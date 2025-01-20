@@ -109,9 +109,9 @@ python3 suzaku-cli.py set-operator-l1-shares 0x670EA377eF80c40F717871e0Fd92eC6D7
 ## As a Staker
 export PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # Anvil #0
 ## Deposit to the vault
-python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1 # 1 ETH
+python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 2 # 1 ETH
 ## Withdraw from the vault
-python3 suzaku-cli.py withdraw 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 5
+python3 suzaku-cli.py withdraw 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1
 ## Claim a withdrawal for some epoch at the vault
 python3 suzaku-cli.py claim 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1
 ```
@@ -125,14 +125,35 @@ python3 suzaku-cli.py opstakes 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 ```
 Connected to chain ID 31337
 Operator: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-Networks [1 total]:
-  Network: ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', 'https://l1.com']
+L1s [1 total]:
+  L1: ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', 'https://l1.com']
     Collateral: 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN)
       Vault: 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
         Type: L1Restake / NonSlashable
-        Stake: 1.0
-    Total stake: 1.0 TOKEN
+        Stake: 2.0
+    Total stake: 2.0 TOKEN
 
 Total stakes:
-  Collateral 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN): 1.0
+  Collateral 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN): 2.0
+```
+
+## L1 recap
+
+```bash
+python3 suzaku-cli.py l1stakes 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+```
+
+```
+Connected to chain ID 31337
+L1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+Operators [1 total]:
+  Operator: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+    Collateral: 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN)
+      Vault: 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
+        Type: L1Restake / NonSlashable
+        Stake: 2.0
+    Total stake: 2.0 TOKEN
+
+Total stakes:
+  Collateral 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN): 2.0
 ```

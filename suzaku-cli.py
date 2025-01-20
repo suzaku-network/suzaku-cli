@@ -496,37 +496,28 @@ class SymbioticCLI:
 
         return results
 
-    def get_l1_ops_vaults(self, net):
-        """Fetch the stakes of all operators in a given network."""
-        net = self.normalize_address(net)
-        vaults = self.get_net_vaults(net)
-        ops = self.get_l1_ops(net)
+    def get_l1_ops_vaults(self, l1_address):
+        """Fetch the stakes of all operators in a given L1."""
+        l1_address = self.normalize_address(l1_address)
+        vaults = self.get_l1_vaults(l1_address)
+        ops = self.get_l1_ops(l1_address)
 
-        w3_multicall = W3Multicall(self.w3)
+        stakes = []
         for op in ops:
             for vault in vaults:
-                for subnet_id in self.SUBNETWORKS:
-                    w3_multicall.add(
-                        W3Multicall.Call(
-                            vault["delegator"],
-                            "stake(bytes32,address)(uint256)",
-                            [
-                                bytes.fromhex(self.get_subnetwork(net, subnet_id)[2:]),
-                                op,
-                            ],
-                        )
-                    )
-
-        stakes = w3_multicall.call()
+                for asset_class in self.ASSET_CLASSES:
+                    delegator_contract = self.w3.eth.contract(address=vault["delegator"], abi=self.ABIS["l1_restake_delegator"])
+                    stake = delegator_contract.functions.stake(l1_address,asset_class, op).call()
+                    stakes.append(stake)
         results = [{"op": op, "vaults": []} for op in ops]
         i = 0
         for op_idx in range(len(ops)):
             for vault in vaults:
                 vault_stake = {}
-                for subnet_id in self.SUBNETWORKS:
+                for asset_class in self.ASSET_CLASSES:
                     stake = stakes[i]
                     if stake and stake > 0:
-                        vault_stake[subnet_id] = stake
+                        vault_stake[asset_class] = stake
                     i += 1
                 if len(vault_stake):
                     results[op_idx]["vaults"].append({"stake": vault_stake, **vault})
@@ -1265,69 +1256,69 @@ def l1ops(ctx, l1_address):
         ctx.obj.print_indented(f"Operator: {op}")
 
 
-# @cli.command()
-# @click.argument("network_address", type=address_type)
-# @click.pass_context
-# def netstakes(ctx, network_address):
-#     """Show stakes of all operators in network.
+@cli.command()
+@click.argument("l1_address", type=address_type)
+@click.pass_context
+def l1stakes(ctx, l1_address):
+    """Show stakes of all operators in L1.
 
-#     \b
-#     NETWORK_ADDRESS - an address of the network to get a whole stake data for
-#     """
-#     network_address = ctx.obj.normalize_address(network_address)
-#     print(f"Network: {network_address}")
-#     print(f"Middleware: {ctx.obj.get_middleware(network_address)}")
+    \b
+    L1_ADDRESS - an address of the L1 to get a whole stake data for
+    """
+    l1_address = ctx.obj.normalize_address(l1_address)
+    print(f"L1: {l1_address}")
+    # print(f"Middleware: {ctx.obj.get_middleware(l1_address)}")
 
-#     opsvaults = ctx.obj.get_l1_ops_vaults(network_address)
-#     print(f"Operators [{len(opsvaults)} total]:")
-#     total_stakes = {}
-#     for op in opsvaults:
-#         ctx.obj.print_indented(f'Operator: {op["op"]}', indent=2)
-#         collaterals = {}
-#         for vault in op["vaults"]:
-#             vault["token_meta"] = ctx.obj.get_token_meta(vault["collateral"])
-#             if vault["collateral"] not in collaterals:
-#                 collaterals[vault["collateral"]] = []
-#             collaterals[vault["collateral"]].append(vault)
+    opsvaults = ctx.obj.get_l1_ops_vaults(l1_address)
+    print(f"Operators [{len(opsvaults)} total]:")
+    total_stakes = {}
+    for op in opsvaults:
+        ctx.obj.print_indented(f'Operator: {op["op"]}', indent=2)
+        collaterals = {}
+        for vault in op["vaults"]:
+            vault["token_meta"] = ctx.obj.get_token_meta(vault["collateral"])
+            if vault["collateral"] not in collaterals:
+                collaterals[vault["collateral"]] = []
+            collaterals[vault["collateral"]].append(vault)
 
-#         total_op_stake = ""
-#         for collateral, vaults in collaterals.items():
-#             stakes_sum = 0
-#             token_meta = ctx.obj.get_token_meta(collateral)
-#             ctx.obj.print_indented(
-#                 f'Collateral: {collateral} ({token_meta["symbol"]})', indent=4
-#             )
-#             for vault in vaults:
-#                 ctx.obj.print_indented(f'Vault: {vault["vault"]}', indent=6)
-#                 ctx.obj.print_indented(
-#                     f'Type: {ctx.obj.DELEGATOR_TYPES_NAMES[vault["delegator_type"]]} / {ctx.obj.SLASHER_TYPES_NAMES[vault["slasher_type"]]}',
-#                     indent=8,
-#                 )
-#                 stake = sum(vault["stake"].values())
-#                 ctx.obj.print_indented(
-#                     f'Stake: {stake / 10 ** token_meta["decimals"]}', indent=8
-#                 )
-#                 stakes_sum += stake
-#             total_op_stake += (
-#                 f'{stakes_sum / 10 ** token_meta["decimals"]} {token_meta["symbol"]} + '
-#             )
-#             if collateral not in total_stakes:
-#                 total_stakes[collateral] = 0
-#             total_stakes[collateral] += stakes_sum
+        total_op_stake = ""
+        for collateral, vaults in collaterals.items():
+            stakes_sum = 0
+            token_meta = ctx.obj.get_token_meta(collateral)
+            ctx.obj.print_indented(
+                f'Collateral: {collateral} ({token_meta["symbol"]})', indent=4
+            )
+            for vault in vaults:
+                ctx.obj.print_indented(f'Vault: {vault["vault"]}', indent=6)
+                ctx.obj.print_indented(
+                    f'Type: {ctx.obj.DELEGATOR_TYPES_NAMES[vault["delegator_type"]]} / {ctx.obj.SLASHER_TYPES_NAMES[vault["slasher_type"]]}',
+                    indent=8,
+                )
+                stake = sum(vault["stake"].values())
+                ctx.obj.print_indented(
+                    f'Stake: {stake / 10 ** token_meta["decimals"]}', indent=8
+                )
+                stakes_sum += stake
+            total_op_stake += (
+                f'{stakes_sum / 10 ** token_meta["decimals"]} {token_meta["symbol"]} + '
+            )
+            if collateral not in total_stakes:
+                total_stakes[collateral] = 0
+            total_stakes[collateral] += stakes_sum
 
-#         if total_op_stake:
-#             ctx.obj.print_indented("Total stake:", total_op_stake[:-3], indent=4)
-#         else:
-#             ctx.obj.print_indented("Total stake: 0", indent=4)
-#         print("")
+        if total_op_stake:
+            ctx.obj.print_indented("Total stake:", total_op_stake[:-3], indent=4)
+        else:
+            ctx.obj.print_indented("Total stake: 0", indent=4)
+        print("")
 
-#     print("Total stakes:")
-#     for collateral, stakes in total_stakes.items():
-#         token_meta = ctx.obj.get_token_meta(collateral)
-#         ctx.obj.print_indented(
-#             f'Collateral {collateral} ({token_meta["symbol"]}): {stakes / 10 ** token_meta["decimals"]}',
-#             indent=2,
-#         )
+    print("Total stakes:")
+    for collateral, stakes in total_stakes.items():
+        token_meta = ctx.obj.get_token_meta(collateral)
+        ctx.obj.print_indented(
+            f'Collateral {collateral} ({token_meta["symbol"]}): {stakes / 10 ** token_meta["decimals"]}',
+            indent=2,
+        )
 
 
 ## GENERAL OPERATOR RELATED CLI COMMANDS ##
@@ -1444,10 +1435,10 @@ def opstakes(ctx, operator_address):
     print(f"Operator: {operator_address}")
 
     l1s_vaults = ctx.obj.get_op_l1s_vaults(operator_address)
-    print(f"Networks [{len(l1s_vaults)} total]:")
+    print(f"L1s [{len(l1s_vaults)} total]:")
     total_stakes = {}
     for l1 in l1s_vaults:
-        ctx.obj.print_indented(f'Network: {l1["l1"]}', indent=2)
+        ctx.obj.print_indented(f'L1: {l1["l1"]}', indent=2)
         collaterals = {}
         for vault in l1["vaults"]:
             vault["token_meta"] = ctx.obj.get_token_meta(vault["collateral"])
