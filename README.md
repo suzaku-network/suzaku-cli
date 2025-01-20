@@ -76,56 +76,63 @@ Commands:
 - Do we hardcode `delegator_type` to `0` everywhere?
 - We don't have `setOperatorL1Shares` in `L1RestakeDelegator`?
 
-### OK
+## End-to-end example
 
 ```bash
-# --- for general use (related to Networks) ---
-python3 suzaku-cli.py isl1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py l1s
-python3 suzaku-cli.py l1ops 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+# As a L1
+export PK=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d # Anvil #1
+## Register the L1 in the L1Registry. Using EOA as ValidatorManager & L1Middleware for now
+python3 suzaku-cli.py register-l1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 https://l1.com
+## Set the max limit for the L1 at the vault's delegator
+python3 suzaku-cli.py set-max-l1-limit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 20000000000000000000 # 10 ETH
 
-# --- for general use (related to Operators) ---
-python3 suzaku-cli.py isop 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py ops
-python3 suzaku-cli.py opl1s 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py check-opt-in-l1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py check-opt-in-vault 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py opstakes 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-
-# --- for general use (related to Vaults) ---
-python3 suzaku-cli.py isvault 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py vaults
-python3 suzaku-cli.py vaultops 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py vaultl1s 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py vaultl1sops 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-
-#--- for general use (related to Stakers) ---
-python3 suzaku-cli.py active-balance-of 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py withdrawals-of 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py withdrawals-claimed 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-
-# --- for Networks ---
-python3 suzaku-cli.py register-l1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 https://l1.com
-python3 suzaku-cli.py set-max-l1-limit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 10
-
-# --- for Operators ---
+# As an Operator
+export PK=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a # Anvil #2
+## Register the Operator in the OperatorRegistry
 python3 suzaku-cli.py register-operator https://operator1.com
-python3 suzaku-cli.py opt-in-l1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py opt-in-l1-signature 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py opt-out-l1 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-python3 suzaku-cli.py opt-out-l1-signature 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+## Opt-in to the L1 via the OperatorL1OptInService
+python3 suzaku-cli.py opt-in-l1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+## Verify the opt-in via the OperatorL1OptInService
+python3 suzaku-cli.py check-opt-in-l1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+## Opt-in to the Vault via the OperatorVaultOptInService. Vault deployed by FullLocalDeploymentScript
 python3 suzaku-cli.py opt-in-vault 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py opt-in-vault-signature 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py opt-out-vault 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py opt-out-vault-signature 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
-python3 suzaku-cli.py op-vault-l1-stake 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+## Verify the opt-in via the OperatorVaultOptInService
+python3 suzaku-cli.py check-opt-in-vault 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
 
-# --- for Stakers ---
-python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 10
+# As a Vault Curator
+export PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # Anvil #0
+## Set the limit for the L1 at the vault's delegator
+python3 suzaku-cli.py set-l1-limit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 10000000000000000000 # 10 ETH
+## Set the operator's L1 shares at the vault's delegator
+python3 suzaku-cli.py set-operator-l1-shares 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 10
+
+## As a Staker
+export PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # Anvil #0
+## Deposit to the vault
+python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1 # 1 ETH
+## Withdraw from the vault
 python3 suzaku-cli.py withdraw 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 5
+## Claim a withdrawal for some epoch at the vault
 python3 suzaku-cli.py claim 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1
+```
 
-# --- for Vault Curators ---
-python3 suzaku-cli.py set-l1-limit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 1
-python3 suzaku-cli.py set-operator-l1-shares 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 10
+## Operator recap
+
+```bash
+python3 suzaku-cli.py opstakes 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+```
+
+```
+Connected to chain ID 31337
+Operator: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+Networks [1 total]:
+  Network: ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', 'https://l1.com']
+    Collateral: 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN)
+      Vault: 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b
+        Type: L1Restake / NonSlashable
+        Stake: 1.0
+    Total stake: 1.0 TOKEN
+
+Total stakes:
+  Collateral 0x5FbDB2315678afecb367f032d93F642f64180aa3 (TOKEN): 1.0
 ```

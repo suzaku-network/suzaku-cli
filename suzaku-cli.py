@@ -462,47 +462,34 @@ class SymbioticCLI:
 
         return results
 
-    def get_net_vaults(self, net):
-        """Fetch all vaults in a given network."""
-        net = self.normalize_address(net)
+    def get_l1_vaults(self, l1):
+        """Fetch all vaults in a given L1."""
+        l1 = self.normalize_address(l1)
         vaults = self.get_vaults()
         vaults = [
             vault
             for vault in vaults
             if vault["delegator"] != "0x0000000000000000000000000000000000000000"
-            and (
-                vault["delegator_type"] not in [3] or vault["delegator_network"] == net
-            )
         ]
-        w3_multicall = W3Multicall(self.w3)
+        limits = []
         for vault in vaults:
-            for subnet_id in self.SUBNETWORKS:
+            for asset_class in self.ASSET_CLASSES:
                 if vault["delegator_type"] in [0, 1, 2]:
-                    w3_multicall.add(
-                        W3Multicall.Call(
-                            vault["delegator"],
-                            "networkLimit(bytes32)(uint256)",
-                            bytes.fromhex(self.get_subnetwork(net, subnet_id)[2:]),
-                        )
-                    )
+                    delegator_contract = self.w3.eth.contract(address=vault["delegator"], abi=self.ABIS["l1_restake_delegator"])
+                    limit = delegator_contract.functions.l1Limit(l1, asset_class).call()
+                    limits.append(limit)
                 elif vault["delegator_type"] in [3]:
-                    w3_multicall.add(
-                        W3Multicall.Call(
-                            vault["delegator"],
-                            "maxNetworkLimit(bytes32)(uint256)",
-                            bytes.fromhex(self.get_subnetwork(net, subnet_id)[2:]),
-                        )
-                    )
-
-        limits = w3_multicall.call()
+                    delegator_contract = self.w3.eth.contract(address=vault["delegator"], abi=self.ABIS["l1_restake_delegator"])
+                    limit = delegator_contract.functions.maxL1Limit(l1, asset_class).call()
+                    limits.append(limit)
         results = []
         i = 0
         for vault in vaults:
             vault_limit = {}
-            for subnet_id in self.SUBNETWORKS:
+            for asset_class in self.ASSET_CLASSES:
                 limit = limits[i]
                 if limit and limit > 0:
-                    vault_limit[subnet_id] = limit
+                    vault_limit[asset_class] = limit
                 i += 1
             if len(vault_limit):
                 results.append({"limit": vault_limit, **vault})
@@ -553,8 +540,9 @@ class SymbioticCLI:
         l1_vaults = {}
         stakes = []
         for l1 in l1s:
-            l1_vaults[l1["l1"]] = self.get_l1_vaults(l1["l1"])
-            for vault in l1_vaults[l1["l1"]]:
+            l1_address = l1["l1"][0]
+            l1_vaults[l1_address] = self.get_l1_vaults(l1_address)
+            for vault in l1_vaults[l1_address]:
                 for asset_class in self.ASSET_CLASSES:
                     stake = self.w3.eth.call(
                         {
@@ -562,19 +550,19 @@ class SymbioticCLI:
                             "data": self.contracts["l1_restake_delegator"].encodeABI(
                                 fn_name="stake",
                                 args=[
-                                    l1,
+                                    l1_address,
                                     asset_class,
                                     op,
                                 ]
                             )
                         }
                     )
-                    stakes.append(stake)
+                    stakes.append(int.from_bytes(stake, 'big'))
 
         results = [{"l1": l1["l1"], "vaults": []} for l1 in l1s]
         i = 0
         for l1_idx in range(len(l1s)):
-            for vault in l1_vaults[l1s[l1_idx]["l1"]]:
+            for vault in l1_vaults[l1s[l1_idx]["l1"][0]]:
                 vault_stake = {}
                 for asset_class in self.ASSET_CLASSES:
                     stake = stakes[i]
