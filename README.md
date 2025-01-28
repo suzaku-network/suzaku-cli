@@ -40,6 +40,7 @@ Commands:
   isvault                  Check if address is vault.
   l1ops                    List all operators opted in L1.
   l1s                      List all L1s.
+  l1stakes                 Show stakes of all operators in a L1.
   op-vault-l1-stake        Get operator stake in vault for L1.
   opl1s                    List all L1s where operator is opted in.
   ops                      List all operators.

@@ -1260,7 +1260,7 @@ def l1ops(ctx, l1_address):
 @click.argument("l1_address", type=address_type)
 @click.pass_context
 def l1stakes(ctx, l1_address):
-    """Show stakes of all operators in L1.
+    """Show stakes of all operators in a L1.
 
     \b
     L1_ADDRESS - an address of the L1 to get a whole stake data for
