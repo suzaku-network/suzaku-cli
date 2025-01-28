@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Replace PK & SUZAKU_CORE_PATH with a private key (e.g. Anvil #0) & path to suzaku-core directory from which the ABI files are fetched
+# Replace PK & SUZAKU_CORE_PATH with a private key (e.g. Anvil #0) & the path to suzaku-core directory from which the ABI files are fetched
 ```
 
 ## Usage
@@ -84,8 +84,7 @@ export PK=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d # A
 ## Register the L1 in the L1Registry. Using EOA as ValidatorManager & L1Middleware for now
 python3 suzaku-cli.py register-l1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 https://l1.com
 ## Set the max limit for the L1 at the vault's delegator
-python3 suzaku-cli.py set-max-l1-limit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 20000000000000000000 # 10 ETH
-
+python3 suzaku-cli.py set-max-l1-limit <VAULT_ADDRESS> 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 20000000000000000000 # 20 ETH
 # As an Operator
 export PK=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a # Anvil #2
 ## Register the Operator in the OperatorRegistry
@@ -109,7 +108,7 @@ python3 suzaku-cli.py set-operator-l1-shares 0x670EA377eF80c40F717871e0Fd92eC6D7
 ## As a Staker
 export PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # Anvil #0
 ## Deposit to the vault
-python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 2 # 1 ETH
+python3 suzaku-cli.py deposit 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 2 # 2 ETH
 ## Withdraw from the vault
 python3 suzaku-cli.py withdraw 0x670EA377eF80c40F717871e0Fd92eC6D7AC7328b 1
 ## Claim a withdrawal for some epoch at the vault
