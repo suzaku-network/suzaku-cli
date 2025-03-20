@@ -130,6 +130,20 @@ class TokenAmountType(click.ParamType):
         return amount
 
 
+class HexBytesType(click.ParamType):
+    name = "hexbytes"
+
+    def convert(self, value, param, ctx):
+        # strip "0x" if present
+        if value.startswith("0x"):
+            value = value[2:]
+        try:
+            return bytes.fromhex(value)
+        except ValueError:
+            self.fail(f"Invalid hex string: {value}", param, ctx)
+
+hex_bytes_type = HexBytesType()
+
 class ChainType(click.ParamType):
     name = "chain"
 
@@ -187,7 +201,10 @@ class SymbioticCLI:
             'l1_restake_delegator': 'L1RestakeDelegator',
             'erc20': 'ERC20',
             'op_l1_opt_in': 'OperatorL1OptInService',
-            'op_vault_opt_in': 'OperatorVaultOptInService'
+            'op_vault_opt_in': 'OperatorVaultOptInService',
+            'middleware_service': 'AvalancheL1Middleware',
+            'vault_manager': 'MiddlewareVaultManager',
+            'balancer_validator_manager': 'BalancerValidatorManager',
         }
         
         abis = {}
@@ -226,12 +243,14 @@ class SymbioticCLI:
 
     ADDRESSES = {
         "anvil": {
-            "op_registry": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
-            "l1_registry": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
-            "op_vault_opt_in": "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
-            "op_l1_opt_in": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
-            # "middleware_service": "0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3",
-            "vault_factory": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+            "op_registry": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+            "l1_registry": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+            "op_vault_opt_in": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
+            "op_l1_opt_in": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+            "middleware_service": "0x1275D096B9DBf2347bD2a131Fb6BDaB0B4882487",
+            "vault_manager": "0x05Aa229Aec102f78CE0E852A812a388F076Aa555",
+            "vault_factory": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+            "balancer_validator_manager": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
         },
         "fuji": {
             "op_registry": "0x6F75a4ffF97326A00e52662d82EA4FdE86a2C548",
@@ -240,6 +259,7 @@ class SymbioticCLI:
             "op_net_opt_in": "0x58973d16FFA900D11fC22e5e2B6840d9f7e13401",
             "middleware_service": "0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3",
             "vault_factory": "0x407A039D94948484D356eFB765b3c74382A050B4",
+            "balancer_validator_manager": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
         },
     }
 
@@ -789,6 +809,23 @@ class SymbioticCLI:
 
     def timestamp_to_datetime(self, timestamp):
         return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # def simulate_call(self, who, entity, to, function_name, *args):
+    #     """
+    #     Try a .call() to see if it reverts with a reason.
+    #     This won't send a tx, just a simulation. 
+    #     """
+    #     contract = self.w3.eth.contract(address=to, abi=self.ABIS[entity])
+    #     try:
+    #         # We set {"from": who} so EVM sees the same msg.sender.
+    #         # If it reverts, we usually get an Exception with the revert reason.
+    #         contract.functions[function_name](*args).call({"from": who})
+    #         print("[DEBUG] Call simulation succeeded (no revert).")
+    #     except Exception as e:
+    #         print("[DEBUG] Call simulation revert reason =>", e)
+    #         # Optionally re-raise so we skip the real tx
+    #         # raise e
+
 
     def get_operator_l1_opt_in_signature(
         self, private_key, ledger, ledger_address, where, duration
@@ -1024,7 +1061,22 @@ Deadline: {deadline} ({self.timestamp_to_datetime(deadline)})
         *args,
         success_message="Success!",
     ):
+        
         to = self.normalize_address(to)
+        # # Step A: figure out who is "from"
+        # if ledger:
+        #     # We can't do a 'call' from the ledger itself, so pick ledger_address or the first ledger acct
+        #     if ledger_address:
+        #         from_address = self.normalize_address(ledger_address)
+        #     else:
+        #         from_address = ledgereth.accounts.get_accounts()[0].address
+        # else:
+        #     from_address = Account.from_key(private_key).address
+
+        # # Step B: (Optional) do a simulation call to see if there's a revert reason
+        # print("[DEBUG] Simulating call:", entity, function_name, *args)
+        # self.simulate_call(from_address, entity, to, function_name, *args)
+
         try:
             if ledger_address:
                 ledger_address = self.normalize_address(ledger_address)
@@ -1055,6 +1107,8 @@ Deadline: {deadline} ({self.timestamp_to_datetime(deadline)})
             return tx_receipt
 
         except Exception as e:
+            # import traceback
+            # traceback.print_exc()
             print(f"Failed! Reason: {e}")
 
     def get_domain_data(self, name, version, verifyingContract):
@@ -1635,7 +1689,6 @@ def vaultl1sops(ctx, vault_address):
 
 ## GENERAL STAKER RELATED CLI COMMANDS ##
 
-
 @cli.command()
 @click.argument("vault_address", type=address_type)
 @click.argument("address", type=address_type)
@@ -1702,7 +1755,6 @@ def withdrawals_claimed(ctx, vault_address, epoch, address):
 
 ### NETWORK CLI COMMANDS ###
 
-
 @cli.command()
 @click.option(
     "--private-key", type=bytes32_type, help="Your private key for signing transactions", envvar="PK"
@@ -1747,12 +1799,12 @@ def register_l1(ctx, private_key, ledger, ledger_address, validator_manager, l1_
         success_message=f"Successfully registered as L1",
     )
 
+### Vault Manager CLI commands ###
 
 @cli.command()
 @click.argument("vault_address", type=address_type)
-@click.argument("l1_address", type=address_type)
-@click.argument("max_limit", type=uint256_type)
 @click.argument("asset_class", default=1, type=uint96_type)
+@click.argument("max_limit", type=uint256_type)
 @click.option(
     "--private-key", type=bytes32_type, help="Your private key for signing transactions", envvar="PK"
 )
@@ -1767,36 +1819,758 @@ def register_l1(ctx, private_key, ledger, ledger_address, validator_manager, l1_
     help="The Ledger account address to use for signing (defaults to the first account if not provided)",
 )
 @click.pass_context
-def set_max_l1_limit(
-    ctx, vault_address, l1_address, max_limit, asset_class, private_key, ledger, ledger_address
+def register_vault_l1(
+    ctx, vault_address, asset_class, max_limit, private_key, ledger, ledger_address
 ):
-    """Set a maximum L1 limit at the vault's delegator.
+    """Register a vault in the VaultManager with a specific asset class and max L1 limit..
 
     \b
     VAULT_ADDRESS - an address of the vault to set a maximum limit for
-    L1_ADDRESS - an address of the L1 to set a maximum limit for
-    MAX_LIMIT - a maximum amount of stake a L1 is ready to get from the vault (in wei)
     ASSET_CLASS - an identifier of the asset class to set a maximum limit for (default is 1)
+    MAX_LIMIT - a maximum amount of stake a L1 is ready to get from the vault (in wei)
     """
     vault_address = ctx.obj.normalize_address(vault_address)
-    delegator = ctx.obj.get_delegator(vault_address)
-
 
     ctx.obj.process_write_transaction(
         private_key,
         ledger,
         ledger_address,
-        "l1_restake_delegator",
-        delegator,
-        "setMaxL1Limit",
-        l1_address,
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "registerVault",
+        vault_address,
         asset_class,
         max_limit,
-        success_message=f"Successfully set max limit = {max_limit} in vault = {vault_address}",
+        success_message=(
+            f"Vault {vault_address} successfully registered "
+            f"with assetClassId={asset_class} and initial maxL1Limit={max_limit}"
+        ),
     )
 
 
-# @cli.command()
+@cli.command()
+@click.argument("vault_address", type=address_type)
+@click.argument("asset_class", type=uint96_type)
+@click.argument("max_limit", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def update_vault_max_l1_limit(ctx, vault_address, asset_class, max_limit, private_key, ledger, ledger_address):
+    """Update a vault's max L1 limit in the MiddlewareVaultManager.
+
+    \b
+    VAULT_ADDRESS - the vault address (already must be registered)
+    ASSET_CLASS - the asset class ID assigned to this vault
+    MAX_LIMIT - the new maximum L1 limit (in wei)
+    """
+    vault_address = ctx.obj.normalize_address(vault_address)
+
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "updateVaultMaxL1Limit",
+        vault_address,
+        asset_class,
+        max_limit,
+        success_message=(
+            f"Vault {vault_address} successfully updated maxL1Limit to {max_limit} "
+            f"(assetClassId={asset_class})"
+        ),
+    )
+
+
+@cli.command()
+@click.argument("vault_address", type=address_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def remove_vault(ctx, vault_address, private_key, ledger, ledger_address):
+    """Remove a registered vault from MiddlewareVaultManager.
+
+    \b
+    VAULT_ADDRESS - the vault address to remove
+    """
+    vault_address = ctx.obj.normalize_address(vault_address)
+
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "removeVault",
+        vault_address,
+        success_message=f"Vault {vault_address} removed successfully (pending grace period checks)."
+    )
+
+@cli.command()
+@click.pass_context
+def vault_manager_get_vault_count(ctx):
+    """Get the total number of registered vaults."""
+    val = ctx.obj.get_data(
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "getVaultCount"
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("index", type=uint256_type)
+@click.pass_context
+def vault_manager_get_vault_at_with_times(ctx, index):
+    """Get vault and its enable/disable timestamps by index.
+
+    \b
+    INDEX - array index of the vault
+    """
+    val = ctx.obj.get_data(
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "getVaultAtWithTimes",
+        index
+    )
+    # val is a tuple (vault, enabledTime, disabledTime)
+    print(val)
+
+
+@cli.command()
+@click.argument("vault_address", type=address_type)
+@click.pass_context
+def vault_manager_get_vault_asset_class(ctx, vault_address):
+    """Get the asset class for a given vault.
+
+    \b
+    VAULT_ADDRESS - the vault address
+    """
+    vault_address = ctx.obj.normalize_address(vault_address)
+
+    val = ctx.obj.get_data(
+        "vault_manager",
+        ctx.obj.addresses["vault_manager"],
+        "getVaultAssetClass",
+        vault_address
+    )
+    print(val)
+
+
+## Grant Role
+
+@cli.command()
+@click.argument("delegator_address", type=address_type)
+@click.argument("manager_address", type=address_type)
+@click.option(
+    "--private-key", type=bytes32_type, help="Your private key for signing transactions", envvar="PK"
+)
+@click.option(
+    "--ledger",
+    is_flag=True,
+    help="Use a Ledger device for signing transactions instead of a private key",
+)
+@click.option(
+    "--ledger-address",
+    type=address_type,
+    help="The Ledger account address to use for signing (defaults to the first account if not provided)",
+)
+@click.pass_context
+def grant_l1_limit_set_role(ctx, delegator_address, manager_address, private_key, ledger, ledger_address):
+    """Grant the L1_LIMIT_SET_ROLE to a given manager for a delegator.
+
+    \b
+    DELEGATOR_ADDRESS - an address of the delegator contract
+    MANAGER_ADDRESS - an address to grant the L1_LIMIT_SET_ROLE to
+    """
+    delegator_address = ctx.obj.normalize_address(delegator_address)
+    manager_address = ctx.obj.normalize_address(manager_address)
+
+    # Hard-coded role hash for keccak256("L1_LIMIT_SET_ROLE"):
+    l1_limit_set_role = "0xb512dffa3a2c2c469dbaacc6dc7a8f7c406addce3d59bd0bc82a77875fdb82f6"
+
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        "l1_restake_delegator",  # or "delegator", if that's the actual key in self.ABIS
+        delegator_address,
+        "grantRole",
+        l1_limit_set_role,
+        manager_address,
+        success_message=(
+            f"Granted L1_LIMIT_SET_ROLE to {manager_address} on delegator {delegator_address}"
+        ),
+    )
+
+
+## Middleware CLI commands ##
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def middleware_register_operator(ctx, operator, private_key, ledger, ledger_address):
+    """Register an operator in AvalancheL1Middleware.
+
+    \b
+    OPERATOR - an address to register
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "registerOperator",
+        operator,
+        success_message=f"Successfully called registerOperator({operator})"
+    )
+
+
+@cli.command()
+@click.argument("node_id", type=bytes32_type)
+@click.argument("bls_key", type=hex_bytes_type)
+@click.argument("registration_expiry", type=uint256_type)
+@click.argument("pchain_threshold", type=uint256_type)
+@click.option("--pchain-address", "pchain_addresses", multiple=True, type=address_type)
+@click.argument("reward_threshold", type=uint256_type)
+@click.option("--reward-address", "reward_addresses", multiple=True, type=address_type)
+@click.argument("initial_stake", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_add_node(ctx,
+                        node_id,
+                        bls_key,
+                        registration_expiry,
+                        pchain_threshold,
+                        pchain_addresses,
+                        reward_threshold,
+                        reward_addresses,
+                        initial_stake,
+                        private_key,
+                        ledger,
+                        ledger_address):
+    """Add a node in AvalancheL1Middleware.
+
+    \b
+    NODE_ID - bytes32 ID of the node
+    BLS_KEY - raw bytes of the BLS key
+    REGISTRATION_EXPIRY - a timestamp for node registration expiry
+    PCHAIN_THRESHOLD - threshold for pchain owner struct
+    PCHAIN_ADDRESSES - one or more addresses for pchain owner
+    REWARD_THRESHOLD - threshold for reward owner struct
+    REWARD_ADDRESSES - one or more addresses for reward owner
+    INITIAL_STAKE - initial stake to assign
+    """
+    pchain_owner = (pchain_threshold, list(pchain_addresses))
+    reward_owner = (reward_threshold, list(reward_addresses))
+
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "addNode",
+        node_id,
+        bls_key,
+        registration_expiry,
+        pchain_owner,
+        reward_owner,
+        initial_stake,
+        success_message=f"Node added: {node_id}"
+    )
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.argument("node_id", type=bytes32_type)
+@click.argument("message_index", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_complete_validator_registration(ctx,
+                                               operator,
+                                               node_id,
+                                               message_index,
+                                               private_key,
+                                               ledger,
+                                               ledger_address):
+    """Complete validator registration.
+
+    \b
+    OPERATOR - address of the operator
+    NODE_ID - bytes32 ID of the node
+    MESSAGE_INDEX - message index used for cross-messages
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "completeValidatorRegistration",
+        operator,
+        node_id,
+        message_index,
+        success_message=f"Completed validator registration for nodeId={node_id}"
+    )
+
+
+@cli.command()
+@click.argument("node_id", type=bytes32_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_remove_node(ctx, node_id, private_key, ledger, ledger_address):
+    """Remove a node.
+
+    \b
+    NODE_ID - bytes32 ID of the node
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "removeNode",
+        node_id,
+        success_message=f"Node removed: {node_id}"
+    )
+
+
+@cli.command()
+@click.argument("message_index", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_complete_validator_removal(ctx, message_index, private_key, ledger, ledger_address):
+    """Complete validator removal.
+
+    \b
+    MESSAGE_INDEX - index for cross-messages
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "completeValidatorRemoval",
+        message_index,
+        success_message=f"CompleteValidatorRemoval called for msgIndex={message_index}"
+    )
+
+
+@cli.command()
+@click.argument("node_id", type=bytes32_type)
+@click.argument("new_weight", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_init_weight_update(ctx, node_id, new_weight, private_key, ledger, ledger_address):
+    """Initialize validator weight update.
+
+    \b
+    NODE_ID - bytes32 ID of the node
+    NEW_WEIGHT - new weight to set
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "initializeValidatorWeightUpdateAndLock",
+        node_id,
+        new_weight,
+        success_message=f"Weight update initialized for nodeId={node_id}"
+    )
+
+
+@cli.command()
+@click.argument("node_id", type=bytes32_type)
+@click.argument("message_index", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_complete_weight_update(ctx, node_id, message_index, private_key, ledger, ledger_address):
+    """Complete node weight update.
+
+    \b
+    NODE_ID - bytes32 ID of the node
+    MESSAGE_INDEX - message index used for cross-messages
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "completeNodeWeightUpdate",
+        node_id,
+        message_index,
+        success_message=f"Node weight update completed for nodeId={node_id}"
+    )
+
+
+@cli.command()
+@click.argument("epoch", type=uint256_type)
+@click.argument("asset_class", type=uint96_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_operator_cache(ctx, epoch, asset_class, private_key, ledger, ledger_address):
+    """Calculate and cache stakes.
+
+    \b
+    EPOCH - epoch number
+    ASSET_CLASS - asset class ID
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "calcAndCacheStakes",
+        epoch,
+        asset_class,
+        success_message="calcAndCacheStakes() done"
+    )
+
+
+@cli.command()
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_calc_node_weights(ctx, private_key, ledger, ledger_address):
+    """Calculate and cache node weights for all operators."""
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "calcAndCacheNodeWeightsForAllOperators",
+        success_message="calcAndCacheNodeWeightsForAllOperators() called"
+    )
+
+
+@cli.command()
+@click.argument("operator_address", type=address_type)
+@click.argument("message_index", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device")
+@click.option("--ledger-address", type=address_type, help="Ledger account address")
+@click.pass_context
+def middleware_force_update_nodes(ctx, operator_address, message_index, private_key, ledger, ledger_address):
+    """Force update nodes.
+
+    \b
+    OPERATOR_ADDRESS - an address of the operator
+    MESSAGE_INDEX - message index used for cross-messages
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "forceUpdateNodes",
+        operator_address,
+        message_index,
+        success_message=f"forceUpdateNodes called for operator={operator_address}"
+    )
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.argument("epoch", type=uint48_type)
+@click.argument("asset_class", type=uint96_type)
+@click.pass_context
+def middleware_get_operator_stake(ctx, operator, epoch, asset_class):
+    """Get an operator's stake.
+
+    \b
+    OPERATOR - operator address
+    EPOCH - epoch number
+    ASSET_CLASS - asset class ID
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getOperatorStake",
+        operator,
+        epoch,
+        asset_class
+    )
+    print(val)
+
+
+@cli.command()
+@click.pass_context
+def middleware_get_current_epoch(ctx):
+    """Get current epoch."""
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getCurrentEpoch"
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("epoch", type=uint48_type)
+@click.pass_context
+def middleware_get_epoch_start_ts(ctx, epoch):
+    """Get epoch start timestamp.
+
+    \b
+    EPOCH - epoch number
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getEpochStartTs",
+        epoch
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.argument("epoch", type=uint48_type)
+@click.pass_context
+def middleware_get_active_nodes_for_epoch(ctx, operator, epoch):
+    """Get the active nodes for an epoch.
+
+    \b
+    OPERATOR - operator address
+    EPOCH - epoch number
+    """
+    node_ids = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getActiveNodesForEpoch",
+        operator,
+        epoch
+    )
+    print(node_ids)
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.pass_context
+def middleware_get_operator_nodes_length(ctx, operator):
+    """Get number of nodes for an operator.
+
+    \b
+    OPERATOR - operator address
+    """
+    length = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getOperatorNodesLength",
+        operator
+    )
+    print(length)
+
+
+@cli.command()
+@click.argument("epoch", type=uint48_type)
+@click.argument("validator_id", type=bytes32_type)
+@click.pass_context
+def middleware_get_node_weight_cache(ctx, epoch, validator_id):
+    """Get node weight cache.
+
+    \b
+    EPOCH - epoch number
+    VALIDATOR_ID - bytes32 ID of the validator/node
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "nodeWeightCache",
+        epoch,
+        validator_id
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.pass_context
+def middleware_get_operator_locked_stake(ctx, operator):
+    """Get locked stake for an operator.
+
+    \b
+    OPERATOR - operator address
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "operatorLockedStake",
+        operator
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("validator_id", type=bytes32_type)
+@click.pass_context
+def middleware_node_pending_removal(ctx, validator_id):
+    """Check if a node is pending removal.
+
+    \b
+    VALIDATOR_ID - bytes32 ID of the node
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "nodePendingRemoval",
+        validator_id
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("validator_id", type=bytes32_type)
+@click.pass_context
+def middleware_node_pending_update(ctx, validator_id):
+    """Check if a node is pending an update.
+
+    \b
+    VALIDATOR_ID - bytes32 ID of the node
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "nodePendingUpdate",
+        validator_id
+    )
+    print(val)
+
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.pass_context
+def middleware_get_operator_used_weight(ctx, operator):
+    """Get operator's used weight cached.
+
+    \b
+    OPERATOR - operator address
+    """
+    val = ctx.obj.get_data(
+        "middleware_service",
+        ctx.obj.addresses["middleware_service"],
+        "getOperatorUsedWeightCached",
+        operator
+    )
+    print(val)
+
+## Balancer CLI commands ##
+
+
+@cli.command()
+@click.argument("security_module", type=address_type)
+@click.argument("max_weight", type=uint256_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def balancer_set_up_security_module(ctx, security_module, max_weight, private_key, ledger, ledger_address):
+    """Register or update a security module's max weight in BalancerValidatorManager.
+
+    \b
+    SECURITY_MODULE - the address of the security module
+    MAX_WEIGHT - the maximum allowed weight for this security module (set to 0 to remove)
+    """
+    security_module = ctx.obj.normalize_address(security_module)
+
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        "balancer_validator_manager",                # The key in your ABIS/address mapping
+        ctx.obj.addresses["balancer_validator_manager"],  # The actual BalancerValidatorManager address
+        "setUpSecurityModule",
+        security_module,
+        max_weight,
+        success_message=(
+            f"Security module {security_module} set with maxWeight = {max_weight}"
+            if max_weight > 0 else f"Security module {security_module} removed."
+        )
+    )
+
+
+@cli.command()
+@click.pass_context
+def balancer_get_security_modules(ctx):
+    """List the addresses of all registered security modules."""
+    modules = ctx.obj.get_data(
+        "balancer_validator_manager",
+        ctx.obj.addresses["balancer_validator_manager"],
+        "getSecurityModules"
+    )
+    print(modules)
+
+
+@cli.command()
+@click.argument("security_module", type=address_type)
+@click.pass_context
+def balancer_get_security_module_weights(ctx, security_module):
+    """Get weight & maxWeight for a given security module.
+
+    \b
+    SECURITY_MODULE - the address of the security module to query
+    """
+    security_module = ctx.obj.normalize_address(security_module)
+    val = ctx.obj.get_data(
+        "balancer_validator_manager",
+        ctx.obj.addresses["balancer_validator_manager"],
+        "getSecurityModuleWeights",
+        security_module
+    )
+    # val is a tuple (weight, maxWeight)
+    print(val)
+
+
 # @click.argument("vault_address", type=address_type)
 # @click.argument("network_address", type=address_type)
 # @click.pass_context
@@ -2340,7 +3114,7 @@ def set_l1_limit(
         limit,
         success_message=f"Successfully set limit = {limit} for asset class = {asset_class}",
     )
-
+    
 
 # @cli.command()
 # @click.argument("vault_address", type=address_type)
