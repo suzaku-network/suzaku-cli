@@ -253,13 +253,14 @@ class SymbioticCLI:
             "balancer_validator_manager": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
         },
         "fuji": {
-            "op_registry": "0x6F75a4ffF97326A00e52662d82EA4FdE86a2C548",
-            "net_registry": "0x7d03b7343BF8d5cEC7C0C27ecE084a20113D15C9",
-            "op_vault_opt_in": "0x95CC0a052ae33941877c9619835A233D21D57351",
-            "op_net_opt_in": "0x58973d16FFA900D11fC22e5e2B6840d9f7e13401",
-            "middleware_service": "0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3",
-            "vault_factory": "0x407A039D94948484D356eFB765b3c74382A050B4",
-            "balancer_validator_manager": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
+            "op_registry": "0xc30dB1156Aa360F1E23F605Bfa3c9213732Faf63",
+            "l1_registry": "0x21f73984b9064Cb2d2f54584c1d2c7296069F8E2",
+            "op_vault_opt_in": "0x17C8D2e53297C51DB79Fedd01320bC913Cd69eF7",
+            "op_l1_opt_in": "0xA1a41daE5f13eCe6F3DeD9f7d6c975Ed128b681C",
+            "middleware_service": "0x88b8A1485BbB9249667b4B4Fd70c87dfBd166cdf",
+            "vault_manager": "0x6566c78CA0BA6526Adc7B31d8d1264F61E3Fb619",
+            "vault_factory": "0x9d342dba348eFB0235938eAdeCb06f0b23d8E980",
+            "balancer_validator_manager": "0x1A59410b0f39b6e2AED66021Ae0FA154b9BB0587"
         },
     }
 
