@@ -257,8 +257,8 @@ class SymbioticCLI:
             "l1_registry": "0x21f73984b9064Cb2d2f54584c1d2c7296069F8E2",
             "op_vault_opt_in": "0x17C8D2e53297C51DB79Fedd01320bC913Cd69eF7",
             "op_l1_opt_in": "0xA1a41daE5f13eCe6F3DeD9f7d6c975Ed128b681C",
-            "middleware_service": "0x88b8A1485BbB9249667b4B4Fd70c87dfBd166cdf",
-            "vault_manager": "0x6566c78CA0BA6526Adc7B31d8d1264F61E3Fb619",
+            "middleware_service": "0x20ff8Fee854f4b320b5Dc8933ac4C77b86f162f8",
+            "vault_manager": "0x680bA472b4cc7932b1C8BA2118a36661863e3053",
             "vault_factory": "0x9d342dba348eFB0235938eAdeCb06f0b23d8E980",
             "balancer_validator_manager": "0x1A59410b0f39b6e2AED66021Ae0FA154b9BB0587"
         },
@@ -672,6 +672,7 @@ class SymbioticCLI:
         operator = self.normalize_address(operator)
         l1 = self.normalize_address(l1)
         return self.contracts["op_l1_opt_in"].functions.isOptedIn(operator, l1).call()
+    
 
     # def get_resolver_set_epoch_delay(self, slasher_address):
     #     slasher_address = self.normalize_address(slasher_address)
@@ -810,6 +811,7 @@ class SymbioticCLI:
 
     def timestamp_to_datetime(self, timestamp):
         return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+    
     
     # def simulate_call(self, who, entity, to, function_name, *args):
     #     """
@@ -1688,6 +1690,74 @@ def vaultl1sops(ctx, vault_address):
         print("")
 
 
+@cli.command()
+@click.argument("vault_address", type=address_type)
+@click.argument("l1_address", type=address_type)
+@click.argument("asset_class", default=1, type=uint96_type)
+@click.pass_context
+def delegator_l1_limit(ctx, vault_address, l1_address, asset_class):
+    """Get the l1Limit for a given L1 and assetClass in an L1RestakeDelegator.
+
+    \b
+    VAULT_ADDRESS - an address of the vault whose delegator we read from
+    L1_ADDRESS - the L1 for which we want the limit
+    ASSET_CLASS - the asset class ID (default = 1)
+    """
+    # 1) Get the delegator from the vault
+    vault_address = ctx.obj.normalize_address(vault_address)
+    l1_address = ctx.obj.normalize_address(l1_address)
+
+    delegator = ctx.obj.get_delegator(vault_address)
+    if not delegator or delegator == "0x0000000000000000000000000000000000000000":
+        print("No delegator found for this vault.")
+        return
+
+    # 2) Read l1Limit(l1Address, assetClass)
+    value = ctx.obj.get_data(
+        "l1_restake_delegator",
+        delegator,
+        "l1Limit",
+        l1_address,
+        asset_class
+    )
+
+    print(f"L1RestakeDelegator.l1Limit({l1_address}, {asset_class}) = {value}")
+
+
+@cli.command()
+@click.argument("vault_address", type=address_type)
+@click.argument("l1_address", type=address_type)
+@click.argument("asset_class", default=1, type=uint96_type)
+@click.pass_context
+def delegator_max_l1_limit(ctx, vault_address, l1_address, asset_class):
+    """Get the maxL1Limit for a given L1 and assetClass in an L1RestakeDelegator.
+
+    \b
+    VAULT_ADDRESS - an address of the vault whose delegator we read from
+    L1_ADDRESS - the L1 for which we want the max limit
+    ASSET_CLASS - the asset class ID (default = 1)
+    """
+    # 1) Get the delegator from the vault
+    vault_address = ctx.obj.normalize_address(vault_address)
+    l1_address = ctx.obj.normalize_address(l1_address)
+
+    delegator = ctx.obj.get_delegator(vault_address)
+    if not delegator or delegator == "0x0000000000000000000000000000000000000000":
+        print("No delegator found for this vault.")
+        return
+
+    # 2) Read maxL1Limit[l1][assetClass]
+    value = ctx.obj.get_data(
+        "l1_restake_delegator",
+        delegator,
+        "maxL1Limit",
+        l1_address,
+        asset_class
+    )
+
+    print(f"L1RestakeDelegator.maxL1Limit({l1_address}, {asset_class}) = {value}")
+
+
 ## GENERAL STAKER RELATED CLI COMMANDS ##
 
 @cli.command()
@@ -1800,6 +1870,47 @@ def register_l1(ctx, private_key, ledger, ledger_address, validator_manager, l1_
         success_message=f"Successfully registered as L1",
     )
 
+@cli.command()
+@click.argument("validator_manager", type=address_type)
+@click.argument("l1_middleware", type=address_type)
+@click.option(
+    "--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions"
+)
+@click.option(
+    "--ledger",
+    is_flag=True,
+    help="Use a Ledger device for signing transactions instead of a private key",
+)
+@click.option(
+    "--ledger-address",
+    type=address_type,
+    help="The Ledger account address to use for signing (defaults to the first account if not provided)",
+)
+@click.pass_context
+def l1_registry_set_middleware(ctx, validator_manager, l1_middleware, private_key, ledger, ledger_address):
+    """Set L1 middleware for a given validatorManager.
+
+    \b
+    VALIDATOR_MANAGER - an address that is already registered as an L1
+    L1_MIDDLEWARE - the new L1Middleware address to set
+    """
+
+    validator_manager = ctx.obj.normalize_address(validator_manager)
+    l1_middleware = ctx.obj.normalize_address(l1_middleware)
+
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        "l1_registry",                       # The contract key in your ABIs
+        ctx.obj.addresses["l1_registry"],    # The actual address from ADDRESSES
+        "setL1Middleware",
+        validator_manager,
+        l1_middleware,
+        success_message=f"Successfully called setL1Middleware({validator_manager}, {l1_middleware})"
+    )
+
+
 ### Vault Manager CLI commands ###
 
 @cli.command()
@@ -1820,7 +1931,7 @@ def register_l1(ctx, private_key, ledger, ledger_address, validator_manager, l1_
     help="The Ledger account address to use for signing (defaults to the first account if not provided)",
 )
 @click.pass_context
-def register_vault_l1(
+def vault_manager_register_vault_l1(
     ctx, vault_address, asset_class, max_limit, private_key, ledger, ledger_address
 ):
     """Register a vault in the VaultManager with a specific asset class and max L1 limit..
@@ -1857,7 +1968,7 @@ def register_vault_l1(
 @click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
 @click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
 @click.pass_context
-def update_vault_max_l1_limit(ctx, vault_address, asset_class, max_limit, private_key, ledger, ledger_address):
+def vault_manager_update_vault_max_l1_limit(ctx, vault_address, asset_class, max_limit, private_key, ledger, ledger_address):
     """Update a vault's max L1 limit in the MiddlewareVaultManager.
 
     \b
@@ -1890,7 +2001,7 @@ def update_vault_max_l1_limit(ctx, vault_address, asset_class, max_limit, privat
 @click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
 @click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
 @click.pass_context
-def remove_vault(ctx, vault_address, private_key, ledger, ledger_address):
+def vault_manager_remove_vault(ctx, vault_address, private_key, ledger, ledger_address):
     """Remove a registered vault from MiddlewareVaultManager.
 
     \b
@@ -2033,6 +2144,81 @@ def middleware_register_operator(ctx, operator, private_key, ledger, ledger_addr
         "registerOperator",
         operator,
         success_message=f"Successfully called registerOperator({operator})"
+    )
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def middleware_register_operator(ctx, operator, private_key, ledger, ledger_address):
+    """Register an operator in AvalancheL1Middleware.
+
+    \b
+    OPERATOR - an address to register
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "registerOperator",
+        operator,
+        success_message=f"Successfully called registerOperator({operator})"
+    )
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def middleware_disable_operator(ctx, operator, private_key, ledger, ledger_address):
+    """Disable an operator in AvalancheL1Middleware.
+
+    \b
+    OPERATOR - an address to disable
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "disableOperator",
+        operator,
+        success_message=f"Successfully called disableOperator({operator})"
+    )
+
+@cli.command()
+@click.argument("operator", type=address_type)
+@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
+@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
+@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
+@click.pass_context
+def middleware_remove_operator(ctx, operator, private_key, ledger, ledger_address):
+    """Remove an operator in AvalancheL1Middleware.
+
+    \b
+    OPERATOR - an address to remove
+    """
+    to = ctx.obj.addresses["middleware_service"]
+    entity = "middleware_service"
+    ctx.obj.process_write_transaction(
+        private_key,
+        ledger,
+        ledger_address,
+        entity,
+        to,
+        "removeOperator",
+        operator,
+        success_message=f"Successfully called removeOperator({operator})"
     )
 
 

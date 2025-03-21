@@ -5,7 +5,7 @@ Fill .env with `CURATOR_OWNER` & `L1_OWNER` env vars
 ```bash
 
 python3 suzaku-cli.py --chain fuji register-l1 $VALIDATOR_MANAGER $VAULT_MANAGER https://l1.com --private-key $L1_OWNER
-python3 suzaku-cli.py --chain fuji register-vault-l1 $VAULT 1 200000000000000000000000 --private-key $L1_OWNER # 200_000 ETH
+python3 suzaku-cli.py --chain fuji vault-manager-register-vault-l1 $VAULT 1 200000000000000000000000 --private-key $L1_OWNER # 200_000 ETH
 
 # As an Operator
 ## Register the Operator in the OperatorRegistry
@@ -89,7 +89,7 @@ python3 suzaku-cli.py --chain fuji middleware-operator-cache 2 1 --private-key $
 
 python3 suzaku-cli.py --chain fuji middleware-get-operator-stake $OPERATOR 2 1
 
-python3 suzaku-cli.py --chain fuji balancer-set-up-security-module $MIDDLEWARE 1000000 --private-key $L1_OWNER
+python3 suzaku-cli.py --chain fuji balancer-set-up-security-module $MIDDLEWARE 100000000000000000 --private-key $L1_OWNER
 
 cast rpc evm_increaseTime 7200 
 cast rpc evm_mine
@@ -120,6 +120,14 @@ python3 suzaku-cli.py --chain fuji middleware-add-node \
   --reward-address $OPERATOR \
   200000000000000000000 --private-key $OPERATOR_OWNER
 
+
+# FIX
+cast send $VALIDATOR_MANAGER \
+    "setUpSecurityModule(address,uint256)" \
+    $ <NEW_MAX_WEIGHT> \
+    --rpc-url <RPC_URL> \
+    --private-key <PRIVATE_KEY>
+
 # This last step should fail due to initializeValidatorSet() not being possible. Would require a mock BalancerValidatorManager.
 # 100000000000000 0.0001 Primariy Asset Min stake Anvil
 # 20000000000000000000 20 maxL1Limit - registerVault
@@ -147,3 +155,39 @@ python3 suzaku-cli.py --chain fuji middleware-add-node \
 # "maximumChurnPercentage": 20
 # 1000000 0.000000000001 initialSecurityModuleWeight
 ```
+
+
+Removal of middleware:
+
+```bash
+
+python3 suzaku-cli.py --chain fuji balancer-set-up-security-module $MIDDLEWARE 0 --private-key $L1_OWNER
+
+# Operator disable and remove
+python3 suzaku-cli.py --chain fuji middleware-disable-operator $OPERATOR --private-key $L1_OWNER
+
+python3 suzaku-cli.py --chain fuji middleware-remove-operator $OPERATOR --private-key $L1_OWNER
+
+# Disable vault
+python3 suzaku-cli.py --chain fuji vault-manager-update-vault-max-l1-limit $VAULT 1 0 --private-key $L1_OWNER
+
+# Remove vault after Grace Period
+python3 suzaku-cli.py --chain fuji vault-manager-remove-vault $VAULT --private-key $L1_OWNER
+# Tihs fails
+# Connected to chain ID 43113
+# Failed! Reason: 0xd7f78986 -> BaseDelegator__AlreadySet()
+# Remove from l1 registry
+
+python3 suzaku-cli.py --chain fuji delegator-l1-limit $VAULT $VALIDATOR_MANAGER 1
+
+python3 suzaku-cli.py --chain fuji delegator-max-l1-limit $VAULT $VALIDATOR_MANAGER 1
+
+# Change middleware to new one
+python3 suzaku-cli.py --chain fuji l1-registry-set-middleware $VALIDATOR_MANAGER 0x20ff8Fee854f4b320b5Dc8933ac4C77b86f162f8 --private-key $L1_OWNER
+
+# Modify address in script and restart sequence
+# python3 suzaku-cli.py --chain fuji vault-manager-register-vault-l1 $VAULT 1 200000000000000000000000 --private-key $L1_OWNER # 200_000 ETH
+
+python3 suzaku-cli.py --chain fuji opstakes $OPERATOR
+
+python3 suzaku-cli.py --chain fuji l1stakes $VALIDATOR_MANAGER
