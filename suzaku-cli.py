@@ -253,13 +253,13 @@ class SymbioticCLI:
             "balancer_validator_manager": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
         },
         "fuji": {
-            "op_registry": "0xc30dB1156Aa360F1E23F605Bfa3c9213732Faf63",
-            "l1_registry": "0x21f73984b9064Cb2d2f54584c1d2c7296069F8E2",
-            "op_vault_opt_in": "0x17C8D2e53297C51DB79Fedd01320bC913Cd69eF7",
-            "op_l1_opt_in": "0xA1a41daE5f13eCe6F3DeD9f7d6c975Ed128b681C",
-            "middleware_service": "0x20ff8Fee854f4b320b5Dc8933ac4C77b86f162f8",
-            "vault_manager": "0x680bA472b4cc7932b1C8BA2118a36661863e3053",
-            "vault_factory": "0x9d342dba348eFB0235938eAdeCb06f0b23d8E980",
+            "op_registry": "0x9BCfAD7791Eb1E5a540406fF91aA188Bbf051171",
+            "l1_registry": "0xf79bDf6582F5180679465Ec0bf8B2dA5B2B1B0E0",
+            "op_vault_opt_in": "0xFe6Fc1aA73AbB68C7173cA000c59e2a6a23AcED6",
+            "op_l1_opt_in": "0xb73e204d8B4FB80B9C403b8c9f5F22D408e56f91",
+            "middleware_service": "0x21185E1168fE101cF877CE7b64D5EdDB031FF537",
+            "vault_manager": "0x8e13b5d1d2aCFd6A1254E4ea64d79aBdeDF7990c",
+            "vault_factory": "0xD0C38C7678B512108d1c88adCb1a2923e6389F9B",
             "balancer_validator_manager": "0x1A59410b0f39b6e2AED66021Ae0FA154b9BB0587"
         },
     }
@@ -2152,31 +2152,6 @@ def middleware_register_operator(ctx, operator, private_key, ledger, ledger_addr
 @click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
 @click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
 @click.pass_context
-def middleware_register_operator(ctx, operator, private_key, ledger, ledger_address):
-    """Register an operator in AvalancheL1Middleware.
-
-    \b
-    OPERATOR - an address to register
-    """
-    to = ctx.obj.addresses["middleware_service"]
-    entity = "middleware_service"
-    ctx.obj.process_write_transaction(
-        private_key,
-        ledger,
-        ledger_address,
-        entity,
-        to,
-        "registerOperator",
-        operator,
-        success_message=f"Successfully called registerOperator({operator})"
-    )
-
-@cli.command()
-@click.argument("operator", type=address_type)
-@click.option("--private-key", type=bytes32_type, envvar="PK", help="Your private key for signing transactions")
-@click.option("--ledger", is_flag=True, help="Use a Ledger device for signing instead of a private key")
-@click.option("--ledger-address", type=address_type, help="Ledger account address (if not the first one)")
-@click.pass_context
 def middleware_disable_operator(ctx, operator, private_key, ledger, ledger_address):
     """Disable an operator in AvalancheL1Middleware.
 
@@ -2277,7 +2252,7 @@ def middleware_add_node(ctx,
         pchain_owner,
         reward_owner,
         initial_stake,
-        success_message=f"Node added: {node_id}"
+        success_message = f"Node added: 0x{node_id.hex()}"
     )
 
 
@@ -2578,7 +2553,10 @@ def middleware_get_active_nodes_for_epoch(ctx, operator, epoch):
         operator,
         epoch
     )
-    print(node_ids)
+
+    # Convert bytes to hex
+    node_ids_hex = [f"0x{node_id.hex()}" for node_id in node_ids]
+    print(node_ids_hex)
 
 
 @cli.command()
