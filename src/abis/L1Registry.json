@@ -1,0 +1,284 @@
+[
+    {
+        "type": "function",
+        "name": "getAllL1s",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[]",
+                "internalType": "address[]"
+            },
+            {
+                "name": "",
+                "type": "address[]",
+                "internalType": "address[]"
+            },
+            {
+                "name": "",
+                "type": "string[]",
+                "internalType": "string[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getL1At",
+        "inputs": [
+            {
+                "name": "index",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "isRegistered",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "isRegisteredWithMiddleware",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "l1Middleware_",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "l1MetadataURL",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "l1Middleware",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "registerL1",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "l1Middleware_",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "metadataURL",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setL1Middleware",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "l1Middleware_",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setMetadataURL",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "metadataURL",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "totalL1s",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "event",
+        "name": "RegisterL1",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetL1Middleware",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "l1Middleware",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetMetadataURL",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "metadataURL",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__InvalidL1Middleware",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__InvalidValidatorManager",
+        "inputs": [
+            {
+                "name": "validatorManager",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__L1AlreadyRegistered",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__L1NotRegistered",
+        "inputs": []
+    }
+]
