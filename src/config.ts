@@ -21,6 +21,7 @@ interface Config {
   middlewareService: `0x${string}`;
   opL1OptIn: `0x${string}`;
   opVaultOptIn: `0x${string}`;
+  balancerValidatorManager: `0x${string}`;
   abis: {
     L1Registry: any;
     OperatorRegistry: any;
@@ -43,6 +44,7 @@ const fujiConfig: Config = {
   middlewareService: (process.env.MIDDLEWARE_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
+  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,
@@ -65,6 +67,7 @@ const anvilConfig: Config = {
   middlewareService: (process.env.MIDDLEWARE as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opL1OptIn: (process.env.OP_L1_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opVaultOptIn: (process.env.OP_VAULT_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
+  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER as `0x${string}`) || '0x0000000000000000000000000000000000000000', 
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,

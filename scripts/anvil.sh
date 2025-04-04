@@ -9,6 +9,7 @@ export L1_OWNER=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b7869
 export OPERATOR_OWNER=0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
 export STAKER_OWNER=0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97
 
+export BALANCER_VALIDATOR_MANAGER=0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F 
 export VAULT_MANAGER=0x05Aa229Aec102f78CE0E852A812a388F076Aa555
 export VALIDATOR_MANAGER=0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F
 export VAULT=0x10233c0dbD1B2A309743F5336E30b79248724360
@@ -189,7 +190,7 @@ run_ts_cli_calls() {
     printf "\n%s\n" "=== 15.1) Check current epoch in the middleware ==="
     npx ts-node src/cli.ts --network anvil middleware-get-current-epoch
 
-    printf "\n%s\n" "=== 15.2) Calc & Cache stakes for epoch=1, assetClass=1 ==="
+    printf "\n%s\n" "=== 15.2) Calc & Cache stakes for epoch=1 and 2, assetClass=1 ==="
     npx ts-node src/cli.ts --network anvil \
       --private-key "$L1_OWNER" \
       middleware-operator-cache 1 1
@@ -197,26 +198,25 @@ run_ts_cli_calls() {
     npx ts-node src/cli.ts --network anvil \
       --private-key "$L1_OWNER" \
       middleware-operator-cache 2 1
+
+    npx ts-node src/cli.ts --network anvil \
+      --private-key "$L1_OWNER" \
+      middleware-operator-cache 2 1
+
+    npx ts-node src/cli.ts --network anvil \
+      --private-key "$L1_OWNER" \
+      middleware-calc-node-weights
     
     # Add this before trying to add a node
     printf "\n%s\n" "=== 15.5) Set up security module in the middleware ==="
     run_cmd npx ts-node src/cli.ts --network anvil --private-key "$L1_OWNER" \
-    balancer-set-up-security-module "$MIDDLEWARE" 1000000 
+    balancer-set-up-security-module "$MIDDLEWARE" 1000000
 
     # Check if operator exists in the middleware
     npx ts-node src/cli.ts --network anvil middleware-get-all-operators
 
     # Check the operator's cached stake
-    npx ts-node src/cli.ts --network anvil middleware-get-operator-stake "$OPERATOR" 0 1
-
-    # Check the operator's locked stake
-    npx ts-node src/cli.ts --network anvil middleware-get-operator-locked-stake "$OPERATOR"
-
-    # Check the operator's used weight
-    npx ts-node src/cli.ts --network anvil middleware-get-operator-used-weight "$OPERATOR"
-
-    # Check the operator's nodes length
-    npx ts-node src/cli.ts --network anvil middleware-get-operator-nodes-length "$OPERATOR"
+    npx ts-node src/cli.ts --network anvil middleware-get-operator-stake "$OPERATOR" 2 1
 
     # 1) Grab the latest block timestamp from Anvil
     LATEST_TS=$(cast block latest --rpc-url "$RPC_URL" --json | jq -r '.timestamp')
@@ -230,12 +230,15 @@ run_ts_cli_calls() {
       middleware-add-node \
       0x00000000000000000000000039a662260f928d2d98ab5ad93aa7af8e0ee4d426 \
       0xb6d4ef306dcbfd1fb4e9ba75e47caf564f170eccc7a17033f40a2887fe6887b5c245e6dd38ba34a5be81683dc0d6394e \
-      "0" \
+      "$REGISTRATION_EXPIRY" \  # Use the $ prefix to reference the variable
       1 \
       1 \
       100000000000000000000 \
       --pchain-address 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc \
       --reward-address 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+
+    # Check the operator's nodes length
+    npx ts-node src/cli.ts --network anvil middleware-get-operator-nodes-length "$OPERATOR"
 
     printf "\n%s\n" "[INFO] Done with CLI calls. Check the logs above.\n"
   } 2>&1 | tee -a "$TEST_LOG"

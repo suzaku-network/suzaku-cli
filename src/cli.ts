@@ -56,6 +56,12 @@ import {
   checkOptInVault
 } from "./operatorOptIn";
 
+import {
+    setUpSecurityModule,
+    getSecurityModules,
+    getSecurityModuleWeights
+  } from "./balancer";
+
 async function getDefaultAccount(opts: any): Promise<`0x${string}`> {
   const client = generateClient(opts.privateKey, opts.network);
   return client.account?.address as `0x${string}`;
@@ -814,6 +820,57 @@ async function main() {
             vaultAddress as `0x${string}`,
             );
     });
+
+    /**
+     * --------------------------------------------------
+     * BALANCER
+     * --------------------------------------------------
+     */
+    program
+        .command("balancer-set-up-security-module")
+        .argument("<middlewareAddress>")
+        .argument("<maxWeight>")
+        .action(async (middlewareAddress, maxWeight) => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generateClient(opts.privateKey, opts.network);
+            await setUpSecurityModule(
+            client,
+            config.balancerValidatorManager as `0x${string}`,
+            config.abis.BalancerValidatorManager,
+            middlewareAddress as `0x${string}`,
+            BigInt(maxWeight)
+            );
+    });
+
+    program
+        .command("balancer-get-security-modules")
+        .action(async () => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generatePublicClient(opts.network);
+            await getSecurityModules(
+            client,
+            config.balancerValidatorManager as `0x${string}`,
+            config.abis.BalancerValidatorManager
+            );
+    });
+
+    program
+        .command("balancer-get-security-module-weights")
+        .argument("<securityModule>")
+        .action(async (securityModule) => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generatePublicClient(opts.network);
+            await getSecurityModuleWeights(
+            client,
+            config.balancerValidatorManager as `0x${string}`,
+            config.abis.BalancerValidatorManager,
+            securityModule as `0x${string}`
+            );
+        });
+    
     program.parse(process.argv);
 }
 
