@@ -1,7 +1,7 @@
 import { Config } from "./config";
 import { WalletClient } from "viem";
 
-async function registerL1(config: Config, client: WalletClient, validatorManager: string, l1Middleware: string, metadataUrl: string) {
+export async function registerL1(config: Config, client: WalletClient, validatorManager: string, l1Middleware: string, metadataUrl: string) {
     console.log("Registering L1...");
 
     try {
@@ -22,4 +22,31 @@ async function registerL1(config: Config, client: WalletClient, validatorManager
     }
 }
 
-export { registerL1 };
+export async function setL1Middleware(
+    client: WalletClient,
+    l1RegistryAddress: `0x${string}`,
+    l1RegistryAbi: any,
+    validatorManager: `0x${string}`,
+    newMiddleware: `0x${string}`
+  ) {
+    console.log("Setting L1 Middleware...");
+
+    try {
+        // @ts-ignore - Client has hoisted account but TypeScript doesn't recognize it
+        const hash = await client.writeContract({
+            address: l1RegistryAddress,
+            abi: l1RegistryAbi,
+            functionName: 'setL1Middleware',
+            args: [validatorManager, newMiddleware],
+            chain: null,
+            account: client.account || null,
+        });
+
+        console.log("Set L1 Middleware successfully, Transaction hash:", hash);
+    } catch (error) {
+        console.error("Transaction failed:", error);
+        if (error instanceof Error) {
+            console.error("Error message:", error.message);
+        }
+    }
+}

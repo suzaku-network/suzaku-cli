@@ -1,5 +1,5 @@
-import { createWalletClient, http, WalletClient } from 'viem'
-import { avalancheFuji, avalanche, localhost } from 'viem/chains'
+import { createWalletClient, http, WalletClient, createPublicClient, PublicClient } from 'viem'
+import { avalancheFuji, avalanche, anvil } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
 
@@ -17,10 +17,10 @@ function generateClient(privateKey: string, network: string): WalletClient {
                 chain: avalanche,
                 transport: http()
             })
-        case 'localhost':
+        case 'anvil':
             return createWalletClient({
                 account: privateKeyToAccount(privateKey as `0x${string}`),
-                chain: localhost,
+                chain: anvil,
                 transport: http()
             })
         default:
@@ -28,4 +28,26 @@ function generateClient(privateKey: string, network: string): WalletClient {
     }
 }
 
-export { generateClient };
+function generatePublicClient(network: string): PublicClient {
+    switch (network) {
+        case 'fuji':
+            return createPublicClient({
+                chain: avalancheFuji,
+                transport: http()
+            })
+        case 'mainnet':
+            return createPublicClient({
+                chain: avalanche,
+                transport: http()
+            })
+        case 'anvil':
+            return createPublicClient({
+                chain: anvil,
+                transport: http()
+            })
+        default:
+            throw new Error(`Unsupported network: ${network}`)
+    }
+}
+
+export { generateClient, generatePublicClient };
