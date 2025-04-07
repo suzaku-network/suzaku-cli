@@ -9,9 +9,9 @@ export L1_OWNER=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b7869
 export OPERATOR_OWNER=0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
 export STAKER_OWNER=0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97
 
-export BALANCER_VALIDATOR_MANAGER=0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F 
-export VAULT_MANAGER=0x05Aa229Aec102f78CE0E852A812a388F076Aa555
-export VALIDATOR_MANAGER=0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F
+export BALANCER_VALIDATOR_MANAGER=0x8464135c8F25Da09e49BC8782676a84730C318bC 
+export VAULT_MANAGER=0x712516e61C8B383dF4A63CFe83d7701Bce54B03e
+export VALIDATOR_MANAGER=0x8464135c8F25Da09e49BC8782676a84730C318bC
 export VAULT=0x10233c0dbD1B2A309743F5336E30b79248724360
 export DELEGATOR=0xB13cA41129b7209bFD0392147aEf54B21DE06770
 export OPERATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
@@ -19,7 +19,7 @@ export SAVAX=0x5FbDB2315678afecb367f032d93F642f64180aa3
 export STAKER=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f
 export PRIMARY_ASSET=0x9f1ac54BEF0DD2f6f3462EA0fa94fC62300d3a8e
 export COLLATERAL=0x9f1ac54BEF0DD2f6f3462EA0fa94fC62300d3a8e
-export MIDDLEWARE=0x1275D096B9DBf2347bD2a131Fb6BDaB0B4882487
+export MIDDLEWARE=0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F
 export OPERATOR_REGISTRY=0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
 export L1_REGISTRY=0x0165878A594ca255338adfa4d48449f69242Eb8F
 export OP_L1_OPT_IN=0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
@@ -33,7 +33,7 @@ export RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
 ########################################
 export LOGS_DIR="./logs"
 export TEST_LOG="$LOGS_DIR/test-run.log"
-export DEPLOY_SCRIPT="suzaku-deployments/suzaku-protocol/anvil.sh"
+export DEPLOY_SCRIPT="suzaku-deployments/suzaku-protocol/anvil-with-mock.sh"
 export ROOT_DIR="$(pwd)"
 
 ########################################
@@ -167,6 +167,9 @@ run_ts_cli_calls() {
     run_cmd npx ts-node src/cli.ts --network anvil --private-key "$L1_OWNER" \
       middleware-register-operator "$OPERATOR"
 
+    printf "\n%s\n" "=== 12.1) Verify operator registration in middleware ==="
+    run_cmd cast call "$MIDDLEWARE" "operators(address)" "$OPERATOR" --rpc-url "$RPC_URL"
+
     printf "\n%s\n" "=== 13) Check current epoch in the middleware ==="
     run_cmd npx ts-node src/cli.ts --network anvil \
       middleware-get-current-epoch
@@ -230,7 +233,7 @@ run_ts_cli_calls() {
       middleware-add-node \
       0x00000000000000000000000039a662260f928d2d98ab5ad93aa7af8e0ee4d426 \
       0xb6d4ef306dcbfd1fb4e9ba75e47caf564f170eccc7a17033f40a2887fe6887b5c245e6dd38ba34a5be81683dc0d6394e \
-      "$REGISTRATION_EXPIRY" \  # Use the $ prefix to reference the variable
+      "$REGISTRATION_EXPIRY" \
       1 \
       1 \
       100000000000000000000 \
