@@ -1,4 +1,7 @@
-import { WalletClient, PublicClient } from 'viem';
+import { WalletClient, PublicClient, bytesToHex, hexToBytes } from 'viem';
+import { ExtendedWalletClient } from './client';
+import { collectSignatures, packL1ValidatorRegistration, packWarpIntoAccessList } from './lib/warpUtils';
+import { registerL1Validator } from './lib/pChainUtils';
 
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -137,12 +140,16 @@ export async function middlewareAddNode(
 
 // completeValidatorRegistration
 export async function middlewareCompleteValidatorRegistration(
-  client: WalletClient,
+  client: ExtendedWalletClient,
   middlewareAddress: `0x${string}`,
   middlewareAbi: any,
   operator: `0x${string}`,
   nodeId: `0x${string}`,
-  messageIndex: bigint
+  messageIndex: bigint,
+  pChainTxPrivateKey: string,
+  pChainTxAddress: string,
+  blsProofOfPossession: string,
+  addNodeTxHash: `0x${string}`
 ) {
   console.log("Completing validator registration...");
 
@@ -150,6 +157,53 @@ export async function middlewareCompleteValidatorRegistration(
     if (!client.account) {
       throw new Error('Client account is required');
     }
+
+    // Wait for transaction receipt to extract warp message and validation ID
+    // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
+    const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
+
+    // Get the unsigned warp message and validation ID from the receipt
+    const RegisterL1ValidatorUnsignedWarpMsg = receipt.logs[0].data ?? '';
+    const validationIDHex = receipt.logs[1].topics[1] ?? '';
+
+    // Collect signatures for the warp message
+    console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
+    const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
+
+    // Register validator on P-Chain
+    const pChainTxId = await registerL1Validator({
+      privateKeyHex: pChainTxPrivateKey,
+      pChainAddress: pChainTxAddress,
+      blsProofOfPossession: blsProofOfPossession,
+      signedMessage
+    });
+
+    // Pack and sign the P-Chain warp message
+    const validationIDBytes = hexToBytes(validationIDHex as `0x${string}`);
+    const pChainChainID = '11111111111111111111111111111111LpoYY';
+    const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
+    const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
+
+    // Aggregate signatures from validators
+    console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
+    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    console.log("Signatures aggregated");
+
+    // Convert the signed warp message to bytes and pack into access list
+    const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
+    const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
+
+    // Simulate completeValidatorRegistration transaction
+    console.log("Simulating completeValidatorRegistration transaction...");
+    await client.simulateContract({
+      address: middlewareAddress,
+      abi: middlewareAbi,
+      functionName: 'completeValidatorRegistration',
+      args: [operator, nodeId, messageIndex],
+      account: client.account,
+      accessList
+    });
+    console.log("completeValidatorRegistration simulation successful");
 
     const hash = await client.writeContract({
       address: middlewareAddress,

@@ -409,7 +409,11 @@ async function main() {
         .argument("<operator>")
         .argument("<nodeId>")
         .argument("<messageIndex>")
-        .action(async (operator, nodeId, messageIndex) => {
+        .option("--pchain-tx-private-key <privateKey>", "", collectMultiple, [])
+        .option("--pchain-tx-address <address>", "", collectMultiple, [])
+        .option("--bls-proof-of-possession <blsProofOfPossession>", "", collectMultiple, [])
+        .option("--add-node-tx-hash <txHash>", "", collectMultiple, [])
+        .action(async (operator, nodeId, messageIndex, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
@@ -420,6 +424,10 @@ async function main() {
             operator as `0x${string}`,
             nodeId as `0x${string}`,
             BigInt(messageIndex),
+            options.pchainTxPrivateKey as string,
+            options.pchainTxAddress as string,
+            options.blsProofOfPossession as string,
+            options.addNodeTxHash as `0x${string}`
             );
     });
 
