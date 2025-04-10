@@ -33,7 +33,7 @@ export RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
 ########################################
 export LOGS_DIR="./logs"
 export TEST_LOG="$LOGS_DIR/test-run.log"
-export DEPLOY_SCRIPT="suzaku-deployments/suzaku-protocol/anvil-with-mock.sh"
+export DEPLOY_SCRIPT="$SUZAKU_CORE_PATH/suzaku-protocol/anvil-with-mock.sh"
 export ROOT_DIR="$(pwd)"
 
 ########################################

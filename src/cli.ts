@@ -871,6 +871,28 @@ async function main() {
             );
         });
     
+    
+    // --------------------------------------------------
+    // "help" for help function
+    // --------------------------------------------------
+    program
+        .command("help [command]")
+        .description("Display help for a specific command or the entire CLI")
+        .action((cmd) => {
+            if (cmd) {
+                const sub = program.commands.find(c => c.name() === cmd);
+                if (!sub) {
+                    console.error(`Unknown command: ${cmd}`);
+                    program.outputHelp();
+                    process.exit(1);
+                }
+                sub.help();
+            } else {
+                program.help();
+            }
+        });
+    
+    
     program.parse(process.argv);
 }
 
