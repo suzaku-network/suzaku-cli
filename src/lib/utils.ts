@@ -4,6 +4,7 @@ import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
 import * as readline from 'readline';
+import { fromBytes } from "viem";
 
 const CHECKSUM_LENGTH = 4;
 
@@ -119,4 +120,12 @@ export async function interruptiblePause(seconds: number): Promise<void> {
 
         process.stdin.on('keypress', handleKeypress);
     });
-} 
+}
+
+export const parseNodeID = (nodeID: string) => {
+    const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
+    const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
+    const nodeIDHex = fromBytes(decodedID, 'hex')
+    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
+    return nodeIDHexTrimmed
+}

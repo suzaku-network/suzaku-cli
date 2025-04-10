@@ -451,7 +451,11 @@ async function main() {
     program
         .command("middleware-complete-validator-removal")
         .argument("<messageIndex>")
-        .action(async (messageIndex) => {
+        .option("--initialize-end-validation-tx-hash <txHash>", "", collectMultiple, [])
+        .option("--node-id <nodeId>", "", collectMultiple, [])
+        .option("--pchain-tx-private-key <privateKey>", "", collectMultiple, [])
+        .option("--pchain-tx-address <address>", "", collectMultiple, [])
+        .action(async (messageIndex, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
@@ -459,7 +463,11 @@ async function main() {
             client,
             config.middlewareService as `0x${string}`,
             config.abis.MiddlewareService,
-            BigInt(messageIndex)
+            BigInt(messageIndex),
+            options.nodeId as string,
+            options.initializeEndValidationTxHash as `0x${string}`,
+            options.pchainTxPrivateKey as string,
+            options.pchainTxAddress as string
             );
     });
 
