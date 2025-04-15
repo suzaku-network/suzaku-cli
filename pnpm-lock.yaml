@@ -11,12 +11,21 @@ importers:
       '@avalabs/avalanchejs':
         specifier: 4.1.2-alpha.4
         version: 4.1.2-alpha.4
+      '@noble/hashes':
+        specifier: ^1.7.2
+        version: 1.7.2
+      '@scure/base':
+        specifier: ^1.2.4
+        version: 1.2.4
       commander:
         specifier: ^12.0.0
         version: 12.1.0
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
+      micro-eth-signer:
+        specifier: 0.7.2
+        version: 0.7.2
       viem:
         specifier: ^2.24.2
         version: 2.24.2(typescript@5.8.2)
@@ -69,6 +78,10 @@ packages:
 
   '@noble/hashes@1.7.1':
     resolution: {integrity: sha512-B8XBPsn4vT/KJAGqDzbwztd+6Yte3P4V7iafm24bxgDe/mlRuK6xmWPuCNrKt2vDafZ8MfJLlchDG/vYafQEjQ==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.7.2':
+    resolution: {integrity: sha512-biZ0NUSxyjLLqo6KxEJ1b+C2NAx0wtDoFvCaXHGgUkeHzf3Xc1xKumFKREuT7f7DARNZ/slvYUwFG6B0f2b6hQ==}
     engines: {node: ^14.21.3 || >=16}
 
   '@noble/secp256k1@2.0.0':
@@ -252,6 +265,8 @@ snapshots:
 
   '@noble/hashes@1.7.1': {}
 
+  '@noble/hashes@1.7.2': {}
+
   '@noble/secp256k1@2.0.0': {}
 
   '@scure/base@1.1.5': {}
@@ -261,12 +276,12 @@ snapshots:
   '@scure/bip32@1.6.2':
     dependencies:
       '@noble/curves': 1.8.1
-      '@noble/hashes': 1.7.1
+      '@noble/hashes': 1.7.2
       '@scure/base': 1.2.4
 
   '@scure/bip39@1.5.4':
     dependencies:
-      '@noble/hashes': 1.7.1
+      '@noble/hashes': 1.7.2
       '@scure/base': 1.2.4
 
   '@tsconfig/node10@1.0.11': {}
@@ -325,7 +340,7 @@ snapshots:
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
       '@noble/curves': 1.8.1
-      '@noble/hashes': 1.7.1
+      '@noble/hashes': 1.7.2
       '@scure/bip32': 1.6.2
       '@scure/bip39': 1.5.4
       abitype: 1.0.8(typescript@5.8.2)
