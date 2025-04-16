@@ -1,5 +1,5 @@
 import { Config } from "./config";
-import { WalletClient } from "viem";
+import { WalletClient, PublicClient } from "viem";
 
 export async function registerL1(config: Config, client: WalletClient, validatorManager: string, l1Middleware: string, metadataUrl: string) {
     console.log("Registering L1...");
@@ -28,7 +28,7 @@ export async function setL1Middleware(
     l1RegistryAbi: any,
     validatorManager: `0x${string}`,
     newMiddleware: `0x${string}`
-  ) {
+) {
     console.log("Setting L1 Middleware...");
 
     try {
@@ -48,5 +48,42 @@ export async function setL1Middleware(
         if (error instanceof Error) {
             console.error("Error message:", error.message);
         }
+    }
+}
+
+export async function getL1s(client: PublicClient, l1RegistryAddress: `0x${string}`, l1RegistryAbi: any) {
+    console.log("Getting L1s...");
+
+    try {
+        // Get total number of L1s
+        const totalL1s = await client.readContract({
+            address: l1RegistryAddress,
+            abi: l1RegistryAbi,
+            functionName: 'totalL1s',
+            args: [],
+        });
+
+        console.log("Total L1s:", totalL1s);
+
+        // Get each L1
+        const l1s = [];
+        for (let i = 0; i < Number(totalL1s); i++) {
+            const l1 = await client.readContract({
+                address: l1RegistryAddress,
+                abi: l1RegistryAbi,
+                functionName: 'getL1At',
+                args: [i],
+            });
+            l1s.push(l1);
+        }
+
+        console.log("L1s:", l1s);
+
+    } catch (error) {
+        console.error("Failed to get L1s:", error);
+        if (error instanceof Error) {
+            console.error("Error message:", error.message);
+        }
+        return [];
     }
 }

@@ -38,13 +38,13 @@ interface Config {
 }
 
 const fujiConfig: Config = {
-  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  vaultManager: (process.env.VAULT_MANAGER_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  middlewareService: (process.env.MIDDLEWARE_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER_FUJI as `0x${string}`) || '0x0000000000000000000000000000000000000000',
+  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0x9AE34b25A1CfAA191565402bDF511dc748d3BC1F',
+  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0xC931bFB1bC75268496E6aB24f0dFE19B59586aB9',
+  vaultManager: (process.env.VAULT_MANAGER_FUJI as `0x${string}`) || '0x783Bc9F5E7AFe441D06D005a30B9235fEc3F02f6',
+  middlewareService: (process.env.MIDDLEWARE_FUJI as `0x${string}`) || '0x3529c1B9B64C350D4f274e18571e9202E98214F2',
+  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x7DF6A370f8f85FCF437894Aa2566A60674Fe3E5e',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0x18747F0aadAa744F653a4Ae5bdc2bCA919E2412D',
+  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER_FUJI as `0x${string}`) || '0x84F2B4D4cF8DA889701fBe83d127896880c04325',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,
@@ -67,7 +67,7 @@ const anvilConfig: Config = {
   middlewareService: (process.env.MIDDLEWARE as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opL1OptIn: (process.env.OP_L1_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   opVaultOptIn: (process.env.OP_VAULT_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER as `0x${string}`) || '0x0000000000000000000000000000000000000000', 
+  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER as `0x${string}`) || '0x0000000000000000000000000000000000000000',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,

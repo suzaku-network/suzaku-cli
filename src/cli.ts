@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { parseUnits } from "viem";
-import { registerL1 } from "./l1";
+import { registerL1, getL1s } from "./l1";
 import { registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient, generatePublicClient } from "./client";
@@ -100,6 +100,16 @@ async function main() {
 
         await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
         });
+
+    program
+        .command("get-l1s")
+        .action(async () => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generatePublicClient(opts.network);
+            await getL1s(client, config.l1Registry as `0x${string}`, config.abis.L1Registry);
+        });
+
 
     /* --------------------------------------------------
     * OPERATOR REGISTRY COMMANDS
@@ -415,10 +425,10 @@ async function main() {
         .argument("<operator>")
         .argument("<nodeId>")
         .argument("<messageIndex>")
-        .option("--pchain-tx-private-key <privateKey>", "", collectMultiple, [])
-        .option("--pchain-tx-address <address>", "", collectMultiple, [])
-        .option("--bls-proof-of-possession <blsProofOfPossession>", "", collectMultiple, [])
-        .option("--add-node-tx-hash <txHash>", "", collectMultiple, [])
+        .option("--pchain-tx-private-key <pchainTxPrivateKey>")
+        .option("--pchain-tx-address <pchainTxAddress>")
+        .option("--bls-proof-of-possession <blsProofOfPossession>")
+        .option("--add-node-tx-hash <txHash>")
         .action(async (operator, nodeId, messageIndex, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
