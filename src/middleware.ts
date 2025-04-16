@@ -1,9 +1,10 @@
-import { WalletClient, PublicClient, bytesToHex, hexToBytes } from 'viem';
+import { WalletClient, PublicClient, bytesToHex, hexToBytes, fromBytes, pad } from 'viem';
 import { ExtendedWalletClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
 import { parseNodeID } from './lib/utils';
 import { GetRegistrationJustification } from './lib/justification';
+import { utils } from '@avalabs/avalanchejs';
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
@@ -101,7 +102,7 @@ export async function middlewareAddNode(
   client: WalletClient,
   middlewareAddress: `0x${string}`,
   middlewareAbi: any,
-  nodeId: `0x${string}`,
+  nodeId: string,
   blsKey: `0x${string}`,
   registrationExpiry: bigint,
   pchainOwner: [bigint, `0x${string}`[]],
@@ -115,12 +116,20 @@ export async function middlewareAddNode(
       throw new Error('Client account is required');
     }
 
+    // Parse NodeID to bytes32 format
+    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
+    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
+    const nodeIDHex = fromBytes(decodedID, 'hex');
+    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
+    // Pad end (right) to 32 bytes
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+
     const hash = await client.writeContract({
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'addNode',
       args: [
-        nodeId,
+        nodeIdHex32,
         blsKey,
         registrationExpiry,
         pchainOwner,
@@ -145,7 +154,7 @@ export async function middlewareCompleteValidatorRegistration(
   middlewareAddress: `0x${string}`,
   middlewareAbi: any,
   operator: `0x${string}`,
-  nodeId: `0x${string}`,
+  nodeId: string,
   messageIndex: bigint,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
@@ -194,6 +203,15 @@ export async function middlewareCompleteValidatorRegistration(
     // Convert the signed warp message to bytes and pack into access list
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
+    console.log("accessList", accessList)
+
+    // Parse NodeID to bytes32 format
+    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
+    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
+    const nodeIDHex = fromBytes(decodedID, 'hex');
+    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
+    // Pad end (right) to 32 bytes
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
 
     // Simulate completeValidatorRegistration transaction
     console.log("Simulating completeValidatorRegistration transaction...");
@@ -201,8 +219,9 @@ export async function middlewareCompleteValidatorRegistration(
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'completeValidatorRegistration',
-      args: [operator, nodeId, messageIndex],
+      args: [operator, nodeIdHex32, messageIndex],
       account: client.account,
+      gas: BigInt(5000000),
       accessList
     });
     console.log("completeValidatorRegistration simulation successful");
@@ -211,9 +230,10 @@ export async function middlewareCompleteValidatorRegistration(
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'completeValidatorRegistration',
-      args: [operator, nodeId, messageIndex],
+      args: [operator, nodeIdHex32, messageIndex],
       chain: null,
       account: client.account,
+      accessList
     });
     console.log("completeValidatorRegistration done, tx hash:", hash);
   } catch (error) {
