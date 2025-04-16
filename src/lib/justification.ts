@@ -391,79 +391,102 @@ export async function GetRegistrationJustification(
 
     // 2. If not a bootstrap validator, search Warp logs
     try {
-        const warpLogs = await publicClient.getLogs({
-            address: WARP_ADDRESS,
-            event: sendWarpMessageEventAbi,
-            // fromBlock: 'earliest',
-            // toBlock: 'latest',
-            fromBlock: BigInt(39378632),
-            toBlock: BigInt(39378832),
-        });
+        // Start from the latest block and search backwards in batches
+        const latestBlock = await publicClient.getLogs({ fromBlock: 'latest' }).then(logs => logs.length > 0 ? logs[0].blockNumber : 0);
+        const BATCH_SIZE = 2048;
+        let fromBlock = BigInt(latestBlock);
+        let toBlock = BigInt(latestBlock);
+        let justification = null;
 
-        if (warpLogs.length === 0) {
-            console.log(`No Warp logs found.`);
-            return null;
-        }
+        console.log(`Starting search from latest block ${latestBlock} in batches of ${BATCH_SIZE} blocks...`);
 
-        console.log(`Found ${warpLogs.length} Warp logs. Searching for justification matching ValidationID ${validationIDHex}...`);
+        while (fromBlock > 0 && !justification) {
+            // Calculate batch range
+            fromBlock = BigInt(Math.max(0, Number(toBlock) - BATCH_SIZE + 1));
 
-        for (const log of warpLogs) {
-            try {
-                const decodedArgs = log.args as { message?: `0x${string}` };
-                const fullMessageHex = decodedArgs.message;
-                if (!fullMessageHex) continue;
+            console.log(`Searching for Warp logs in block range: ${fromBlock} to ${toBlock}...`);
 
-                const unsignedMessageBytes = Buffer.from(fullMessageHex.slice(2), 'hex');
-                const addressedCall = extractAddressedCall(unsignedMessageBytes);
-                if (addressedCall.length === 0) continue;
+            const warpLogs = await publicClient.getLogs({
+                address: WARP_ADDRESS,
+                event: sendWarpMessageEventAbi,
+                fromBlock: fromBlock,
+                toBlock: toBlock,
+            });
 
-                // Check TypeID within AddressedCall for RegisterL1ValidatorMessage
-                if (addressedCall.length < 6) continue;
-                const acTypeID = (addressedCall[2] << 24) | (addressedCall[3] << 16) | (addressedCall[4] << 8) | addressedCall[5];
-                const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID_IN_AC = 1;
-                if (acTypeID !== REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID_IN_AC) {
-                    continue;
-                }
+            if (warpLogs.length > 0) {
+                console.log(`Found ${warpLogs.length} Warp logs in block range ${fromBlock}-${toBlock}. Searching for justification matching ValidationID ${validationIDHex}...`);
 
-                const payloadBytes = extractPayloadFromAddressedCall(addressedCall);
-                if (!payloadBytes) continue;
+                for (const log of warpLogs) {
+                    try {
+                        const decodedArgs = log.args as { message?: `0x${string}` };
+                        const fullMessageHex = decodedArgs.message;
+                        if (!fullMessageHex) continue;
 
-                try {
-                    // Unpack the payload
-                    const parsedPayload: SolidityValidationPeriod = unpackRegisterL1ValidatorPayload(payloadBytes);
-                    // Calculate the validationID (hash) of this message payload
-                    const logValidationIDBytes = calculateValidationID(parsedPayload);
+                        const unsignedMessageBytes = Buffer.from(fullMessageHex.slice(2), 'hex');
+                        const addressedCall = extractAddressedCall(unsignedMessageBytes);
+                        if (addressedCall.length === 0) continue;
 
-                    // Compare the calculated hash with the target validation ID
-                    if (compareBytes(logValidationIDBytes, targetValidationIDBytes)) {
-
-                        // Optional: Confirm the nodeID in the message matches the input nodeID
-                        if (targetNodeIDBytes && !compareBytes(parsedPayload.nodeID, targetNodeIDBytes)) {
-                            console.warn(`ValidationID match found (${validationIDHex}) in log ${log.transactionHash}, but NodeID in message (${utils.base58check.encode(Buffer.from(parsedPayload.nodeID))}) does not match expected NodeID ${nodeID}. Skipping.`);
+                        // Check TypeID within AddressedCall for RegisterL1ValidatorMessage
+                        if (addressedCall.length < 6) continue;
+                        const acTypeID = (addressedCall[2] << 24) | (addressedCall[3] << 16) | (addressedCall[4] << 8) | addressedCall[5];
+                        const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID_IN_AC = 1;
+                        if (acTypeID !== REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID_IN_AC) {
                             continue;
                         }
 
-                        // Construct justification using the original payloadBytes
-                        const tag = new Uint8Array([0x12]); // Field 2, wire type 2
-                        const lengthVarint = encodeVarint(payloadBytes.length);
-                        const marshalledJustification = new Uint8Array(tag.length + lengthVarint.length + payloadBytes.length);
-                        marshalledJustification.set(tag, 0);
-                        marshalledJustification.set(lengthVarint, tag.length);
-                        marshalledJustification.set(payloadBytes, tag.length + lengthVarint.length);
+                        const payloadBytes = extractPayloadFromAddressedCall(addressedCall);
+                        if (!payloadBytes) continue;
 
-                        console.log(`Found matching ValidationID ${validationIDHex} (NodeID ${nodeID}) in Warp log (Tx: ${log.transactionHash}). Marshalled justification.`);
-                        return marshalledJustification;
+                        try {
+                            // Unpack the payload
+                            const parsedPayload: SolidityValidationPeriod = unpackRegisterL1ValidatorPayload(payloadBytes);
+                            // Calculate the validationID (hash) of this message payload
+                            const logValidationIDBytes = calculateValidationID(parsedPayload);
+
+                            // Compare the calculated hash with the target validation ID
+                            if (compareBytes(logValidationIDBytes, targetValidationIDBytes)) {
+                                if (targetNodeIDBytes && !compareBytes(parsedPayload.nodeID, targetNodeIDBytes)) {
+                                    console.warn(`ValidationID match found (${validationIDHex}) in log ${log.transactionHash}, but NodeID in message (${utils.base58check.encode(Buffer.from(parsedPayload.nodeID))}) does not match expected NodeID ${nodeID}. Skipping.`);
+                                    continue;
+                                }
+
+                                const tag = new Uint8Array([0x12]);
+                                const lengthVarint = encodeVarint(payloadBytes.length);
+                                const marshalledJustification = new Uint8Array(tag.length + lengthVarint.length + payloadBytes.length);
+                                marshalledJustification.set(tag, 0);
+                                marshalledJustification.set(lengthVarint, tag.length);
+                                marshalledJustification.set(payloadBytes, tag.length + lengthVarint.length);
+
+                                console.log(`Found matching ValidationID ${validationIDHex} (NodeID ${nodeID}) in Warp log (Tx: ${log.transactionHash}, Block: ${log.blockNumber}). Marshalled justification.`);
+                                justification = marshalledJustification;
+                                break; // Exit the loop once found
+                            }
+                        } catch (parseOrHashError) {
+                            // console.warn(`Error parsing/hashing RegisterL1ValidatorMessage payload from Tx ${log.transactionHash}:`, parseOrHashError);
+                        }
+                    } catch (logProcessingError) {
+                        console.error(`Error processing log entry for tx ${log.transactionHash}:`, logProcessingError);
                     }
-                } catch (parseOrHashError) {
-                    // console.warn(`Error parsing/hashing RegisterL1ValidatorMessage payload from Tx ${log.transactionHash}:`, parseOrHashError);
                 }
-            } catch (logProcessingError) {
-                console.error(`Error processing log entry for tx ${log.transactionHash}:`, logProcessingError);
+            } else {
+                console.log(`No Warp logs found in block range ${fromBlock}-${toBlock}.`);
             }
+
+            // If justification was found, break out of the while loop
+            if (justification) break;
+
+            // Move to previous batch
+            toBlock = fromBlock - 1n;
+
+            // Exit if we've scanned all blocks
+            if (toBlock < 0) break;
         }
 
-        console.log(`No matching registration log found for ValidationID ${validationIDHex} in Warp logs.`);
-        return null;
+        if (!justification) {
+            console.log(`No matching registration log found for ValidationID ${validationIDHex} in any Warp logs.`);
+        }
+
+        return justification;
 
     } catch (fetchLogError) {
         console.error(`Error fetching or decoding logs for ValidationID ${validationIDHex}:`, fetchLogError);
