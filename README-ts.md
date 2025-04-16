@@ -16,7 +16,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
   - [Installation](#installation)
   - [Environment Setup](#environment-setup)
   - [Usage on Fuji](#usage-on-fuji)
-    - [Example Sequence on Fuji](#example-sequence-on-fuji)
+    - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
   - [Testing on Anvil](#testing-on-anvil)
   - [Commands Reference](#commands-reference)
   - [Command Reference](#command-reference)
@@ -76,7 +76,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
    - **Owners & Roles Private Keys:**
      `CURATOR_OWNER`, `L1_OWNER`, `OPERATOR_OWNER`, `STAKER_OWNER`
    - **Contract Addresses:**  
-     `BALANCER_VALIDATOR_MANAGER`, `VAULT_MANAGER`, `VALIDATOR_MANAGER`, `VAULT`, etc.
+     `BALANCER_BALANCER_VALIDATOR_MANAGER_FUJI`, `VAULT_MANAGER_FUJI`, `BALANCER_VALIDATOR_MANAGER_FUJI`, `VAULT`, etc.
    - **Network Variables:**  
      For Fuji, `https://api.avax-test.network/ext/bc/C/rpc`  
      *The Anvil script uses `RPC_URL=http://127.0.0.1:8545` by default.*
@@ -89,16 +89,16 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
 When deploying on Fuji, run commands using the `fuji` network parameter. For example:
 
 ```bash
-pnpm cli --network fuji --private-key $PK register-l1 $VALIDATOR_MANAGER $VAULT_MANAGER https://l1.com
+pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
 ```
 
 
-### Example Sequence on Fuji
+### L1 Setup Sequence on Fuji
 
 - **L1 & Vault Registration:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $VALIDATOR_MANAGER $VAULT_MANAGER https://l1.com
+  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
   pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT 1 200000000000000000000000
   ```
 
@@ -106,8 +106,8 @@ pnpm cli --network fuji --private-key $PK register-l1 $VALIDATOR_MANAGER $VAULT_
 
   ```bash
   pnpm cli --network fuji --private-key $OPERATOR_OWNER register-operator https://operator1.com
-  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-l1 $VALIDATOR_MANAGER
-  pnpm cli --network fuji check-opt-in-l1 $OPERATOR $VALIDATOR_MANAGER
+  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-l1 $BALANCER_VALIDATOR_MANAGER_FUJI
+  pnpm cli --network fuji check-opt-in-l1 $OPERATOR $BALANCER_VALIDATOR_MANAGER_FUJI
   pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-vault $VAULT
   pnpm cli --network fuji check-opt-in-vault $OPERATOR $VAULT
   ```
@@ -115,17 +115,89 @@ pnpm cli --network fuji --private-key $PK register-l1 $VALIDATOR_MANAGER $VAULT_
 - **Set Limits & Operator Shares:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER set-l1-limit $DELEGATOR $VALIDATOR_MANAGER 100000000000000000000000 1
-  pnpm cli --network fuji --private-key $L1_OWNER set-operator-l1-shares $DELEGATOR $VALIDATOR_MANAGER $OPERATOR 10 1
+  pnpm cli --network fuji --private-key $L1_OWNER set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER_FUJI 100000000000000000000000 1
+  pnpm cli --network fuji --private-key $L1_OWNER set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER_FUJI $OPERATOR 10 1
   ```
+
+- **(Optional) Mint & Approve sAVAX, Then Deposit via `cast`**
+   1. Mint:
+      ```bash
+      cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 50000000000000000000000 \
+        --rpc-url $RPC_URL \
+        --private-key "$CURATOR_OWNER"
+      ```
+   2. Check allowance:
+      ```bash
+      cast call "$SAVAX" "allowance(address,address)" "$STAKER" "$PRIMARY_ASSET" \
+      --rpc-url $RPC_URL
+      ```
+   3. Approve:
+      ```bash
+      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 5000000000000000000000 \
+        --rpc-url $RPC_URL \
+        --private-key "$STAKER_OWNER"
+      ```
+   4. Deposit on Vault’s `deposit(address,uint256)`:
+      ```bash
+      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
+        --rpc-url $RPC_URL \
+        --private-key "$STAKER_OWNER"
+
+
 
 - **Deposits / Withdrawals / Claims:**
 
   ```bash
-  pnpm cli --network fuji --private-key $STAKER_OWNER deposit $VAULT 300
+  pnpm cli --network fuji --private-key $STAKER_OWNER deposit $VAULT 400
   pnpm cli --network fuji --private-key $STAKER_OWNER withdraw $VAULT 100
   pnpm cli --network fuji --private-key $STAKER_OWNER claim $VAULT 100
   ```
+- **Check Stakes & Epochs**
+   ```bash
+   pnpm cli --network fuji opstakes $OPERATOR
+   pnpm cli --network fuji l1stakes $VALIDATOR_MANAGER
+   pnpm cli --network fuji middleware-get-current-epoch
+   pnpm cli --network fuji middleware-register-operator $OPERATOR --private-key $L1_OWNER
+   pnpm cli --network fuji middleware-operator-cache <current-epoch> 1 --private-key $L1_OWNER
+   pnpm cli --network fuji middleware-get-operator-stake $OPERATOR <current-epoch> 1
+   ```
+
+- **Balancer / Security Module Setup**
+    ```bash
+    pnpm cli --network fuji balancer-set-up-security-module $MIDDLEWARE 200000 --private-key $L1_OWNER
+    pnpm cli --network fuji balancer-get-security-modules
+    ```
+
+- **Check epoch information**
+    ```bash
+    pnpm cli --network fuji middleware-get-current-epoch
+    pnpm cli --network fuji middleware-operator-cache <current-epoch> 1 --private-key $L1_OWNER
+    pnpm cli --network fuji middleware-get-operator-stake $OPERATOR <next-epoch> 1
+    ```
+
+- **Initialize and complete node addion**
+    ```bash
+    pnpm cli --network fuji middleware-add-node \
+      0xYOUR_NODEID \
+      OXYOUR_BLSKEY \
+      expiration \
+      1 \
+      --pchain-address $OPERATOR \
+      1 \
+      --reward-address $OPERATOR \
+      100000000000000000000 --private-key $OPERATOR_OWNER
+
+    pnpm cli --network fuji middleware-complete-validator-registration \
+      $OPERATOR \
+      0x0000000000000000000000000ab6bcadff9b54ea72a7b289d351e44c7233e0d9 \
+      0 \
+      --pchain-tx-private-key 0xYOUR_PCHAIN_KEY \
+      --pchain-tx-address P-fFF4224c953682C0866cb45643512D8Eee6eB608 \
+      --bls-proof-of-possession 0xYOUR_BLS_POP \
+      --add-node-tx-hash 0x673878d21c4bc767738f0b97764c781216dc15fbd3b2f3c0211759f3c8321316
+
+    ```
+
 
 For a complete list of commands, see the [Commands Reference](#commands-reference) below.
 

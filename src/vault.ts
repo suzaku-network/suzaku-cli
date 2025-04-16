@@ -126,3 +126,39 @@ export async function claimVault(
     }
   }
 }
+
+/**
+ * Reads the `delegator` address from a vault (VaultTokenized).
+ * This assumes your `VaultTokenized` contract has a public `delegator()` method.
+ */
+export async function getVaultDelegator(
+  client: PublicClient,
+  vaultAddress: `0x${string}`,
+  vaultAbi: any
+): Promise<`0x${string}`> {
+  return await client.readContract({
+    address: vaultAddress,
+    abi: vaultAbi,
+    functionName: 'delegator',
+    args: [],
+  }) as `0x${string}`;
+}
+
+/**
+ * Reads stake for an operator in a given L1, from a L1RestakeDelegator-based contract.
+ */
+export async function getStake(
+  client: PublicClient,
+  delegatorAddress: `0x${string}`,
+  delegatorAbi: any,
+  l1Address: `0x${string}`,
+  assetClass: bigint,
+  operatorAddress: `0x${string}`
+): Promise<bigint> {
+  return await client.readContract({
+    address: delegatorAddress,
+    abi: delegatorAbi,
+    functionName: 'stake',
+    args: [l1Address, assetClass, operatorAddress],
+  }) as bigint;
+}

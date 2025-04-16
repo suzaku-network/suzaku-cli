@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { parseUnits } from "viem";
 import { registerL1 } from "./l1";
 import { registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -14,7 +15,9 @@ import {
 import {
   depositVault,
   withdrawVault,
-  claimVault
+    claimVault,
+    getVaultDelegator,
+    getStake
 } from "./vault";
 
 import {
@@ -223,12 +226,14 @@ async function main() {
         const opts = program.opts();
         const config = getConfig(opts.network);
         const client = generateClient(opts.privateKey, opts.network);
+        const amountWei = parseUnits(amount, 18);
+            
         await depositVault(
             client,
             vaultAddress as `0x${string}`,
             config.abis.VaultTokenized, 
             onBehalfOf as `0x${string}`,
-            BigInt(amount)
+            amountWei
         );
         });
 
@@ -242,12 +247,13 @@ async function main() {
         const opts = program.opts();
         const config = getConfig(opts.network);
         const client = generateClient(opts.privateKey, opts.network);
+        const amountWei = parseUnits(amount, 18);
         await withdrawVault(
             client,
             vaultAddress as `0x${string}`,
             config.abis.VaultTokenized,
             claimer as `0x${string}`,
-            BigInt(amount)
+            amountWei
         );
         });
 
@@ -887,6 +893,143 @@ async function main() {
             );
         });
     
+    /**
+         * --------------------------------------------------
+         * OP-STAKES: enumerates the vaults and attempts to read stake for <operator>
+         * --------------------------------------------------
+         */
+    program
+    .command("opstakes")
+    .argument("<operatorAddress>")
+    .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
+    .action(async (operatorAddress) => {
+      const opts = program.opts();
+      const config = getConfig(opts.network);
+      const client = generatePublicClient(opts.network);
+  
+      const operator = operatorAddress as `0x${string}`;
+      console.log(`Operator: ${operator}`);
+  
+      // 1) Read total vaults from VaultManager
+      const vaultCount = (await client.readContract({
+        address: config.vaultManager as `0x${string}`,
+        abi: config.abis.VaultManager,
+        functionName: 'getVaultCount',
+        args: [],
+      })) as bigint;
+  
+      console.log(`Found ${vaultCount} vault(s).`);
+  
+      // This map accumulates the total stake for each collateral
+      const totalStakesByCollateral: Record<string, bigint> = {};
+  
+      // 2) Let's get all L1 addresses from the L1Registry (similar to your Python code)
+      const totalL1s = (await client.readContract({
+        address: config.l1Registry as `0x${string}`,
+        abi: config.abis.L1Registry,
+        functionName: 'totalL1s',
+        args: [],
+      })) as bigint;
+  
+      // We'll store them in an array
+      const l1Array: `0x${string}`[] = [];
+      for (let i = 0n; i < totalL1s; i++) {
+        // e.g. getL1At(i) might return [address, metadataUrl], adjust as needed
+        const [l1Address, metadataUrl] = (await client.readContract({
+          address: config.l1Registry as `0x${string}`,
+          abi: config.abis.L1Registry,
+          functionName: 'getL1At',
+          args: [i],
+        })) as [`0x${string}`, string];
+  
+        l1Array.push(l1Address);
+      }
+  
+      // 3) For each vault in [0..vaultCount-1], read assetClass, delegator, collateral
+      for (let i = 0n; i < vaultCount; i++) {
+        const [vaultAddress] = (await client.readContract({
+          address: config.vaultManager as `0x${string}`,
+          abi: config.abis.VaultManager,
+          functionName: 'getVaultAtWithTimes',
+          args: [i],
+        })) as [`0x${string}`, bigint, bigint];
+  
+        console.log(`\nVault #${i}: ${vaultAddress}`);
+  
+        // read the assetClass
+        const assetClass = (await client.readContract({
+          address: config.vaultManager as `0x${string}`,
+          abi: config.abis.VaultManager,
+          functionName: 'getVaultAssetClass',
+          args: [vaultAddress],
+        })) as bigint;
+  
+        // read delegator
+        const delegator = await client.readContract({
+          address: vaultAddress,
+          abi: config.abis.VaultTokenized,
+          functionName: 'delegator',
+          args: [],
+        }) as `0x${string}`;
+  
+        if (delegator === '0x0000000000000000000000000000000000000000') {
+          console.log("    (No delegator set, skipping)");
+          continue;
+        }
+        // read collateral
+        const collateral = await client.readContract({
+          address: vaultAddress,
+          abi: config.abis.VaultTokenized,
+          functionName: 'collateral',
+          args: [],
+        }) as `0x${string}`;
+  
+        // 4) For each L1 in l1Array, check if operator is opted in
+        for (const l1Address of l1Array) {
+          const isOptedIn = await client.readContract({
+            address: config.opL1OptIn as `0x${string}`,
+            abi: config.abis.OperatorL1OptInService,
+            functionName: 'isOptedIn',
+            args: [operator, l1Address],
+          }) as boolean;
+  
+          if (isOptedIn) {
+            // read stake
+            const stakeValue = await client.readContract({
+              address: delegator,
+              abi: config.abis.L1RestakeDelegator,
+              functionName: 'stake',
+              args: [l1Address, assetClass, operator],
+            }) as bigint;
+  
+            if (stakeValue > 0n) {
+              console.log(
+                `    L1: ${l1Address} => stake = ${stakeValue.toString()} (vault=${vaultAddress})`
+              );
+  
+              // sum into totalStakesByCollateral
+              const oldVal = totalStakesByCollateral[collateral] || 0n;
+              totalStakesByCollateral[collateral] = oldVal + stakeValue;
+            }
+          }
+        }
+      }
+  
+      // 5) Finally, print aggregated totals
+      console.log("\nAggregated stakes by collateral:");
+      if (Object.keys(totalStakesByCollateral).length === 0) {
+        console.log("   No stakes found or operator not opted into any L1s this way.");
+      } else {
+        for (const [collateralAddr, totalWei] of Object.entries(totalStakesByCollateral)) {
+          // optional: look up decimals for that collateral if you want a float
+          const decimals = 18; // or read from chain
+          const floatAmount = Number(totalWei) / 10 ** decimals;
+          console.log(`   Collateral=${collateralAddr} totalStakeWei=${totalWei} => ${floatAmount}`);
+        }
+      }
+    });
+  
+
     
     // --------------------------------------------------
     // "help" for help function
@@ -910,6 +1053,8 @@ async function main() {
     
     
     program.parse(process.argv);
+
+
 }
 
 main().catch((err) => console.error(err));

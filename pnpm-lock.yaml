@@ -30,9 +30,15 @@ importers:
         specifier: ^2.24.2
         version: 2.24.2(typescript@5.8.2)
     devDependencies:
+      '@types/dotenv':
+        specifier: ^8.2.3
+        version: 8.2.3
+      '@types/node':
+        specifier: ^22.13.17
+        version: 22.13.17
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@22.13.14)(typescript@5.8.2)
+        version: 10.9.2(@types/node@22.13.17)(typescript@5.8.2)
       typescript:
         specifier: ^5.3.3
         version: 5.8.2
@@ -111,8 +117,12 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
-  '@types/node@22.13.14':
-    resolution: {integrity: sha512-Zs/Ollc1SJ8nKUAgc7ivOEdIBM8JAKgrqqUYi2J997JuKO7/tpQC+WCetQ1sypiKCQWHdvdg9wBNpUPEWZae7w==}
+  '@types/dotenv@8.2.3':
+    resolution: {integrity: sha512-g2FXjlDX/cYuc5CiQvyU/6kkbP1JtmGzh0obW50zD7OKeILVL0NSpPWLXVfqoAGQjom2/SLLx9zHq0KXvD6mbw==}
+    deprecated: This is a stub types definition. dotenv provides its own type definitions, so you do not need this installed.
+
+  '@types/node@22.13.17':
+    resolution: {integrity: sha512-nAJuQXoyPj04uLgu+obZcSmsfOenUg6DxPKogeUy6yNCFwWaj5sBF8/G/pNo8EtBJjAfSVgfIlugR/BCOleO+g==}
 
   abitype@1.0.8:
     resolution: {integrity: sha512-ZeiI6h3GnW06uYDLx0etQtX/p8E24UaHHBj57RSjK7YBFe7iuVn07EDpOeP451D06sF27VOz9JJPlIKJmXgkEg==}
@@ -292,7 +302,11 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@types/node@22.13.14':
+  '@types/dotenv@8.2.3':
+    dependencies:
+      dotenv: 16.4.7
+
+  '@types/node@22.13.17':
     dependencies:
       undici-types: 6.20.0
 
@@ -350,14 +364,14 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  ts-node@10.9.2(@types/node@22.13.14)(typescript@5.8.2):
+  ts-node@10.9.2(@types/node@22.13.17)(typescript@5.8.2):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.11
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 22.13.14
+      '@types/node': 22.13.17
       acorn: 8.14.1
       acorn-walk: 8.3.4
       arg: 4.1.3
