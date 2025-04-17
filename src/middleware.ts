@@ -105,11 +105,11 @@ export async function middlewareAddNode(
   nodeId: string,
   blsKey: `0x${string}`,
   registrationExpiry: bigint,
-  pchainOwner: [bigint, `0x${string}`[]],
-  rewardOwner: [bigint, `0x${string}`[]],
+  remainingBalanceOwner: [bigint, `0x${string}`[]],
+  disableOwner: [bigint, `0x${string}`[]],
   initialStake: bigint
 ) {
-  console.log("Adding node...");
+  console.log("Calling function addNode...");
 
   try {
     if (!client.account) {
@@ -132,14 +132,14 @@ export async function middlewareAddNode(
         nodeIdHex32,
         blsKey,
         registrationExpiry,
-        pchainOwner,
-        rewardOwner,
+        remainingBalanceOwner,
+        disableOwner,
         initialStake,
       ],
       chain: null,
       account: client.account,
     });
-    console.log("addNode done, tx hash:", hash);
+    console.log("addNode executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
     if (error instanceof Error) {
@@ -170,7 +170,6 @@ export async function middlewareCompleteValidatorRegistration(
 
     // Wait for transaction receipt to extract warp message and validation ID
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
-    // NOTE: With PoAValidatorManager, the Tx hash here is the initializeValidatorRegistration, not sure if addNode tx works here or if we need to use the underlying's initializeValidatorRegistration tx (the one that emits a wrap message event log 0x0200000000000000000000000000000000000005)
     const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
     // Get the unsigned warp message and validation ID from the receipt
@@ -203,7 +202,6 @@ export async function middlewareCompleteValidatorRegistration(
     // Convert the signed warp message to bytes and pack into access list
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-    console.log("accessList", accessList)
 
     // Parse NodeID to bytes32 format
     const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");

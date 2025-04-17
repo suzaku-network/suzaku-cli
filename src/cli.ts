@@ -388,33 +388,45 @@ async function main() {
     .command("middleware-add-node")
     .argument("<nodeId>")
     .argument("<blsKey>")
-    .argument("<registrationExpiry>")
-    .argument("<pchainThreshold>")
-    .argument("<rewardThreshold>")
     .argument("<initialStake>")
-    .option("--pchain-address <address>", "", collectMultiple, [])
-    .option("--reward-address <address>", "", collectMultiple, [])
-    .action(async (nodeId, blsKey, registrationExpiry, pchainThreshold, rewardThreshold, initialStake, options) => {
+    .option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)")
+    .option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold (default: 1)", "1")
+    .option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold (default: 1)", "1")
+    .option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address", collectMultiple, [])
+    .option("--pchain-disable-owner-address <address>", "P-Chain disable owner address", collectMultiple, [])
+    .action(async (nodeId, blsKey, initialStake, options) => {
       const opts = program.opts();
       const config = getConfig(opts.network);
       const client = generateClient(opts.privateKey, opts.network);
-      const pchainOwner: [bigint, `0x${string}`[]] = [
-        BigInt(pchainThreshold),
-        options.pchainAddress as `0x${string}`[]
+      
+      // Default registration expiry to now + 12 hours if not provided
+      const registrationExpiry = options.registrationExpiry
+        ? BigInt(options.registrationExpiry)
+        : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
+      
+      // Build remainingBalanceOwner and disableOwner PChainOwner structs
+      // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
+      const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(program.opts()))];
+      const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
+      const remainingBalanceOwner: [bigint, `0x${string}`[]] = [
+        BigInt(options.pchainRemainingBalanceOwnerThreshold),
+        remainingBalanceOwnerAddress as `0x${string}`[]
       ];
-      const rewardOwner: [bigint, `0x${string}`[]] = [
-        BigInt(rewardThreshold),
-        options.rewardAddress as `0x${string}`[]
+      const disableOwner: [bigint, `0x${string}`[]] = [
+        BigInt(options.pchainDisableOwnerThreshold),
+        disableOwnerAddress as `0x${string}`[]
       ];
+
+      // Call middlewareAddNode
       await middlewareAddNode(
         client,
         config.middlewareService as `0x${string}`,
         config.abis.MiddlewareService,
         nodeId,
         blsKey as `0x${string}`,
-        BigInt(registrationExpiry),
-        pchainOwner,
-        rewardOwner,
+        registrationExpiry,
+        remainingBalanceOwner,
+        disableOwner,
         BigInt(initialStake),
       );
     });
