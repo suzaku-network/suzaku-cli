@@ -4,6 +4,7 @@ import { registerL1, getL1s } from "./l1";
 import { registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient, generatePublicClient } from "./client";
+import { derivePChainAddressFromPrivateKey } from "./lib/pChainUtils";
 import {
   registerVaultL1,
   updateVaultMaxL1Limit,
@@ -436,28 +437,37 @@ async function main() {
         .command("middleware-complete-validator-registration")
         .argument("<operator>")
         .argument("<nodeId>")
-        .argument("<messageIndex>")
-        .option("--pchain-tx-private-key <pchainTxPrivateKey>")
-        .option("--pchain-tx-address <pchainTxAddress>")
-        .option("--bls-proof-of-possession <blsProofOfPossession>")
-        .option("--add-node-tx-hash <txHash>")
-        .action(async (operator, nodeId, messageIndex, options) => {
+        .argument("<addNodeTxHash>")
+        .argument("<blsProofOfPossession>")
+        .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
+        .action(async (operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
+            
+            // If pchainTxPrivateKey is not provided, use the private key
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey;
+            }
+
+            // Derive pchainTxAddress from the private key
+            // Determine the right network prefix (e.g., 'P-fuji' vs 'P-avax')
+            const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
+            let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
+            
+            // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
-            client,
-            config.middlewareService as `0x${string}`,
-            config.abis.MiddlewareService,
-            operator as `0x${string}`,
-            nodeId as string,
-            BigInt(messageIndex),
-            options.pchainTxPrivateKey as string,
-            options.pchainTxAddress as string,
-            options.blsProofOfPossession as string,
-            options.addNodeTxHash as `0x${string}`
+                client,
+                config.middlewareService as `0x${string}`,
+                config.abis.MiddlewareService,
+                operator as `0x${string}`,
+                nodeId as string,
+                options.pchainTxPrivateKey as string,
+                pchainTxAddress as string,
+                blsProofOfPossession as string,
+                addNodeTxHash as `0x${string}`
             );
-    });
+        });
 
     // Remove node
     program

@@ -332,3 +332,14 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
 
     return response.txID;
 }
+
+export function derivePChainAddressFromPrivateKey(privateKeyHex: string, networkPrefix: string): string {
+    const publicKey = secp256k1.getPublicKey(utils.hexToBuffer(privateKeyHex));
+    const hrp = networkPrefix;
+    const address = utils.formatBech32(
+      hrp,
+      secp256k1.publicKeyBytesToAddress(publicKey),
+    );
+
+    return "P-" + address;
+}

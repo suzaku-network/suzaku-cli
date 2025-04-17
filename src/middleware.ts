@@ -155,7 +155,6 @@ export async function middlewareCompleteValidatorRegistration(
   middlewareAbi: any,
   operator: `0x${string}`,
   nodeId: string,
-  messageIndex: bigint,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
   blsProofOfPossession: string,
@@ -217,7 +216,7 @@ export async function middlewareCompleteValidatorRegistration(
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'completeValidatorRegistration',
-      args: [operator, nodeIdHex32, messageIndex],
+      args: [operator, nodeIdHex32, 0],
       account: client.account,
       gas: BigInt(5000000),
       accessList
@@ -228,7 +227,7 @@ export async function middlewareCompleteValidatorRegistration(
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'completeValidatorRegistration',
-      args: [operator, nodeIdHex32, messageIndex],
+      args: [operator, nodeIdHex32, 0],
       chain: null,
       account: client.account,
       accessList
