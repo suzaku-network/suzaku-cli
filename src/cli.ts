@@ -489,23 +489,32 @@ async function main() {
     program
         .command("middleware-complete-validator-removal")
         .argument("<nodeId>")
-        .option("--initialize-end-validation-tx-hash <txHash>")
-        .option("--pchain-tx-private-key <privateKey>")
-        .option("--pchain-tx-address <address>")
-        .action(async (nodeId, options) => {
+        .argument("<removeNodeTxHash>")
+        .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
+        .action(async (nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
+            
+            // If pchainTxPrivateKey is not provided, use the private key
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey;
+            }
+
+            // Derive pchainTxAddress from the private key
+            const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
+            let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
+            
             await middlewareCompleteValidatorRemoval(
-            client,
-            config.middlewareService as `0x${string}`,
-            config.abis.MiddlewareService,
-            nodeId as string,
-            options.initializeEndValidationTxHash as `0x${string}`,
-            options.pchainTxPrivateKey as string,
-            options.pchainTxAddress as string
+                client,
+                config.middlewareService as `0x${string}`,
+                config.abis.MiddlewareService,
+                nodeId as string,
+                removeNodeTxHash as `0x${string}`,
+                options.pchainTxPrivateKey as string,
+                pchainTxAddress as string
             );
-    });
+        });
 
     // Init weight update
     program
