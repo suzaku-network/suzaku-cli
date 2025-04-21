@@ -27,6 +27,7 @@ export interface RegisterL1ValidatorParams {
     pChainAddress: string;
     blsProofOfPossession: string;
     signedMessage: string;
+    initialBalance: number;
 }
 
 export interface RemoveL1ValidatorParams {
@@ -214,8 +215,7 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
 
     // Create a new register validator transaction
     const tx = pvm.e.newRegisterL1ValidatorTx({
-        // balance: BigInt(1 * 1e9), // 1 AVAX
-        balance: BigInt(1 * 1e8), // 0.1 AVAX
+        balance: BigInt(params.initialBalance * 1e9), // e.g.: 0.1 * 1e9 = 0.1 AVAX
         blsSignature: new Uint8Array(Buffer.from(params.blsProofOfPossession.slice(2), 'hex')),
         message: new Uint8Array(Buffer.from(params.signedMessage, 'hex')),
         feeState,
@@ -228,16 +228,16 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
 
     // Issue the signed transaction
     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
-    console.log("\nRegisterL1ValidatorTx submitted to P-Chain:", response.txID);
+    // console.log("\nRegisterL1ValidatorTx submitted to P-Chain:", response.txID);
 
     // Wait for transaction to be confirmed
-    console.log("Waiting for P-Chain confirmation...");
+    // console.log("Waiting for P-Chain confirmation...");
     while (true) {
         let status = await pvmApi.getTxStatus({ txID: response.txID });
         if (status.status === "Committed") break;
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    console.log("P-Chain transaction confirmed");
+    // console.log("P-Chain transaction confirmed");
 
     return response.txID;
 }
@@ -337,8 +337,8 @@ export function derivePChainAddressFromPrivateKey(privateKeyHex: string, network
     const publicKey = secp256k1.getPublicKey(utils.hexToBuffer(privateKeyHex));
     const hrp = networkPrefix;
     const address = utils.formatBech32(
-      hrp,
-      secp256k1.publicKeyBytesToAddress(publicKey),
+        hrp,
+        secp256k1.publicKeyBytesToAddress(publicKey),
     );
 
     return "P-" + address;

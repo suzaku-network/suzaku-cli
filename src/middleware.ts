@@ -1,6 +1,6 @@
 import { WalletClient, PublicClient, bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem } from 'viem';
 import { ExtendedWalletClient } from './client';
-import { collectSignatures, packL1ValidatorRegistration, packWarpIntoAccessList } from './lib/warpUtils';
+import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
 import { parseNodeID } from './lib/utils';
 import { GetRegistrationJustification } from './lib/justification';
@@ -158,7 +158,8 @@ export async function middlewareCompleteValidatorRegistration(
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
   blsProofOfPossession: string,
-  addNodeTxHash: `0x${string}`
+  addNodeTxHash: `0x${string}`,
+  initialBalance: number
 ) {
   console.log("Completing validator registration...");
 
@@ -178,13 +179,16 @@ export async function middlewareCompleteValidatorRegistration(
     // Collect signatures for the warp message
     console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
     const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
+    console.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
     // Register validator on P-Chain
+    console.log("\nRegistering validator on P-Chain...");
     const pChainTxId = await registerL1Validator({
       privateKeyHex: pChainTxPrivateKey,
       pChainAddress: pChainTxAddress,
       blsProofOfPossession: blsProofOfPossession,
-      signedMessage
+      signedMessage,
+      initialBalance: initialBalance
     });
     console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
 
@@ -195,7 +199,7 @@ export async function middlewareCompleteValidatorRegistration(
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
     // Aggregate signatures from validators
-    // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
+    console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
     const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
     console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
@@ -222,7 +226,7 @@ export async function middlewareCompleteValidatorRegistration(
       accessList
     });
 
-    console.log("Calling function completeValidatorRegistration...");
+    console.log("\nCalling function completeValidatorRegistration...");
     const hash = await client.writeContract({
       address: middlewareAddress,
       abi: middlewareAbi,
@@ -378,22 +382,30 @@ export async function middlewareInitWeightUpdate(
   nodeId: `0x${string}`,
   newWeight: bigint
 ) {
-  console.log("Initializing validator weight update...");
+  console.log("Calling function initializeValidatorWeightUpdateAndLock...");
 
   try {
     if (!client.account) {
       throw new Error('Client account is required');
     }
 
+    // Parse NodeID to bytes32 format
+    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
+    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
+    const nodeIDHex = fromBytes(decodedID, 'hex');
+    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
+    // Pad end (right) to 32 bytes
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+
     const hash = await client.writeContract({
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'initializeValidatorWeightUpdateAndLock',
-      args: [nodeId, newWeight],
+      args: [nodeIdHex32, newWeight],
       chain: null,
       account: client.account,
     });
-    console.log("initializeValidatorWeightUpdateAndLock done, tx hash:", hash);
+    console.log("initializeValidatorWeightUpdateAndLock executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
     if (error instanceof Error) {
@@ -404,11 +416,13 @@ export async function middlewareInitWeightUpdate(
 
 // completeNodeWeightUpdate
 export async function middlewareCompleteWeightUpdate(
-  client: WalletClient,
+  client: ExtendedWalletClient,
   middlewareAddress: `0x${string}`,
   middlewareAbi: any,
   nodeId: `0x${string}`,
-  messageIndex: bigint
+  validatorWeightUpdateTxHash: `0x${string}`,
+  pChainTxPrivateKey: string,
+  pChainTxAddress: string,
 ) {
   console.log("Completing node weight update...");
 
@@ -417,11 +431,52 @@ export async function middlewareCompleteWeightUpdate(
       throw new Error('Client account is required');
     }
 
+    // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
+    const receipt = await client.waitForTransactionReceipt({ hash: validatorWeightUpdateTxHash })
+    const validationIDHex = receipt.logs[2].topics[1] ?? '';
+
+    // Get the unsigned L1ValidatorWeightMessage with new weight generated by the ValidatorManager from the receipt
+    const unsignedL1ValidatorWeightMessage = receipt.logs[0].data ?? '';
+    console.log("Initialize End Validation Warp Msg: ", unsignedL1ValidatorWeightMessage)
+
+    // Get the ValidatorWeightUpdate nonce from the receipt
+    const nonce = receipt.logs[1].topics[2] ?? '';
+
+    // Aggregate signatures from validators
+    // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
+    const signedL1ValidatorWeightMessage = await collectSignatures(unsignedL1ValidatorWeightMessage);
+    console.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
+
+    // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
+    const pChainSetWeightTxId = await setValidatorWeight({
+      privateKeyHex: pChainTxPrivateKey,
+      pChainAddress: pChainTxAddress,
+      validationID: validationIDHex,
+      message: signedL1ValidatorWeightMessage
+    });
+    console.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
+
+    // Pack and sign the P-Chain warp message
+    const validationIDBytes = hexToBytes(validationIDHex as `0x${string}`);
+    const pChainChainID = '11111111111111111111111111111111LpoYY';
+    const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(0), 5, pChainChainID);
+    const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
+
+    // Aggregate signatures from validators
+    // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
+    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    console.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
+
+    // Convert the signed warp message to bytes and pack into access list
+    const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
+    const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
+
+
     const hash = await client.writeContract({
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'completeNodeWeightUpdate',
-      args: [nodeId, messageIndex],
+      args: [nodeId, 0],
       chain: null,
       account: client.account,
     });
@@ -502,9 +557,9 @@ export async function middlewareForceUpdateNodes(
   middlewareAddress: `0x${string}`,
   middlewareAbi: any,
   operator: `0x${string}`,
-  messageIndex: bigint
+  limitWeight: bigint
 ) {
-  console.log("Forcing node updates...");
+  console.log("Calling forceUpdateNodes...");
 
   try {
     if (!client.account) {
@@ -515,11 +570,11 @@ export async function middlewareForceUpdateNodes(
       address: middlewareAddress,
       abi: middlewareAbi,
       functionName: 'forceUpdateNodes',
-      args: [operator, messageIndex],
+      args: [operator, limitWeight],
       chain: null,
       account: client.account,
     });
-    console.log("forceUpdateNodes done, tx hash:", hash);
+    console.log("forceUpdateNodes executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
     if (error instanceof Error) {

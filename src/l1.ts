@@ -63,7 +63,7 @@ export async function getL1s(client: PublicClient, l1RegistryAddress: `0x${strin
             args: [],
         });
 
-        console.log("Total L1s:", totalL1s);
+        console.log("Total L1s:", Number(totalL1s));
 
         // Get each L1
         const l1s = [];
@@ -73,11 +73,15 @@ export async function getL1s(client: PublicClient, l1RegistryAddress: `0x${strin
                 abi: l1RegistryAbi,
                 functionName: 'getL1At',
                 args: [i],
-            });
+            }) as [`0x${string}`, `0x${string}`, string];
             l1s.push(l1);
         }
 
-        console.log("L1s:", l1s);
+        for (const l1 of l1s) {
+            console.log("L1 Address:", l1[0]);
+            console.log("L1 Middleware:", l1[1]);
+            console.log("L1 Metadata URL:", l1[2]);
+        }
 
     } catch (error) {
         console.error("Failed to get L1s:", error);

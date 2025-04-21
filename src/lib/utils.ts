@@ -88,7 +88,7 @@ export function bytesToCB58(bytes: Uint8Array): string {
 }
 
 export async function interruptiblePause(seconds: number): Promise<void> {
-    console.log(`\nWaiting ${seconds} seconds before aggregating signatures... Press Enter or Space to continue immediately`);
+    console.log(`\nWaiting ${seconds} seconds before aggregating signatures...`);
 
     return new Promise((resolve) => {
         const rl = readline.createInterface({

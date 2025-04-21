@@ -215,8 +215,8 @@ export async function collectSignatures(message: string, justification?: string)
         // body.signingSubnetId = "11111111111111111111111111111111LpoYY";
     }
 
-    console.log("message", message);
-    console.log("justification", justification);
+    // console.log("message", message);
+    // console.log("justification", justification);
     const signResponse = await fetch('https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures', {
         method: 'POST',
         headers: {

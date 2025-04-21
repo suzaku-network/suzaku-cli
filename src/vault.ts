@@ -1,9 +1,11 @@
 import { WalletClient, PublicClient } from 'viem';
+import { ExtendedWalletClient } from './client';
 
 // deposit
 export async function depositVault(
-  client: WalletClient,
+  client: ExtendedWalletClient,
   vaultAddress: `0x${string}`,
+  collateralAddress: `0x${string}`,
   vaultAbi: any,
   onBehalfOf: `0x${string}`,
   amountWei: bigint
@@ -16,13 +18,13 @@ export async function depositVault(
     }
 
     // -- Added code: read collateral from env var, then approve vault for that collateral
-    const collateralAddress = process.env.COLLATERAL as `0x${string}`; 
+    const collateralAddress = process.env.COLLATERAL as `0x${string}`;
     if (!collateralAddress) {
       throw new Error("Missing COLLATERAL environment variable");
     }
 
     console.log("Approving collateral token for vault deposit...");
-    await client.writeContract({
+    const approveTx = await client.writeContract({
       address: collateralAddress,
       // minimal ABI for 'approve'
       abi: [
@@ -32,7 +34,7 @@ export async function depositVault(
           "stateMutability": "nonpayable",
           "inputs": [
             { "name": "spender", "type": "address" },
-            { "name": "amount",  "type": "uint256" }
+            { "name": "amount", "type": "uint256" }
           ],
           "outputs": [{ "name": "", "type": "bool" }]
         }
@@ -42,7 +44,8 @@ export async function depositVault(
       chain: null,
       account: client.account,
     });
-    console.log("Approval done.");
+    // Wait for the approval transaction to be mined
+    await client.waitForTransactionReceipt({ hash: approveTx });
 
     // === Existing deposit code (unchanged) ===
     const hash = await client.writeContract({

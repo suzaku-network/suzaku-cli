@@ -133,13 +133,13 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
       ```
    3. Approve:
       ```bash
-      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 5000000000000000000000 \
+      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 200000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
    4. Deposit on Vault’s `deposit(address,uint256)`:
       ```bash
-      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
+      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 200000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
 
@@ -178,24 +178,16 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **Initialize and complete node addion**
     ```bash
     pnpm cli --network fuji middleware-add-node \
-      0xYOUR_NODEID \
-      OXYOUR_BLSKEY \
-      expiration \
-      1 \
-      --pchain-address $OPERATOR \
-      1 \
-      --reward-address $OPERATOR \
-      100000000000000000000 --private-key $OPERATOR_OWNER
+      $NODE_ID \
+      $BLS_KEY \
+      --private-key $OPERATOR_OWNER
 
     pnpm cli --network fuji middleware-complete-validator-registration \
       $OPERATOR \
-      0x0000000000000000000000000ab6bcadff9b54ea72a7b289d351e44c7233e0d9 \
-      0 \
-      --pchain-tx-private-key 0xYOUR_PCHAIN_KEY \
-      --pchain-tx-address P-fFF4224c953682C0866cb45643512D8Eee6eB608 \
-      --bls-proof-of-possession 0xYOUR_BLS_POP \
-      --add-node-tx-hash 0x673878d21c4bc767738f0b97764c781216dc15fbd3b2f3c0211759f3c8321316
-
+      $NODE_ID \
+      $ADD_NODE_TX_HASH \
+      $BLS_PROOF_OF_POSSESSION \
+      --private-key $OPERATOR_OWNER
     ```
 
 
