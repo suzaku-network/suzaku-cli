@@ -1012,6 +1012,11 @@
     },
     {
         "type": "error",
+        "name": "BaseDelegator__NotAuthorizedMiddleware",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "BaseDelegator__NotInitialized",
         "inputs": []
     },
@@ -1029,6 +1034,17 @@
         "type": "error",
         "name": "BaseDelegator__NotVault",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__ZeroAddress",
+        "inputs": [
+            {
+                "name": "name",
+                "type": "string",
+                "internalType": "string"
+            }
+        ]
     },
     {
         "type": "error",

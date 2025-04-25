@@ -24,6 +24,7 @@ export OPERATOR_REGISTRY=0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
 export L1_REGISTRY=0x0165878A594ca255338adfa4d48449f69242Eb8F
 export OP_L1_OPT_IN=0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
 export OP_VAULT_OPT_IN=0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6
+export VAULT_FACTORY=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 
 export ANVIL_PORT="8545"
 export RPC_URL="http://127.0.0.1:${ANVIL_PORT}"
@@ -99,9 +100,14 @@ run_ts_cli_calls() {
   cd "$ROOT_DIR" || return 1
 
   {
+    # npm cli --network fuji balancer-set-up-security-module $MIDDLEWARE 200000 --private-key $L1_OWNER
+    printf "\n%s\n" "=== 0) Set up security module in the middleware ==="
+    run_cmd npx ts-node src/cli.ts --network anvil --private-key "$L1_OWNER" \
+      balancer-set-up-security-module "$MIDDLEWARE" 200000
+
     printf "%s\n" "=== 1) Register L1 ==="
     run_cmd npx ts-node src/cli.ts --network anvil --private-key "$L1_OWNER" \
-      register-l1 "$VALIDATOR_MANAGER" "$VAULT_MANAGER" "https://l1.com"
+      register-l1 "$VALIDATOR_MANAGER" "$MIDDLEWARE" "https://l1.com" 10000000000000000
 
     printf "\n%s\n" "=== 2) Register Vault in VaultManager ==="
     run_cmd npx ts-node src/cli.ts --network anvil --private-key "$L1_OWNER" \
@@ -208,7 +214,7 @@ run_ts_cli_calls() {
 
     npx ts-node src/cli.ts --network anvil \
       --private-key "$L1_OWNER" \
-      middleware-calc-node-weights
+      middleware-calc-node-stakes
     
     # Add this before trying to add a node
     printf "\n%s\n" "=== 15.5) Set up security module in the middleware ==="
@@ -231,8 +237,8 @@ run_ts_cli_calls() {
 
     run_cmd npx ts-node src/cli.ts --network anvil --private-key "$OPERATOR_OWNER" \
       middleware-add-node \
-      0x00000000000000000000000039a662260f928d2d98ab5ad93aa7af8e0ee4d426 \
-      0xb6d4ef306dcbfd1fb4e9ba75e47caf564f170eccc7a17033f40a2887fe6887b5c245e6dd38ba34a5be81683dc0d6394e \
+      0x00000000000000000000000039a662260f928d2d98ab5ad93aa7af8e0ee4d426 \ # nodeId
+      0xb6d4ef306dcbfd1fb4e9ba75e47caf564f170eccc7a17033f40a2887fe6887b5c245e6dd38ba34a5be81683dc0d6394e \ # BLSPubKey
       "$REGISTRATION_EXPIRY" \
       1 \
       1 \

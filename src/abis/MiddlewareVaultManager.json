@@ -166,35 +166,9 @@
     {
         "type": "function",
         "name": "slashVault",
-        "inputs": [
-            {
-                "name": "totalOperatorStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "assetClassId",
-                "type": "uint96",
-                "internalType": "uint96"
-            },
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "epochStartTs",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ],
+        "inputs": [],
         "outputs": [],
-        "stateMutability": "nonpayable"
+        "stateMutability": "pure"
     },
     {
         "type": "function",
@@ -272,16 +246,6 @@
     },
     {
         "type": "error",
-        "name": "AlreadyAdded",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AlreadyEnabled",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "AvalancheL1Middleware__AssetClassNotActive",
         "inputs": [
             {
@@ -309,11 +273,6 @@
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__NoSlasher",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "AvalancheL1Middleware__NotVault",
         "inputs": [
             {
@@ -325,7 +284,7 @@
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__UnknownSlasherType",
+        "name": "AvalancheL1Middleware__SlasherNotImplemented",
         "inputs": []
     },
     {
@@ -345,8 +304,24 @@
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__VaultNotDisabled",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__WrongVaultAssetClass",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__ZeroAddress",
+        "inputs": [
+            {
+                "name": "name",
+                "type": "string",
+                "internalType": "string"
+            }
+        ]
     },
     {
         "type": "error",
@@ -366,7 +341,22 @@
     },
     {
         "type": "error",
-        "name": "NotEnabled",
+        "name": "MapWithTimeData__AlreadyAdded",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MapWithTimeData__AlreadyDisabled",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MapWithTimeData__AlreadyEnabled",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MapWithTimeData__NotEnabled",
         "inputs": []
     },
     {
