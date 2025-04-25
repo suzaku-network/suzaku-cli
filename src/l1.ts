@@ -7,7 +7,7 @@ export async function registerL1(
     validatorManager: string,
     l1Middleware: string,
     metadataUrl: string,
-    fee: string = "0" // pass as wei
+    fee: bigint
   ) {
       console.log("Registering L1...");
   
@@ -18,7 +18,7 @@ export async function registerL1(
               abi: config.abis.L1Registry,
               functionName: "registerL1",
               args: [validatorManager, l1Middleware, metadataUrl],
-              value: BigInt(fee), // <--- Pass the fee as a BigInt
+              value: fee,
           });
   
           console.log("Registered L1 successfully, Transaction hash:", hash);
