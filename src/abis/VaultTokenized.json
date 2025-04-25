@@ -1971,6 +1971,11 @@
     },
     {
         "type": "error",
+        "name": "Vault__InconsistentRoles",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "Vault__InsufficientClaim",
         "inputs": []
     },
@@ -2026,6 +2031,11 @@
     },
     {
         "type": "error",
+        "name": "Vault__InvalidFactory",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "Vault__InvalidLengthEpochs",
         "inputs": []
     },
@@ -2047,6 +2057,11 @@
     {
         "type": "error",
         "name": "Vault__InvalidTimestamp",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__MigrationNotImplemented",
         "inputs": []
     },
     {

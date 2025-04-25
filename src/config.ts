@@ -63,11 +63,11 @@ const fujiConfig: Config = {
 const anvilConfig: Config = {
   l1Registry: (process.env.L1_REGISTRY as `0x${string}`) || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
   operatorRegistry: (process.env.OPERATOR_REGISTRY as `0x${string}`) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
-  vaultManager: (process.env.VAULT_MANAGER as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  middlewareService: (process.env.MIDDLEWARE as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  opL1OptIn: (process.env.OP_L1_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN as `0x${string}`) || '0x0000000000000000000000000000000000000000',
-  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER as `0x${string}`) || '0x0000000000000000000000000000000000000000',
+  vaultManager: (process.env.VAULT_MANAGER as `0x${string}`) || '0x712516e61C8B383dF4A63CFe83d7701Bce54B03e',
+  middlewareService: (process.env.MIDDLEWARE as `0x${string}`) || '0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F',
+  opL1OptIn: (process.env.OP_L1_OPT_IN as `0x${string}`) || '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN as `0x${string}`) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER as `0x${string}`) || '0x8464135c8F25Da09e49BC8782676a84730C318bC',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,

@@ -34,21 +34,21 @@ import {
     middlewareCompleteValidatorRegistration,
     middlewareRemoveNode,
     middlewareCompleteValidatorRemoval,
-    middlewareInitWeightUpdate,
-    middlewareCompleteWeightUpdate,
-    middlewareOperatorCache,
-    middlewareCalcNodeWeights,
+    middlewareInitStakeUpdate,
+    middlewareCompleteStakeUpdate,
+    middlewareCalcNodeStakes,
     middlewareForceUpdateNodes,
     middlewareGetOperatorStake,
     middlewareGetCurrentEpoch,
     middlewareGetEpochStartTs,
     middlewareGetActiveNodesForEpoch,
     middlewareGetOperatorNodesLength,
-    middlewareGetNodeWeightCache,
+    middlewareGetNodeStakeCache,
     middlewareGetOperatorLockedStake,
     middlewareNodePendingRemoval,
     middlewareNodePendingUpdate,
-    middlewareGetOperatorUsedWeight
+    middlewareGetOperatorUsedStake,
+    middlewareGetAllOperators
 } from "./middleware";
 
 import {
@@ -93,13 +93,14 @@ async function main() {
         .argument("<validatorManager>")
         .argument("<l1Middleware>")
         .argument("<metadataUrl>")
-        .action(async (validatorManager, l1Middleware, metadataUrl) => {
+        .argument("[fee]", "Optional fee in wei", "0")
+        .action(async (validatorManager, l1Middleware, metadataUrl, fee) => {
             console.log("DEBUG: We are inside the .action callback for register-l1");
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
 
-            await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
+            await registerL1(config, client, validatorManager, l1Middleware, metadataUrl, fee);
         });
 
     program
@@ -520,31 +521,33 @@ async function main() {
             );
         });
 
-    // Init weight update
+    // Init stake update
     program
-        .command("middleware-init-weight-update")
+        .command("middleware-init-stake-update")
+        .description("Initialize validator stake update and lock")
         .argument("<nodeId>")
-        .argument("<newWeight>")
-        .action(async (nodeId, newWeight) => {
+        .argument("<newStake>")
+        .action(async (nodeId, newStake) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
-            await middlewareInitWeightUpdate(
+            await middlewareInitStakeUpdate(
                 client,
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService,
                 nodeId as `0x${string}`,
-                BigInt(newWeight)
+                BigInt(newStake)
             );
         });
 
-    // Complete weight update
+    // Complete stake update
     program
-        .command("middleware-complete-weight-update")
+        .command("middleware-complete-stake-update")
+        .description("Complete validator stake update")
         .argument("<nodeId>")
-        .argument("<validatorWeightUpdateTxHash>")
+        .argument("<validatorStakeUpdateTxHash>")
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
-        .action(async (nodeId, validatorWeightUpdateTxHash, options) => {
+        .action(async (nodeId, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
@@ -559,12 +562,12 @@ async function main() {
             const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
             let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
 
-            await middlewareCompleteWeightUpdate(
+            await middlewareCompleteStakeUpdate(
                 client,
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService,
                 nodeId as `0x${string}`,
-                validatorWeightUpdateTxHash as `0x${string}`,
+                validatorStakeUpdateTxHash as `0x${string}`,
                 options.pchainTxPrivateKey as string,
                 pchainTxAddress as string
             );
@@ -573,29 +576,46 @@ async function main() {
     // Operator cache / calcAndCacheStakes
     program
         .command("middleware-operator-cache")
+        .description("Calculate and cache stakes for operators")
         .argument("<epoch>")
         .argument("<assetClass>")
         .action(async (epoch, assetClass) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
-            await middlewareOperatorCache(
-                client,
-                config.middlewareService as `0x${string}`,
-                config.abis.MiddlewareService,
-                BigInt(epoch),
-                BigInt(assetClass)
-            );
+            console.log("Calculating and caching stakes...");
+            
+            try {
+                if (!client.account) {
+                    throw new Error('Client account is required');
+                }
+            
+                const hash = await client.writeContract({
+                    address: config.middlewareService as `0x${string}`,
+                    abi: config.abis.MiddlewareService,
+                    functionName: 'calcAndCacheStakes',
+                    args: [BigInt(epoch), BigInt(assetClass)],
+                    chain: null,
+                    account: client.account,
+                });
+                console.log("calcAndCacheStakes done, tx hash:", hash);
+            } catch (error) {
+                console.error("Transaction failed:", error);
+                if (error instanceof Error) {
+                    console.error("Error message:", error.message);
+                }
+            }
         });
 
-    // calcAndCacheNodeWeightsForAllOperators
+    // calcAndCacheNodeStakeForAllOperators
     program
-        .command("middleware-calc-node-weights")
+        .command("middleware-calc-node-stakes")
+        .description("Calculate and cache node stakes for all operators")
         .action(async () => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
-            await middlewareCalcNodeWeights(
+            await middlewareCalcNodeStakes(
                 client,
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService
@@ -605,8 +625,9 @@ async function main() {
     // forceUpdateNodes
     program
         .command("middleware-force-update-nodes")
+        .description("Force update operator nodes with stake limit")
         .argument("<operator>")
-        .option("--limit-weight <weight>", "Weight limit (default: 0)", "0")
+        .option("--limit-stake <stake>", "Stake limit (default: 0)", "0")
         .action(async (operator, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
@@ -616,7 +637,7 @@ async function main() {
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService,
                 operator as `0x${string}`,
-                BigInt(options.limitWeight)
+                BigInt(options.limitStake)
             );
         });
 
@@ -704,16 +725,17 @@ async function main() {
             );
         });
 
-    // getNodeWeightCache (read)
+    // getNodeStakeCache (read)
     program
-        .command("middleware-get-node-weight-cache")
+        .command("middleware-get-node-stake-cache")
+        .description("Get node stake cache for a specific epoch and validator")
         .argument("<epoch>")
         .argument("<validatorId>")
         .action(async (epoch, validatorId) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
-            await middlewareGetNodeWeightCache(
+            await middlewareGetNodeStakeCache(
                 client,
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService,
@@ -725,6 +747,7 @@ async function main() {
     // getOperatorLockedStake (read)
     program
         .command("middleware-get-operator-locked-stake")
+        .description("Get operator locked stake")
         .argument("<operator>")
         .action(async (operator) => {
             const opts = program.opts();
@@ -741,6 +764,7 @@ async function main() {
     // nodePendingRemoval (read)
     program
         .command("middleware-node-pending-removal")
+        .description("Check if node is pending removal")
         .argument("<validatorId>")
         .action(async (validatorId) => {
             const opts = program.opts();
@@ -757,6 +781,7 @@ async function main() {
     // nodePendingUpdate (read)
     program
         .command("middleware-node-pending-update")
+        .description("Check if node is pending stake update")
         .argument("<validatorId>")
         .action(async (validatorId) => {
             const opts = program.opts();
@@ -770,19 +795,35 @@ async function main() {
             );
         });
 
-    // getOperatorUsedWeight (read)
+    // getOperatorUsedStakeCached (read)
     program
-        .command("middleware-get-operator-used-weight")
+        .command("middleware-get-operator-used-stake")
+        .description("Get operator used stake from cache")
         .argument("<operator>")
         .action(async (operator) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
-            await middlewareGetOperatorUsedWeight(
+            await middlewareGetOperatorUsedStake(
                 client,
                 config.middlewareService as `0x${string}`,
                 config.abis.MiddlewareService,
                 operator as `0x${string}`
+            );
+        });
+
+    // getAllOperators (read)
+    program
+        .command("middleware-get-all-operators")
+        .description("Get all operators registered in the middleware")
+        .action(async () => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generatePublicClient(opts.network);
+            await middlewareGetAllOperators(
+                client,
+                config.middlewareService as `0x${string}`,
+                config.abis.MiddlewareService
             );
         });
 

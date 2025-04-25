@@ -98,7 +98,7 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **L1 & Vault Registration:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
+  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com 10000000000000000
   pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT 1 200000000000000000000000
   ```
 
@@ -306,16 +306,16 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 #### Weight Update & Caching
 
-- **middleware-init-weight-update `<nodeId>` `<newWeight>`**  
-  Initiates a node weight update.
-- **middleware-complete-weight-update `<nodeId>` `<messageIndex>`**  
-  Completes a node’s weight update.
+- **middleware-init-stake-update `<nodeId>` `<newStake>`**  
+  Initiates a node stake update.
+- **middleware-complete-stake-update `<nodeId>` `<validatorStakeUpdateTxHash>`**  
+  Completes a node's stake update.
 - **middleware-operator-cache `<epoch>` `<assetClass>`**  
   Caches operator stakes for a specified epoch and asset class.
-- **middleware-calc-node-weights**  
-  Calculates and caches node weights for all operators.
-- **middleware-force-update-nodes `<operator>` `<messageIndex>`**  
-  Forces an update of nodes for an operator.
+- **middleware-calc-node-stakes**  
+  Calculates and caches node stakes for all operators.
+- **middleware-force-update-nodes `<operator>` `<limitStake>`**  
+  Forces an update of nodes for an operator with an optional stake limit.
 
 #### Middleware Read Operations
 
@@ -329,16 +329,18 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Retrieves the active nodes for an operator during a specific epoch.
 - **middleware-get-operator-nodes-length `<operator>`**  
   Returns the number of nodes associated with an operator.
-- **middleware-get-node-weight-cache `<epoch>` `<validatorId>`**  
-  Fetches the cached weight for a node (validator) for a given epoch.
+- **middleware-get-node-stake-cache `<epoch>` `<validatorId>`**  
+  Fetches the cached stake for a node (validator) for a given epoch.
 - **middleware-get-operator-locked-stake `<operator>`**  
   Retrieves the locked stake for the operator.
 - **middleware-node-pending-removal `<validatorId>`**  
   Checks if a node is pending removal.
 - **middleware-node-pending-update `<validatorId>`**  
   Checks if a node is pending an update.
-- **middleware-get-operator-used-weight `<operator>`**  
-  Retrieves the used weight for an operator.
+- **middleware-get-operator-used-stake `<operator>`**  
+  Retrieves the used stake for an operator.
+- **middleware-get-all-operators**  
+  Retrieves all registered operators in the middleware.
 
 ---
 
