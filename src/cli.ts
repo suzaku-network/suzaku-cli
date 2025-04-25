@@ -93,9 +93,10 @@ async function main() {
         .argument("<validatorManager>")
         .argument("<l1Middleware>")
         .argument("<metadataUrl>")
-        .argument("[fee]", "Optional fee in wei", "0")
-        .action(async (validatorManager, l1Middleware, metadataUrl, fee) => {
+        .argument("[fee]", "Obligatory fee in wei", "10000000000000000")
+        .action(async (validatorManager, l1Middleware, metadataUrl, feeStr) => {
             console.log("DEBUG: We are inside the .action callback for register-l1");
+            const fee = BigInt(feeStr);
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
