@@ -38,12 +38,12 @@ interface Config {
 }
 
 const fujiConfig: Config = {
-  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0x9AE34b25A1CfAA191565402bDF511dc748d3BC1F',
-  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0xC931bFB1bC75268496E6aB24f0dFE19B59586aB9',
-  vaultManager: (process.env.VAULT_MANAGER_FUJI as `0x${string}`) || '0x783Bc9F5E7AFe441D06D005a30B9235fEc3F02f6',
-  middlewareService: (process.env.MIDDLEWARE_FUJI as `0x${string}`) || '0x3529c1B9B64C350D4f274e18571e9202E98214F2',
-  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x7DF6A370f8f85FCF437894Aa2566A60674Fe3E5e',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0x18747F0aadAa744F653a4Ae5bdc2bCA919E2412D',
+  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0x96a7389543d84a93f2fBE90D5d09eF1B0c30F84b',
+  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0xcBAf6eb3d1F557f4cFF5c2531c0689B582ce0420',
+  vaultManager: (process.env.VAULT_MANAGER_FUJI as `0x${string}`) || '0xB289d0a1723a36Eba3AE4492794f81F854A7f970',
+  middlewareService: (process.env.MIDDLEWARE_FUJI as `0x${string}`) || '0xde7b5222Cf6A031ee1F9595f7364162376B8C2b4',
+  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x4036D99c3a1210d669f56E7eD71816D6696c05Cb',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0xA1E4764eC99fC616A69930c45651643dFC58DD0d',
   balancerValidatorManager: (process.env.BALANCER_VALIDATOR_MANAGER_FUJI as `0x${string}`) || '0x84F2B4D4cF8DA889701fBe83d127896880c04325',
   abis: {
     L1Registry: L1RegistryAbi,
