@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { parseUnits } from "viem";
 import { registerL1, getL1s } from "./l1";
-import { registerOperator } from "./operator";
+import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient, generatePublicClient } from "./client";
 import { derivePChainAddressFromPrivateKey } from "./lib/pChainUtils";
@@ -125,6 +125,16 @@ async function main() {
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
             await registerOperator(config, client, metadataUrl);
+        });
+
+    program
+        .command("list-operators")
+        .description("List all operators registered in the operator registry")
+        .action(async () => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generateClient(opts.privateKey, opts.network);
+            await listOperators(config, client);
         });
 
     /* --------------------------------------------------
@@ -585,12 +595,12 @@ async function main() {
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
             console.log("Calculating and caching stakes...");
-            
+
             try {
                 if (!client.account) {
                     throw new Error('Client account is required');
                 }
-            
+
                 const hash = await client.writeContract({
                     address: config.middlewareService as `0x${string}`,
                     abi: config.abis.MiddlewareService,
