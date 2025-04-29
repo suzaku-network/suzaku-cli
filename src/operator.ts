@@ -1,10 +1,11 @@
+import { ExtendedWalletClient } from "./client";
 import { Config } from "./config";
 import { WalletClient } from "viem";
 
 async function registerOperator(
-  config: Config,
-  client: WalletClient,
-  metadataUrl: string
+    config: Config,
+    client: WalletClient,
+    metadataUrl: string
 ) {
     console.log("Registering operator...");
 
@@ -26,4 +27,36 @@ async function registerOperator(
     }
 }
 
-export { registerOperator };
+async function listOperators(
+    config: Config,
+    client: ExtendedWalletClient
+) {
+    console.log("Listing operators...");
+
+    try {
+        const result = await client.readContract({
+            address: config.operatorRegistry,
+            abi: config.abis.OperatorRegistry,
+            functionName: 'getAllOperators',
+            args: [],
+        }) as [string[], string[]];
+
+        const [addresses, metadataUrls] = result;
+        const totalOperators = addresses.length;
+
+        console.log(`\nTotal operators: ${totalOperators}\n`);
+
+        for (let i = 0; i < totalOperators; i++) {
+            console.log(`Operator ${i + 1}:`);
+            console.log(`  Address: ${addresses[i]}`);
+            console.log(`  Metadata URL: ${metadataUrls[i]}\n`);
+        }
+    } catch (error) {
+        console.error("Failed to list operators:", error);
+        if (error instanceof Error) {
+            console.error("Error message:", error.message);
+        }
+    }
+}
+
+export { registerOperator, listOperators };
