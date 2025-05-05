@@ -252,10 +252,9 @@ async function main() {
     program
         .command("deposit")
         .argument("<vaultAddress>")
-        .argument("<collateralAddress>")
         .argument("<amount>")
         .option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address")
-        .action(async (vaultAddress, collateralAddress, amount, options) => {
+        .action(async (vaultAddress, amount, options) => {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const config = getConfig(opts.network);
@@ -265,7 +264,6 @@ async function main() {
             await depositVault(
                 client,
                 vaultAddress as `0x${string}`,
-                collateralAddress as `0x${string}`,
                 config.abis.VaultTokenized,
                 onBehalfOf as `0x${string}`,
                 amountWei

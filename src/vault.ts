@@ -5,7 +5,6 @@ import { ExtendedWalletClient } from './client';
 export async function depositVault(
   client: ExtendedWalletClient,
   vaultAddress: `0x${string}`,
-  collateralAddress: `0x${string}`,
   vaultAbi: any,
   onBehalfOf: `0x${string}`,
   amountWei: bigint
@@ -17,15 +16,17 @@ export async function depositVault(
       throw new Error('Client account is required');
     }
 
-    // -- Added code: read collateral from env var, then approve vault for that collateral
-    const collateralAddress = process.env.COLLATERAL as `0x${string}`;
-    if (!collateralAddress) {
-      throw new Error("Missing COLLATERAL environment variable");
-    }
+    // Get collateralAddress by calling function "collateral" on vaultAddress
+    const collateralAddress = await client.readContract({
+      address: vaultAddress,
+      abi: vaultAbi,
+      functionName: 'collateral',
+      args: [],
+    });
 
     console.log("Approving collateral token for vault deposit...");
     const approveTx = await client.writeContract({
-      address: collateralAddress,
+      address: collateralAddress as `0x${string}`,
       // minimal ABI for 'approve'
       abi: [
         {
