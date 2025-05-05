@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { cb58ToBytes, bytesToCB58, interruptiblePause } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
+import { cb58ToHex } from './utils';
 
 interface PackL1ConversionMessageArgs {
     subnetId: string;
@@ -487,3 +488,25 @@ function parseVarBytes(input: Uint8Array, offset: number): { bytes: Uint8Array; 
 }
 
 const bytesToHexPrefixed = (bytes: Uint8Array): `0x${string}` => `0x${Buffer.from(bytes).toString('hex')}`;
+
+export function packValidationUptimeMessage(validationId: string, uptimeSeconds: number, networkID: number, sourceChainID: string): Uint8Array {
+    let validationIdBytes: Uint8Array;
+
+    // Convert validationId to hex
+    const validationIdHex = cb58ToHex(validationId);
+    validationIdBytes = hexToBytes(validationIdHex as `0x${string}`);
+
+    // Create the message payload with the proper format
+    const messagePayload = concatenateUint8Arrays(
+        encodeUint16(codecVersion),
+        encodeUint32(VALIDATION_UPTIME_MESSAGE_TYPE_ID),
+        validationIdBytes,
+        encodeUint64(BigInt(uptimeSeconds))
+    );
+
+    // Create addressed call with empty source address
+    const addressedCall = newAddressedCall(new Uint8Array([]), messagePayload);
+
+    // Create unsigned message
+    return newUnsignedMessage(networkID, sourceChainID, addressedCall);
+}

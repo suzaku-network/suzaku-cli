@@ -65,6 +65,7 @@ import {
     getSecurityModules,
     getSecurityModuleWeights
 } from "./balancer";
+import { getValidationUptimeMessage } from "./uptime";
 
 async function getDefaultAccount(opts: any): Promise<`0x${string}`> {
     const client = generateClient(opts.privateKey, opts.network);
@@ -1171,6 +1172,20 @@ async function main() {
             }
         });
 
+    program
+        .command("get-validation-uptime-message")
+        .description("Get the validation uptime message for a given validator in the given L1 RPC")
+        .argument("<rpcUrl>")
+        .argument("<chainId>")
+        .argument("<nodeId>")
+        .action(async (rpcUrl, chainId, nodeId) => {
+            const opts = program.opts();
+            if (opts.network === "fuji") {
+                await getValidationUptimeMessage(rpcUrl, nodeId, 5, chainId);
+            } else {
+                await getValidationUptimeMessage(rpcUrl, nodeId, 1, chainId);
+            }
+        });
 
     program.parse(process.argv);
 
