@@ -7,28 +7,56 @@ export async function registerL1(
     validatorManager: string,
     l1Middleware: string,
     metadataUrl: string,
-    fee: bigint
-  ) {
-      console.log("Registering L1...");
-  
-      try {
-          // @ts-ignore
-          const hash = await client.writeContract({
-              address: config.l1Registry as `0x${string}`,
-              abi: config.abis.L1Registry,
-              functionName: "registerL1",
-              args: [validatorManager, l1Middleware, metadataUrl],
-              value: fee,
-          });
-  
-          console.log("Registered L1 successfully, Transaction hash:", hash);
-      } catch (error) {
-          console.error("Transaction failed:", error);
-          if (error instanceof Error) {
-              console.error("Error message:", error.message);
-          }
-      }
-  }
+) {
+    console.log("Registering L1...");
+
+    try {
+        // @ts-ignore
+        const hash = await client.writeContract({
+            address: config.l1Registry as `0x${string}`,
+            abi: config.abis.L1Registry,
+            functionName: "registerL1",
+            args: [validatorManager, l1Middleware, metadataUrl],
+            value: BigInt(10000000000000000),
+        });
+
+        console.log("Registered L1 successfully, Transaction hash:", hash);
+    } catch (error) {
+        console.error("Transaction failed:", error);
+        if (error instanceof Error) {
+            console.error("Error message:", error.message);
+        }
+    }
+}
+
+export async function setL1MetadataUrl(
+    client: WalletClient,
+    l1RegistryAddress: `0x${string}`,
+    l1RegistryAbi: any,
+    l1Address: `0x${string}`,
+    metadataUrl: string
+) {
+    console.log("Setting L1 Metadata URL...");
+
+    try {
+        // @ts-ignore - Client has hoisted account but TypeScript doesn't recognize it
+        const hash = await client.writeContract({
+            address: l1RegistryAddress,
+            abi: l1RegistryAbi,
+            functionName: 'setMetadataURL',
+            args: [l1Address, metadataUrl],
+            chain: null,
+            account: client.account || null,
+        });
+
+        console.log("Set L1 Metadata URL successfully, Transaction hash:", hash);
+    } catch (error) {
+        console.error("Transaction failed:", error);
+        if (error instanceof Error) {
+            console.error("Error message:", error.message);
+        }
+    }
+}
 
 export async function setL1Middleware(
     client: WalletClient,

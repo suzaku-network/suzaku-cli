@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { parseUnits } from "viem";
-import { registerL1, getL1s } from "./l1";
+import { registerL1, getL1s, setL1MetadataUrl } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient, generatePublicClient } from "./client";
@@ -93,15 +93,12 @@ async function main() {
         .argument("<validatorManager>")
         .argument("<l1Middleware>")
         .argument("<metadataUrl>")
-        .argument("[fee]", "Obligatory fee in wei", "10000000000000000")
-        .action(async (validatorManager, l1Middleware, metadataUrl, feeStr) => {
-            console.log("DEBUG: We are inside the .action callback for register-l1");
-            const fee = BigInt(feeStr);
+        .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
 
-            await registerL1(config, client, validatorManager, l1Middleware, metadataUrl, fee);
+            await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
         });
 
     program
@@ -111,6 +108,17 @@ async function main() {
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getL1s(client, config.l1Registry as `0x${string}`, config.abis.L1Registry);
+        });
+
+    program
+        .command("set-l1-metadata-url")
+        .argument("<l1Address>")
+        .argument("<metadataUrl>")
+        .action(async (l1Address, metadataUrl) => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generateClient(opts.privateKey, opts.network);
+            await setL1MetadataUrl(client, config.l1Registry as `0x${string}`, config.abis.L1Registry, l1Address, metadataUrl);
         });
 
 
@@ -128,7 +136,7 @@ async function main() {
         });
 
     program
-        .command("list-operators")
+        .command("get-operators")
         .description("List all operators registered in the operator registry")
         .action(async () => {
             const opts = program.opts();
@@ -142,16 +150,17 @@ async function main() {
     * -------------------------------------------------- */
     program
         .command("vault-manager-register-vault-l1")
+        .argument("<middlewareVaultManagerAddress>")
         .argument("<vaultAddress>")
         .argument("<assetClass>")
         .argument("<maxLimit>")
-        .action(async (vaultAddress, assetClass, maxLimit) => {
+        .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
             await registerVaultL1(
                 client,
-                config.vaultManager as `0x${string}`,
+                middlewareVaultManagerAddress,
                 config.abis.VaultManager,
                 vaultAddress as `0x${string}`,
                 BigInt(assetClass),
@@ -959,15 +968,16 @@ async function main() {
      */
     program
         .command("balancer-set-up-security-module")
+        .argument("<balancerValidatorManagerAddress>")
         .argument("<middlewareAddress>")
         .argument("<maxWeight>")
-        .action(async (middlewareAddress, maxWeight) => {
+        .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
             await setUpSecurityModule(
                 client,
-                config.balancerValidatorManager as `0x${string}`,
+                balancerValidatorManagerAddress,
                 config.abis.BalancerValidatorManager,
                 middlewareAddress as `0x${string}`,
                 BigInt(maxWeight)
@@ -976,13 +986,14 @@ async function main() {
 
     program
         .command("balancer-get-security-modules")
-        .action(async () => {
+        .argument("<balancerValidatorManagerAddress")
+        .action(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getSecurityModules(
                 client,
-                config.balancerValidatorManager as `0x${string}`,
+                balancerValidatorManagerAddress,
                 config.abis.BalancerValidatorManager
             );
         });
