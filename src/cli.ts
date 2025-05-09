@@ -1023,14 +1023,15 @@ async function main() {
 
     program
         .command("balancer-get-security-module-weights")
+        .argument("<balancerValidatorManagerAddress>")
         .argument("<securityModule>")
-        .action(async (securityModule) => {
+        .action(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getSecurityModuleWeights(
                 client,
-                config.balancerValidatorManager as `0x${string}`,
+                balancerValidatorManagerAddress,
                 config.abis.BalancerValidatorManager,
                 securityModule as `0x${string}`
             );
