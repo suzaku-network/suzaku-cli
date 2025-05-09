@@ -33,6 +33,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
     - [Operator → L1 Opt-In/Opt-Out Commands](#operator--l1-opt-inopt-out-commands)
     - [Operator → Vault Opt-In/Opt-Out Commands](#operator--vault-opt-inopt-out-commands)
     - [Balancer Commands](#balancer-commands)
+    - [Utility Commands](#utility-commands)
 
 ## Requirements
 
@@ -81,7 +82,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
      For Fuji, `https://api.avax-test.network/ext/bc/C/rpc`  
      *The Anvil script uses `RPC_URL=http://127.0.0.1:8545` by default.*
 
-2. **Ensure that the environment variables match your intended network settings (Fuji for production/test deployment, or Anvil for local testing). This is not intended for a production enviromment**
+2. **Ensure that the environment variables match your intended network settings (Fuji for production/test deployment, or Anvil for local testing). This is not intended for a production environment**
 
 
 ## Usage on Fuji
@@ -98,8 +99,8 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **L1 & Vault Registration:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com 10000000000000000
-  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT 1 200000000000000000000000
+  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
+  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $MIDDLEWAREVAULTMANAGER $VAULT 1 200000000000000000000000
   ```
 
 - **Operator Setup & Opt-In:**
@@ -137,13 +138,12 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
-   4. Deposit on Vault’s `deposit(address,uint256)`:
+   4. Deposit on Vault's `deposit(address,uint256)`:
       ```bash
       cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 200000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
-
-
+      ```
 
 - **Deposits / Withdrawals / Claims:**
 
@@ -152,44 +152,41 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   pnpm cli --network fuji --private-key $STAKER_OWNER withdraw $VAULT 100
   pnpm cli --network fuji --private-key $STAKER_OWNER claim $VAULT 100
   ```
+  
 - **Check Stakes & Epochs**
    ```bash
    pnpm cli --network fuji opstakes $OPERATOR
-   pnpm cli --network fuji l1stakes $VALIDATOR_MANAGER
-   pnpm cli --network fuji middleware-get-current-epoch
-   pnpm cli --network fuji middleware-register-operator $OPERATOR --private-key $L1_OWNER
-   pnpm cli --network fuji middleware-operator-cache <current-epoch> 1 --private-key $L1_OWNER
-   pnpm cli --network fuji middleware-get-operator-stake $OPERATOR <current-epoch> 1
+   pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
+   pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
+   pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
+   pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <current-epoch> 1
    ```
 
 - **Balancer / Security Module Setup**
     ```bash
-    pnpm cli --network fuji balancer-set-up-security-module $MIDDLEWARE 200000 --private-key $L1_OWNER
-    pnpm cli --network fuji balancer-get-security-modules
+    pnpm cli --network fuji balancer-set-up-security-module $BALANCERVALIDATORMANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
+    pnpm cli --network fuji balancer-get-security-modules $BALANCERVALIDATORMANAGER
     ```
 
-- **Check epoch information**
+- **Check Epoch Information**
     ```bash
-    pnpm cli --network fuji middleware-get-current-epoch
-    pnpm cli --network fuji middleware-operator-cache <current-epoch> 1 --private-key $L1_OWNER
-    pnpm cli --network fuji middleware-get-operator-stake $OPERATOR <next-epoch> 1
+    pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
+    pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
+    pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1
     ```
 
-- **Initialize and complete node addion**
+- **Initialize and Complete Node Addition**
     ```bash
-    pnpm cli --network fuji middleware-add-node \
-      $NODE_ID \
-      $BLS_KEY \
-      --private-key $OPERATOR_OWNER
+    pnpm cli --network fuji middleware-add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER
 
     pnpm cli --network fuji middleware-complete-validator-registration \
+      $MIDDLEWARE \
       $OPERATOR \
       $NODE_ID \
       $ADD_NODE_TX_HASH \
       $BLS_PROOF_OF_POSSESSION \
       --private-key $OPERATOR_OWNER
     ```
-
 
 For a complete list of commands, see the [Commands Reference](#commands-reference) below.
 
@@ -235,6 +232,10 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 - **register-l1 `<validatorManager>` `<l1Middleware>` `<metadataUrl>`**  
   Registers a new L1 by linking a validator manager and L1 middleware and setting a metadata URL.
+- **get-l1s**  
+  Lists all registered L1s.
+- **set-l1-metadata-url `<l1Address>` `<metadataUrl>`**  
+  Updates the metadata URL for a registered L1.
 
 ---
 
@@ -242,14 +243,16 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 - **register-operator `<metadataUrl>`**  
   Registers an operator using the provided metadata URL.
+- **get-operators**  
+  Lists all registered operators.
 
 ---
 
 ### Vault Manager Commands
 
-- **vault-manager-register-vault-l1 `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
-  Registers a vault for an L1 with a given asset class and maximum limit.
-- **vault-manager-update-vault-max-l1-limit `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+- **vault-manager-register-vault-l1 `<middlewareVaultManagerAddress>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+  Registers a vault for an L1 with the given parameters.
+- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManagerAddress>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
   Updates the maximum L1 limit of a registered vault.
 - **vault-manager-remove-vault `<vaultAddress>`**  
   Removes a registered vault.
@@ -286,61 +289,61 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 #### Operator-Related Actions
 
-- **middleware-register-operator `<operator>`**  
+- **middleware-register-operator `<middlewareAddress>` `<operator>`**  
   Registers an operator in the middleware.
-- **middleware-disable-operator `<operator>`**  
+- **middleware-disable-operator `<middlewareAddress>` `<operator>`**  
   Disables an operator in the middleware.
-- **middleware-remove-operator `<operator>`**  
+- **middleware-remove-operator `<middlewareAddress>` `<operator>`**  
   Removes an operator from the middleware.
+- **middleware-get-all-operators `<middlewareAddress>`**  
+  Lists all operators registered in the middleware.
 
 #### Node Operations
 
-- **middleware-add-node `<nodeId>` `<blsKey>` `<registrationExpiry>` `<pchainThreshold>` `<rewardThreshold>` `<initialStake>` [--pchain-address `<address>`...] [--reward-address `<address>`...]**  
-  Adds a node with its BLS key, registration expiry, thresholds, and initial stake. Multiple addresses for p-chain and rewards can be specified.
-- **middleware-complete-validator-registration `<operator>` `<nodeId>` `<messageIndex>`**  
-  Completes validator registration for a given node.
-- **middleware-remove-node `<nodeId>`**  
+- **middleware-add-node `<middlewareAddress>` `<nodeId>` `<blsKey>` [--initial-stake `<initialStake>`] [--registration-expiry `<expiry>`] [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**  
+  Adds a node with its BLS key. Options include setting the initial stake (default: 0), registration expiry (default: now + 12 hours), P-Chain thresholds, and owner addresses.
+- **middleware-complete-validator-registration `<middlewareAddress>` `<operator>` `<nodeId>` `<addNodeTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`]**  
+  Completes validator registration for a given node. Includes the transaction hash from the add-node operation and BLS proof of possession. Optionally specify a P-Chain transaction private key and initial balance (default: 0.1 AVAX).
+- **middleware-remove-node `<middlewareAddress>` `<nodeId>`**  
   Removes a node from the middleware.
-- **middleware-complete-validator-removal `<messageIndex>`**  
-  Completes the validator removal process.
+- **middleware-complete-validator-removal `<middlewareAddress>` `<nodeId>` `<removeNodeTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**  
+  Completes the validator removal process, specifying the transaction hash from the removal operation.
 
 #### Weight Update & Caching
 
-- **middleware-init-stake-update `<nodeId>` `<newStake>`**  
+- **middleware-init-stake-update `<middlewareAddress>` `<nodeId>` `<newStake>`**  
   Initiates a node stake update.
-- **middleware-complete-stake-update `<nodeId>` `<validatorStakeUpdateTxHash>`**  
+- **middleware-complete-stake-update `<middlewareAddress>` `<nodeId>` `<validatorStakeUpdateTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**  
   Completes a node's stake update.
-- **middleware-operator-cache `<epoch>` `<assetClass>`**  
+- **middleware-operator-cache `<middlewareAddress>` `<epoch>` `<assetClass>`**  
   Caches operator stakes for a specified epoch and asset class.
-- **middleware-calc-node-stakes**  
+- **middleware-calc-node-stakes `<middlewareAddress>`**  
   Calculates and caches node stakes for all operators.
-- **middleware-force-update-nodes `<operator>` `<limitStake>`**  
-  Forces an update of nodes for an operator with an optional stake limit.
+- **middleware-force-update-nodes `<middlewareAddress>` `<operator>` [--limit-stake `<stake>`]**  
+  Forces an update of nodes for an operator with an optional stake limit (default: 0).
 
 #### Middleware Read Operations
 
-- **middleware-get-operator-stake `<operator>` `<epoch>` `<assetClass>`**  
+- **middleware-get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<assetClass>`**  
   Retrieves the stake of an operator for the specified epoch and asset class.
-- **middleware-get-current-epoch**  
+- **middleware-get-current-epoch `<middlewareAddress>`**  
   Returns the current epoch.
-- **middleware-get-epoch-start-ts `<epoch>`**  
+- **middleware-get-epoch-start-ts `<middlewareAddress>` `<epoch>`**  
   Retrieves the start timestamp for the given epoch.
-- **middleware-get-active-nodes-for-epoch `<operator>` `<epoch>`**  
+- **middleware-get-active-nodes-for-epoch `<middlewareAddress>` `<operator>` `<epoch>`**  
   Retrieves the active nodes for an operator during a specific epoch.
-- **middleware-get-operator-nodes-length `<operator>`**  
+- **middleware-get-operator-nodes-length `<middlewareAddress>` `<operator>`**  
   Returns the number of nodes associated with an operator.
-- **middleware-get-node-stake-cache `<epoch>` `<validatorId>`**  
+- **middleware-get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validatorId>`**  
   Fetches the cached stake for a node (validator) for a given epoch.
-- **middleware-get-operator-locked-stake `<operator>`**  
+- **middleware-get-operator-locked-stake `<middlewareAddress>` `<operator>`**  
   Retrieves the locked stake for the operator.
-- **middleware-node-pending-removal `<validatorId>`**  
+- **middleware-node-pending-removal `<middlewareAddress>` `<validatorId>`**  
   Checks if a node is pending removal.
-- **middleware-node-pending-update `<validatorId>`**  
+- **middleware-node-pending-update `<middlewareAddress>` `<validatorId>`**  
   Checks if a node is pending an update.
-- **middleware-get-operator-used-stake `<operator>`**  
+- **middleware-get-operator-used-stake `<middlewareAddress>` `<operator>`**  
   Retrieves the used stake for an operator.
-- **middleware-get-all-operators**  
-  Retrieves all registered operators in the middleware.
 
 ---
 
@@ -368,18 +371,29 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 ### Balancer Commands
 
-- **balancer-set-up-security-module `<middlewareAddress>` `<maxWeight>`**  
-  Sets up a security module with the given middleware address and maximum weight.
-- **balancer-get-security-modules**  
-  Retrieves the list of security modules.
+- **balancer-set-up-security-module `<balancerValidatorManagerAddress>` `<middlewareAddress>` `<maxWeight>`**  
+  Sets up a security module with the given parameters and maximum weight.
+- **balancer-get-security-modules `<balancerValidatorManagerAddress>`**  
+  Retrieves the list of security modules for the specified balancer validator manager.
 - **balancer-get-security-module-weights `<securityModule>`**  
   Retrieves weight details for the specified security module.
 
 ---
 
+### Utility Commands
+
+- **opstakes `<operatorAddress>`**  
+  Shows operator stakes across L1s, enumerating each L1 the operator is opted into.
+- **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**  
+  Gets the validation uptime message for a given validator in the specified L1 RPC.
+- **help [command]**  
+  Displays help information for a specific command or the entire CLI.
+
+---
+
 *Bullet Points for Clarification:*
 - Global options like `--private-key` and `--network` are inherited by every command.
-- Optional flags (such as `--onBehalfOf`, `--claimer`, `--recipient`, `--pchain-address`, and `--reward-address`) allow overriding default addresses.
+- Optional flags are shown in square brackets and have default values where applicable.
 - Numeric inputs are processed as BigInt values when needed.
 
 For further details on options and examples for each command, run:
@@ -387,4 +401,3 @@ For further details on options and examples for each command, run:
 ```bash
 pnpm cli --help
 ```
----
