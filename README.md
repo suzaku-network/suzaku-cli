@@ -100,7 +100,7 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 
   ```bash
   pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
-  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $MIDDLEWAREVAULTMANAGER $VAULT 1 200000000000000000000000
+  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT_MANAGER_FUJI $VAULT 1 200000000000000000000000
   ```
 
 - **Operator Setup & Opt-In:**
@@ -155,7 +155,7 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   
 - **Check Stakes & Epochs**
    ```bash
-   pnpm cli --network fuji opstakes $OPERATOR
+   pnpm cli --network fuji opstakes $VAULT_MANAGER_FUJI $OPERATOR
    pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
    pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
    pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
@@ -250,17 +250,17 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 ### Vault Manager Commands
 
-- **vault-manager-register-vault-l1 `<middlewareVaultManagerAddress>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+- **vault-manager-register-vault-l1 `<middlewareVaultManager>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
   Registers a vault for an L1 with the given parameters.
-- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManagerAddress>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManager>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
   Updates the maximum L1 limit of a registered vault.
-- **vault-manager-remove-vault `<vaultAddress>`**  
+- **vault-manager-remove-vault `<middlewareVaultManager>` `<vaultAddress>`**  
   Removes a registered vault.
-- **get-vault-count**  
+- **get-vault-count `<middlewareVaultManager>`**  
   Retrieves the total number of registered vaults.
-- **get-vault-at-with-times `<index>`**  
+- **get-vault-at-with-times `<middlewareVaultManager>` `<index>`**  
   Returns vault details at a specified index, including related timestamps.
-- **get-vault-asset-class `<vaultAddress>`**  
+- **get-vault-asset-class `<middlewareVaultManager>` `<vaultAddress>`**  
   Returns the asset class associated with the given vault.
 
 ---
@@ -382,7 +382,7 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 ### Utility Commands
 
-- **opstakes `<operatorAddress>`**  
+- **opstakes `<middlewareVaultManager>` `<operatorAddress>`**  
   Shows operator stakes across L1s, enumerating each L1 the operator is opted into.
 - **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**  
   Gets the validation uptime message for a given validator in the specified L1 RPC.

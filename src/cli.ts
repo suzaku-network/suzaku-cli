@@ -191,14 +191,15 @@ async function main() {
 
     program
         .command("vault-manager-remove-vault")
+        .argument("<middlewareVaultManager>")
         .argument("<vaultAddress>")
-        .action(async (vaultAddress) => {
+        .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.privateKey, opts.network);
             await removeVault(
                 client,
-                config.vaultManager as `0x${string}`,
+                middlewareVaultManager as `0x${string}`,
                 config.abis.VaultManager,
                 vaultAddress as `0x${string}`
             );
@@ -206,27 +207,29 @@ async function main() {
 
     program
         .command("get-vault-count")
-        .action(async () => {
+        .argument("<middlewareVaultManager>")
+        .action(async (middlewareVaultManager) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getVaultCount(
                 client,
-                config.vaultManager as `0x${string}`,
+                middlewareVaultManager as `0x${string}`,
                 config.abis.VaultManager
             );
         });
 
     program
         .command("get-vault-at-with-times")
+        .argument("<middlewareVaultManager>")
         .argument("<index>")
-        .action(async (index) => {
+        .action(async (middlewareVaultManager, index) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getVaultAtWithTimes(
                 client,
-                config.vaultManager as `0x${string}`,
+                middlewareVaultManager as `0x${string}`,
                 config.abis.VaultManager,
                 BigInt(index)
             );
@@ -234,14 +237,15 @@ async function main() {
 
     program
         .command("get-vault-asset-class")
+        .argument("<middlewareVaultManager>")
         .argument("<vaultAddress>")
-        .action(async (vaultAddress) => {
+        .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
             await getVaultAssetClass(
                 client,
-                config.vaultManager as `0x${string}`,
+                middlewareVaultManager as `0x${string}`,
                 config.abis.VaultManager,
                 vaultAddress as `0x${string}`
             );
@@ -1044,9 +1048,10 @@ async function main() {
          */
     program
         .command("opstakes")
+        .argument("<middlewareVaultManager>")
         .argument("<operatorAddress>")
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
-        .action(async (operatorAddress) => {
+        .action(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generatePublicClient(opts.network);
@@ -1056,7 +1061,7 @@ async function main() {
 
             // 1) Read total vaults from VaultManager
             const vaultCount = (await client.readContract({
-                address: config.vaultManager as `0x${string}`,
+                address: middlewareVaultManager as `0x${string}`,
                 abi: config.abis.VaultManager,
                 functionName: 'getVaultCount',
                 args: [],
@@ -1092,7 +1097,7 @@ async function main() {
             // 3) For each vault in [0..vaultCount-1], read assetClass, delegator, collateral
             for (let i = 0n; i < vaultCount; i++) {
                 const [vaultAddress] = (await client.readContract({
-                    address: config.vaultManager as `0x${string}`,
+                    address: middlewareVaultManager as `0x${string}`,
                     abi: config.abis.VaultManager,
                     functionName: 'getVaultAtWithTimes',
                     args: [i],
@@ -1102,7 +1107,7 @@ async function main() {
 
                 // read the assetClass
                 const assetClass = (await client.readContract({
-                    address: config.vaultManager as `0x${string}`,
+                    address: middlewareVaultManager as `0x${string}`,
                     abi: config.abis.VaultManager,
                     functionName: 'getVaultAssetClass',
                     args: [vaultAddress],
