@@ -142,7 +142,7 @@ async function main() {
         .action(async () => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generatePublicClient(opts.network);
             await listOperators(config, client);
         });
 

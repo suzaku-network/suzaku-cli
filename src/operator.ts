@@ -1,6 +1,6 @@
 import { ExtendedWalletClient } from "./client";
 import { Config } from "./config";
-import { WalletClient } from "viem";
+import { PublicClient, WalletClient } from "viem";
 
 async function registerOperator(
     config: Config,
@@ -29,7 +29,7 @@ async function registerOperator(
 
 async function listOperators(
     config: Config,
-    client: ExtendedWalletClient
+    client: PublicClient
 ) {
     console.log("Listing operators...");
 

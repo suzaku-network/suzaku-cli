@@ -35,10 +35,10 @@ interface Config {
 }
 
 const fujiConfig: Config = {
-  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0x96a7389543d84a93f2fBE90D5d09eF1B0c30F84b',
-  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0xcBAf6eb3d1F557f4cFF5c2531c0689B582ce0420',
-  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x4036D99c3a1210d669f56E7eD71816D6696c05Cb',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0xA1E4764eC99fC616A69930c45651643dFC58DD0d',
+  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0xB9826Bbf0deB10cC3924449B93F418db6b16be36',
+  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0x46D45D6be6214F6bd8124187caD1a5302755d7A2',
+  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x0360C1cB32A20D97b358538D9Db71339ce2c9592',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0xC30c9f7482B2ED82d0532812285295f8b7453941',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,
