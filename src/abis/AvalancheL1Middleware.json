@@ -78,19 +78,6 @@
     },
     {
         "type": "function",
-        "name": "BALANCER_VALIDATOR_MANAGER",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "EPOCH_DURATION",
         "inputs": [],
         "outputs": [
@@ -111,6 +98,19 @@
                 "name": "",
                 "type": "address",
                 "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "MAX_AUTO_EPOCH_UPDATES",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ],
         "stateMutability": "view"
@@ -552,6 +552,19 @@
     },
     {
         "type": "function",
+        "name": "getAssetClassIds",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint96[]",
+                "internalType": "uint96[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "getClassAssets",
         "inputs": [
             {
@@ -756,6 +769,35 @@
     },
     {
         "type": "function",
+        "name": "getOperatorUsedStakeCachedPerEpoch",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "assetClass",
+                "type": "uint96",
+                "internalType": "uint96"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "getTotalStake",
         "inputs": [
             {
@@ -851,6 +893,32 @@
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "lastGlobalNodeStakeUpdateEpoch",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "manualProcessNodeStakeCache",
+        "inputs": [
+            {
+                "name": "numEpochsToProcess",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -1355,6 +1423,25 @@
     },
     {
         "type": "event",
+        "name": "NodeStakeCacheManuallyProcessed",
+        "inputs": [
+            {
+                "name": "upToEpoch",
+                "type": "uint48",
+                "indexed": false,
+                "internalType": "uint48"
+            },
+            {
+                "name": "epochsProcessedCount",
+                "type": "uint48",
+                "indexed": false,
+                "internalType": "uint48"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "NodeStakeUpdated",
         "inputs": [
             {
@@ -1565,7 +1652,33 @@
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__InvalidScaleFactor",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__ManualEpochUpdateRequired",
+        "inputs": [
+            {
+                "name": "epochsPending",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "maxAutoUpdates",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__MaxL1LimitZero",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__NoEpochsToProcess",
         "inputs": []
     },
     {
@@ -1781,6 +1894,22 @@
         "type": "error",
         "name": "AvalancheL1Middleware__TooBigSlashAmount",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__TooManyEpochsRequested",
+        "inputs": [
+            {
+                "name": "requested",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "pending",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
     },
     {
         "type": "error",
