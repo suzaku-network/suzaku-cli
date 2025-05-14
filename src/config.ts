@@ -9,6 +9,8 @@ import BalancerValidatorManagerAbi from './abis/BalancerValidatorManager.json';
 import VaultFactoryAbi from './abis/VaultFactory.json';
 import OperatorVaultOptInServiceAbi from './abis/OperatorVaultOptInService.json';
 import OperatorL1OptInServiceAbi from './abis/OperatorL1OptInService.json';
+import UptimeTrackerAbi from './abis/UptimeTracker.json';
+import RewardsAbi from './abis/Rewards.json';
 // import DelegatorFactoryAbi from './abis/DelegatorFactory.json';
 
 // Load environment variables
@@ -31,6 +33,8 @@ interface Config {
     OperatorVaultOptInService?: any;
     OperatorL1OptInService?: any;
     MiddlewareService: any;
+    UptimeTracker: any;
+    Rewards: any;
   };
 }
 
@@ -51,6 +55,8 @@ const fujiConfig: Config = {
     OperatorVaultOptInService: OperatorVaultOptInServiceAbi,
     OperatorL1OptInService: OperatorL1OptInServiceAbi,
     MiddlewareService: L1MiddlewareAbi,
+    UptimeTracker: UptimeTrackerAbi,
+    Rewards: RewardsAbi,
   },
 };
 
@@ -71,6 +77,8 @@ const anvilConfig: Config = {
     OperatorVaultOptInService: OperatorVaultOptInServiceAbi,
     OperatorL1OptInService: OperatorL1OptInServiceAbi,
     MiddlewareService: L1MiddlewareAbi,
+    UptimeTracker: UptimeTrackerAbi,
+    Rewards: RewardsAbi,
   },
 };
 

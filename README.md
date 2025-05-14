@@ -1,45 +1,40 @@
 # Suzaku CLI
 
-A simple CLI tool to interact with Suzaku core smart contracts on the Fuji network. The commands let you register L1, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
+A simple CLI tool to interact with Suzaku core smart contracts on the Fuji network. The commands let you register L1s, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
 
 > **Note:**  
-> - The default current usage is aimed at launching on Fuji.  
-> - For testing parts of the protocol locally, you can use the provided Anvil script (`scripts/anvil.sh`).
-
+> - The default usage is aimed at launching on Fuji.  
 ---
 
 ## Table of Contents
 
 - [Suzaku CLI](#suzaku-cli)
-  - [Table of Contents](#table-of-contents)
-  - [Requirements](#requirements)
-  - [Installation](#installation)
-  - [Environment Setup](#environment-setup)
-  - [Usage on Fuji](#usage-on-fuji)
-    - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
-  - [Testing on Anvil](#testing-on-anvil)
-  - [Commands Reference](#commands-reference)
-  - [Command Reference](#command-reference)
-    - [L1 Registry Commands](#l1-registry-commands)
-    - [Operator Registry Commands](#operator-registry-commands)
-    - [Vault Manager Commands](#vault-manager-commands)
-    - [Vault Deposit/Withdraw/Claim Commands](#vault-depositwithdrawclaim-commands)
-    - [L1RestakeDelegator Commands](#l1restakedelegator-commands)
-    - [Middleware Commands](#middleware-commands)
-      - [Operator-Related Actions](#operator-related-actions)
-      - [Node Operations](#node-operations)
-      - [Weight Update \& Caching](#weight-update--caching)
-      - [Middleware Read Operations](#middleware-read-operations)
-    - [Operator → L1 Opt-In/Opt-Out Commands](#operator--l1-opt-inopt-out-commands)
-    - [Operator → Vault Opt-In/Opt-Out Commands](#operator--vault-opt-inopt-out-commands)
-    - [Balancer Commands](#balancer-commands)
-    - [Utility Commands](#utility-commands)
+- [Table of Contents](#table-of-contents)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Environment Setup](#environment-setup)
+- [Usage on Fuji](#usage-on-fuji)
+  - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
+- [Commands Reference](#commands-reference)
+  - [L1 Registry Commands](#l1-registry-commands)
+  - [Operator Registry Commands](#operator-registry-commands)
+  - [Vault Manager Commands](#vault-manager-commands)
+  - [Vault Deposit/Withdraw/Claim Commands](#vault-depositwithdrawclaim-commands)
+  - [L1RestakeDelegator Commands](#l1restakedelegator-commands)
+  - [Middleware Commands](#middleware-commands)
+    - [Operator-Related Actions](#operator-related-actions)
+    - [Node Operations](#node-operations)
+    - [Weight Update & Caching](#weight-update--caching)
+    - [Middleware Read Operations](#middleware-read-operations)
+  - [Operator → L1 Opt-In/Opt-Out Commands](#operator--l1-opt-inopt-out-commands)
+  - [Operator → Vault Opt-In/Opt-Out Commands](#operator--vault-opt-inopt-out-commands)
+  - [Balancer Commands](#balancer-commands)
+  - [Utility Commands](#utility-commands)
 
 ## Requirements
 
 - Node.js (v16+ recommended)
 - pnpm package manager (or npm/yarn)
-- [Anvil](https://book.getfoundry.sh/tutorials/anvil) if you want to test locally (default port: 8545)
 - [cast](https://book.getfoundry.sh/reference/cast) for token minting/approval commands (optional)
 
 ---
@@ -64,26 +59,9 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
 
 ## Environment Setup
 
-1. **Configure Environment Variables:**
+1. **Identify the required addresses and credentials:**
 
-   Copy the example file and edit accordingly:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   **Key variables to update:**
-
-   - **Owners & Roles Private Keys:**
-     `CURATOR_OWNER`, `L1_OWNER`, `OPERATOR_OWNER`, `STAKER_OWNER`
-   - **Contract Addresses:**  
-     `BALANCER_BALANCER_VALIDATOR_MANAGER_FUJI`, `VAULT_MANAGER_FUJI`, `BALANCER_VALIDATOR_MANAGER_FUJI`, `VAULT`, etc.
-   - **Network Variables:**  
-     For Fuji, `https://api.avax-test.network/ext/bc/C/rpc`  
-     *The Anvil script uses `RPC_URL=http://127.0.0.1:8545` by default.*
-
-2. **Ensure that the environment variables match your intended network settings (Fuji for production/test deployment, or Anvil for local testing). This is not intended for a production environment**
-
+The specific commands and required information (such as contract addresses and private keys) will vary depending on your role—Operator, Curator, or L1. Ensure you have the relevant contract addresses and credentials prepared before proceeding.
 
 ## Usage on Fuji
 
@@ -189,29 +167,6 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
     ```
 
 For a complete list of commands, see the [Commands Reference](#commands-reference) below.
-
----
-
-
-## Testing on Anvil
-
-If you wish to test the commands on a local Anvil network, use the provided script:
-
-```bash
-set -a
-source env.anvil
-./scripts/anvil.sh
-```
-
-This script:
-
-- Sets up example environment variables.
-- Deploys contracts Suzaku-collateral and Suzaku-core. For this you will need to clone [suzaku-deployments.](https://github.com/suzaku-network/suzaku-deployments) and reference the path in env.anvil
-- Executes a sequence of TS CLI commands on your local anvil chain.
-
-*Bullet points for clarification:*
-- The Anvil script is provided as an example of how to run the sequence locally.
-- It mimics the Fuji commands while using local endpoints (e.g., `RPC_URL=http://127.0.0.1:8545`).
 
 ---
 

@@ -65,7 +65,13 @@ import {
     getSecurityModules,
     getSecurityModuleWeights
 } from "./balancer";
-import { getValidationUptimeMessage } from "./uptime";
+import { 
+    getValidationUptimeMessage, 
+    computeValidatorUptime, 
+    reportAndSubmitValidatorUptime,
+    computeOperatorUptimeAtEpoch,
+    computeOperatorUptimeForEpochs
+} from "./uptime";
 
 async function getDefaultAccount(opts: any): Promise<`0x${string}`> {
     const client = generateClient(opts.privateKey, opts.network);
@@ -1220,6 +1226,126 @@ async function main() {
                 await getValidationUptimeMessage(rpcUrl, nodeId, 1, chainId);
             }
         });
+
+    program
+        .command('compute-validator-uptime')
+        .argument('<uptimeTrackerAddress>')
+        .argument('<signedUptimeHex>')
+        .option('--messageIndex <int>', 'Warp message index', '0')
+        .action(async (uptimeTrackerAddress, signedUptimeHex, options) => {
+          const { privateKey, network } = program.opts();
+          const messageIndex = parseInt(options.messageIndex, 10);
+          await computeValidatorUptime(
+            uptimeTrackerAddress as `0x${string}`,
+            signedUptimeHex as `0x${string}`,
+            messageIndex,
+            privateKey,
+            network
+          );
+        });     
+
+            // ---- Combined Uptime Reporting Command ----
+    program
+    .command("report-uptime-validator")
+    .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
+    .argument("<rpcUrl>", "RPC URL of the L1/Subnet (e.g., http://localhost:9650/ext/bc/CHAIN_ID)")
+    .argument("<sourceChainId>", "The Chain ID for which the uptime is being reported (used in the Warp message)")
+    .argument("<nodeId>", "The NodeID of the validator (e.g., NodeID-xxxxxxxxxxx)")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract on the C-Chain")
+    .option("--messageIndex <number>", "Warp message index for the UptimeTracker contract call", "0")
+    // Optional: Add an explicit option if deriving warpNetworkID is complex
+    // .option("--warp-network-id <number>", "Avalanche Network ID for the Warp message (e.g., 1 for Mainnet, 5 for Fuji)")
+    .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress, options) => {
+        const opts = program.opts();
+        if (!opts.privateKey) {
+            console.error("Error: Private key is required. Use -k or set PK environment variable.");
+            process.exit(1);
+        }
+
+        // Determine the Avalanche Network ID for the Warp message based on the --network option
+        let warpNetworkID: number;
+        if (opts.network === "fuji") {
+            warpNetworkID = 5;
+        } else if (opts.network === "mainnet") {
+            warpNetworkID = 1;
+        } else if (opts.network === "anvil") {
+            // For Anvil, decide if it's simulating Fuji (5) or Mainnet (1)
+            // Or if it needs a different ID. Defaulting to Fuji's ID for local testing.
+            console.warn("Using Warp Network ID 5 (Fuji) for Anvil. Adjust if Anvil simulates Mainnet or another network context for Warp.");
+            warpNetworkID = 5;
+        } else {
+            // Fallback or error for unsupported networks for warpNetworkID derivation
+            // You might want to make this an explicit option if network names get more complex
+            throw new Error(
+                `Network '${opts.network}' is not configured for determining Warp Network ID. ` +
+                `Use 'fuji', 'mainnet', or 'anvil', or extend this logic.`
+            );
+        }
+
+        const messageIndex = parseInt(options.messageIndex, 10);
+        if (isNaN(messageIndex)) {
+            console.error("Error: Invalid message index. Must be a number.");
+            process.exit(1);
+        }
+
+        await reportAndSubmitValidatorUptime(
+            rpcUrl,
+            nodeId,
+            warpNetworkID,
+            sourceChainId,
+            uptimeTrackerAddress as `0x${string}`,
+            messageIndex,
+            opts.privateKey,
+            opts.network
+        );
+    });
+
+    // ---- Adding new commands for operator uptime ----
+    program
+    .command("compute-operator-uptime")
+    .description("Compute uptime for an operator at a specific epoch")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<operator>", "Address of the operator")
+    .argument("<epoch>", "Epoch number")
+    .action(async (uptimeTrackerAddress, operator, epoch) => {
+        const opts = program.opts();
+        if (!opts.privateKey) {
+            console.error("Error: Private key is required. Use -k or set PK environment variable.");
+            process.exit(1);
+        }
+
+        await computeOperatorUptimeAtEpoch(
+            uptimeTrackerAddress as `0x${string}`,
+            operator as `0x${string}`,
+            parseInt(epoch, 10),
+            opts.privateKey,
+            opts.network
+        );
+    });
+
+    program
+    .command("compute-operator-uptime-range")
+    .description("Compute uptime for an operator over a range of epochs (client-side looping)")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<operator>", "Address of the operator")
+    .argument("<startEpoch>", "Starting epoch number")
+    .argument("<endEpoch>", "Ending epoch number")
+    .action(async (uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
+        const opts = program.opts();
+        if (!opts.privateKey) {
+            console.error("Error: Private key is required. Use -k or set PK environment variable.");
+            process.exit(1);
+        }
+
+        await computeOperatorUptimeForEpochs(
+            uptimeTrackerAddress as `0x${string}`,
+            operator as `0x${string}`,
+            parseInt(startEpoch, 10),
+            parseInt(endEpoch, 10),
+            opts.privateKey,
+            opts.network
+        );
+    });
 
     program.parse(process.argv);
 }
