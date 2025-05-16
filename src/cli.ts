@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { parseUnits } from "viem";
-import { registerL1, getL1s, setL1MetadataUrl } from "./l1";
+import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient, generatePublicClient } from "./client";
@@ -122,7 +122,16 @@ async function main() {
             await setL1MetadataUrl(client, config.l1Registry as `0x${string}`, config.abis.L1Registry, l1Address, metadataUrl);
         });
 
-
+    program
+        .command("set-l1-middleware")
+        .argument("<l1Address>")
+        .argument("<l1Middleware>")
+        .action(async (l1Address, l1Middleware) => {
+            const opts = program.opts();
+            const config = getConfig(opts.network);
+            const client = generateClient(opts.privateKey, opts.network);
+            await setL1Middleware(client, config.l1Registry as `0x${string}`, config.abis.L1Registry, l1Address, l1Middleware);
+        });
     /* --------------------------------------------------
     * OPERATOR REGISTRY COMMANDS
     * -------------------------------------------------- */
