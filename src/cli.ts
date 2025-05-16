@@ -70,8 +70,44 @@ import {
     computeValidatorUptime, 
     reportAndSubmitValidatorUptime,
     computeOperatorUptimeAtEpoch,
-    computeOperatorUptimeForEpochs
+    computeOperatorUptimeForEpochs,
+    getValidatorUptimeForEpoch,
+    isValidatorUptimeSetForEpoch,
+    getOperatorUptimeForEpoch,
+    isOperatorUptimeSetForEpoch,
+    getLastUptimeCheckpoint
 } from "./uptime";
+
+import {
+    distributeRewards,
+    claimRewards,
+    claimOperatorFee,
+    claimCuratorFee,
+    claimProtocolFee,
+    claimUndistributedRewards,
+    setRewardsAmountForEpochs,
+    setRewardsShareForAssetClass,
+    setMinRequiredUptime,
+    setAdminRole,
+    setProtocolOwner,
+    updateProtocolFee,
+    updateOperatorFee,
+    updateCuratorFee,
+    getRewardsAmountPerTokenFromEpoch,
+    getRewardsAmountForTokenFromEpoch,
+    getOperatorShares,
+    getVaultShares,
+    getCuratorShares,
+    getProtocolRewards,
+    getDistributionBatch,
+    getFeesConfiguration,
+    getRewardsShareForAssetClass,
+    getMinRequiredUptime,
+    getLastEpochClaimedStaker,
+    getLastEpochClaimedOperator,
+    getLastEpochClaimedCurator,
+    getLastEpochClaimedProtocol
+} from "./rewards";
 
 async function getDefaultAccount(opts: any): Promise<`0x${string}`> {
     const client = generateClient(opts.privateKey, opts.network);
@@ -1346,6 +1382,534 @@ async function main() {
             opts.network
         );
     });
+
+    // ---- Read-only commands for uptime data ----
+    program
+    .command("get-validator-uptime")
+    .description("Get the recorded uptime for a validator at a specific epoch")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<validationID>", "Validation ID of the validator")
+    .argument("<epoch>", "Epoch number")
+    .action(async (uptimeTrackerAddress, validationID, epoch) => {
+        const opts = program.opts();
+        const uptime = await getValidatorUptimeForEpoch(
+            uptimeTrackerAddress as `0x${string}`,
+            validationID as `0x${string}`,
+            parseInt(epoch, 10),
+            opts.network
+        ) as bigint;
+        console.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+    });
+
+    program
+    .command("check-validator-uptime-set")
+    .description("Check if uptime data is set for a validator at a specific epoch")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<validationID>", "Validation ID of the validator")
+    .argument("<epoch>", "Epoch number")
+    .action(async (uptimeTrackerAddress, validationID, epoch) => {
+        const opts = program.opts();
+        const isSet = await isValidatorUptimeSetForEpoch(
+            uptimeTrackerAddress as `0x${string}`,
+            validationID as `0x${string}`,
+            parseInt(epoch, 10),
+            opts.network
+        );
+        console.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+    });
+
+    program
+    .command("get-operator-uptime")
+    .description("Get the recorded uptime for an operator at a specific epoch")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<operator>", "Address of the operator")
+    .argument("<epoch>", "Epoch number")
+    .action(async (uptimeTrackerAddress, operator, epoch) => {
+        const opts = program.opts();
+        const uptime = await getOperatorUptimeForEpoch(
+            uptimeTrackerAddress as `0x${string}`,
+            operator as `0x${string}`,
+            parseInt(epoch, 10),
+            opts.network
+        ) as bigint;
+        console.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+    });
+
+    program
+    .command("check-operator-uptime-set")
+    .description("Check if uptime data is set for an operator at a specific epoch")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<operator>", "Address of the operator")
+    .argument("<epoch>", "Epoch number")
+    .action(async (uptimeTrackerAddress, operator, epoch) => {
+        const opts = program.opts();
+        const isSet = await isOperatorUptimeSetForEpoch(
+            uptimeTrackerAddress as `0x${string}`,
+            operator as `0x${string}`,
+            parseInt(epoch, 10),
+            opts.network
+        );
+        console.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+    });
+
+    program
+    .command("get-last-uptime-checkpoint")
+    .description("Get the last uptime checkpoint for a validator")
+    .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
+    .argument("<validationID>", "Validation ID of the validator")
+    .action(async (uptimeTrackerAddress, validationID) => {
+        const opts = program.opts();
+        const checkpoint = await getLastUptimeCheckpoint(
+            uptimeTrackerAddress as `0x${string}`,
+            validationID as `0x${string}`,
+            opts.network
+        ) as { remainingUptime: bigint; attributedUptime: bigint; timestamp: bigint };
+        console.log(`Last uptime checkpoint for validator ${validationID}:`);
+        console.log(`  Remaining uptime: ${checkpoint.remainingUptime.toString()} seconds`);
+        console.log(`  Attributed uptime: ${checkpoint.attributedUptime.toString()} seconds`);
+        console.log(`  Timestamp: ${checkpoint.timestamp.toString()} (${new Date(Number(checkpoint.timestamp) * 1000).toISOString()})`);
+    });
+
+    /* --------------------------------------------------
+    * REWARDS COMMANDS
+    * -------------------------------------------------- */
+    program
+        .command("rewards-distribute")
+        .description("Distribute rewards for a specific epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to distribute rewards for")
+        .argument("<batchSize>", "Number of operators to process in this batch")
+        .action(async (rewardsAddress, epoch, batchSize) => {
+            const opts = program.opts();
+            await distributeRewards(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                parseInt(batchSize),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-claim")
+        .description("Claim rewards for a staker")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .option("--recipient <recipient>", "Optional recipient address")
+        .action(async (rewardsAddress, rewardsToken, options) => {
+            const opts = program.opts();
+            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            await claimRewards(
+                rewardsAddress as `0x${string}`,
+                rewardsToken as `0x${string}`,
+                recipient as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-claim-operator-fee")
+        .description("Claim operator fees")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .option("--recipient <recipient>", "Optional recipient address")
+        .action(async (rewardsAddress, rewardsToken, options) => {
+            const opts = program.opts();
+            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            await claimOperatorFee(
+                rewardsAddress as `0x${string}`,
+                rewardsToken as `0x${string}`,
+                recipient as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-claim-curator-fee")
+        .description("Claim curator fees")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .option("--recipient <recipient>", "Optional recipient address")
+        .action(async (rewardsAddress, rewardsToken, options) => {
+            const opts = program.opts();
+            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            await claimCuratorFee(
+                rewardsAddress as `0x${string}`,
+                rewardsToken as `0x${string}`,
+                recipient as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-claim-protocol-fee")
+        .description("Claim protocol fees (only for protocol owner)")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .option("--recipient <recipient>", "Optional recipient address")
+        .action(async (rewardsAddress, rewardsToken, options) => {
+            const opts = program.opts();
+            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            await claimProtocolFee(
+                rewardsAddress as `0x${string}`,
+                rewardsToken as `0x${string}`,
+                recipient as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-claim-undistributed")
+        .description("Claim undistributed rewards (admin only)")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to claim undistributed rewards for")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .option("--recipient <recipient>", "Optional recipient address")
+        .action(async (rewardsAddress, epoch, rewardsToken, options) => {
+            const opts = program.opts();
+            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            await claimUndistributedRewards(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                rewardsToken as `0x${string}`,
+                recipient as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-set-amount")
+        .description("Set rewards amount for epochs")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<startEpoch>", "Starting epoch")
+        .argument("<numberOfEpochs>", "Number of epochs")
+        .argument("<rewardsToken>", "Address of the rewards token")
+        .argument("<rewardsAmount>", "Amount of rewards in wei")
+        .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
+            const opts = program.opts();
+            await setRewardsAmountForEpochs(
+                rewardsAddress as `0x${string}`,
+                parseInt(startEpoch),
+                parseInt(numberOfEpochs),
+                rewardsToken as `0x${string}`,
+                BigInt(rewardsAmount),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-set-share-asset-class")
+        .description("Set rewards share for asset class")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<assetClass>", "Asset class ID")
+        .argument("<share>", "Share in basis points (100 = 1%)")
+        .action(async (rewardsAddress, assetClass, share) => {
+            const opts = program.opts();
+            await setRewardsShareForAssetClass(
+                rewardsAddress as `0x${string}`,
+                BigInt(assetClass),
+                parseInt(share),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-set-min-uptime")
+        .description("Set minimum required uptime for rewards eligibility")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<minUptime>", "Minimum uptime in seconds")
+        .action(async (rewardsAddress, minUptime) => {
+            const opts = program.opts();
+            await setMinRequiredUptime(
+                rewardsAddress as `0x${string}`,
+                BigInt(minUptime),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-set-admin")
+        .description("Set admin role (DEFAULT_ADMIN_ROLE only)")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<newAdmin>", "New admin address")
+        .action(async (rewardsAddress, newAdmin) => {
+            const opts = program.opts();
+            await setAdminRole(
+                rewardsAddress as `0x${string}`,
+                newAdmin as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-set-protocol-owner")
+        .description("Set protocol owner (DEFAULT_ADMIN_ROLE only)")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<newOwner>", "New protocol owner address")
+        .action(async (rewardsAddress, newOwner) => {
+            const opts = program.opts();
+            await setProtocolOwner(
+                rewardsAddress as `0x${string}`,
+                newOwner as `0x${string}`,
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-update-protocol-fee")
+        .description("Update protocol fee")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .action(async (rewardsAddress, newFee) => {
+            const opts = program.opts();
+            await updateProtocolFee(
+                rewardsAddress as `0x${string}`,
+                parseInt(newFee),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-update-operator-fee")
+        .description("Update operator fee")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .action(async (rewardsAddress, newFee) => {
+            const opts = program.opts();
+            await updateOperatorFee(
+                rewardsAddress as `0x${string}`,
+                parseInt(newFee),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-update-curator-fee")
+        .description("Update curator fee")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .action(async (rewardsAddress, newFee) => {
+            const opts = program.opts();
+            await updateCuratorFee(
+                rewardsAddress as `0x${string}`,
+                parseInt(newFee),
+                opts.privateKey,
+                opts.network
+            );
+        });
+
+    // Read-only getter functions
+    program
+        .command("rewards-get-amounts")
+        .description("Get rewards amounts per token for epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query")
+        .action(async (rewardsAddress, epoch) => {
+            const opts = program.opts();
+            await getRewardsAmountPerTokenFromEpoch(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-amount-for-token")
+        .description("Get rewards amount for a specific token from epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query")
+        .argument("<token>", "Token address")
+        .action(async (rewardsAddress, epoch, token) => {
+            const opts = program.opts();
+            await getRewardsAmountForTokenFromEpoch(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                token as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-operator-shares")
+        .description("Get operator shares for a specific epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query") 
+        .argument("<operator>", "Operator address")
+        .action(async (rewardsAddress, epoch, operator) => {
+            const opts = program.opts();
+            await getOperatorShares(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                operator as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-vault-shares")
+        .description("Get vault shares for a specific epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query")
+        .argument("<vault>", "Vault address")
+        .action(async (rewardsAddress, epoch, vault) => {
+            const opts = program.opts();
+            await getVaultShares(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                vault as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-curator-shares")
+        .description("Get curator shares for a specific epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query")
+        .argument("<curator>", "Curator address")
+        .action(async (rewardsAddress, epoch, curator) => {
+            const opts = program.opts();
+            await getCuratorShares(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                curator as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-protocol-rewards")
+        .description("Get protocol rewards for a token")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<token>", "Token address")
+        .action(async (rewardsAddress, token) => {
+            const opts = program.opts();
+            await getProtocolRewards(
+                rewardsAddress as `0x${string}`,
+                token as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-distribution-batch")
+        .description("Get distribution batch status for an epoch")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<epoch>", "Epoch to query")
+        .action(async (rewardsAddress, epoch) => {
+            const opts = program.opts();
+            await getDistributionBatch(
+                rewardsAddress as `0x${string}`,
+                parseInt(epoch),
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-fees-config")
+        .description("Get current fees configuration")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .action(async (rewardsAddress) => {
+            const opts = program.opts();
+            await getFeesConfiguration(
+                rewardsAddress as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-share-asset-class")
+        .description("Get rewards share for asset class")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<assetClass>", "Asset class ID")
+        .action(async (rewardsAddress, assetClass) => {
+            const opts = program.opts();
+            await getRewardsShareForAssetClass(
+                rewardsAddress as `0x${string}`,
+                BigInt(assetClass),
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-min-uptime")
+        .description("Get minimum required uptime for rewards eligibility")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .action(async (rewardsAddress) => {
+            const opts = program.opts();
+            await getMinRequiredUptime(
+                rewardsAddress as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-last-claimed-staker")
+        .description("Get last claimed epoch for a staker")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<staker>", "Staker address")
+        .action(async (rewardsAddress, staker) => {
+            const opts = program.opts();
+            await getLastEpochClaimedStaker(
+                rewardsAddress as `0x${string}`,
+                staker as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-last-claimed-operator")
+        .description("Get last claimed epoch for an operator")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<operator>", "Operator address")
+        .action(async (rewardsAddress, operator) => {
+            const opts = program.opts();
+            await getLastEpochClaimedOperator(
+                rewardsAddress as `0x${string}`,
+                operator as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-last-claimed-curator")
+        .description("Get last claimed epoch for a curator")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<curator>", "Curator address")
+        .action(async (rewardsAddress, curator) => {
+            const opts = program.opts();
+            await getLastEpochClaimedCurator(
+                rewardsAddress as `0x${string}`,
+                curator as `0x${string}`,
+                opts.network
+            );
+        });
+
+    program
+        .command("rewards-get-last-claimed-protocol")
+        .description("Get last claimed epoch for protocol owner")
+        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .argument("<protocolOwner>", "Protocol owner address")
+        .action(async (rewardsAddress, protocolOwner) => {
+            const opts = program.opts();
+            await getLastEpochClaimedProtocol(
+                rewardsAddress as `0x${string}`,
+                protocolOwner as `0x${string}`,
+                opts.network
+            );
+        });
 
     program.parse(process.argv);
 }

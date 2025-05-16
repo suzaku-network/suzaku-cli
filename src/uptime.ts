@@ -2,7 +2,7 @@ import { packValidationUptimeMessage, collectSignatures } from "./lib/warpUtils"
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes } from 'viem';
 import { packWarpIntoAccessList } from './lib/warpUtils';
-import { generateClient } from './client'; 
+import { generateClient, generatePublicClient } from './client'; 
 import { getConfig } from './config';
 
 export async function getValidationUptimeMessage(
@@ -265,4 +265,113 @@ export async function computeOperatorUptimeForEpochs(
 
   console.log("Operator uptime computation complete for all epochs.");
   return txHashes;
+}
+
+/**
+ * Get validator uptime for a specific epoch
+ */
+export async function getValidatorUptimeForEpoch(
+  uptimeTrackerAddress: `0x${string}`,
+  validationID: `0x${string}`,
+  epoch: number,
+  network: string
+) {
+  const config = getConfig(network);
+  const client = generatePublicClient(network);
+
+  const uptime = await client.readContract({
+    address: uptimeTrackerAddress,
+    abi: config.abis.UptimeTracker,
+    functionName: 'validatorUptimePerEpoch',
+    args: [BigInt(epoch), validationID]
+  });
+
+  return uptime;
+}
+
+/**
+ * Check if validator uptime is set for a specific epoch
+ */
+export async function isValidatorUptimeSetForEpoch(
+  uptimeTrackerAddress: `0x${string}`,
+  validationID: `0x${string}`,
+  epoch: number,
+  network: string
+) {
+  const config = getConfig(network);
+  const client = generatePublicClient(network);
+
+  const isSet = await client.readContract({
+    address: uptimeTrackerAddress,
+    abi: config.abis.UptimeTracker,
+    functionName: 'isValidatorUptimeSet',
+    args: [BigInt(epoch), validationID]
+  });
+
+  return isSet;
+}
+
+/**
+ * Get operator uptime for a specific epoch
+ */
+export async function getOperatorUptimeForEpoch(
+  uptimeTrackerAddress: `0x${string}`,
+  operator: `0x${string}`,
+  epoch: number,
+  network: string
+) {
+  const config = getConfig(network);
+  const client = generatePublicClient(network);
+
+  const uptime = await client.readContract({
+    address: uptimeTrackerAddress,
+    abi: config.abis.UptimeTracker,
+    functionName: 'operatorUptimePerEpoch',
+    args: [BigInt(epoch), operator]
+  });
+
+  return uptime;
+}
+
+/**
+ * Check if operator uptime is set for a specific epoch
+ */
+export async function isOperatorUptimeSetForEpoch(
+  uptimeTrackerAddress: `0x${string}`,
+  operator: `0x${string}`,
+  epoch: number,
+  network: string
+) {
+  const config = getConfig(network);
+  const client = generatePublicClient(network);
+
+  const isSet = await client.readContract({
+    address: uptimeTrackerAddress,
+    abi: config.abis.UptimeTracker,
+    functionName: 'isOperatorUptimeSet',
+    args: [BigInt(epoch), operator]
+  });
+
+  return isSet;
+}
+
+/**
+ * Get last uptime checkpoint for a validator
+ */
+export async function getLastUptimeCheckpoint(
+  uptimeTrackerAddress: `0x${string}`,
+  validationID: `0x${string}`,
+  network: string
+) {
+  const config = getConfig(network);
+  const client = generatePublicClient(network);
+
+  const checkpoint = await client.readContract({
+    address: uptimeTrackerAddress,
+    abi: config.abis.UptimeTracker,
+    functionName: 'getLastUptimeCheckpoint',
+    args: [validationID]
+  });
+
+  return checkpoint;
 }
