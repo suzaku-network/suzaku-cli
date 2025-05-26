@@ -4,7 +4,6 @@ import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient } from "./client";
-import { derivePChainAddressFromPrivateKey } from "./lib/pChainUtils";
 import {
     registerVaultL1,
     updateVaultMaxL1Limit,
@@ -109,6 +108,8 @@ import {
     getLastEpochClaimedCurator,
     getLastEpochClaimedProtocol
 } from "./rewards";
+import { requirePChainBallance } from "./lib/transferUtils";
+import { getAddresses } from "./lib/utils";
 import { NodeId } from "./lib/utils";
 import { TContract } from './config';
 import type { Account } from 'viem';
@@ -496,6 +497,7 @@ async function main() {
             );
         });
 
+    // TODO: Automate `cast send 0x1C1B9F55BBa4C0D4E695459a0340130c6eAe4074 "manualProcessNodeStakeCache(uint48)" 1000 --rpc-url https://api.avax-test.network/ext/bc/C/rpc --private-key $PK`
     // Add node
     program
         .command("middleware-add-node")
@@ -563,14 +565,12 @@ async function main() {
                 options.pchainTxPrivateKey = opts.privateKey;
             }
 
-            // Derive pchainTxAddress from the private key
-            // Determine the right network prefix (e.g., 'P-fuji' vs 'P-avax')
-            const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
-            let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
-
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
             const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+
+            // Check if P-Chain address have 0.01 AVAX for tx fees
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.01 + Number(options.initialBalance)) * 1e9));
 
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
@@ -579,7 +579,6 @@ async function main() {
                 operator as Hex,
                 nodeId as NodeId,
                 options.pchainTxPrivateKey as string,
-                pchainTxAddress as string,
                 blsProofOfPossession as string,
                 addNodeTxHash as Hex,
                 Number(options.initialBalance)
@@ -613,13 +612,18 @@ async function main() {
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
         .action(async (middlewareAddress, balancerValidatorManagerAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey;
             const client = generateClient(opts.network, opts.privateKey);
+
             const config = getConfig(opts.network, client);
             const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             const balancerSvc = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
-            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey;
-            const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
-            const pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
+            // Check if P-Chain address have 0.01 AVAX for tx fees
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+
+            // Derive pchainTxAddress from the private key
+            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
+
             await middlewareCompleteValidatorRemoval(
                 client,
                 middlewareSvc,
@@ -667,13 +671,16 @@ async function main() {
                 options.pchainTxPrivateKey = opts.privateKey;
             }
 
-            // Derive pchainTxAddress from the private key
-            // Determine the right network prefix (e.g., 'P-fuji' vs 'P-avax')
-            const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
-            let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
             const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+
+            
+            // Check if P-Chain address have 0.01 AVAX for tx fees
+            await requirePChainBallance(opts.privateKey, client, BigInt(0.01 * 1e9));
+
+            // Derive pchainTxAddress from the private key
+            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
 
             await middlewareCompleteStakeUpdate(
                 client,

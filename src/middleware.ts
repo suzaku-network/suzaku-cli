@@ -122,7 +122,6 @@ export async function middlewareCompleteValidatorRegistration(
   operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
-  pChainTxAddress: string,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
   initialBalance: number
@@ -149,7 +148,7 @@ export async function middlewareCompleteValidatorRegistration(
     console.log("\nRegistering validator on P-Chain...");
     const pChainTxId = await registerL1Validator({
       privateKeyHex: pChainTxPrivateKey,
-      pChainAddress: pChainTxAddress,
+      client,
       blsProofOfPossession: blsProofOfPossession,
       signedMessage,
       initialBalance: initialBalance
@@ -263,30 +262,30 @@ export async function middlewareCompleteValidatorRemoval(
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
       const pChainSetWeightTxId = await setValidatorWeight({
         privateKeyHex: pChainTxPrivateKey,
-        pChainAddress: pChainTxAddress,
+        client,
         validationID: validationID,
         message: signedL1ValidatorWeightMessage
       });
       console.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
     }
 
-    // get justification for original register validator tx (the unsigned warp msg emitted)
-    const justification = await GetRegistrationJustification(nodeID, validationID, '11111111111111111111111111111111LpoYY', client);
+      // get justification for original register validator tx (the unsigned warp msg emitted)
+      const justification = await GetRegistrationJustification(nodeID, validationID, '11111111111111111111111111111111LpoYY', client);
 
-    // Pack and sign the P-Chain warp message
-    const validationIDBytes = hexToBytes(validationID as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
-    const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
-    const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
+      // Pack and sign the P-Chain warp message
+      const validationIDBytes = hexToBytes(validationID as Hex);
+      const pChainChainID = '11111111111111111111111111111111LpoYY';
+      const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
+      const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
-    // Aggregate signatures from validators
-    // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
-    console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
+      // Aggregate signatures from validators
+      // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
+      const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+      console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
-    // Convert the signed warp message to bytes and pack into access list
-    const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-    const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
+      // Convert the signed warp message to bytes and pack into access list
+      const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
+      const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     // Simulate completeEndValidation transaction
     // console.log("\nSimulating completeEndValidation transaction...");
@@ -305,14 +304,14 @@ export async function middlewareCompleteValidatorRemoval(
       accessList
     });
 
-    console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
-  } catch (error) {
-    console.error("Transaction failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
+    } catch (error) {
+      console.error("Transaction failed:", error);
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+      }
     }
   }
-}
 
 // initializeValidatorWeightUpdate
 export async function middlewareInitStakeUpdate(
@@ -388,7 +387,7 @@ export async function middlewareCompleteStakeUpdate(
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
     const pChainSetWeightTxId = await setValidatorWeight({
       privateKeyHex: pChainTxPrivateKey,
-      pChainAddress: pChainTxAddress,
+      client,
       validationID: validationIDHex,
       message: signedL1ValidatorWeightMessage
     });
