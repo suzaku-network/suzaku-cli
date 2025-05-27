@@ -22,6 +22,7 @@ export type DecodedEvent = {
   args: Record<string, any>;
 }
 
+// TODO: optimize eventNames filtering it from apis
 export async function GetContractEvents(
   client: ExtendedPublicClient,
   address: Hex,

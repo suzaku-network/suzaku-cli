@@ -2,9 +2,10 @@ import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, H
 import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
-import { GetContractEvents } from './lib/cChainUtils';
+import { DecodedEvent, GetContractEvents } from './lib/cChainUtils';
 import { GetRegistrationJustification } from './lib/justification';
 import { utils } from '@avalabs/avalanchejs';
+import { parseNodeID, NodeId } from './lib/utils';
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
@@ -102,7 +103,7 @@ export async function middlewareAddNode(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: string,
+  nodeId: NodeId,
   blsKey: Hex,
   registrationExpiry: bigint,
   remainingBalanceOwner: [bigint, Hex[]],
@@ -117,12 +118,7 @@ export async function middlewareAddNode(
     }
 
     // Parse NodeID to bytes32 format
-    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
-    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
-    const nodeIDHex = fromBytes(decodedID, 'hex');
-    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
-    // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
+    const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -154,7 +150,7 @@ export async function middlewareCompleteValidatorRegistration(
   middlewareAddress: Hex,
   middlewareAbi: any,
   operator: Hex,
-  nodeId: string,
+  nodeId: NodeId,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
   blsProofOfPossession: string,
@@ -208,12 +204,7 @@ export async function middlewareCompleteValidatorRegistration(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     // Parse NodeID to bytes32 format
-    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
-    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
-    const nodeIDHex = fromBytes(decodedID, 'hex');
-    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
-    // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
+    const nodeIdHex32 = parseNodeID(nodeId)
 
     // Simulate completeValidatorRegistration transaction
     await client.simulateContract({
@@ -250,7 +241,7 @@ export async function middlewareRemoveNode(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: string
+  nodeId: NodeId
 ) {
   console.log("Calling function removeNode...");
 
@@ -260,12 +251,7 @@ export async function middlewareRemoveNode(
     }
 
     // Parse NodeID to bytes32 format
-    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
-    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
-    const nodeIDHex = fromBytes(decodedID, 'hex');
-    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
-    // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
+    const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -379,7 +365,7 @@ export async function middlewareInitStakeUpdate(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: Hex,
+  nodeId: NodeId,
   newStake: bigint
 ) {
   console.log("Calling function initializeValidatorStakeUpdate...");
@@ -390,12 +376,7 @@ export async function middlewareInitStakeUpdate(
     }
 
     // Parse NodeID to bytes32 format
-    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
-    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
-    const nodeIDHex = fromBytes(decodedID, 'hex');
-    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
-    // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
+    const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -419,7 +400,7 @@ export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: Hex,
+  nodeId: NodeId,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
@@ -484,12 +465,7 @@ export async function middlewareCompleteStakeUpdate(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     // Parse NodeID to bytes32 format
-    const nodeIDWithoutPrefix = nodeId.replace("NodeID-", "");
-    const decodedID = utils.base58.decode(nodeIDWithoutPrefix);
-    const nodeIDHex = fromBytes(decodedID, 'hex');
-    const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
-    // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
+    const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -848,16 +824,18 @@ export async function middlewareGetAllOperators(
   }
 }
 
-export async function middlewareGetLogs(
+export async function middlewareGetNodeLogs(
   client: ExtendedPublicClient,
-  middlewareAddress: Hex,
   middlewareTxHash: Hex,
   middlewareAbi: any,
+  nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
   console.log("Reading logs from middleware...");
   let logs = []
-  const from = (await client.getTransactionReceipt({ hash: middlewareTxHash })).blockNumber
+  const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
+  const middlewareAddress = receipt.contractAddress as Hex;
+  const from = receipt.blockNumber
   const to = await client.getBlockNumber();
 
   logs = await GetContractEvents(
@@ -866,9 +844,45 @@ export async function middlewareGetLogs(
     Number(from),
     Number(to),
     middlewareAbi,
-    undefined,// ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"]
+    ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey
   )
-  console.log(logs)
-  console.log(`Found ${logs.length} logs from middleware`);
+
+  const logOfInterest = groupEventsByNodeId(logs);
+
+  if (nodeId != undefined) {
+    const nodeIdHex32 = parseNodeID(nodeId);
+    console.log(`\t\tLogs for ${nodeId}:`);
+    console.table(logOfInterest[nodeIdHex32] || []);
+  } else {
+    for (const [key, value] of Object.entries(logOfInterest)) {
+      console.log(`\t\tLogs for ${key}:`);
+      console.table(value);
+    }
+  }
+  
+}
+
+export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { event: string; hash: string; /*args: string*/ }[]> {
+  return events.reduce((acc, log) => {
+    if (log.args.nodeId) {
+      const key = log.args.nodeId;
+
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+
+      acc[key].push({
+        event: log.eventName,
+        // args: JSON.stringify(log.args, (key, value) => 
+        //   typeof value === 'bigint'
+        //     ? value.toString()
+        //     : value // return everything else unchanged
+        // ),// Too long in the table TODO: use a custom formatter
+        hash: log.transactionHash,
+      });
+    }
+
+    return acc;
+  }, {} as Record<string, { event: string; hash: string; /*args: string*/ }[]>);
 }

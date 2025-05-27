@@ -122,10 +122,12 @@ export async function interruptiblePause(seconds: number): Promise<void> {
     });
 }
 
-export const parseNodeID = (nodeID: string) => {
+export type NodeId = `NodeID-${string}`;
+
+export const parseNodeID = (nodeID: NodeId): Hex => {
     const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    return nodeIDHexTrimmed
+    return nodeIDHexTrimmed as Hex
 }

@@ -49,7 +49,7 @@ import {
     middlewareNodePendingUpdate,
     middlewareGetOperatorUsedStake,
     middlewareGetAllOperators,
-    middlewareGetLogs
+    middlewareGetNodeLogs
 } from "./middleware";
 
 import {
@@ -109,6 +109,7 @@ import {
     getLastEpochClaimedCurator,
     getLastEpochClaimedProtocol
 } from "./rewards";
+import { NodeId } from "./lib/utils";
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.privateKey, opts.network);
@@ -546,7 +547,7 @@ async function main() {
                 middlewareAddress as Hex,
                 config.abis.MiddlewareService,
                 operator as Hex,
-                nodeId as string,
+                nodeId as NodeId,
                 options.pchainTxPrivateKey as string,
                 pchainTxAddress as string,
                 blsProofOfPossession as string,
@@ -568,7 +569,7 @@ async function main() {
                 client,
                 middlewareAddress as Hex,
                 config.abis.MiddlewareService,
-                nodeId as string
+                nodeId as NodeId
             );
         });
 
@@ -619,7 +620,7 @@ async function main() {
                 client,
                 middlewareAddress as Hex,
                 config.abis.MiddlewareService,
-                nodeId as Hex,
+                nodeId as NodeId,
                 BigInt(newStake)
             );
         });
@@ -651,7 +652,7 @@ async function main() {
                 client,
                 middlewareAddress as Hex,
                 config.abis.MiddlewareService,
-                nodeId as Hex,
+                nodeId as NodeId,
                 validatorStakeUpdateTxHash as Hex,
                 options.pchainTxPrivateKey as string,
                 pchainTxAddress as string
@@ -927,21 +928,21 @@ async function main() {
         });
 
     program
-        .command("middleware-logs")
-        .description("Get middleware logs")
-        .argument("<middlewareAddress>")
+        .command("middleware-node-logs")
+        .description("Get middleware node logs")
         .argument("<middlewareTxHash>")
+        .option("--node-id <nodeId>", "Node ID to filter logs", undefined)
         .option('--snowscan-api-key <string>', "Snowscan API key", "")
-        .action(async (middlewareAddress, middlewareTxHash, options) => {
+        .action(async (middlewareTxHash, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
             const client = generateClient(opts.network);
-
-            await middlewareGetLogs(
+            console.log(`nodeId: ${options.nodeId}`);
+            await middlewareGetNodeLogs(
                 client,
-                middlewareAddress as Hex,
                 middlewareTxHash as Hex,
                 config.abis.MiddlewareService,
+                options.nodeId,
                 options.snowscanApiKey
             );
         });
