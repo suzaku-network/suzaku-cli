@@ -1,5 +1,6 @@
 import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, BigIntPr, pvmSerial, PChainOwner } from "@avalabs/avalanchejs";
 import { getAddresses } from "./utils";
+import { Hex } from "viem";
 
 export interface CreateChainParams {
     privateKeyHex: string;
@@ -12,7 +13,7 @@ export interface ConvertToL1Params {
     privateKeyHex: string;
     subnetId: string;
     chainId: string;
-    managerAddress: `0x${string}`;
+    managerAddress: Hex;
     validators: {
         nodeID: string;
         blsPublicKey: string;

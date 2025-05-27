@@ -1,9 +1,10 @@
 import { Config } from "./config";
-import { WalletClient, PublicClient } from "viem";
+import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
+import { Hex } from "viem";
 
 export async function registerL1(
     config: Config,
-    client: WalletClient,
+    client: ExtendedWalletClient,
     validatorManager: string,
     l1Middleware: string,
     metadataUrl: string,
@@ -13,7 +14,7 @@ export async function registerL1(
     try {
         // @ts-ignore
         const hash = await client.writeContract({
-            address: config.l1Registry as `0x${string}`,
+            address: config.l1Registry as Hex,
             abi: config.abis.L1Registry,
             functionName: "registerL1",
             args: [validatorManager, l1Middleware, metadataUrl],
@@ -30,10 +31,10 @@ export async function registerL1(
 }
 
 export async function setL1MetadataUrl(
-    client: WalletClient,
-    l1RegistryAddress: `0x${string}`,
+    client: ExtendedWalletClient,
+    l1RegistryAddress: Hex,
     l1RegistryAbi: any,
-    l1Address: `0x${string}`,
+    l1Address: Hex,
     metadataUrl: string
 ) {
     console.log("Setting L1 Metadata URL...");
@@ -59,11 +60,11 @@ export async function setL1MetadataUrl(
 }
 
 export async function setL1Middleware(
-    client: WalletClient,
-    l1RegistryAddress: `0x${string}`,
+    client: ExtendedWalletClient,
+    l1RegistryAddress: Hex,
     l1RegistryAbi: any,
-    validatorManager: `0x${string}`,
-    newMiddleware: `0x${string}`
+    validatorManager: Hex,
+    newMiddleware: Hex
 ) {
     console.log("Setting L1 Middleware...");
 
@@ -87,7 +88,7 @@ export async function setL1Middleware(
     }
 }
 
-export async function getL1s(client: PublicClient, l1RegistryAddress: `0x${string}`, l1RegistryAbi: any) {
+export async function getL1s(client: ExtendedPublicClient, l1RegistryAddress: Hex, l1RegistryAbi: any) {
     console.log("Getting L1s...");
 
     try {
@@ -109,7 +110,7 @@ export async function getL1s(client: PublicClient, l1RegistryAddress: `0x${strin
                 abi: l1RegistryAbi,
                 functionName: 'getL1At',
                 args: [i],
-            }) as [`0x${string}`, `0x${string}`, string];
+            }) as [Hex, Hex, string];
             l1s.push(l1);
         }
 

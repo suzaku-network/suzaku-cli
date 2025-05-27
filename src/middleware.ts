@@ -1,17 +1,17 @@
-import { WalletClient, PublicClient, bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog } from 'viem';
-import { ExtendedWalletClient } from './client';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex } from 'viem';
+import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
-import { parseNodeID } from './lib/utils';
+import { GetContractEvents } from './lib/cChainUtils';
 import { GetRegistrationJustification } from './lib/justification';
 import { utils } from '@avalabs/avalanchejs';
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Registering operator...");
 
@@ -38,10 +38,10 @@ export async function middlewareRegisterOperator(
 }
 
 export async function middlewareDisableOperator(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Disabling operator...");
 
@@ -68,10 +68,10 @@ export async function middlewareDisableOperator(
 }
 
 export async function middlewareRemoveOperator(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Removing operator...");
 
@@ -99,14 +99,14 @@ export async function middlewareRemoveOperator(
 
 // addNode
 export async function middlewareAddNode(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
   nodeId: string,
-  blsKey: `0x${string}`,
+  blsKey: Hex,
   registrationExpiry: bigint,
-  remainingBalanceOwner: [bigint, `0x${string}`[]],
-  disableOwner: [bigint, `0x${string}`[]],
+  remainingBalanceOwner: [bigint, Hex[]],
+  disableOwner: [bigint, Hex[]],
   initialStake: bigint
 ) {
   console.log("Calling function addNode...");
@@ -122,7 +122,7 @@ export async function middlewareAddNode(
     const nodeIDHex = fromBytes(decodedID, 'hex');
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
     // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -151,14 +151,14 @@ export async function middlewareAddNode(
 // completeValidatorRegistration
 export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
-  middlewareAddress: `0x${string}`,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`,
+  operator: Hex,
   nodeId: string,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
   blsProofOfPossession: string,
-  addNodeTxHash: `0x${string}`,
+  addNodeTxHash: Hex,
   initialBalance: number
 ) {
   console.log("Completing validator registration...");
@@ -193,7 +193,7 @@ export async function middlewareCompleteValidatorRegistration(
     console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
 
     // Pack and sign the P-Chain warp message
-    const validationIDBytes = hexToBytes(validationIDHex as `0x${string}`);
+    const validationIDBytes = hexToBytes(validationIDHex as Hex);
     const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
@@ -213,7 +213,7 @@ export async function middlewareCompleteValidatorRegistration(
     const nodeIDHex = fromBytes(decodedID, 'hex');
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
     // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
 
     // Simulate completeValidatorRegistration transaction
     await client.simulateContract({
@@ -247,8 +247,8 @@ export async function middlewareCompleteValidatorRegistration(
 
 // removeNode
 export async function middlewareRemoveNode(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
   nodeId: string
 ) {
@@ -265,7 +265,7 @@ export async function middlewareRemoveNode(
     const nodeIDHex = fromBytes(decodedID, 'hex');
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
     // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -287,10 +287,10 @@ export async function middlewareRemoveNode(
 // completeValidatorRemoval
 export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
-  middlewareAddress: `0x${string}`,
+  middlewareAddress: Hex,
   middlewareAbi: any,
   nodeID: string,
-  initializeEndValidationTxHash: `0x${string}`,
+  initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
 ) {
@@ -327,7 +327,7 @@ export async function middlewareCompleteValidatorRemoval(
     const justification = await GetRegistrationJustification(nodeID, validationID, '11111111111111111111111111111111LpoYY', client);
 
     // Pack and sign the P-Chain warp message
-    const validationIDBytes = hexToBytes(validationID as `0x${string}`);
+    const validationIDBytes = hexToBytes(validationID as Hex);
     const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
@@ -376,10 +376,10 @@ export async function middlewareCompleteValidatorRemoval(
 
 // initializeValidatorWeightUpdate
 export async function middlewareInitStakeUpdate(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: `0x${string}`,
+  nodeId: Hex,
   newStake: bigint
 ) {
   console.log("Calling function initializeValidatorStakeUpdate...");
@@ -395,7 +395,7 @@ export async function middlewareInitStakeUpdate(
     const nodeIDHex = fromBytes(decodedID, 'hex');
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
     // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -417,10 +417,10 @@ export async function middlewareInitStakeUpdate(
 // completeStakeUpdate
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
-  middlewareAddress: `0x${string}`,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  nodeId: `0x${string}`,
-  validatorStakeUpdateTxHash: `0x${string}`,
+  nodeId: Hex,
+  validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
 ) {
@@ -469,7 +469,7 @@ export async function middlewareCompleteStakeUpdate(
     console.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
 
     // Pack and sign the P-Chain warp message
-    const validationIDBytes = hexToBytes(validationIDHex as `0x${string}`);
+    const validationIDBytes = hexToBytes(validationIDHex as Hex);
     const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
@@ -489,7 +489,7 @@ export async function middlewareCompleteStakeUpdate(
     const nodeIDHex = fromBytes(decodedID, 'hex');
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8); // Remove checksum
     // Pad end (right) to 32 bytes
-    const nodeIdHex32 = pad(nodeIDHexTrimmed as `0x${string}`, { size: 32 });
+    const nodeIdHex32 = pad(nodeIDHexTrimmed as Hex, { size: 32 });
 
     const hash = await client.writeContract({
       address: middlewareAddress,
@@ -511,8 +511,8 @@ export async function middlewareCompleteStakeUpdate(
 
 // calcAndCacheNodeStakeForAllOperators
 export async function middlewareCalcNodeStakes(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any
 ) {
   console.log("Calculating node stakes for all operators...");
@@ -541,10 +541,10 @@ export async function middlewareCalcNodeStakes(
 
 // forceUpdateNodes
 export async function middlewareForceUpdateNodes(
-  client: WalletClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`,
+  operator: Hex,
   limitStake: bigint
 ) {
   console.log("Calling forceUpdateNodes...");
@@ -573,10 +573,10 @@ export async function middlewareForceUpdateNodes(
 
 // getOperatorStake
 export async function middlewareGetOperatorStake(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`,
+  operator: Hex,
   epoch: bigint,
   assetClass: bigint
 ) {
@@ -600,8 +600,8 @@ export async function middlewareGetOperatorStake(
 
 // getCurrentEpoch
 export async function middlewareGetCurrentEpoch(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any
 ) {
   console.log("Reading current epoch...");
@@ -624,8 +624,8 @@ export async function middlewareGetCurrentEpoch(
 
 // getEpochStartTs
 export async function middlewareGetEpochStartTs(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
   epoch: bigint
 ) {
@@ -649,10 +649,10 @@ export async function middlewareGetEpochStartTs(
 
 // getActiveNodesForEpoch
 export async function middlewareGetActiveNodesForEpoch(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`,
+  operator: Hex,
   epoch: bigint
 ) {
   console.log("Reading active nodes for epoch...");
@@ -663,8 +663,8 @@ export async function middlewareGetActiveNodesForEpoch(
       abi: middlewareAbi,
       functionName: 'getActiveNodesForEpoch',
       args: [operator, epoch],
-    }) as `0x${string}`[];
-    console.log(nodeIds.map((b: `0x${string}`) => b));
+    }) as Hex[];
+    console.log(nodeIds.map((b: Hex) => b));
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
@@ -675,10 +675,10 @@ export async function middlewareGetActiveNodesForEpoch(
 
 // getOperatorNodesLength
 export async function middlewareGetOperatorNodesLength(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Reading operator nodes length...");
 
@@ -700,11 +700,11 @@ export async function middlewareGetOperatorNodesLength(
 
 // nodeStakeCache
 export async function middlewareGetNodeStakeCache(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
   epoch: bigint,
-  validatorId: `0x${string}`
+  validatorId: Hex
 ) {
   console.log("Reading node stake cache...");
 
@@ -726,10 +726,10 @@ export async function middlewareGetNodeStakeCache(
 
 // operatorLockedStake
 export async function middlewareGetOperatorLockedStake(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Reading operator locked stake...");
 
@@ -751,10 +751,10 @@ export async function middlewareGetOperatorLockedStake(
 
 // nodePendingRemoval
 export async function middlewareNodePendingRemoval(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  validatorId: `0x${string}`
+  validatorId: Hex
 ) {
   console.log("Reading nodePendingRemoval...");
 
@@ -776,10 +776,10 @@ export async function middlewareNodePendingRemoval(
 
 // nodePendingUpdate
 export async function middlewareNodePendingUpdate(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  validatorId: `0x${string}`
+  validatorId: Hex
 ) {
   console.log("Reading nodePendingUpdate...");
 
@@ -801,10 +801,10 @@ export async function middlewareNodePendingUpdate(
 
 // getOperatorUsedStakeCached
 export async function middlewareGetOperatorUsedStake(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any,
-  operator: `0x${string}`
+  operator: Hex
 ) {
   console.log("Reading operator used stake cached...");
 
@@ -826,8 +826,8 @@ export async function middlewareGetOperatorUsedStake(
 
 // getAllOperators
 export async function middlewareGetAllOperators(
-  client: PublicClient,
-  middlewareAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
   middlewareAbi: any
 ) {
   console.log("Reading all operators from middleware...");
@@ -846,4 +846,29 @@ export async function middlewareGetAllOperators(
       console.error("Error message:", error.message);
     }
   }
+}
+
+export async function middlewareGetLogs(
+  client: ExtendedPublicClient,
+  middlewareAddress: Hex,
+  middlewareTxHash: Hex,
+  middlewareAbi: any,
+  snowscanApiKey?: string,
+) {
+  console.log("Reading logs from middleware...");
+  let logs = []
+  const from = (await client.getTransactionReceipt({ hash: middlewareTxHash })).blockNumber
+  const to = await client.getBlockNumber();
+
+  logs = await GetContractEvents(
+    client,
+    middlewareAddress,
+    Number(from),
+    Number(to),
+    middlewareAbi,
+    undefined,// ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"]
+    snowscanApiKey
+  )
+  console.log(logs)
+  console.log(`Found ${logs.length} logs from middleware`);
 }

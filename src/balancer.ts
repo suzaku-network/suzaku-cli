@@ -1,10 +1,11 @@
-import { WalletClient, PublicClient } from 'viem';
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { Hex } from 'viem';
 
 export async function setUpSecurityModule(
-  client: WalletClient,
-  balancerAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  balancerAddress: Hex,
   balancerAbi: any,
-  securityModule: `0x${string}`,
+  securityModule: Hex,
   maxWeight: bigint
 ) {
   console.log("Setting up security module...");
@@ -32,8 +33,8 @@ export async function setUpSecurityModule(
 }
 
 export async function getSecurityModules(
-  client: PublicClient,
-  balancerAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  balancerAddress: Hex,
   balancerAbi: any
 ) {
   console.log("Getting security modules...");
@@ -55,10 +56,10 @@ export async function getSecurityModules(
 }
 
 export async function getSecurityModuleWeights(
-  client: PublicClient,
-  balancerAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  balancerAddress: Hex,
   balancerAbi: any,
-  securityModule: `0x${string}`
+  securityModule: Hex
 ) {
   console.log("Getting security module weights...");
 

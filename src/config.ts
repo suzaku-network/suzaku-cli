@@ -11,16 +11,18 @@ import OperatorVaultOptInServiceAbi from './abis/OperatorVaultOptInService.json'
 import OperatorL1OptInServiceAbi from './abis/OperatorL1OptInService.json';
 import UptimeTrackerAbi from './abis/UptimeTracker.json';
 import RewardsAbi from './abis/Rewards.json';
+import { Network } from './client';
+import { Hex } from 'viem';
 // import DelegatorFactoryAbi from './abis/DelegatorFactory.json';
 
 // Load environment variables
 dotenv.config();
 
 interface Config {
-  l1Registry: `0x${string}`;
-  operatorRegistry: `0x${string}`;
-  opL1OptIn: `0x${string}`;
-  opVaultOptIn: `0x${string}`;
+  l1Registry: Hex;
+  operatorRegistry: Hex;
+  opL1OptIn: Hex;
+  opVaultOptIn: Hex;
   abis: {
     L1Registry: any;
     OperatorRegistry: any;
@@ -39,10 +41,10 @@ interface Config {
 }
 
 const fujiConfig: Config = {
-  l1Registry: (process.env.L1_REGISTRY_FUJI as `0x${string}`) || '0xB9826Bbf0deB10cC3924449B93F418db6b16be36',
-  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as `0x${string}`) || '0x46D45D6be6214F6bd8124187caD1a5302755d7A2',
-  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as `0x${string}`) || '0x0360C1cB32A20D97b358538D9Db71339ce2c9592',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as `0x${string}`) || '0xC30c9f7482B2ED82d0532812285295f8b7453941',
+  l1Registry: (process.env.L1_REGISTRY_FUJI as Hex) || '0xB9826Bbf0deB10cC3924449B93F418db6b16be36',
+  operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as Hex) || '0x46D45D6be6214F6bd8124187caD1a5302755d7A2',
+  opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as Hex) || '0x0360C1cB32A20D97b358538D9Db71339ce2c9592',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as Hex) || '0xC30c9f7482B2ED82d0532812285295f8b7453941',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,
@@ -61,10 +63,10 @@ const fujiConfig: Config = {
 };
 
 const anvilConfig: Config = {
-  l1Registry: (process.env.L1_REGISTRY as `0x${string}`) || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
-  operatorRegistry: (process.env.OPERATOR_REGISTRY as `0x${string}`) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
-  opL1OptIn: (process.env.OP_L1_OPT_IN as `0x${string}`) || '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
-  opVaultOptIn: (process.env.OP_VAULT_OPT_IN as `0x${string}`) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  l1Registry: (process.env.L1_REGISTRY as Hex) || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
+  operatorRegistry: (process.env.OPERATOR_REGISTRY as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  opL1OptIn: (process.env.OP_L1_OPT_IN as Hex) || '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
+  opVaultOptIn: (process.env.OP_VAULT_OPT_IN as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
   abis: {
     L1Registry: L1RegistryAbi,
     OperatorRegistry: OperatorRegistryAbi,
@@ -82,7 +84,7 @@ const anvilConfig: Config = {
   },
 };
 
-function getConfig(network: string): Config {
+function getConfig(network: Network): Config {
   if (network === 'fuji') {
     return fujiConfig;
   } else if (network === 'anvil') {

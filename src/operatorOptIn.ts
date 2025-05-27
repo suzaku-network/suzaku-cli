@@ -1,16 +1,17 @@
-import { WalletClient, PublicClient } from 'viem';
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { Hex } from 'viem';
 
 // L1 opt-in functionality
 export async function optInL1(
-  client: WalletClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  l1Address: `0x${string}`
+  l1Address: Hex
 ) {
   if (!client.account) {
     throw new Error('Client account is required');
   }
-  
+
   try {
     const hash = await client.writeContract({
       address: optInServiceAddress,
@@ -30,15 +31,15 @@ export async function optInL1(
 }
 
 export async function optOutL1(
-  client: WalletClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  l1Address: `0x${string}`
+  l1Address: Hex
 ) {
   if (!client.account) {
     throw new Error('Client account is required');
   }
-  
+
   try {
     const hash = await client.writeContract({
       address: optInServiceAddress,
@@ -58,11 +59,11 @@ export async function optOutL1(
 }
 
 export async function checkOptInL1(
-  client: PublicClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  operator: `0x${string}`,
-  l1Address: `0x${string}`
+  operator: Hex,
+  l1Address: Hex
 ) {
   try {
     const result = await client.readContract({
@@ -84,15 +85,15 @@ export async function checkOptInL1(
 
 // Vault opt-in functionality
 export async function optInVault(
-  client: WalletClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  vaultAddress: `0x${string}`
+  vaultAddress: Hex
 ) {
   if (!client.account) {
     throw new Error('Client account is required');
   }
-  
+
   try {
     const hash = await client.writeContract({
       address: optInServiceAddress,
@@ -112,15 +113,15 @@ export async function optInVault(
 }
 
 export async function optOutVault(
-  client: WalletClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  vaultAddress: `0x${string}`
+  vaultAddress: Hex
 ) {
   if (!client.account) {
     throw new Error('Client account is required');
   }
-  
+
   try {
     const hash = await client.writeContract({
       address: optInServiceAddress,
@@ -140,11 +141,11 @@ export async function optOutVault(
 }
 
 export async function checkOptInVault(
-  client: PublicClient,
-  optInServiceAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  optInServiceAddress: Hex,
   optInServiceAbi: any,
-  operator: `0x${string}`,
-  vaultAddress: `0x${string}`
+  operator: Hex,
+  vaultAddress: Hex
 ) {
   try {
     const result = await client.readContract({

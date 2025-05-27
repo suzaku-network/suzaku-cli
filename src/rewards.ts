@@ -1,18 +1,19 @@
-import { generateClient, generatePublicClient } from './client';
+import { generateClient, Network } from './client';
 import { getConfig } from './config';
+import { Hex } from 'viem';
 
 /**
  * Distributes rewards for a specific epoch
  */
 export async function distributeRewards(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
   batchSize: number,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -35,14 +36,14 @@ export async function distributeRewards(
  * Claims rewards for a staker
  */
 export async function claimRewards(
-  rewardsAddress: `0x${string}`,
-  rewardsToken: `0x${string}`,
-  recipient: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  rewardsToken: Hex,
+  recipient: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -65,14 +66,14 @@ export async function claimRewards(
  * Claims operator fees
  */
 export async function claimOperatorFee(
-  rewardsAddress: `0x${string}`,
-  rewardsToken: `0x${string}`,
-  recipient: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  rewardsToken: Hex,
+  recipient: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -95,14 +96,14 @@ export async function claimOperatorFee(
  * Claims curator fees
  */
 export async function claimCuratorFee(
-  rewardsAddress: `0x${string}`,
-  rewardsToken: `0x${string}`,
-  recipient: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  rewardsToken: Hex,
+  recipient: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -125,14 +126,14 @@ export async function claimCuratorFee(
  * Claims protocol fees
  */
 export async function claimProtocolFee(
-  rewardsAddress: `0x${string}`,
-  rewardsToken: `0x${string}`,
-  recipient: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  rewardsToken: Hex,
+  recipient: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -155,15 +156,15 @@ export async function claimProtocolFee(
  * Claims undistributed rewards
  */
 export async function claimUndistributedRewards(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  rewardsToken: `0x${string}`,
-  recipient: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsToken: Hex,
+  recipient: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -186,16 +187,16 @@ export async function claimUndistributedRewards(
  * Sets rewards amount for epochs
  */
 export async function setRewardsAmountForEpochs(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   startEpoch: number,
   numberOfEpochs: number,
-  rewardsToken: `0x${string}`,
+  rewardsToken: Hex,
   rewardsAmount: bigint,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -218,14 +219,14 @@ export async function setRewardsAmountForEpochs(
  * Sets rewards share for asset class
  */
 export async function setRewardsShareForAssetClass(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   assetClass: bigint,
   share: number,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -248,13 +249,13 @@ export async function setRewardsShareForAssetClass(
  * Sets minimum required uptime
  */
 export async function setMinRequiredUptime(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   minUptime: bigint,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -277,13 +278,13 @@ export async function setMinRequiredUptime(
  * Sets admin role
  */
 export async function setAdminRole(
-  rewardsAddress: `0x${string}`,
-  newAdmin: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  newAdmin: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -306,13 +307,13 @@ export async function setAdminRole(
  * Sets protocol owner
  */
 export async function setProtocolOwner(
-  rewardsAddress: `0x${string}`,
-  newOwner: `0x${string}`,
-  privateKey: string,
-  network: string
+  rewardsAddress: Hex,
+  newOwner: Hex,
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -335,13 +336,13 @@ export async function setProtocolOwner(
  * Updates protocol fee
  */
 export async function updateProtocolFee(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   newFee: number,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -364,13 +365,13 @@ export async function updateProtocolFee(
  * Updates operator fee
  */
 export async function updateOperatorFee(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   newFee: number,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -393,13 +394,13 @@ export async function updateOperatorFee(
  * Updates curator fee
  */
 export async function updateCuratorFee(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   newFee: number,
-  privateKey: string,
-  network: string
+  privateKey: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generateClient(privateKey, network);
+  const client = generateClient(network, privateKey);
 
   if (!client.account) {
     throw new Error("No client account set.");
@@ -422,12 +423,12 @@ export async function updateCuratorFee(
  * Gets rewards amount per token from epoch
  */
 export async function getRewardsAmountPerTokenFromEpoch(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  network: string
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const result = await client.readContract({
     address: rewardsAddress,
@@ -448,13 +449,13 @@ export async function getRewardsAmountPerTokenFromEpoch(
  * Gets rewards amount for a specific token from epoch
  */
 export async function getRewardsAmountForTokenFromEpoch(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  token: `0x${string}`,
-  network: string
+  token: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const amount = await client.readContract({
     address: rewardsAddress,
@@ -471,13 +472,13 @@ export async function getRewardsAmountForTokenFromEpoch(
  * Gets operator shares for a specific epoch
  */
 export async function getOperatorShares(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  operator: `0x${string}`,
-  network: string
+  operator: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const share = await client.readContract({
     address: rewardsAddress,
@@ -494,13 +495,13 @@ export async function getOperatorShares(
  * Gets vault shares for a specific epoch
  */
 export async function getVaultShares(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  vault: `0x${string}`,
-  network: string
+  vault: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const share = await client.readContract({
     address: rewardsAddress,
@@ -517,13 +518,13 @@ export async function getVaultShares(
  * Gets curator shares for a specific epoch
  */
 export async function getCuratorShares(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  curator: `0x${string}`,
-  network: string
+  curator: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const share = await client.readContract({
     address: rewardsAddress,
@@ -540,12 +541,12 @@ export async function getCuratorShares(
  * Gets protocol rewards for a token
  */
 export async function getProtocolRewards(
-  rewardsAddress: `0x${string}`,
-  token: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  token: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const rewards = await client.readContract({
     address: rewardsAddress,
@@ -562,12 +563,12 @@ export async function getProtocolRewards(
  * Gets distribution batch status for an epoch
  */
 export async function getDistributionBatch(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   epoch: number,
-  network: string
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const result = await client.readContract({ // Changed variable name for clarity
     address: rewardsAddress,
@@ -591,11 +592,11 @@ export async function getDistributionBatch(
  * Gets current fees configuration
  */
 export async function getFeesConfiguration(
-  rewardsAddress: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const protocolFee = await client.readContract({
     address: rewardsAddress,
@@ -630,12 +631,12 @@ export async function getFeesConfiguration(
  * Gets rewards share for asset class
  */
 export async function getRewardsShareForAssetClass(
-  rewardsAddress: `0x${string}`,
+  rewardsAddress: Hex,
   assetClass: bigint,
-  network: string
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const share = await client.readContract({
     address: rewardsAddress,
@@ -652,11 +653,11 @@ export async function getRewardsShareForAssetClass(
  * Gets min required uptime
  */
 export async function getMinRequiredUptime(
-  rewardsAddress: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const minUptime = await client.readContract({
     address: rewardsAddress,
@@ -673,12 +674,12 @@ export async function getMinRequiredUptime(
  * Gets last claimed epoch for a staker
  */
 export async function getLastEpochClaimedStaker(
-  rewardsAddress: `0x${string}`,
-  staker: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  staker: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const lastEpoch = await client.readContract({
     address: rewardsAddress,
@@ -695,12 +696,12 @@ export async function getLastEpochClaimedStaker(
  * Gets last claimed epoch for an operator
  */
 export async function getLastEpochClaimedOperator(
-  rewardsAddress: `0x${string}`,
-  operator: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  operator: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const lastEpoch = await client.readContract({
     address: rewardsAddress,
@@ -717,12 +718,12 @@ export async function getLastEpochClaimedOperator(
  * Gets last claimed epoch for a curator
  */
 export async function getLastEpochClaimedCurator(
-  rewardsAddress: `0x${string}`,
-  curator: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  curator: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const lastEpoch = await client.readContract({
     address: rewardsAddress,
@@ -739,12 +740,12 @@ export async function getLastEpochClaimedCurator(
  * Gets last claimed epoch for protocol
  */
 export async function getLastEpochClaimedProtocol(
-  rewardsAddress: `0x${string}`,
-  protocolOwner: `0x${string}`,
-  network: string
+  rewardsAddress: Hex,
+  protocolOwner: Hex,
+  network: Network
 ) {
   const config = getConfig(network);
-  const client = generatePublicClient(network);
+  const client = generateClient(network);
 
   const lastEpoch = await client.readContract({
     address: rewardsAddress,
