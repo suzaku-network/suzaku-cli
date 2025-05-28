@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Abi, ContractEventName } from 'viem';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Abi } from 'viem';
 import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
@@ -829,18 +829,18 @@ export async function middlewareGetNodeLogs(
   client: ExtendedPublicClient,
   middlewareTxHash: Hex,
   middlewareAbi: Abi,
+  balancerValidatorManagerAbi: Abi,
   nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
   console.log("Reading logs from middleware...");
-  let logs = []
+  
   const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
   const middlewareAddress = receipt.contractAddress as Hex;
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
-
-  const events = middlewareAbi.filter((item) => item.type === 'event');
   
+  let logs = []
   logs = await GetContractEvents(
     client,
     middlewareAddress,
@@ -849,9 +849,44 @@ export async function middlewareGetNodeLogs(
     middlewareAbi,
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey
-  )
+  );
+
+  const l1ValidatorManagerAddressProm = client.readContract({
+    address: middlewareAddress,
+    abi: middlewareAbi,
+    functionName: 'L1_VALIDATOR_MANAGER',
+    args: [],
+  })
+  // 
+  const balancerAddressProm = client.readContract({
+    address: middlewareAddress,
+    abi: middlewareAbi,
+    functionName: 'balancerValidatorManager',
+    args: [],
+  })
+
+  const [l1ValidatorManagerAddress, balancerAddress] = await Promise.all([l1ValidatorManagerAddressProm, balancerAddressProm]);
+
+  const completeEventsContractAddress = l1ValidatorManagerAddress as Hex || balancerAddress as Hex;
+
+  if (completeEventsContractAddress) {
+    const completeEvents = await GetContractEvents(
+      client,
+      completeEventsContractAddress,
+      Number(from),
+      Number(to),
+      balancerValidatorManagerAbi,
+      undefined,
+      snowscanApiKey
+    );
+    logs = logs.concat(completeEvents).sort((a, b) => Number(a.blockNumber - b.blockNumber));
+  }
   
-  const logOfInterest = groupEventsByNodeId(logs);
+  // Human readable addresses and structured logs
+  const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
+    log.address = log.address.toLowerCase() === middlewareAddress.toLowerCase() ? "Middleware" : "ValidatorManager";
+    return log;
+  }))
 
   if (nodeId != undefined) {
     const nodeIdHex32 = parseNodeID(nodeId);
@@ -867,16 +902,24 @@ export async function middlewareGetNodeLogs(
 
 }
 
-export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { event: string; hash: string; /*args: string*/ }[]> {
+export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; /*args: string*/ }[]> {
+  let validationIdMap: Record<string, string> = {};
   return events.reduce((acc, log) => {
+    if (log.args.nodeId && log.args.validationID) {
+      validationIdMap[log.args.validationID] = log.args.nodeId;
+    } else if (!log.args.nodeId && log.args.validationID && validationIdMap[log.args.validationID]) {
+      log.args.nodeId = validationIdMap[log.args.validationID];
+    }
     if (log.args.nodeId) {
       const key = log.args.nodeId;
 
       if (!acc[key]) {
         acc[key] = [];
+
       }
 
       acc[key].push({
+        source: log.address,
         event: log.eventName,
         // args: JSON.stringify(log.args, (key, value) => 
         //   typeof value === 'bigint'
@@ -888,5 +931,5 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { ev
     }
 
     return acc;
-  }, {} as Record<string, { event: string; hash: string; /*args: string*/ }[]>);
+  }, {} as Record<string, { source: string; event: string; hash: string; /*args: string*/ }[]>);
 }

@@ -20,6 +20,7 @@ export type DecodedEvent = {
   transactionHash: Hex;
   eventName: string;
   args: Record<string, any>;
+  address: string;
 }
 
 // TODO: optimize eventNames filtering it from apis
@@ -98,7 +99,8 @@ export async function GetContractEvents(
       blockNumber: typeof (log.blockNumber) === 'bigint' ? log.blockNumber : BigInt(log.blockNumber),
       transactionHash: log.transactionHash,
       eventName: log.eventName,
-      args: log.args
+      args: log.args,
+      address: log.address
     } as DecodedEvent
   });
 }

@@ -942,6 +942,7 @@ async function main() {
                 client,
                 middlewareTxHash as Hex,
                 config.abis.MiddlewareService,
+                config.abis.BalancerValidatorManager,
                 options.nodeId,
                 options.snowscanApiKey
             );
