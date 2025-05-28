@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex } from 'viem';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Abi, ContractEventName } from 'viem';
 import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
@@ -12,7 +12,7 @@ import { color } from 'console-log-colors';
 export async function middlewareRegisterOperator(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Registering operator...");
@@ -42,7 +42,7 @@ export async function middlewareRegisterOperator(
 export async function middlewareDisableOperator(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Disabling operator...");
@@ -72,7 +72,7 @@ export async function middlewareDisableOperator(
 export async function middlewareRemoveOperator(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Removing operator...");
@@ -103,7 +103,7 @@ export async function middlewareRemoveOperator(
 export async function middlewareAddNode(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeId: NodeId,
   blsKey: Hex,
   registrationExpiry: bigint,
@@ -149,7 +149,7 @@ export async function middlewareAddNode(
 export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
@@ -241,7 +241,7 @@ export async function middlewareCompleteValidatorRegistration(
 export async function middlewareRemoveNode(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeId: NodeId
 ) {
   console.log("Calling function removeNode...");
@@ -275,7 +275,7 @@ export async function middlewareRemoveNode(
 export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeID: string,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
@@ -365,7 +365,7 @@ export async function middlewareCompleteValidatorRemoval(
 export async function middlewareInitStakeUpdate(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeId: NodeId,
   newStake: bigint
 ) {
@@ -400,7 +400,7 @@ export async function middlewareInitStakeUpdate(
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeId: NodeId,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
@@ -490,7 +490,7 @@ export async function middlewareCompleteStakeUpdate(
 export async function middlewareCalcNodeStakes(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any
+  middlewareAbi: Abi
 ) {
   console.log("Calculating node stakes for all operators...");
 
@@ -520,7 +520,7 @@ export async function middlewareCalcNodeStakes(
 export async function middlewareForceUpdateNodes(
   client: ExtendedWalletClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex,
   limitStake: bigint
 ) {
@@ -552,7 +552,7 @@ export async function middlewareForceUpdateNodes(
 export async function middlewareGetOperatorStake(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex,
   epoch: bigint,
   assetClass: bigint
@@ -579,7 +579,7 @@ export async function middlewareGetOperatorStake(
 export async function middlewareGetCurrentEpoch(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any
+  middlewareAbi: Abi
 ) {
   console.log("Reading current epoch...");
 
@@ -603,7 +603,7 @@ export async function middlewareGetCurrentEpoch(
 export async function middlewareGetEpochStartTs(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   epoch: bigint
 ) {
   console.log("Reading epoch start timestamp...");
@@ -628,7 +628,7 @@ export async function middlewareGetEpochStartTs(
 export async function middlewareGetActiveNodesForEpoch(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex,
   epoch: bigint
 ) {
@@ -654,7 +654,7 @@ export async function middlewareGetActiveNodesForEpoch(
 export async function middlewareGetOperatorNodesLength(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Reading operator nodes length...");
@@ -679,7 +679,7 @@ export async function middlewareGetOperatorNodesLength(
 export async function middlewareGetNodeStakeCache(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   epoch: bigint,
   validatorId: Hex
 ) {
@@ -705,7 +705,7 @@ export async function middlewareGetNodeStakeCache(
 export async function middlewareGetOperatorLockedStake(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Reading operator locked stake...");
@@ -730,7 +730,7 @@ export async function middlewareGetOperatorLockedStake(
 export async function middlewareNodePendingRemoval(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   validatorId: Hex
 ) {
   console.log("Reading nodePendingRemoval...");
@@ -755,7 +755,7 @@ export async function middlewareNodePendingRemoval(
 export async function middlewareNodePendingUpdate(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   validatorId: Hex
 ) {
   console.log("Reading nodePendingUpdate...");
@@ -780,7 +780,7 @@ export async function middlewareNodePendingUpdate(
 export async function middlewareGetOperatorUsedStake(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   operator: Hex
 ) {
   console.log("Reading operator used stake cached...");
@@ -805,7 +805,7 @@ export async function middlewareGetOperatorUsedStake(
 export async function middlewareGetAllOperators(
   client: ExtendedPublicClient,
   middlewareAddress: Hex,
-  middlewareAbi: any
+  middlewareAbi: Abi
 ) {
   console.log("Reading all operators from middleware...");
 
@@ -828,7 +828,7 @@ export async function middlewareGetAllOperators(
 export async function middlewareGetNodeLogs(
   client: ExtendedPublicClient,
   middlewareTxHash: Hex,
-  middlewareAbi: any,
+  middlewareAbi: Abi,
   nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
@@ -839,6 +839,9 @@ export async function middlewareGetNodeLogs(
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
 
+  const events = middlewareAbi.filter((item) => item.type === 'event');
+  
+
   logs = await GetContractEvents(
     client,
     middlewareAddress,
@@ -848,7 +851,7 @@ export async function middlewareGetNodeLogs(
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey
   )
-
+  ContractEventName
   const logOfInterest = groupEventsByNodeId(logs);
 
   if (nodeId != undefined) {
@@ -862,7 +865,7 @@ export async function middlewareGetNodeLogs(
       console.table(value);
     }
   }
-  
+
 }
 
 export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { event: string; hash: string; /*args: string*/ }[]> {

@@ -1,13 +1,13 @@
 import { Config } from "./config";
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex } from 'viem';
+import { Hex, Abi } from 'viem';
 /**
  * Operator -> L1
  */
 export async function optInL1(
   client: ExtendedWalletClient,
   opL1OptInAddress: Hex,
-  opL1OptInAbi: any,
+  opL1OptInAbi: Abi,
   l1Address: Hex,
 ) {
   console.log(`Opting in to L1: ${l1Address}`);
@@ -29,7 +29,7 @@ export async function optInL1(
 export async function optOutL1(
   client: ExtendedWalletClient,
   opL1OptInAddress: Hex,
-  opL1OptInAbi: any,
+  opL1OptInAbi: Abi,
   l1Address: Hex,
 ) {
   console.log(`Opting out from L1: ${l1Address}`);
@@ -51,7 +51,7 @@ export async function optOutL1(
 export async function checkOptInL1(
   client: ExtendedPublicClient,
   opL1OptInAddress: Hex,
-  opL1OptInAbi: any,
+  opL1OptInAbi: Abi,
   operator: Hex,
   l1Address: Hex,
 ) {
@@ -75,7 +75,7 @@ export async function checkOptInL1(
 export async function optInVault(
   client: ExtendedWalletClient,
   opVaultOptInAddress: Hex,
-  opVaultOptInAbi: any,
+  opVaultOptInAbi: Abi,
   vaultAddress: Hex,
 ) {
   console.log(`Opting in to Vault: ${vaultAddress}`);
@@ -97,7 +97,7 @@ export async function optInVault(
 export async function optOutVault(
   client: ExtendedWalletClient,
   opVaultOptInAddress: Hex,
-  opVaultOptInAbi: any,
+  opVaultOptInAbi: Abi,
   vaultAddress: Hex,
 ) {
   console.log(`Opting out from Vault: ${vaultAddress}`);
@@ -119,7 +119,7 @@ export async function optOutVault(
 export async function checkOptInVault(
   client: ExtendedPublicClient,
   opVaultOptInAddress: Hex,
-  opVaultOptInAbi: any,
+  opVaultOptInAbi: Abi,
   operator: Hex,
   vaultAddress: Hex,
 ) {

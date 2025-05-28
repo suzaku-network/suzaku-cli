@@ -1,6 +1,6 @@
 import { Config } from "./config";
 import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
-import { Hex } from "viem";
+import { Hex, Abi } from "viem";
 
 export async function registerL1(
     config: Config,
@@ -33,7 +33,7 @@ export async function registerL1(
 export async function setL1MetadataUrl(
     client: ExtendedWalletClient,
     l1RegistryAddress: Hex,
-    l1RegistryAbi: any,
+    l1RegistryAbi: Abi,
     l1Address: Hex,
     metadataUrl: string
 ) {
@@ -62,7 +62,7 @@ export async function setL1MetadataUrl(
 export async function setL1Middleware(
     client: ExtendedWalletClient,
     l1RegistryAddress: Hex,
-    l1RegistryAbi: any,
+    l1RegistryAbi: Abi,
     validatorManager: Hex,
     newMiddleware: Hex
 ) {
@@ -88,7 +88,7 @@ export async function setL1Middleware(
     }
 }
 
-export async function getL1s(client: ExtendedPublicClient, l1RegistryAddress: Hex, l1RegistryAbi: any) {
+export async function getL1s(client: ExtendedPublicClient, l1RegistryAddress: Hex, l1RegistryAbi: Abi) {
     console.log("Getting L1s...");
 
     try {

@@ -1,11 +1,11 @@
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex } from 'viem';
+import { Hex, Abi } from 'viem';
 
 // L1 opt-in functionality
 export async function optInL1(
   client: ExtendedWalletClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   l1Address: Hex
 ) {
   if (!client.account) {
@@ -33,7 +33,7 @@ export async function optInL1(
 export async function optOutL1(
   client: ExtendedWalletClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   l1Address: Hex
 ) {
   if (!client.account) {
@@ -61,7 +61,7 @@ export async function optOutL1(
 export async function checkOptInL1(
   client: ExtendedPublicClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   operator: Hex,
   l1Address: Hex
 ) {
@@ -87,7 +87,7 @@ export async function checkOptInL1(
 export async function optInVault(
   client: ExtendedWalletClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   vaultAddress: Hex
 ) {
   if (!client.account) {
@@ -115,7 +115,7 @@ export async function optInVault(
 export async function optOutVault(
   client: ExtendedWalletClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   vaultAddress: Hex
 ) {
   if (!client.account) {
@@ -143,7 +143,7 @@ export async function optOutVault(
 export async function checkOptInVault(
   client: ExtendedPublicClient,
   optInServiceAddress: Hex,
-  optInServiceAbi: any,
+  optInServiceAbi: Abi,
   operator: Hex,
   vaultAddress: Hex
 ) {

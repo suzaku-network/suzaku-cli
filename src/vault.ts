@@ -1,11 +1,11 @@
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex } from 'viem';
+import { Hex, Abi } from 'viem';
 
 // deposit
 export async function depositVault(
   client: ExtendedWalletClient,
   vaultAddress: Hex,
-  vaultAbi: any,
+  vaultAbi: Abi,
   onBehalfOf: Hex,
   amountWei: bigint
 ) {
@@ -71,7 +71,7 @@ export async function depositVault(
 export async function withdrawVault(
   client: ExtendedWalletClient,
   vaultAddress: Hex,
-  vaultAbi: any,
+  vaultAbi: Abi,
   claimer: Hex,
   amountWei: bigint
 ) {
@@ -103,7 +103,7 @@ export async function withdrawVault(
 export async function claimVault(
   client: ExtendedWalletClient,
   vaultAddress: Hex,
-  vaultAbi: any,
+  vaultAbi: Abi,
   recipient: Hex,
   epoch: bigint
 ) {
@@ -138,7 +138,7 @@ export async function claimVault(
 export async function getVaultDelegator(
   client: ExtendedPublicClient,
   vaultAddress: Hex,
-  vaultAbi: any
+  vaultAbi: Abi
 ): Promise<Hex> {
   return await client.readContract({
     address: vaultAddress,
@@ -154,7 +154,7 @@ export async function getVaultDelegator(
 export async function getStake(
   client: ExtendedPublicClient,
   delegatorAddress: Hex,
-  delegatorAbi: any,
+  delegatorAbi: Abi,
   l1Address: Hex,
   assetClass: bigint,
   operatorAddress: Hex

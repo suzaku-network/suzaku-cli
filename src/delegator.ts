@@ -1,10 +1,10 @@
 import { ExtendedWalletClient } from './client';
-import { Hex } from 'viem';
+import { Hex, Abi } from 'viem';
 
 export async function setL1Limit(
   client: ExtendedWalletClient,
   l1RestakeDelegatorAddress: Hex,
-  l1RestakeDelegatorAbi: any,
+  l1RestakeDelegatorAbi: Abi,
   l1Address: Hex,
   assetClass: bigint,
   limit: bigint
@@ -36,7 +36,7 @@ export async function setL1Limit(
 export async function setOperatorL1Shares(
   client: ExtendedWalletClient,
   l1RestakeDelegatorAddress: Hex,
-  l1RestakeDelegatorAbi: any,
+  l1RestakeDelegatorAbi: Abi,
   l1Address: Hex,
   assetClass: bigint,
   operatorAddress: Hex,

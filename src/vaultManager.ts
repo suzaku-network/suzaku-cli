@@ -1,10 +1,10 @@
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex } from 'viem';
+import { Hex, Abi } from 'viem';
 
 export async function registerVaultL1(
     client: ExtendedWalletClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any,
+    vaultManagerAbi: Abi,
     vaultAddress: Hex,
     assetClass: bigint,
     maxLimit: bigint
@@ -33,7 +33,7 @@ export async function registerVaultL1(
 export async function updateVaultMaxL1Limit(
     client: ExtendedWalletClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any,
+    vaultManagerAbi: Abi,
     vaultAddress: Hex,
     assetClass: bigint,
     maxLimit: bigint
@@ -62,7 +62,7 @@ export async function updateVaultMaxL1Limit(
 export async function removeVault(
     client: ExtendedWalletClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any,
+    vaultManagerAbi: Abi,
     vaultAddress: Hex
 ) {
     console.log("Removing vault...");
@@ -89,7 +89,7 @@ export async function removeVault(
 export async function getVaultCount(
     client: ExtendedPublicClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any
+    vaultManagerAbi: Abi
 ) {
     console.log("Getting vault count...");
 
@@ -112,7 +112,7 @@ export async function getVaultCount(
 export async function getVaultAtWithTimes(
     client: ExtendedPublicClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any,
+    vaultManagerAbi: Abi,
     index: bigint
 ) {
     console.log("Getting vault at index with times...");
@@ -136,7 +136,7 @@ export async function getVaultAtWithTimes(
 export async function getVaultAssetClass(
     client: ExtendedPublicClient,
     vaultManagerAddress: Hex,
-    vaultManagerAbi: any,
+    vaultManagerAbi: Abi,
     vaultAddress: Hex
 ) {
     console.log("Getting vault asset class...");

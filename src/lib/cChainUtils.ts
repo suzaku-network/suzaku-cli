@@ -1,5 +1,5 @@
 import cliProgress from 'cli-progress';
-import { decodeEventLog, decodeAbiParameters, Hex } from 'viem';
+import { decodeEventLog, decodeAbiParameters, Hex, Abi } from 'viem';
 import { ExtendedPublicClient } from '../client';
 
 type CommonEvent = {
@@ -28,7 +28,7 @@ export async function GetContractEvents(
   address: Hex,
   fromBlock: number,
   toBlock: number,
-  abi: any,
+  abi: Abi,
   eventNames?: string[],
   snowscanApiKey?: string,
 ): Promise<DecodedEvent[]> {
