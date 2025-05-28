@@ -841,7 +841,6 @@ export async function middlewareGetNodeLogs(
 
   const events = middlewareAbi.filter((item) => item.type === 'event');
   
-
   logs = await GetContractEvents(
     client,
     middlewareAddress,
@@ -851,7 +850,7 @@ export async function middlewareGetNodeLogs(
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey
   )
-  ContractEventName
+  
   const logOfInterest = groupEventsByNodeId(logs);
 
   if (nodeId != undefined) {
