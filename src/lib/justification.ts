@@ -590,7 +590,7 @@ function stringToUint8Array(str: string): Uint8Array {
     return Buffer.from(str, 'hex');
 }
 
-function hexToUint8Array(hex: Hex): Uint8Array {
+export function hexToUint8Array(hex: Hex): Uint8Array {
     // Remove '0x' prefix if present
     const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
     return Buffer.from(hexString, 'hex');
@@ -814,7 +814,7 @@ function parseUint16(input: Uint8Array, offset: number): number {
     return result;
 }
 
-function parseUint32(input: Uint8Array, offset: number): number {
+export function parseUint32(input: Uint8Array, offset: number): number {
     let result = 0;
     for (let i = 0; i < 4; i++) {
         result = (result << 8) | input[offset + i];

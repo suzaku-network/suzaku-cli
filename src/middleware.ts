@@ -3,9 +3,10 @@ import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
 import { DecodedEvent, GetContractEvents } from './lib/cChainUtils';
-import { GetRegistrationJustification } from './lib/justification';
+import { GetRegistrationJustification, parseUint32, hexToUint8Array } from './lib/justification';
 import { utils } from '@avalabs/avalanchejs';
 import { parseNodeID, NodeId } from './lib/utils';
+import { color } from 'console-log-colors';
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
@@ -852,11 +853,12 @@ export async function middlewareGetNodeLogs(
 
   if (nodeId != undefined) {
     const nodeIdHex32 = parseNodeID(nodeId);
-    console.log(`\t\tLogs for ${nodeId}:`);
+    console.log('\t\t\t' + color.blue(nodeId));
     console.table(logOfInterest[nodeIdHex32] || []);
   } else {
     for (const [key, value] of Object.entries(logOfInterest)) {
-      console.log(`\t\tLogs for ${key}:`);
+      const nodeId = `NodeID-${utils.base58check.encode(hexToUint8Array(key as Hex).slice(12))}`;
+      console.log('\t\t\t' + color.blue(nodeId));
       console.table(value);
     }
   }

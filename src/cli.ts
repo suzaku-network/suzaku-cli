@@ -112,7 +112,7 @@ import {
 import { NodeId } from "./lib/utils";
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
-    const client = generateClient(opts.privateKey, opts.network);
+    const client = generateClient(opts.network, opts.privateKey);
     return client.account?.address as Hex;
 }
 
@@ -141,7 +141,7 @@ async function main() {
         .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
 
             await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
         });
@@ -162,7 +162,7 @@ async function main() {
         .action(async (l1Address, metadataUrl) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await setL1MetadataUrl(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, metadataUrl);
         });
 
@@ -173,7 +173,7 @@ async function main() {
         .action(async (l1Address, l1Middleware) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await setL1Middleware(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, l1Middleware);
         });
     /* --------------------------------------------------
@@ -185,7 +185,7 @@ async function main() {
         .action(async (metadataUrl) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await registerOperator(config, client, metadataUrl);
         });
 
@@ -211,7 +211,7 @@ async function main() {
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await registerVaultL1(
                 client,
                 middlewareVaultManagerAddress,
@@ -231,7 +231,7 @@ async function main() {
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await updateVaultMaxL1Limit(
                 client,
                 middlewareVaultManagerAddress,
@@ -249,7 +249,7 @@ async function main() {
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await removeVault(
                 client,
                 middlewareVaultManager as Hex,
@@ -316,7 +316,7 @@ async function main() {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             const amountWei = parseUnits(amount, 18);
 
             await depositVault(
@@ -337,7 +337,7 @@ async function main() {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             const amountWei = parseUnits(amount, 18);
             await withdrawVault(
                 client,
@@ -357,7 +357,7 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await claimVault(
                 client,
                 vaultAddress as Hex,
@@ -379,7 +379,7 @@ async function main() {
         .action(async (delegatorAddress, l1Address, limit, assetClass) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await setL1Limit(
                 client,
                 delegatorAddress as Hex,
@@ -400,7 +400,7 @@ async function main() {
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, assetClass) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await setOperatorL1Shares(
                 client,
                 delegatorAddress as Hex,
@@ -424,7 +424,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareRegisterOperator(
                 client,
                 middlewareAddress as Hex,
@@ -441,7 +441,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareDisableOperator(
                 client,
                 middlewareAddress as Hex,
@@ -458,7 +458,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareRemoveOperator(
                 client,
                 middlewareAddress as Hex,
@@ -482,7 +482,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -529,7 +529,7 @@ async function main() {
         .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -564,7 +564,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareRemoveNode(
                 client,
                 middlewareAddress as Hex,
@@ -583,7 +583,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -615,7 +615,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareInitStakeUpdate(
                 client,
                 middlewareAddress as Hex,
@@ -636,7 +636,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -669,7 +669,7 @@ async function main() {
         .action(async (middlewareAddress, epoch, assetClass) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             console.log("Calculating and caching stakes...");
 
             try {
@@ -702,7 +702,7 @@ async function main() {
         .action(async (middlewareAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareCalcNodeStakes(
                 client,
                 middlewareAddress as Hex,
@@ -720,7 +720,7 @@ async function main() {
         .action(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await middlewareForceUpdateNodes(
                 client,
                 middlewareAddress as Hex,
@@ -962,7 +962,7 @@ async function main() {
             const config = getConfig(opts.network);
             // We'll assume in config you have something like: config.opL1OptIn = "0x..."
             // and config.abis.OpL1OptIn = the ABI.
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await optInL1(
                 client,
                 config.opL1OptIn as Hex,
@@ -978,7 +978,7 @@ async function main() {
         .action(async (l1Address) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await optOutL1(
                 client,
                 config.opL1OptIn as Hex,
@@ -1018,7 +1018,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await optInVault(
                 client,
                 config.opVaultOptIn as Hex,
@@ -1034,7 +1034,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await optOutVault(
                 client,
                 config.opVaultOptIn as Hex,
@@ -1074,7 +1074,7 @@ async function main() {
         .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
             const config = getConfig(opts.network);
-            const client = generateClient(opts.privateKey, opts.network);
+            const client = generateClient(opts.network, opts.privateKey);
             await setUpSecurityModule(
                 client,
                 balancerValidatorManagerAddress,
