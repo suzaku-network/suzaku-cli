@@ -4,7 +4,7 @@ import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
 import * as readline from 'readline';
-import { fromBytes, Hex } from "viem";
+import { fromBytes, Hex, pad } from "viem";
 
 const CHECKSUM_LENGTH = 4;
 
@@ -129,5 +129,6 @@ export const parseNodeID = (nodeID: NodeId): Hex => {
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    return nodeIDHexTrimmed as Hex
+    const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
+    return padded as Hex
 }
