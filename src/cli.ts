@@ -597,7 +597,7 @@ async function main() {
             await middlewareCompleteValidatorRemoval(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config.abis,
                 nodeId as string,
                 removeNodeTxHash as Hex,
                 options.pchainTxPrivateKey as string,

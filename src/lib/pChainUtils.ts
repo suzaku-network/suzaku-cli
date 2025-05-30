@@ -1,6 +1,8 @@
-import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, BigIntPr, pvmSerial, PChainOwner } from "@avalabs/avalanchejs";
+import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner } from "@avalabs/avalanchejs";
 import { getAddresses } from "./utils";
 import { Hex } from "viem";
+
+export type GetValidatorAtObject = {[nodeId: string]: {publicKey: string, weight: BigInt}};
 
 export interface CreateChainParams {
     privateKeyHex: string;
@@ -287,6 +289,22 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     console.log("P-Chain transaction confirmed");
 
     return response.txID;
+}
+
+export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtObject> {
+    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const currentHeight = await pvmApi.getHeight();
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.getValidatorsAt({
+        subnetID: subnetId,
+        height: currentHeight.height, 
+    });
+
+    if (!response.validators) {
+        return {};
+    }
+
+    return response.validators as GetValidatorAtObject;
 }
 
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<string> {
