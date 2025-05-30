@@ -1,18 +1,18 @@
-import L1RegistryAbi from './abis/L1Registry.json';
-import OperatorRegistryAbi from './abis/OperatorRegistry.json';
-import VaultManagerAbi from './abis/MiddlewareVaultManager.json';
-import L1MiddlewareAbi from './abis/AvalancheL1Middleware.json';
-import VaultTokenizedAbi from './abis/VaultTokenized.json';
-import L1RestakeDelegatorAbi from './abis/L1RestakeDelegator.json';
+import L1RegistryAbi from './abis/L1Registry';
+import OperatorRegistryAbi from './abis/OperatorRegistry';
+import VaultManagerAbi from './abis/MiddlewareVaultManager';
+import L1MiddlewareAbi from './abis/AvalancheL1Middleware';
+import VaultTokenizedAbi from './abis/VaultTokenized';
+import L1RestakeDelegatorAbi from './abis/L1RestakeDelegator';
 import dotenv from 'dotenv';
-import BalancerValidatorManagerAbi from './abis/BalancerValidatorManager.json';
-import VaultFactoryAbi from './abis/VaultFactory.json';
-import OperatorVaultOptInServiceAbi from './abis/OperatorVaultOptInService.json';
-import OperatorL1OptInServiceAbi from './abis/OperatorL1OptInService.json';
-import UptimeTrackerAbi from './abis/UptimeTracker.json';
-import RewardsAbi from './abis/Rewards.json';
+import BalancerValidatorManagerAbi from './abis/BalancerValidatorManager';
+import VaultFactoryAbi from './abis/VaultFactory';
+import OperatorVaultOptInServiceAbi from './abis/OperatorVaultOptInService';
+import OperatorL1OptInServiceAbi from './abis/OperatorL1OptInService';
+import UptimeTrackerAbi from './abis/UptimeTracker';
+import RewardsAbi from './abis/Rewards';
 import { Network } from './client';
-import { Hex, Abi } from 'viem';
+import { Hex, Abi, getContract, PublicClient } from 'viem';
 
 // import DelegatorFactoryAbi from './abis/DelegatorFactory.json';
 // Load environment variables

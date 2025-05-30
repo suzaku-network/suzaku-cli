@@ -1,4 +1,4 @@
-[
+export default [
     {
         "type": "constructor",
         "inputs": [
@@ -1117,4 +1117,4 @@
         "name": "Vault__NotSlasher",
         "inputs": []
     }
-]
+] as const;

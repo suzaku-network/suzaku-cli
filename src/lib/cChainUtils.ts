@@ -104,3 +104,4 @@ export async function GetContractEvents(
     } as DecodedEvent
   });
 }
+

@@ -1,4 +1,4 @@
-[
+export default [
     {
         "type": "constructor",
         "inputs": [],
@@ -1353,4 +1353,4 @@
             }
         ]
     }
-]
+] as const;

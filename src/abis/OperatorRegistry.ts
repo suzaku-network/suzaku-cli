@@ -1,4 +1,4 @@
-[
+export default [
     {
         "type": "function",
         "name": "getAllOperators",
@@ -160,4 +160,4 @@
         "name": "OperatorRegistry__OperatorNotRegistered",
         "inputs": []
     }
-]
+] as const;
