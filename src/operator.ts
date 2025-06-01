@@ -1,21 +1,20 @@
 import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
-import { Config } from "./config";
+import { TContract } from "./config";
+import type { Account } from "viem";
 
 async function registerOperator(
-    config: Config,
-    client: ExtendedWalletClient,
-    metadataUrl: string
+    operatorRegistry: TContract['OperatorRegistry'],
+    metadataUrl: string,
+    account: Account | undefined
 ) {
     console.log("Registering operator...");
 
     try {
-        // @ts-ignore - Client has hoisted account but TypeScript doesn't recognize it
-        const hash = await client.writeContract({
-            address: config.operatorRegistry,
-            abi: config.abis.OperatorRegistry,
-            functionName: 'registerOperator',
-            args: [metadataUrl]
-        });
+        if (!account) throw new Error('Client account is required');
+        const hash = await operatorRegistry.write.registerOperator(
+            [metadataUrl],
+            { chain: null, account }
+        );
 
         console.log("Registered operator successfully, Transaction hash:", hash);
     } catch (error) {
@@ -27,18 +26,12 @@ async function registerOperator(
 }
 
 async function listOperators(
-    config: Config,
-    client: ExtendedPublicClient
+    operatorRegistry: TContract['OperatorRegistry']
 ) {
     console.log("Listing operators...");
 
     try {
-        const result = await client.readContract({
-            address: config.operatorRegistry,
-            abi: config.abis.OperatorRegistry,
-            functionName: 'getAllOperators',
-            args: [],
-        }) as [string[], string[]];
+        const result = await operatorRegistry.read.getAllOperators();
 
         const [addresses, metadataUrls] = result;
         const totalOperators = addresses.length;

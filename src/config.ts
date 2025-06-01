@@ -41,11 +41,29 @@ const curriedContract = <TABI extends Abi, TClient extends PublicClient | Wallet
 // Load environment variables
 dotenv.config();
 
+const abis = {
+  L1Registry: L1RegistryAbi,
+  OperatorRegistry: OperatorRegistryAbi,
+  VaultManager: VaultManagerAbi,
+  L1Middleware: L1MiddlewareAbi,
+  VaultTokenized: VaultTokenizedAbi,
+  L1RestakeDelegator: L1RestakeDelegatorAbi,
+  BalancerValidatorManager: BalancerValidatorManagerAbi,
+  VaultFactory: VaultFactoryAbi,
+  OperatorVaultOptInService: OperatorVaultOptInServiceAbi,
+  OperatorL1OptInService: OperatorL1OptInServiceAbi,
+  // DelegatorFactory: DelegatorFactoryAbi,
+  MiddlewareService: L1MiddlewareAbi, // Assuming MiddlewareService is the same as L1Middleware
+  UptimeTracker: UptimeTrackerAbi,
+  Rewards: RewardsAbi,
+};
+
 interface Config {
   l1Registry: Hex;
   operatorRegistry: Hex;
   opL1OptIn: Hex;
   opVaultOptIn: Hex;
+  abis: typeof abis;
   contracts: {
     L1Registry: CurriedContractFn<typeof L1RegistryAbi, PublicClient | WalletClient>;
     OperatorRegistry: CurriedContractFn<typeof OperatorRegistryAbi, PublicClient | WalletClient>;
@@ -90,6 +108,7 @@ function getConfig(network: Network, client: PublicClient | WalletClient): Confi
       operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as Hex) || '0x46D45D6be6214F6bd8124187caD1a5302755d7A2',
       opL1OptIn: (process.env.OP_L1_OPT_IN_FUJI as Hex) || '0x0360C1cB32A20D97b358538D9Db71339ce2c9592',
       opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as Hex) || '0xC30c9f7482B2ED82d0532812285295f8b7453941',
+      abis,
       contracts,
     };
   } else if (network === 'anvil') {
@@ -98,6 +117,7 @@ function getConfig(network: Network, client: PublicClient | WalletClient): Confi
       operatorRegistry: (process.env.OPERATOR_REGISTRY as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
       opL1OptIn: (process.env.OP_L1_OPT_IN as Hex) || '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
       opVaultOptIn: (process.env.OP_VAULT_OPT_IN as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+      abis,
       contracts,
     };
   } else {

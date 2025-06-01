@@ -1,26 +1,21 @@
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex, Abi } from 'viem';
+import { TContract } from './config';
+import { Hex } from 'viem';
+import type { Account } from 'viem';
 
 // L1 opt-in functionality
 export async function optInL1(
-  client: ExtendedWalletClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
-  l1Address: Hex
+  optInService: TContract['OperatorL1OptInService'],
+  l1Address: Hex,
+  account: Account | undefined
 ) {
-  if (!client.account) {
-    throw new Error('Client account is required');
-  }
+  if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await client.writeContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'optIn',
-      args: [l1Address],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await optInService.write.optIn(
+      [l1Address],
+      { chain: null, account }
+    );
     console.log("L1 opt-in successful, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -31,24 +26,17 @@ export async function optInL1(
 }
 
 export async function optOutL1(
-  client: ExtendedWalletClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
-  l1Address: Hex
+  optInService: TContract['OperatorL1OptInService'],
+  l1Address: Hex,
+  account: Account | undefined
 ) {
-  if (!client.account) {
-    throw new Error('Client account is required');
-  }
+  if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await client.writeContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'optOut',
-      args: [l1Address],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await optInService.write.optOut(
+      [l1Address],
+      { chain: null, account }
+    );
     console.log("L1 opt-out successful, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -59,19 +47,14 @@ export async function optOutL1(
 }
 
 export async function checkOptInL1(
-  client: ExtendedPublicClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
+  optInService: TContract['OperatorL1OptInService'],
   operator: Hex,
   l1Address: Hex
 ) {
   try {
-    const result = await client.readContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'isOptedIn',
-      args: [operator, l1Address],
-    });
+    const result = await optInService.read.isOptedIn(
+      [operator, l1Address]
+    );
     console.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
     return result;
   } catch (error) {
@@ -85,24 +68,17 @@ export async function checkOptInL1(
 
 // Vault opt-in functionality
 export async function optInVault(
-  client: ExtendedWalletClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
-  vaultAddress: Hex
+  optInService: TContract['OperatorVaultOptInService'],
+  vaultAddress: Hex,
+  account: Account | undefined
 ) {
-  if (!client.account) {
-    throw new Error('Client account is required');
-  }
+  if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await client.writeContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'optIn',
-      args: [vaultAddress],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await optInService.write.optIn(
+      [vaultAddress],
+      { chain: null, account }
+    );
     console.log("Vault opt-in successful, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -113,24 +89,17 @@ export async function optInVault(
 }
 
 export async function optOutVault(
-  client: ExtendedWalletClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
-  vaultAddress: Hex
+  optInService: TContract['OperatorVaultOptInService'],
+  vaultAddress: Hex,
+  account: Account | undefined
 ) {
-  if (!client.account) {
-    throw new Error('Client account is required');
-  }
+  if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await client.writeContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'optOut',
-      args: [vaultAddress],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await optInService.write.optOut(
+      [vaultAddress],
+      { chain: null, account }
+    );
     console.log("Vault opt-out successful, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -141,19 +110,14 @@ export async function optOutVault(
 }
 
 export async function checkOptInVault(
-  client: ExtendedPublicClient,
-  optInServiceAddress: Hex,
-  optInServiceAbi: Abi,
+  optInService: TContract['OperatorVaultOptInService'],
   operator: Hex,
   vaultAddress: Hex
 ) {
   try {
-    const result = await client.readContract({
-      address: optInServiceAddress,
-      abi: optInServiceAbi,
-      functionName: 'isOptedIn',
-      args: [operator, vaultAddress],
-    });
+    const result = await optInService.read.isOptedIn(
+      [operator, vaultAddress]
+    );
     console.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
     return result;
   } catch (error) {
@@ -163,4 +127,4 @@ export async function checkOptInVault(
     }
     return false;
   }
-} 
+}
