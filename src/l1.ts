@@ -1,6 +1,6 @@
-import { Config } from "./config";
+import { Config, TContract } from "./config";
 import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
-import { Hex, Abi } from "viem";
+import { Hex, Abi, GetContractReturnType, Account } from "viem";
 
 export async function registerL1(
     config: Config,
@@ -31,24 +31,15 @@ export async function registerL1(
 }
 
 export async function setL1MetadataUrl(
-    client: ExtendedWalletClient,
-    l1RegistryAddress: Hex,
-    l1RegistryAbi: Abi,
+    l1Registry: TContract['L1Registry'],
     l1Address: Hex,
-    metadataUrl: string
+    metadataUrl: string,
+    account:  Account | null = null,
 ) {
     console.log("Setting L1 Metadata URL...");
 
     try {
-        // @ts-ignore - Client has hoisted account but TypeScript doesn't recognize it
-        const hash = await client.writeContract({
-            address: l1RegistryAddress,
-            abi: l1RegistryAbi,
-            functionName: 'setMetadataURL',
-            args: [l1Address, metadataUrl],
-            chain: null,
-            account: client.account || null,
-        });
+        const hash = await l1Registry.write.setMetadataURL([l1Address, metadataUrl], {chain: null, account} );
 
         console.log("Set L1 Metadata URL successfully, Transaction hash:", hash);
     } catch (error) {
@@ -60,24 +51,16 @@ export async function setL1MetadataUrl(
 }
 
 export async function setL1Middleware(
-    client: ExtendedWalletClient,
-    l1RegistryAddress: Hex,
-    l1RegistryAbi: Abi,
+    l1Registry: TContract['L1Registry'],
     validatorManager: Hex,
-    newMiddleware: Hex
+    newMiddleware: Hex,
+    account: Account | null = null,
 ) {
     console.log("Setting L1 Middleware...");
 
     try {
         // @ts-ignore - Client has hoisted account but TypeScript doesn't recognize it
-        const hash = await client.writeContract({
-            address: l1RegistryAddress,
-            abi: l1RegistryAbi,
-            functionName: 'setL1Middleware',
-            args: [validatorManager, newMiddleware],
-            chain: null,
-            account: client.account || null,
-        });
+        const hash = await l1Registry.write.setL1Middleware([validatorManager, newMiddleware], {chain: null, account});
 
         console.log("Set L1 Middleware successfully, Transaction hash:", hash);
     } catch (error) {
@@ -88,33 +71,20 @@ export async function setL1Middleware(
     }
 }
 
-export async function getL1s(client: ExtendedPublicClient, l1RegistryAddress: Hex, l1RegistryAbi: Abi) {
+export async function getL1s(l1RegistryAbi: TContract['L1Registry']) {
     console.log("Getting L1s...");
 
     try {
         // Get total number of L1s
-        const totalL1s = await client.readContract({
-            address: l1RegistryAddress,
-            abi: l1RegistryAbi,
-            functionName: 'totalL1s',
-            args: [],
-        });
+        const totalL1s = await l1RegistryAbi.read.totalL1s();
 
         console.log("Total L1s:", Number(totalL1s));
 
         // Get each L1
         const l1s = [];
-        for (let i = 0; i < Number(totalL1s); i++) {
-            const l1 = await client.readContract({
-                address: l1RegistryAddress,
-                abi: l1RegistryAbi,
-                functionName: 'getL1At',
-                args: [i],
-            }) as [Hex, Hex, string];
+        for (let i = 0n; i < totalL1s; i++) {
+            const l1 = await l1RegistryAbi.read.getL1At([i])
             l1s.push(l1);
-        }
-
-        for (const l1 of l1s) {
             console.log("L1 Address:", l1[0]);
             console.log("L1 Middleware:", l1[1]);
             console.log("L1 Metadata URL:", l1[2]);

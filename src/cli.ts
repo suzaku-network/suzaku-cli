@@ -140,8 +140,8 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
             await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
         });
@@ -150,9 +150,9 @@ async function main() {
         .command("get-l1s")
         .action(async () => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
-            await getL1s(client, config.l1Registry as Hex, config.abis.L1Registry);
+            const config = getConfig(opts.network, client);
+            await getL1s(config.contracts.L1Registry(config.l1Registry));
         });
 
     program
@@ -161,9 +161,9 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (l1Address, metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-            await setL1MetadataUrl(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, metadataUrl);
+            const config = getConfig(opts.network, client);
+            await setL1MetadataUrl(config.contracts.L1Registry(config.l1Registry), l1Address, metadataUrl);
         });
 
     program
@@ -172,9 +172,9 @@ async function main() {
         .argument("<l1Middleware>")
         .action(async (l1Address, l1Middleware) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-            await setL1Middleware(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, l1Middleware);
+            const config = getConfig(opts.network, client);
+            await setL1Middleware(config.contracts.L1Registry(config.l1Registry), l1Address, l1Middleware);
         });
     /* --------------------------------------------------
     * OPERATOR REGISTRY COMMANDS
@@ -184,8 +184,8 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await registerOperator(config, client, metadataUrl);
         });
 
@@ -194,8 +194,8 @@ async function main() {
         .description("List all operators registered in the operator registry")
         .action(async () => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await listOperators(config, client);
         });
 
@@ -210,12 +210,12 @@ async function main() {
         .argument("<maxLimit>")
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await registerVaultL1(
                 client,
                 middlewareVaultManagerAddress,
-                config.abis.VaultManager,
+                config,
                 vaultAddress as Hex,
                 BigInt(assetClass),
                 BigInt(maxLimit)
@@ -230,12 +230,12 @@ async function main() {
         .argument("<maxLimit>")
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await updateVaultMaxL1Limit(
                 client,
                 middlewareVaultManagerAddress,
-                config.abis.VaultManager,
+                config,
                 vaultAddress as Hex,
                 BigInt(assetClass),
                 BigInt(maxLimit)
@@ -248,12 +248,12 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await removeVault(
                 client,
                 middlewareVaultManager as Hex,
-                config.abis.VaultManager,
+                config,
                 vaultAddress as Hex
             );
         });
@@ -263,8 +263,8 @@ async function main() {
         .argument("<middlewareVaultManager>")
         .action(async (middlewareVaultManager) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await getVaultCount(
                 client,
                 middlewareVaultManager as Hex,
@@ -278,12 +278,12 @@ async function main() {
         .argument("<index>")
         .action(async (middlewareVaultManager, index) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await getVaultAtWithTimes(
                 client,
                 middlewareVaultManager as Hex,
-                config.abis.VaultManager,
+                config,
                 BigInt(index)
             );
         });
@@ -294,12 +294,12 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await getVaultAssetClass(
                 client,
                 middlewareVaultManager as Hex,
-                config.abis.VaultManager,
+                config,
                 vaultAddress as Hex
             );
         });
@@ -315,14 +315,14 @@ async function main() {
         .action(async (vaultAddress, amount, options) => {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             const amountWei = parseUnits(amount, 18);
 
             await depositVault(
                 client,
                 vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                config,
                 onBehalfOf as Hex,
                 amountWei
             );
@@ -336,13 +336,13 @@ async function main() {
         .action(async (vaultAddress, amount, options) => {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             const amountWei = parseUnits(amount, 18);
             await withdrawVault(
                 client,
                 vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                config,
                 claimer as Hex,
                 amountWei
             );
@@ -356,12 +356,12 @@ async function main() {
         .action(async (vaultAddress, epoch, options) => {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await claimVault(
                 client,
                 vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                config,
                 recipient as Hex,
                 BigInt(epoch)
             );
@@ -378,12 +378,12 @@ async function main() {
         .argument("<assetClass>", "Asset class")
         .action(async (delegatorAddress, l1Address, limit, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await setL1Limit(
                 client,
                 delegatorAddress as Hex,
-                config.abis.L1RestakeDelegator,
+                config,
                 l1Address as Hex,
                 BigInt(assetClass),
                 BigInt(limit)
@@ -399,12 +399,12 @@ async function main() {
         .argument("<assetClass>", "Asset class")
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await setOperatorL1Shares(
                 client,
                 delegatorAddress as Hex,
-                config.abis.L1RestakeDelegator,
+                config,
                 l1Address as Hex,
                 BigInt(assetClass),
                 operatorAddress as Hex,
@@ -423,12 +423,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareRegisterOperator(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -440,12 +440,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareDisableOperator(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -457,12 +457,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareRemoveOperator(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -481,8 +481,8 @@ async function main() {
         .option("--pchain-disable-owner-address <address>", "P-Chain disable owner address", collectMultiple, [])
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -506,7 +506,7 @@ async function main() {
             await middlewareAddNode(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 nodeId,
                 blsKey as Hex,
                 registrationExpiry,
@@ -528,8 +528,8 @@ async function main() {
         .option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee (default: 0.1 AVAX)", "0.1")
         .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -545,7 +545,7 @@ async function main() {
             await middlewareCompleteValidatorRegistration(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex,
                 nodeId as NodeId,
                 options.pchainTxPrivateKey as string,
@@ -563,12 +563,12 @@ async function main() {
         .argument("<nodeId>")
         .action(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareRemoveNode(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 nodeId as NodeId
             );
         });
@@ -582,8 +582,8 @@ async function main() {
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
         .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -597,7 +597,7 @@ async function main() {
             await middlewareCompleteValidatorRemoval(
                 client,
                 middlewareAddress as Hex,
-                config.abis,
+                config,
                 nodeId as string,
                 removeNodeTxHash as Hex,
                 options.pchainTxPrivateKey as string,
@@ -614,12 +614,12 @@ async function main() {
         .argument("<newStake>")
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareInitStakeUpdate(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 nodeId as NodeId,
                 BigInt(newStake)
             );
@@ -635,8 +635,8 @@ async function main() {
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
         .action(async (middlewareAddress, nodeId, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -651,7 +651,7 @@ async function main() {
             await middlewareCompleteStakeUpdate(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 nodeId as NodeId,
                 validatorStakeUpdateTxHash as Hex,
                 options.pchainTxPrivateKey as string,
@@ -668,8 +668,8 @@ async function main() {
         .argument("<assetClass>")
         .action(async (middlewareAddress, epoch, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             console.log("Calculating and caching stakes...");
 
             try {
@@ -679,7 +679,7 @@ async function main() {
 
                 const hash = await client.writeContract({
                     address: middlewareAddress as Hex,
-                    abi: config.abis.MiddlewareService,
+                    config,
                     functionName: 'calcAndCacheStakes',
                     args: [BigInt(epoch), BigInt(assetClass)],
                     chain: null,
@@ -701,12 +701,12 @@ async function main() {
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareCalcNodeStakes(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                config
             );
         });
 
@@ -719,12 +719,12 @@ async function main() {
         .option("--limit-stake <stake>", "Stake limit (default: 0)", "0")
         .action(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await middlewareForceUpdateNodes(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex,
                 BigInt(options.limitStake)
             );
@@ -739,12 +739,12 @@ async function main() {
         .argument("<assetClass>")
         .action(async (middlewareAddress, operator, epoch, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetOperatorStake(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex,
                 BigInt(epoch),
                 BigInt(assetClass)
@@ -757,12 +757,12 @@ async function main() {
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetCurrentEpoch(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                config
             );
         });
 
@@ -773,12 +773,12 @@ async function main() {
         .argument("<epoch>")
         .action(async (middlewareAddress, epoch) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetEpochStartTs(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 BigInt(epoch)
             );
         });
@@ -791,12 +791,12 @@ async function main() {
         .argument("<epoch>")
         .action(async (middlewareAddress, operator, epoch) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetActiveNodesForEpoch(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex,
                 BigInt(epoch)
             );
@@ -809,12 +809,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetOperatorNodesLength(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -828,12 +828,12 @@ async function main() {
         .argument("<validatorId>")
         .action(async (middlewareAddress, epoch, validatorId) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetNodeStakeCache(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 BigInt(epoch),
                 validatorId as Hex
             );
@@ -847,12 +847,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetOperatorLockedStake(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -865,12 +865,12 @@ async function main() {
         .argument("<validatorId>")
         .action(async (middlewareAddress, validatorId) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareNodePendingRemoval(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 validatorId as Hex
             );
         });
@@ -883,12 +883,12 @@ async function main() {
         .argument("<validatorId>")
         .action(async (middlewareAddress, validatorId) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareNodePendingUpdate(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 validatorId as Hex
             );
         });
@@ -901,12 +901,12 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetOperatorUsedStake(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                config,
                 operator as Hex
             );
         });
@@ -918,12 +918,12 @@ async function main() {
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await middlewareGetAllOperators(
                 client,
                 middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                config
             );
         });
 
@@ -935,14 +935,13 @@ async function main() {
         .option('--snowscan-api-key <string>', "Snowscan API key", "")
         .action(async (middlewareTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             console.log(`nodeId: ${options.nodeId}`);
             await middlewareGetNodeLogs(
                 client,
                 middlewareTxHash as Hex,
-                config.abis.MiddlewareService,
-                config.abis.BalancerValidatorManager,
+                config,
                 options.nodeId,
                 options.snowscanApiKey
             );
@@ -960,14 +959,15 @@ async function main() {
         .argument("<l1Address>")
         .action(async (l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
+
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             // We'll assume in config you have something like: config.opL1OptIn = "0x..."
             // and config.abis.OpL1OptIn = the ABI.
-            const client = generateClient(opts.network, opts.privateKey);
             await optInL1(
                 client,
                 config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService, // or whatever your key is
+                config, // or whatever your key is
                 l1Address as Hex,
             );
         });
@@ -978,12 +978,12 @@ async function main() {
         .argument("<l1Address>")
         .action(async (l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await optOutL1(
                 client,
                 config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService,
+                config,
                 l1Address as Hex,
             );
         });
@@ -995,12 +995,12 @@ async function main() {
         .argument("<l1Address>")
         .action(async (operator, l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await checkOptInL1(
                 client,
                 config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService,
+                config,
                 operator as Hex,
                 l1Address as Hex,
             );
@@ -1018,12 +1018,12 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await optInVault(
                 client,
                 config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                config,
                 vaultAddress as Hex,
             );
         });
@@ -1034,12 +1034,12 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await optOutVault(
                 client,
                 config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                config,
                 vaultAddress as Hex,
             );
         });
@@ -1051,12 +1051,12 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (operator, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await checkOptInVault(
                 client,
                 config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                config,
                 operator as Hex,
                 vaultAddress as Hex,
             );
@@ -1074,12 +1074,12 @@ async function main() {
         .argument("<maxWeight>")
         .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             await setUpSecurityModule(
                 client,
                 balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager,
+                config,
                 middlewareAddress as Hex,
                 BigInt(maxWeight)
             );
@@ -1090,12 +1090,12 @@ async function main() {
         .argument("<balancerValidatorManagerAddress")
         .action(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await getSecurityModules(
                 client,
                 balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager
+                config
             );
         });
 
@@ -1105,12 +1105,12 @@ async function main() {
         .argument("<securityModule>")
         .action(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             await getSecurityModuleWeights(
                 client,
                 balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager,
+                config,
                 securityModule as Hex
             );
         });
@@ -1127,19 +1127,15 @@ async function main() {
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
         .action(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
 
             const operator = operatorAddress as Hex;
             console.log(`Operator: ${operator}`);
 
             // 1) Read total vaults from VaultManager
-            const vaultCount = (await client.readContract({
-                address: middlewareVaultManager as Hex,
-                abi: config.abis.VaultManager,
-                functionName: 'getVaultCount',
-                args: [],
-            })) as bigint;
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const vaultCount = await vaultManager.read.getVaultCount()
 
             console.log(`Found ${vaultCount} vault(s).`);
 
@@ -1147,83 +1143,48 @@ async function main() {
             const totalStakesByCollateral: Record<string, bigint> = {};
 
             // 2) Let's get all L1 addresses from the L1Registry (similar to your Python code)
-            const totalL1s = (await client.readContract({
-                address: config.l1Registry as Hex,
-                abi: config.abis.L1Registry,
-                functionName: 'totalL1s',
-                args: [],
-            })) as bigint;
+            const l1Registry = config.contracts.L1Registry(config.l1Registry)
+            const totalL1s = await l1Registry.read.totalL1s();
 
             // We'll store them in an array
             const l1Array: Hex[] = [];
             for (let i = 0n; i < totalL1s; i++) {
                 // e.g. getL1At(i) might return [address, metadataUrl], adjust as needed
-                const [l1Address, metadataUrl] = (await client.readContract({
-                    address: config.l1Registry as Hex,
-                    abi: config.abis.L1Registry,
-                    functionName: 'getL1At',
-                    args: [i],
-                })) as [Hex, string];
+                const [l1Address, metadataUrl] = await l1Registry.read.getL1At([i]);
 
                 l1Array.push(l1Address);
             }
 
             // 3) For each vault in [0..vaultCount-1], read assetClass, delegator, collateral
             for (let i = 0n; i < vaultCount; i++) {
-                const [vaultAddress] = (await client.readContract({
-                    address: middlewareVaultManager as Hex,
-                    abi: config.abis.VaultManager,
-                    functionName: 'getVaultAtWithTimes',
-                    args: [i],
-                })) as [Hex, bigint, bigint];
+                const [vaultAddress] = await vaultManager.read.getVaultAtWithTimes([i]);
 
                 console.log(`\nVault #${i}: ${vaultAddress}`);
 
                 // read the assetClass
-                const assetClass = (await client.readContract({
-                    address: middlewareVaultManager as Hex,
-                    abi: config.abis.VaultManager,
-                    functionName: 'getVaultAssetClass',
-                    args: [vaultAddress],
-                })) as bigint;
+                const assetClass = await vaultManager.read.getVaultAssetClass([vaultAddress]);
 
                 // read delegator
-                const delegator = await client.readContract({
-                    address: vaultAddress,
-                    abi: config.abis.VaultTokenized,
-                    functionName: 'delegator',
-                    args: [],
-                }) as Hex;
+                const vaultTokenized = config.contracts.VaultTokenized(vaultAddress);
+                const delegator = await vaultTokenized.read.delegator();
 
                 if (delegator === '0x0000000000000000000000000000000000000000') {
                     console.log("    (No delegator set, skipping)");
                     continue;
                 }
+                const l1RestakeDelegator = config.contracts.L1RestakeDelegator(delegator);
                 // read collateral
-                const collateral = await client.readContract({
-                    address: vaultAddress,
-                    abi: config.abis.VaultTokenized,
-                    functionName: 'collateral',
-                    args: [],
-                }) as Hex;
+                const collateral = await vaultTokenized.read.collateral();
 
                 // 4) For each L1 in l1Array, check if operator is opted in
                 for (const l1Address of l1Array) {
-                    const isOptedIn = await client.readContract({
-                        address: config.opL1OptIn as Hex,
-                        abi: config.abis.OperatorL1OptInService,
-                        functionName: 'isOptedIn',
-                        args: [operator, l1Address],
-                    }) as boolean;
+                    const operatorL1OptInService = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+                    const isOptedIn = await operatorL1OptInService.read.isOptedIn([operator, l1Address])
 
                     if (isOptedIn) {
                         // read stake
-                        const stakeValue = await client.readContract({
-                            address: delegator,
-                            abi: config.abis.L1RestakeDelegator,
-                            functionName: 'stake',
-                            args: [l1Address, assetClass, operator],
-                        }) as bigint;
+                        
+                        const stakeValue = await l1RestakeDelegator.read.stake([l1Address, assetClass, operator])
 
                         if (stakeValue > 0n) {
                             console.log(
