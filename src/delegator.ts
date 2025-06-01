@@ -1,29 +1,22 @@
-import { ExtendedWalletClient } from './client';
-import { Hex, Abi } from 'viem';
+import { TContract } from './config';
+import type { Hex, Account } from 'viem';
 
 export async function setL1Limit(
-  client: ExtendedWalletClient,
-  l1RestakeDelegatorAddress: Hex,
-  l1RestakeDelegatorAbi: Abi,
+  delegator: TContract['L1RestakeDelegator'],
   l1Address: Hex,
   assetClass: bigint,
-  limit: bigint
+  limit: bigint,
+  account: Account | undefined
 ) {
   console.log("Setting L1 limit...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: l1RestakeDelegatorAddress,
-      abi: l1RestakeDelegatorAbi,
-      functionName: 'setL1Limit',
-      args: [l1Address, assetClass, limit],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await delegator.write.setL1Limit(
+      [l1Address, assetClass, limit],
+      { chain: null, account }
+    );
     console.log("setL1Limit done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -34,29 +27,22 @@ export async function setL1Limit(
 }
 
 export async function setOperatorL1Shares(
-  client: ExtendedWalletClient,
-  l1RestakeDelegatorAddress: Hex,
-  l1RestakeDelegatorAbi: Abi,
+  delegator: TContract['L1RestakeDelegator'],
   l1Address: Hex,
   assetClass: bigint,
   operatorAddress: Hex,
-  shares: bigint
+  shares: bigint,
+  account: Account | undefined
 ) {
   console.log("Setting operator L1 shares...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: l1RestakeDelegatorAddress,
-      abi: l1RestakeDelegatorAbi,
-      functionName: 'setOperatorL1Shares',
-      args: [l1Address, assetClass, operatorAddress, shares],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await delegator.write.setOperatorL1Shares(
+      [l1Address, assetClass, operatorAddress, shares],
+      { chain: null, account }
+    );
     console.log("setOperatorL1Shares done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);

@@ -1,28 +1,21 @@
-import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { Hex, Abi } from 'viem';
+import { TContract } from './config';
+import type { Hex, Account } from 'viem';
 
 export async function setUpSecurityModule(
-  client: ExtendedWalletClient,
-  balancerAddress: Hex,
-  balancerAbi: Abi,
+  balancer: TContract['BalancerValidatorManager'],
   securityModule: Hex,
-  maxWeight: bigint
+  maxWeight: bigint,
+  account: Account | undefined
 ) {
   console.log("Setting up security module...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: balancerAddress,
-      abi: balancerAbi,
-      functionName: 'setUpSecurityModule',
-      args: [securityModule, maxWeight],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await balancer.write.setUpSecurityModule(
+      [securityModule, maxWeight],
+      { chain: null, account }
+    );
     console.log("Security module updated, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -33,19 +26,12 @@ export async function setUpSecurityModule(
 }
 
 export async function getSecurityModules(
-  client: ExtendedPublicClient,
-  balancerAddress: Hex,
-  balancerAbi: Abi
+  balancer: TContract['BalancerValidatorManager']
 ) {
   console.log("Getting security modules...");
 
   try {
-    const modules = await client.readContract({
-      address: balancerAddress,
-      abi: balancerAbi,
-      functionName: 'getSecurityModules',
-      args: []
-    });
+    const modules = await balancer.read.getSecurityModules();
     console.log(modules);
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -56,20 +42,15 @@ export async function getSecurityModules(
 }
 
 export async function getSecurityModuleWeights(
-  client: ExtendedPublicClient,
-  balancerAddress: Hex,
-  balancerAbi: Abi,
+  balancer: TContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
   console.log("Getting security module weights...");
 
   try {
-    const val = await client.readContract({
-      address: balancerAddress,
-      abi: balancerAbi,
-      functionName: 'getSecurityModuleWeights',
-      args: [securityModule],
-    });
+    const val = await balancer.read.getSecurityModuleWeights(
+      [securityModule]
+    );
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);

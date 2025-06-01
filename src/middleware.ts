@@ -1,37 +1,33 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Abi } from 'viem';
-import { ExtendedWalletClient, ExtendedPublicClient } from './client';
-import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
-import { registerL1Validator, setValidatorWeight, getValidatorsAt } from './lib/pChainUtils';
-import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
-import { GetRegistrationJustification, parseUint32, hexToUint8Array } from './lib/justification';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog } from 'viem';
+import { TContract } from './config';
+import type { Hex, Account, Abi } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
-import { parseNodeID, NodeId } from './lib/utils';
+import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config } from './config';
+import { NodeId, parseNodeID } from './lib/utils';
+import { DecodedEvent, GetContractEvents } from './lib/cChainUtils';
+import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
+import { getValidatorsAt, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
+
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  operator: Hex
+  middleware: TContract['MiddlewareService'],
+  operator: Hex,
+  account: Account | undefined
 ) {
   console.log("Registering operator...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'registerOperator',
-      args: [operator],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.registerOperator(
+      [operator],
+      { chain: null, account }
+    );
     console.log("registerOperator done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -42,26 +38,19 @@ export async function middlewareRegisterOperator(
 }
 
 export async function middlewareDisableOperator(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  operator: Hex
+  middleware: TContract['MiddlewareService'],
+  operator: Hex,
+  account: Account | undefined
 ) {
   console.log("Disabling operator...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'disableOperator',
-      args: [operator],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.disableOperator(
+      [operator],
+      { chain: null, account }
+    );
     console.log("disableOperator done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -72,26 +61,19 @@ export async function middlewareDisableOperator(
 }
 
 export async function middlewareRemoveOperator(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  operator: Hex
+  middleware: TContract['MiddlewareService'],
+  operator: Hex,
+  account: Account | undefined
 ) {
   console.log("Removing operator...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'removeOperator',
-      args: [operator],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.removeOperator(
+      [operator],
+      { chain: null, account }
+    );
     console.log("removeOperator done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -103,41 +85,27 @@ export async function middlewareRemoveOperator(
 
 // addNode
 export async function middlewareAddNode(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   nodeId: NodeId,
   blsKey: Hex,
   registrationExpiry: bigint,
-  remainingBalanceOwner: [bigint, Hex[]],
-  disableOwner: [bigint, Hex[]],
-  initialStake: bigint
+  remainingBalanceOwner: [number, `0x${string}`[]],
+  disableOwner: [number, `0x${string}`[]],
+  initialStake: bigint,
+  account: Account | undefined
 ) {
   console.log("Calling function addNode...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'addNode',
-      args: [
-        nodeIdHex32,
-        blsKey,
-        registrationExpiry,
-        remainingBalanceOwner,
-        disableOwner,
-        initialStake,
-      ],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.addNode(
+      [nodeIdHex32, blsKey, registrationExpiry, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner [1]}, initialStake],
+      { chain: null, account }
+    );
     console.log("addNode executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -150,8 +118,7 @@ export async function middlewareAddNode(
 // completeValidatorRegistration
 export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
@@ -163,9 +130,7 @@ export async function middlewareCompleteValidatorRegistration(
   console.log("Completing validator registration...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!client.account) throw new Error('Client account is required');
 
     // Wait for transaction receipt to extract warp message and validation ID
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
@@ -210,26 +175,18 @@ export async function middlewareCompleteValidatorRegistration(
     const nodeIdHex32 = parseNodeID(nodeId)
 
     // Simulate completeValidatorRegistration transaction
-    await client.simulateContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'completeValidatorRegistration',
-      args: [operator, nodeIdHex32, 0],
-      account: client.account,
-      gas: BigInt(5000000),
-      accessList
+    await middleware.simulate.completeValidatorRegistration([operator, nodeIdHex32, 0],
+      {
+        account: client.account? client.account : null,
+        gas: BigInt(5000000),
+        accessList
     });
 
     console.log("\nCalling function completeValidatorRegistration...");
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'completeValidatorRegistration',
-      args: [operator, nodeIdHex32, 0],
-      chain: null,
-      account: client.account,
-      accessList
-    });
+    const hash = await middleware.write.completeValidatorRegistration(
+      [operator, nodeIdHex32, 0],
+      { chain: null, account: client.account, accessList }
+    );
     console.log("completeValidatorRegistration executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -241,29 +198,22 @@ export async function middlewareCompleteValidatorRegistration(
 
 // removeNode
 export async function middlewareRemoveNode(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  nodeId: NodeId
+  middleware: TContract['MiddlewareService'],
+  nodeId: NodeId,
+  account: Account | undefined
 ) {
   console.log("Calling function removeNode...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'removeNode',
-      args: [nodeIdHex32],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.removeNode(
+      [nodeIdHex32],
+      { chain: null, account }
+    );
     console.log("removeNode executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -276,8 +226,8 @@ export async function middlewareRemoveNode(
 // completeValidatorRemoval
 export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  abis: Config['abis'],
+  middleware: TContract['MiddlewareService'],
+  balancerValidatorManager: TContract['BalancerValidatorManager'],
   nodeID: string,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
@@ -295,7 +245,7 @@ export async function middlewareCompleteValidatorRemoval(
     const validationID = receipt.logs[2].topics[1] ?? '';
 
     // Check if the node is still registered as a validator on the P-Chain
-    const L1Id = await middlewareGetL1Id(client, middlewareAddress, abis);
+    const L1Id = await middlewareGetL1Id(middleware, balancerValidatorManager, client);
     const validators = await getValidatorsAt(L1Id)
     const isValidator = Object.keys(validators).some((key) => key === nodeID);
     if (!isValidator) {
@@ -340,24 +290,17 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Simulate completeEndValidation transaction
     // console.log("\nSimulating completeEndValidation transaction...");
-    const { request: completeRequest } = await client.simulateContract({
-      address: middlewareAddress,
-      abi: abis.MiddlewareService,
-      functionName: 'completeValidatorRemoval',
-      args: [0],
-      account: client.account,
-      gas: BigInt(5000000),
-      accessList
+    const { request: completeRequest } = await middleware.simulate.completeValidatorRemoval([0],
+      {
+        account: client.account? client.account : null,
+        gas: BigInt(5000000),
+        accessList
     });
 
     // Execute completeEndValidation transaction
     console.log("Executing completeEndValidation transaction...");
-    const completeHash = await client.writeContract({
-      address: middlewareAddress,
-      abi: abis.MiddlewareService,
-      functionName: 'completeValidatorRemoval',
-      args: [0],
-      account: client.account,
+    const completeHash = await middleware.write.completeValidatorRemoval([0],
+      {account: client.account,
       chain: null,
       accessList
     });
@@ -373,30 +316,23 @@ export async function middlewareCompleteValidatorRemoval(
 
 // initializeValidatorWeightUpdate
 export async function middlewareInitStakeUpdate(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   nodeId: NodeId,
-  newStake: bigint
+  newStake: bigint,
+  account: Account | undefined
 ) {
   console.log("Calling function initializeValidatorStakeUpdate...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'initializeValidatorStakeUpdate',
-      args: [nodeIdHex32, newStake],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.initializeValidatorStakeUpdate(
+      [nodeIdHex32, newStake],
+      { chain: null, account }
+    );
     console.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -409,19 +345,17 @@ export async function middlewareInitStakeUpdate(
 // completeStakeUpdate
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   nodeId: NodeId,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
+  account: Account | undefined
 ) {
   console.log("Completing node stake update...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
     const receipt = await client.waitForTransactionReceipt({ hash: validatorStakeUpdateTxHash })
@@ -478,15 +412,10 @@ export async function middlewareCompleteStakeUpdate(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'completeStakeUpdate',
-      args: [nodeIdHex32, 0],
-      chain: null,
-      account: client.account,
-      accessList
-    });
+    const hash = await middleware.write.completeStakeUpdate(
+      [nodeIdHex32, 0],
+      { chain: null, account, accessList }
+    );
     console.log("completeStakeUpdate done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -498,25 +427,17 @@ export async function middlewareCompleteStakeUpdate(
 
 // calcAndCacheNodeStakeForAllOperators
 export async function middlewareCalcNodeStakes(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi
+  middleware: TContract['MiddlewareService'],
+  account: Account | undefined
 ) {
   console.log("Calculating node stakes for all operators...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'calcAndCacheNodeStakeForAllOperators',
-      args: [],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.calcAndCacheNodeStakeForAllOperators(
+      { chain: null, account }
+    );
     console.log("calcAndCacheNodeStakeForAllOperators done, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -528,27 +449,20 @@ export async function middlewareCalcNodeStakes(
 
 // forceUpdateNodes
 export async function middlewareForceUpdateNodes(
-  client: ExtendedWalletClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex,
-  limitStake: bigint
+  limitStake: bigint,
+  account: Account | undefined
 ) {
   console.log("Calling forceUpdateNodes...");
 
   try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
+    if (!account) throw new Error('Client account is required');
 
-    const hash = await client.writeContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'forceUpdateNodes',
-      args: [operator, limitStake],
-      chain: null,
-      account: client.account,
-    });
+    const hash = await middleware.write.forceUpdateNodes(
+      [operator, limitStake],
+      { chain: null, account }
+    );
     console.log("forceUpdateNodes executed successfully, tx hash:", hash);
   } catch (error) {
     console.error("Transaction failed:", error);
@@ -560,22 +474,17 @@ export async function middlewareForceUpdateNodes(
 
 // getOperatorStake
 export async function middlewareGetOperatorStake(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex,
-  epoch: bigint,
+  epoch: number,
   assetClass: bigint
 ) {
   console.log("Reading operator stake...");
 
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getOperatorStake',
-      args: [operator, epoch, assetClass],
-    });
+    const val = await middleware.read.getOperatorStake(
+      [operator, epoch, assetClass]
+    );
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -587,19 +496,12 @@ export async function middlewareGetOperatorStake(
 
 // getCurrentEpoch
 export async function middlewareGetCurrentEpoch(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi
+  middleware: TContract['MiddlewareService']
 ) {
   console.log("Reading current epoch...");
 
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getCurrentEpoch',
-      args: [],
-    });
+    const val = await middleware.read.getCurrentEpoch();
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -611,20 +513,15 @@ export async function middlewareGetCurrentEpoch(
 
 // getEpochStartTs
 export async function middlewareGetEpochStartTs(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  epoch: bigint
+  middleware: TContract['MiddlewareService'],
+  epoch: number
 ) {
   console.log("Reading epoch start timestamp...");
 
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getEpochStartTs',
-      args: [epoch],
-    });
+    const val = await middleware.read.getEpochStartTs(
+      [epoch]
+    );
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -636,21 +533,16 @@ export async function middlewareGetEpochStartTs(
 
 // getActiveNodesForEpoch
 export async function middlewareGetActiveNodesForEpoch(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex,
-  epoch: bigint
+  epoch: number
 ) {
   console.log("Reading active nodes for epoch...");
 
   try {
-    const nodeIds = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getActiveNodesForEpoch',
-      args: [operator, epoch],
-    }) as Hex[];
+    const nodeIds = await middleware.read.getActiveNodesForEpoch(
+      [operator, epoch]
+    ) as Hex[];
     console.log(nodeIds.map((b: Hex) => b));
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -662,176 +554,106 @@ export async function middlewareGetActiveNodesForEpoch(
 
 // getOperatorNodesLength
 export async function middlewareGetOperatorNodesLength(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex
 ) {
   console.log("Reading operator nodes length...");
-
   try {
-    const length = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getOperatorNodesLength',
-      args: [operator],
-    });
+    const length = await middleware.read.getOperatorNodesLength([operator]);
     console.log(length);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // nodeStakeCache
 export async function middlewareGetNodeStakeCache(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
-  epoch: bigint,
+  middleware: TContract['MiddlewareService'],
+  epoch: number,
   validatorId: Hex
 ) {
   console.log("Reading node stake cache...");
-
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'nodeStakeCache',
-      args: [epoch, validatorId],
-    });
+    const val = await middleware.read.nodeStakeCache([epoch, validatorId]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // operatorLockedStake
 export async function middlewareGetOperatorLockedStake(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex
 ) {
   console.log("Reading operator locked stake...");
-
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'operatorLockedStake',
-      args: [operator],
-    });
+    const val = await middleware.read.operatorLockedStake([operator]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // nodePendingRemoval
 export async function middlewareNodePendingRemoval(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   validatorId: Hex
 ) {
   console.log("Reading nodePendingRemoval...");
-
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'nodePendingRemoval',
-      args: [validatorId],
-    });
+    const val = await middleware.read.nodePendingRemoval([validatorId]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // nodePendingUpdate
 export async function middlewareNodePendingUpdate(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   validatorId: Hex
 ) {
   console.log("Reading nodePendingUpdate...");
-
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'nodePendingUpdate',
-      args: [validatorId],
-    });
+    const val = await middleware.read.nodePendingUpdate([validatorId]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // getOperatorUsedStakeCached
 export async function middlewareGetOperatorUsedStake(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi,
+  middleware: TContract['MiddlewareService'],
   operator: Hex
 ) {
   console.log("Reading operator used stake cached...");
-
   try {
-    const val = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getOperatorUsedStakeCached',
-      args: [operator],
-    });
+    const val = await middleware.read.getOperatorUsedStakeCached([operator]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
 // getAllOperators
 export async function middlewareGetAllOperators(
-  client: ExtendedPublicClient,
-  middlewareAddress: Hex,
-  middlewareAbi: Abi
+  middleware: TContract['MiddlewareService']
 ) {
   console.log("Reading all operators from middleware...");
-
   try {
-    const operators = await client.readContract({
-      address: middlewareAddress,
-      abi: middlewareAbi,
-      functionName: 'getAllOperators',
-      args: [],
-    });
+    const operators = await middleware.read.getAllOperators();
     console.log(operators);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    }
+    if (error instanceof Error) console.error("Error message:", error.message);
   }
 }
 
@@ -952,26 +774,16 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
 }
 
 export async function middlewareGetL1Id(
-  client: ExtendedPublicClient | ExtendedWalletClient,
-  middlewareAddress: Hex,
-  abis: Config['abis']
+  middleware: TContract['MiddlewareService'],
+  balancerValidatorManager: TContract['BalancerValidatorManager'],
+  client: ExtendedWalletClient,
 ): Promise<string> {
   console.log("Reading L1 ID from Validator Manager...");
   let L1Id
   try {
-    const l1ValidatorManagerAddress = await client.readContract({
-      address: middlewareAddress,
-      abi: abis.MiddlewareService,
-      functionName: 'L1_VALIDATOR_MANAGER',
-      args: [],
-    })
+    const l1ValidatorManagerAddress = await middleware.read.L1_VALIDATOR_MANAGER();
 
-    const VALIDATOR_MANAGER_STORAGE_LOCATION = await client.readContract({
-      address: l1ValidatorManagerAddress as Hex,
-      abi: abis.BalancerValidatorManager,
-      functionName: 'VALIDATOR_MANAGER_STORAGE_LOCATION',
-      args: [],
-    })
+    const VALIDATOR_MANAGER_STORAGE_LOCATION = await balancerValidatorManager.read.VALIDATOR_MANAGER_STORAGE_LOCATION();
 
     L1Id = await client.getStorageAt({
       address: l1ValidatorManagerAddress as Hex,
