@@ -1,10 +1,11 @@
-import { WalletClient, PublicClient } from 'viem';
+import { ExtendedWalletClient } from './client';
+import { Hex, Abi } from 'viem';
 
 export async function setL1Limit(
-  client: WalletClient,
-  l1RestakeDelegatorAddress: `0x${string}`,
-  l1RestakeDelegatorAbi: any,
-  l1Address: `0x${string}`,
+  client: ExtendedWalletClient,
+  l1RestakeDelegatorAddress: Hex,
+  l1RestakeDelegatorAbi: Abi,
+  l1Address: Hex,
   assetClass: bigint,
   limit: bigint
 ) {
@@ -33,12 +34,12 @@ export async function setL1Limit(
 }
 
 export async function setOperatorL1Shares(
-  client: WalletClient,
-  l1RestakeDelegatorAddress: `0x${string}`,
-  l1RestakeDelegatorAbi: any,
-  l1Address: `0x${string}`,
+  client: ExtendedWalletClient,
+  l1RestakeDelegatorAddress: Hex,
+  l1RestakeDelegatorAbi: Abi,
+  l1Address: Hex,
   assetClass: bigint,
-  operatorAddress: `0x${string}`,
+  operatorAddress: Hex,
   shares: bigint
 ) {
   console.log("Setting operator L1 shares...");

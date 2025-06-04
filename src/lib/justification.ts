@@ -1,9 +1,10 @@
 // Using more generic types without specific library dependencies
 import { Buffer } from 'buffer';
-import { createPublicClient, http, parseAbiItem, Chain, Hex, PublicClient, hexToBytes } from 'viem';
+import { createPublicClient, http, parseAbiItem, Chain, Hex, hexToBytes } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
 import { sha256 } from '@noble/hashes/sha256';
 import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from './warpUtils';
+import { ExtendedPublicClient } from '../client';
 
 const codecVersion = 0;
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1;
@@ -336,21 +337,21 @@ const sendWarpMessageEventAbi = parseAbiItem(
  * @param nodeID - The node ID of the validator (e.g., "NodeID-..."), used for logging and secondary confirmation.
  * @param validationIDHex - The target validation ID as a '0x' prefixed hex string (bytes32).
  * @param subnetIDStr - The subnet ID as a Base58Check string.
- * @param publicClient - A client that can perform getLogs operations.
+ * @param ExtendedPublicClient - A client that can perform getLogs operations.
  * @returns The marshalled L1ValidatorRegistrationJustification bytes as a Uint8Array, or null if not found/error.
  */
 export async function GetRegistrationJustification(
     nodeID: string, // Keep for logging/confirmation
     validationIDHex: string,
     subnetIDStr: string,
-    publicClient: { getLogs: PublicClient['getLogs'] }
+    ExtendedPublicClient: { getLogs: ExtendedPublicClient['getLogs'] }
 ): Promise<Uint8Array | null> {
     const WARP_ADDRESS = '0x0200000000000000000000000000000000000005' as const;
     const NUM_BOOTSTRAP_VALIDATORS_TO_SEARCH = 100;
 
     let targetValidationIDBytes: Uint8Array;
     try {
-        targetValidationIDBytes = hexToBytes(validationIDHex as `0x${string}`);
+        targetValidationIDBytes = hexToBytes(validationIDHex as Hex);
         if (targetValidationIDBytes.length !== 32) {
             throw new Error(`Decoded validationID must be 32 bytes, got ${targetValidationIDBytes.length}`);
         }
@@ -392,7 +393,7 @@ export async function GetRegistrationJustification(
     // 2. If not a bootstrap validator, search Warp logs
     try {
         // Start from the latest block and search backwards in batches
-        const latestBlock = await publicClient.getLogs({ fromBlock: 'latest' }).then(logs => logs.length > 0 ? logs[0].blockNumber : 0);
+        const latestBlock = await ExtendedPublicClient.getLogs({ fromBlock: 'latest' }).then(logs => logs.length > 0 ? logs[0].blockNumber : 0);
         const BATCH_SIZE = 2048;
         let fromBlock = BigInt(latestBlock);
         let toBlock = BigInt(latestBlock);
@@ -406,7 +407,7 @@ export async function GetRegistrationJustification(
 
             console.log(`Searching for Warp logs in block range: ${fromBlock} to ${toBlock}...`);
 
-            const warpLogs = await publicClient.getLogs({
+            const warpLogs = await ExtendedPublicClient.getLogs({
                 address: WARP_ADDRESS,
                 event: sendWarpMessageEventAbi,
                 fromBlock: fromBlock,
@@ -418,7 +419,7 @@ export async function GetRegistrationJustification(
 
                 for (const log of warpLogs) {
                     try {
-                        const decodedArgs = log.args as { message?: `0x${string}` };
+                        const decodedArgs = log.args as { message?: Hex };
                         const fullMessageHex = decodedArgs.message;
                         if (!fullMessageHex) continue;
 
@@ -589,7 +590,7 @@ function stringToUint8Array(str: string): Uint8Array {
     return Buffer.from(str, 'hex');
 }
 
-function hexToUint8Array(hex: Hex): Uint8Array {
+export function hexToUint8Array(hex: Hex): Uint8Array {
     // Remove '0x' prefix if present
     const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
     return Buffer.from(hexString, 'hex');
@@ -660,13 +661,13 @@ async function marshalProto(obj: L1ValidatorRegistrationJustification): Promise<
 
 export interface PChainOwner {
     threshold: number;
-    addresses: `0x${string}`[];
+    addresses: Hex[];
 }
 
 export interface ValidationPeriod {
     subnetId: string;
     nodeID: string;
-    blsPublicKey: `0x${string}`;
+    blsPublicKey: Hex;
     registrationExpiry: bigint;
     remainingBalanceOwner: PChainOwner;
     disableOwner: PChainOwner;
@@ -771,7 +772,7 @@ export function parseRegisterL1ValidatorMessage(input: Uint8Array): ValidationPe
     for (let i = 0; i < remainingBalanceOwnerAddressesLength; i++) {
         const addrBytes = input.slice(index, index + 20);
         const addr = `0x${Buffer.from(addrBytes).toString('hex')}`;
-        validation.remainingBalanceOwner.addresses.push(addr as `0x${string}`);
+        validation.remainingBalanceOwner.addresses.push(addr as Hex);
         index += 20;
     }
 
@@ -788,7 +789,7 @@ export function parseRegisterL1ValidatorMessage(input: Uint8Array): ValidationPe
     for (let i = 0; i < disableOwnerAddressesLength; i++) {
         const addrBytes = input.slice(index, index + 20);
         const addr = `0x${Buffer.from(addrBytes).toString('hex')}`;
-        validation.disableOwner.addresses.push(addr as `0x${string}`);
+        validation.disableOwner.addresses.push(addr as Hex);
         index += 20;
     }
 
@@ -813,7 +814,7 @@ function parseUint16(input: Uint8Array, offset: number): number {
     return result;
 }
 
-function parseUint32(input: Uint8Array, offset: number): number {
+export function parseUint32(input: Uint8Array, offset: number): number {
     let result = 0;
     for (let i = 0; i < 4; i++) {
         result = (result << 8) | input[offset + i];

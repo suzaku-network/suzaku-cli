@@ -1,4 +1,4 @@
-import { fromBytes, hexToBytes } from 'viem';
+import { fromBytes, hexToBytes, Hex } from 'viem';
 import { sha256 } from '@noble/hashes/sha256';
 import { cb58ToBytes, bytesToCB58, interruptiblePause } from './utils';
 import { PChainOwner } from './justification';
@@ -8,15 +8,15 @@ import { cb58ToHex } from './utils';
 interface PackL1ConversionMessageArgs {
     subnetId: string;
     managerChainID: string;
-    managerAddress: `0x${string}`;
+    managerAddress: Hex;
     validators: SubnetToL1ConversionValidatorData[];
 }
 
 interface SubnetToL1ConversionValidatorData {
     nodeID: string;
     nodePOP: {
-        publicKey: `0x${string}`;
-        proofOfPossession: `0x${string}`;
+        publicKey: Hex;
+        proofOfPossession: Hex;
     };
     weight: number;
 }
@@ -115,8 +115,8 @@ function newUnsignedMessage(networkID: number, sourceChainID: string, message: U
 }
 
 export function packWarpIntoAccessList(warpMessageBytes: Uint8Array): [{
-    address: `0x${string}`,
-    storageKeys: `0x${string}`[]
+    address: Hex,
+    storageKeys: Hex[]
 }] {
     const CHUNK_SIZE = 32;
     const chunks: string[] = [];
@@ -140,7 +140,7 @@ export function packWarpIntoAccessList(warpMessageBytes: Uint8Array): [{
 
     return [{
         address: "0x0200000000000000000000000000000000000005",
-        storageKeys: chunks as `0x${string}`[]
+        storageKeys: chunks as Hex[]
     }];
 }
 
@@ -151,7 +151,7 @@ interface SignatureResponse {
 export async function collectSignaturesInitializeValidatorSet(params: {
     subnetId: string;
     validatorManagerBlockchainID: string;
-    managerAddress: `0x${string}`;
+    managerAddress: Hex;
     validators: {
         nodeID: string;
         blsPublicKey: string;
@@ -170,8 +170,8 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         validators: params.validators.map(v => ({
             nodeID: v.nodeID,
             nodePOP: {
-                publicKey: v.blsPublicKey as `0x${string}`,
-                proofOfPossession: v.blsProofOfPossession as `0x${string}`
+                publicKey: v.blsPublicKey as Hex,
+                proofOfPossession: v.blsProofOfPossession as Hex
             },
             weight: v.weight
         }))
@@ -487,14 +487,14 @@ function parseVarBytes(input: Uint8Array, offset: number): { bytes: Uint8Array; 
     return { bytes, newOffset: newOffset + length };
 }
 
-const bytesToHexPrefixed = (bytes: Uint8Array): `0x${string}` => `0x${Buffer.from(bytes).toString('hex')}`;
+const bytesToHexPrefixed = (bytes: Uint8Array): Hex => `0x${Buffer.from(bytes).toString('hex')}`;
 
 export function packValidationUptimeMessage(validationId: string, uptimeSeconds: number, networkID: number, sourceChainID: string): Uint8Array {
     let validationIdBytes: Uint8Array;
 
     // Convert validationId to hex
     const validationIdHex = cb58ToHex(validationId);
-    validationIdBytes = hexToBytes(validationIdHex as `0x${string}`);
+    validationIdBytes = hexToBytes(validationIdHex as Hex);
 
     // Create the message payload with the proper format
     const messagePayload = concatenateUint8Arrays(

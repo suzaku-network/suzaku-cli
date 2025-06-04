@@ -1,12 +1,12 @@
-import { WalletClient, PublicClient } from 'viem';
-import { ExtendedWalletClient } from './client';
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { Hex, Abi } from 'viem';
 
 // deposit
 export async function depositVault(
   client: ExtendedWalletClient,
-  vaultAddress: `0x${string}`,
-  vaultAbi: any,
-  onBehalfOf: `0x${string}`,
+  vaultAddress: Hex,
+  vaultAbi: Abi,
+  onBehalfOf: Hex,
   amountWei: bigint
 ) {
   console.log("Depositing...");
@@ -26,7 +26,7 @@ export async function depositVault(
 
     console.log("Approving collateral token for vault deposit...");
     const approveTx = await client.writeContract({
-      address: collateralAddress as `0x${string}`,
+      address: collateralAddress as Hex,
       // minimal ABI for 'approve'
       abi: [
         {
@@ -69,10 +69,10 @@ export async function depositVault(
 
 // withdraw
 export async function withdrawVault(
-  client: WalletClient,
-  vaultAddress: `0x${string}`,
-  vaultAbi: any,
-  claimer: `0x${string}`,
+  client: ExtendedWalletClient,
+  vaultAddress: Hex,
+  vaultAbi: Abi,
+  claimer: Hex,
   amountWei: bigint
 ) {
   console.log("Withdrawing...");
@@ -101,10 +101,10 @@ export async function withdrawVault(
 
 // claim
 export async function claimVault(
-  client: WalletClient,
-  vaultAddress: `0x${string}`,
-  vaultAbi: any,
-  recipient: `0x${string}`,
+  client: ExtendedWalletClient,
+  vaultAddress: Hex,
+  vaultAbi: Abi,
+  recipient: Hex,
   epoch: bigint
 ) {
   console.log("Claiming...");
@@ -136,28 +136,28 @@ export async function claimVault(
  * This assumes your `VaultTokenized` contract has a public `delegator()` method.
  */
 export async function getVaultDelegator(
-  client: PublicClient,
-  vaultAddress: `0x${string}`,
-  vaultAbi: any
-): Promise<`0x${string}`> {
+  client: ExtendedPublicClient,
+  vaultAddress: Hex,
+  vaultAbi: Abi
+): Promise<Hex> {
   return await client.readContract({
     address: vaultAddress,
     abi: vaultAbi,
     functionName: 'delegator',
     args: [],
-  }) as `0x${string}`;
+  }) as Hex;
 }
 
 /**
  * Reads stake for an operator in a given L1, from a L1RestakeDelegator-based contract.
  */
 export async function getStake(
-  client: PublicClient,
-  delegatorAddress: `0x${string}`,
-  delegatorAbi: any,
-  l1Address: `0x${string}`,
+  client: ExtendedPublicClient,
+  delegatorAddress: Hex,
+  delegatorAbi: Abi,
+  l1Address: Hex,
   assetClass: bigint,
-  operatorAddress: `0x${string}`
+  operatorAddress: Hex
 ): Promise<bigint> {
   return await client.readContract({
     address: delegatorAddress,

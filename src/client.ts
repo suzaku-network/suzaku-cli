@@ -1,56 +1,38 @@
 import { avalancheFuji, avalanche, anvil } from 'viem/chains'
-import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions } from 'viem'
+import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions, Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { PublicActions } from 'viem'
 
-// Create extended client type that includes public actions
-export type ExtendedWalletClient = WalletClient & PublicActions;
+// Define the network types
+export type Network = 'fuji' | 'mainnet' | 'anvil';
+const chains = {
+    fuji: avalancheFuji,
+    mainnet: avalanche,
+    anvil: anvil
+};
 
-function generateClient(privateKey: string, network: string): ExtendedWalletClient {
-    switch (network) {
-        case 'fuji':
-            return createWalletClient({
-                account: privateKeyToAccount(privateKey as `0x${string}`),
-                chain: avalancheFuji,
+// Create extended client type that includes public actions and network type
+export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network };
+export type ExtendedPublicClient = PublicClient & { network: Network };
+
+// Overloaded function to generate a client based on the network and optional private key
+export function generateClient(network: Network, privateKey: Hex): ExtendedWalletClient;
+export function generateClient(network: Network, privateKey?: undefined): ExtendedPublicClient;
+export function generateClient(network: Network): ExtendedPublicClient;
+export function generateClient(network: Network, privateKey?: Hex): ExtendedWalletClient | ExtendedPublicClient {
+    return privateKey ? {
+        ...createWalletClient({
+            account: privateKeyToAccount(privateKey),
+            chain: chains[network],
+            transport: http()
+        }).extend(publicActions),
+        network
+    } :
+        {
+            ...createPublicClient({
+                chain: chains[network],
                 transport: http()
-            }).extend(publicActions)
-        case 'mainnet':
-            return createWalletClient({
-                account: privateKeyToAccount(privateKey as `0x${string}`),
-                chain: avalanche,
-                transport: http()
-            }).extend(publicActions)
-        case 'anvil':
-            return createWalletClient({
-                account: privateKeyToAccount(privateKey as `0x${string}`),
-                chain: anvil,
-                transport: http()
-            }).extend(publicActions)
-        default:
-            throw new Error(`Unsupported network: ${network}`)
-    }
+            }).extend(publicActions),
+            network
+        };
 }
-
-function generatePublicClient(network: string): PublicClient {
-    switch (network) {
-        case 'fuji':
-            return createPublicClient({
-                chain: avalancheFuji,
-                transport: http()
-            })
-        case 'mainnet':
-            return createPublicClient({
-                chain: avalanche,
-                transport: http()
-            })
-        case 'anvil':
-            return createPublicClient({
-                chain: anvil,
-                transport: http()
-            })
-        default:
-            throw new Error(`Unsupported network: ${network}`)
-    }
-}
-
-export { generateClient, generatePublicClient };

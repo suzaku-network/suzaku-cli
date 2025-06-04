@@ -1,4 +1,4 @@
-[
+export default [
     {
         "type": "function",
         "name": "ADMIN_ROLE",
@@ -1565,4 +1565,4 @@
             }
         ]
     }
-]
+] as const;

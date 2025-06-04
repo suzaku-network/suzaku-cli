@@ -4,7 +4,7 @@ import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
 import * as readline from 'readline';
-import { fromBytes } from "viem";
+import { fromBytes, Hex, pad } from "viem";
 
 const CHECKSUM_LENGTH = 4;
 
@@ -33,7 +33,7 @@ export function cb58ToHex(cb58: string, include0x: boolean = true): string {
 
 interface AddressMap {
     P: string;    // Platform chain address
-    C: `0x${string}`; // C-Chain address
+    C: Hex; // C-Chain address
 }
 
 /**
@@ -49,7 +49,7 @@ export function getAddresses(privateKeyHex: string): AddressMap {
         secp256k1.publicKeyBytesToAddress(publicKey)
     )}`;
 
-    const cChainAddress = Address.fromPublicKey(publicKey) as `0x${string}`;
+    const cChainAddress = Address.fromPublicKey(publicKey) as Hex;
 
     return {
         C: cChainAddress,
@@ -122,10 +122,13 @@ export async function interruptiblePause(seconds: number): Promise<void> {
     });
 }
 
-export const parseNodeID = (nodeID: string) => {
+export type NodeId = `NodeID-${string}`;
+
+export const parseNodeID = (nodeID: NodeId): Hex => {
     const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    return nodeIDHexTrimmed
+    const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
+    return padded as Hex
 }

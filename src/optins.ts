@@ -1,14 +1,14 @@
 import { Config } from "./config";
-import { WalletClient, PublicClient } from 'viem';
-
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { Hex, Abi } from 'viem';
 /**
  * Operator -> L1
  */
 export async function optInL1(
-  client: WalletClient,
-  opL1OptInAddress: `0x${string}`,
-  opL1OptInAbi: any,
-  l1Address: `0x${string}`,
+  client: ExtendedWalletClient,
+  opL1OptInAddress: Hex,
+  opL1OptInAbi: Abi,
+  l1Address: Hex,
 ) {
   console.log(`Opting in to L1: ${l1Address}`);
   try {
@@ -27,10 +27,10 @@ export async function optInL1(
 }
 
 export async function optOutL1(
-  client: WalletClient,
-  opL1OptInAddress: `0x${string}`,
-  opL1OptInAbi: any,
-  l1Address: `0x${string}`,
+  client: ExtendedWalletClient,
+  opL1OptInAddress: Hex,
+  opL1OptInAbi: Abi,
+  l1Address: Hex,
 ) {
   console.log(`Opting out from L1: ${l1Address}`);
   try {
@@ -49,11 +49,11 @@ export async function optOutL1(
 }
 
 export async function checkOptInL1(
-  client: PublicClient,
-  opL1OptInAddress: `0x${string}`,
-  opL1OptInAbi: any,
-  operator: `0x${string}`,
-  l1Address: `0x${string}`,
+  client: ExtendedPublicClient,
+  opL1OptInAddress: Hex,
+  opL1OptInAbi: Abi,
+  operator: Hex,
+  l1Address: Hex,
 ) {
   try {
     const isOptedIn = await client.readContract({
@@ -73,10 +73,10 @@ export async function checkOptInL1(
  * Operator -> Vault
  */
 export async function optInVault(
-  client: WalletClient,
-  opVaultOptInAddress: `0x${string}`,
-  opVaultOptInAbi: any,
-  vaultAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  opVaultOptInAddress: Hex,
+  opVaultOptInAbi: Abi,
+  vaultAddress: Hex,
 ) {
   console.log(`Opting in to Vault: ${vaultAddress}`);
   try {
@@ -95,10 +95,10 @@ export async function optInVault(
 }
 
 export async function optOutVault(
-  client: WalletClient,
-  opVaultOptInAddress: `0x${string}`,
-  opVaultOptInAbi: any,
-  vaultAddress: `0x${string}`,
+  client: ExtendedWalletClient,
+  opVaultOptInAddress: Hex,
+  opVaultOptInAbi: Abi,
+  vaultAddress: Hex,
 ) {
   console.log(`Opting out from Vault: ${vaultAddress}`);
   try {
@@ -117,11 +117,11 @@ export async function optOutVault(
 }
 
 export async function checkOptInVault(
-  client: PublicClient,
-  opVaultOptInAddress: `0x${string}`,
-  opVaultOptInAbi: any,
-  operator: `0x${string}`,
-  vaultAddress: `0x${string}`,
+  client: ExtendedPublicClient,
+  opVaultOptInAddress: Hex,
+  opVaultOptInAbi: Abi,
+  operator: Hex,
+  vaultAddress: Hex,
 ) {
   try {
     const isOptedIn = await client.readContract({

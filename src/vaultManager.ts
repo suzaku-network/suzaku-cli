@@ -1,12 +1,13 @@
-import { WalletClient, PublicClient } from 'viem';
+import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { Hex, Abi } from 'viem';
 
 export async function registerVaultL1(
-  client: WalletClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any,
-  vaultAddress: `0x${string}`,
-  assetClass: bigint,
-  maxLimit: bigint
+    client: ExtendedWalletClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi,
+    vaultAddress: Hex,
+    assetClass: bigint,
+    maxLimit: bigint
 ) {
     console.log("Registering Vault L1...");
 
@@ -30,12 +31,12 @@ export async function registerVaultL1(
 }
 
 export async function updateVaultMaxL1Limit(
-  client: WalletClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any,
-  vaultAddress: `0x${string}`,
-  assetClass: bigint,
-  maxLimit: bigint
+    client: ExtendedWalletClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi,
+    vaultAddress: Hex,
+    assetClass: bigint,
+    maxLimit: bigint
 ) {
     console.log("Updating Vault Max L1 limit...");
 
@@ -59,10 +60,10 @@ export async function updateVaultMaxL1Limit(
 }
 
 export async function removeVault(
-  client: WalletClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any,
-  vaultAddress: `0x${string}`
+    client: ExtendedWalletClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi,
+    vaultAddress: Hex
 ) {
     console.log("Removing vault...");
 
@@ -86,9 +87,9 @@ export async function removeVault(
 }
 
 export async function getVaultCount(
-  client: PublicClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any
+    client: ExtendedPublicClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi
 ) {
     console.log("Getting vault count...");
 
@@ -109,10 +110,10 @@ export async function getVaultCount(
 }
 
 export async function getVaultAtWithTimes(
-  client: PublicClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any,
-  index: bigint
+    client: ExtendedPublicClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi,
+    index: bigint
 ) {
     console.log("Getting vault at index with times...");
 
@@ -133,10 +134,10 @@ export async function getVaultAtWithTimes(
 }
 
 export async function getVaultAssetClass(
-  client: PublicClient,
-  vaultManagerAddress: `0x${string}`,
-  vaultManagerAbi: any,
-  vaultAddress: `0x${string}`
+    client: ExtendedPublicClient,
+    vaultManagerAddress: Hex,
+    vaultManagerAbi: Abi,
+    vaultAddress: Hex
 ) {
     console.log("Getting vault asset class...");
 
