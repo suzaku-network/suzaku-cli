@@ -2,7 +2,7 @@ import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, H
 import { ExtendedWalletClient, ExtendedPublicClient } from './client';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { registerL1Validator, setValidatorWeight, getValidatorsAt } from './lib/pChainUtils';
-import { DecodedEvent, GetContractEvents } from './lib/cChainUtils';
+import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { GetRegistrationJustification, parseUint32, hexToUint8Array } from './lib/justification';
 import { utils } from '@avalabs/avalanchejs';
 import { parseNodeID, NodeId } from './lib/utils';
@@ -838,15 +838,14 @@ export async function middlewareGetAllOperators(
 export async function middlewareGetNodeLogs(
   client: ExtendedPublicClient,
   middlewareTxHash: Hex,
-  middlewareAbi: Abi,
-  balancerValidatorManagerAbi: Abi,
+  config: Config,
   nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
   console.log("Reading logs from middleware and balancer...");
   
   const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
-  const middlewareAddress = receipt.contractAddress as Hex;
+  const middlewareAddress = receipt.to ? receipt.to as Hex : receipt.contractAddress as Hex;
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
@@ -858,7 +857,7 @@ export async function middlewareGetNodeLogs(
     middlewareAddress,
     Number(from),
     Number(to),
-    middlewareAbi,
+    config.abis.MiddlewareService,
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey,
     snowscanApiKey ? false : true,
@@ -867,14 +866,14 @@ export async function middlewareGetNodeLogs(
 
   const l1ValidatorManagerAddressProm = client.readContract({
     address: middlewareAddress,
-    abi: middlewareAbi,
+    abi: config.abis.MiddlewareService,
     functionName: 'L1_VALIDATOR_MANAGER',
     args: [],
   })
   // 
   const balancerAddressProm = client.readContract({
     address: middlewareAddress,
-    abi: middlewareAbi,
+    abi: config.abis.MiddlewareService,
     functionName: 'balancerValidatorManager',
     args: [],
   })
@@ -889,7 +888,7 @@ export async function middlewareGetNodeLogs(
       completeEventsContractAddress,
       Number(from),
       Number(to),
-      balancerValidatorManagerAbi,
+      config.abis.BalancerValidatorManager,
       undefined,
       snowscanApiKey,
       snowscanApiKey ? false : true,
@@ -897,7 +896,8 @@ export async function middlewareGetNodeLogs(
     ));
   }
   const allLogs = await Promise.all(logsProm);
-  const logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
+  let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
+  logs = await fillEventsNodeId(client, completeEventsContractAddress, config.abis.BalancerValidatorManager, logs);
   
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
@@ -911,7 +911,9 @@ export async function middlewareGetNodeLogs(
     console.table(logOfInterest[nodeIdHex32] || []);
   } else {
     for (const [key, value] of Object.entries(logOfInterest)) {
-      const nodeId = `NodeID-${utils.base58check.encode(hexToUint8Array(key as Hex).slice(12))}`;
+      let hexArray = hexToUint8Array(key as Hex)
+      hexArray = hexArray.length === 32 ? hexArray.slice(12) : hexArray;// Remove the first 12 bytes if it's a full bytes32
+      const nodeId = `NodeID-${utils.base58check.encode(hexArray)}`;
       console.log('\t\t\t\t\t\t' + color.blue(nodeId));
       console.table(value);
     }
@@ -920,19 +922,12 @@ export async function middlewareGetNodeLogs(
 }
 
 export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; executionTime: string/*args: string*/ }[]> {
-  let validationIdMap: Record<string, string> = {};
   return events.reduce((acc, log) => {
-    if (log.args.nodeId && log.args.validationID) {
-      validationIdMap[log.args.validationID] = log.args.nodeId;
-    } else if (!log.args.nodeId && log.args.validationID && validationIdMap[log.args.validationID]) {
-      log.args.nodeId = validationIdMap[log.args.validationID];
-    }
     if (log.args.nodeId) {
       const key = log.args.nodeId;
 
       if (!acc[key]) {
         acc[key] = [];
-
       }
       const same = acc[key].some((l) => l.hash === log.transactionHash);
       const hash = same ? "↑same↑" : log.transactionHash;

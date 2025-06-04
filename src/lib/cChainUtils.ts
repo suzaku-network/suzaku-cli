@@ -131,3 +131,37 @@ export async function PatchEventsTimestamp(
     timestamp: event.timestamp || blockTimstamps[Number(event.blockNumber)],
   }));
 }
+
+export async function fillEventsNodeId(
+  client: ExtendedPublicClient,
+  balancerAddress: Hex,
+  balancerAbi: Abi,
+  events: DecodedEvent[],
+): Promise<DecodedEvent[]> {
+
+  const getNodeId = (validationId: Hex): Promise<{ nodeID: Hex }> => client.readContract({
+    address: balancerAddress,
+    abi: balancerAbi,
+    functionName: 'getValidator',
+    args: [validationId],
+  }) as Promise<{ nodeID: Hex }>;
+
+  let validationIdMap: Record<string, string> = {};
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const validationId = event.args.validationID;
+    const nodeId = event.args.nodeId;
+    if (nodeId && validationId) {
+      validationIdMap[validationId] = nodeId;
+    } else if (!nodeId && validationId && validationIdMap[validationId]) {
+      event.args.nodeId = validationIdMap[validationId];
+    } else if (!nodeId && validationId && !validationIdMap[validationId]) {
+      event.args.nodeId = (await getNodeId(validationId)).nodeID;
+      validationIdMap[event.args.validationId] = event.args.nodeId;
+    }
+    events[i] = event;
+  };
+
+  return events;
+}

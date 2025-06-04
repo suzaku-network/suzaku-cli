@@ -941,8 +941,7 @@ async function main() {
             await middlewareGetNodeLogs(
                 client,
                 middlewareTxHash as Hex,
-                config.abis.MiddlewareService,
-                config.abis.BalancerValidatorManager,
+                config,
                 options.nodeId,
                 options.snowscanApiKey
             );
