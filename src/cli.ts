@@ -943,7 +943,7 @@ async function main() {
             await middlewareGetNodeLogs(
                 client,
                 middlewareTxHash as Hex,
-                config.abis.MiddlewareService,
+                config,
                 options.nodeId,
                 options.snowscanApiKey
             );

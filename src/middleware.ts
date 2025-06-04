@@ -8,7 +8,7 @@ import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config } from './config';
 import { NodeId, parseNodeID } from './lib/utils';
-import { DecodedEvent, GetContractEvents } from './lib/cChainUtils';
+import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
 
@@ -670,10 +670,14 @@ export async function middlewareGetNodeLogs(
   const middlewareAddress = receipt.to ? receipt.to as Hex : receipt.contractAddress as Hex;
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
+
+  const middleware = config.contracts.MiddlewareService(middlewareAddress);
+
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   bar && bar.start(0, 0);
 
   let logsProm = []
+  
   logsProm.push(GetContractEvents(
     client,
     middlewareAddress,
@@ -686,19 +690,9 @@ export async function middlewareGetNodeLogs(
     bar
   ));
 
-  const l1ValidatorManagerAddressProm = client.readContract({
-    address: middlewareAddress,
-    abi: config.abis.MiddlewareService,
-    functionName: 'L1_VALIDATOR_MANAGER',
-    args: [],
-  })
+  const l1ValidatorManagerAddressProm = middleware.read.L1_VALIDATOR_MANAGER();
   // 
-  const balancerAddressProm = client.readContract({
-    address: middlewareAddress,
-    abi: config.abis.MiddlewareService,
-    functionName: 'balancerValidatorManager',
-    args: [],
-  })
+  const balancerAddressProm = middleware.read.balancerValidatorManager();
 
   const [l1ValidatorManagerAddress, balancerAddress] = await Promise.all([l1ValidatorManagerAddressProm, balancerAddressProm]);
 
@@ -717,9 +711,11 @@ export async function middlewareGetNodeLogs(
       bar
     ));
   }
+  const balancer = config.contracts.BalancerValidatorManager(balancerAddress as Hex);
+  
   const allLogs = await Promise.all(logsProm);
   let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
-  logs = await fillEventsNodeId(client, completeEventsContractAddress, config.abis.BalancerValidatorManager, logs);
+  logs = await fillEventsNodeId(balancer, logs);
   
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
