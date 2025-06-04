@@ -1,5 +1,5 @@
 import cliProgress from 'cli-progress';
-import { decodeEventLog, decodeAbiParameters, Hex, Abi } from 'viem';
+import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
 import { ExtendedPublicClient } from '../client';
 
 type CommonEvent = {
@@ -10,6 +10,7 @@ type CommonEvent = {
   blockHash: string;
   transactionHash: string;
   transactionIndex: string | number;
+  timeStamp?: string | number;
   logIndex: string | number;
   eventName?: string;
   args?: Record<string, any>;
@@ -21,6 +22,7 @@ export type DecodedEvent = {
   eventName: string;
   args: Record<string, any>;
   address: string;
+  timestamp: number;
 }
 
 // TODO: optimize eventNames filtering it from apis
@@ -32,6 +34,8 @@ export async function GetContractEvents(
   abi: Abi,
   eventNames?: string[],
   snowscanApiKey?: string,
+  forceTimestamp: boolean = true,
+  bar?: cliProgress.SingleBar
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
   try {
@@ -61,15 +65,17 @@ export async function GetContractEvents(
         )
     } else {
       // Fetch logs using viem client
-      const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-
       toBlock = toBlock - 2 // to avoid reading the current block, which may not be finalized yet
 
       const blockToScan = toBlock - fromBlock;
-      bar.start(Number(blockToScan), 0);
-
+      if (!bar) {
+        bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+        bar.start(blockToScan, 0);
+      } else {
+        bar.setTotal(bar.getTotal() + blockToScan);
+      }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
-
+        
         let toSub = i + 2000 > toBlock ? toBlock : i + 2000;
         events.push(...await client.getContractEvents({
           address: address,
@@ -77,9 +83,10 @@ export async function GetContractEvents(
           fromBlock: BigInt(i),
           toBlock: BigInt(toSub)
         }))
-        bar.update(blockToScan + i - toBlock);
+        bar.increment(2000);
       }
-      bar.stop();
+      bar.increment(blockToScan - (toBlock - fromBlock));
+      if (bar.getProgress() === 1) bar.stop();
     }
   } catch (error) {
     console.error("Read contract failed:", error);
@@ -89,19 +96,38 @@ export async function GetContractEvents(
   }
 
   // Filter and format events
-  return events.filter((log: CommonEvent) => {
-    if (eventNames) {
-      return eventNames.includes(log.eventName!);
-    }
-    return true;
-  }).map(log => {
-    return {
-      blockNumber: typeof (log.blockNumber) === 'bigint' ? log.blockNumber : BigInt(log.blockNumber),
-      transactionHash: log.transactionHash,
-      eventName: log.eventName,
-      args: log.args,
-      address: log.address
-    } as DecodedEvent
-  });
+  const result = events.filter((log: CommonEvent) => eventNames ? eventNames.includes(log.eventName!) : true)
+        .map(log => {
+        return {
+          blockNumber: typeof (log.blockNumber) === 'bigint' ? log.blockNumber : BigInt(log.blockNumber),
+          transactionHash: log.transactionHash,
+          eventName: log.eventName,
+          args: log.args,
+          address: log.address,
+          timestamp: Number(log.timeStamp!)
+        } as DecodedEvent
+        });
+  return forceTimestamp ? snowscanApiKey ? result : PatchEventsTimestamp(client, result) : result;
 }
 
+export async function PatchEventsTimestamp(
+  client: ExtendedPublicClient,
+  events: DecodedEvent[],
+): Promise<DecodedEvent[]> {
+  const blockTimstamps = (await Promise.all([...new Set(events.map(event => event.blockNumber))]
+    .map((blockNumber: bigint) =>
+      client.getBlock({
+        blockNumber,
+        includeTransactions: false,
+      })))
+  )
+  .reduce((acc, block) => {
+    acc[Number(block.number)] = Number(block.timestamp);
+    return acc;
+  }, {} as Record<number, number>);
+
+  return events.map(event => ({
+    ...event,
+    timestamp: event.timestamp || blockTimstamps[Number(event.blockNumber)],
+  }));
+}

@@ -7,6 +7,7 @@ import { GetRegistrationJustification, parseUint32, hexToUint8Array } from './li
 import { utils } from '@avalabs/avalanchejs';
 import { parseNodeID, NodeId } from './lib/utils';
 import { color } from 'console-log-colors';
+import cliProgress from 'cli-progress';
 import { Config } from './config';
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -842,23 +843,27 @@ export async function middlewareGetNodeLogs(
   nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
-  console.log("Reading logs from middleware...");
+  console.log("Reading logs from middleware and balancer...");
   
   const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
   const middlewareAddress = receipt.contractAddress as Hex;
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
-  
-  let logs = []
-  logs = await GetContractEvents(
+  const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+  bar && bar.start(0, 0);
+
+  let logsProm = []
+  logsProm.push(GetContractEvents(
     client,
     middlewareAddress,
     Number(from),
     Number(to),
     middlewareAbi,
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
-    snowscanApiKey
-  );
+    snowscanApiKey,
+    snowscanApiKey ? false : true,
+    bar
+  ));
 
   const l1ValidatorManagerAddressProm = client.readContract({
     address: middlewareAddress,
@@ -879,17 +884,20 @@ export async function middlewareGetNodeLogs(
   const completeEventsContractAddress = l1ValidatorManagerAddress as Hex || balancerAddress as Hex;
 
   if (completeEventsContractAddress) {
-    const completeEvents = await GetContractEvents(
+    logsProm.push(GetContractEvents(
       client,
       completeEventsContractAddress,
       Number(from),
       Number(to),
       balancerValidatorManagerAbi,
       undefined,
-      snowscanApiKey
-    );
-    logs = logs.concat(completeEvents).sort((a, b) => Number(a.blockNumber - b.blockNumber));
+      snowscanApiKey,
+      snowscanApiKey ? false : true,
+      bar
+    ));
   }
+  const allLogs = await Promise.all(logsProm);
+  const logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
   
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
@@ -904,14 +912,14 @@ export async function middlewareGetNodeLogs(
   } else {
     for (const [key, value] of Object.entries(logOfInterest)) {
       const nodeId = `NodeID-${utils.base58check.encode(hexToUint8Array(key as Hex).slice(12))}`;
-      console.log('\t\t\t' + color.blue(nodeId));
+      console.log('\t\t\t\t\t\t' + color.blue(nodeId));
       console.table(value);
     }
   }
 
 }
 
-export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; /*args: string*/ }[]> {
+export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; executionTime: string/*args: string*/ }[]> {
   let validationIdMap: Record<string, string> = {};
   return events.reduce((acc, log) => {
     if (log.args.nodeId && log.args.validationID) {
@@ -926,7 +934,11 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
         acc[key] = [];
 
       }
+      const same = acc[key].some((l) => l.hash === log.transactionHash);
+      const hash = same ? "↑same↑" : log.transactionHash;
+      const executionTime = log.timestamp ? same ? "↑same↑" : new Date(Number(log.timestamp) * 1000).toLocaleString() : 'N/A';
 
+      log.blockNumber
       acc[key].push({
         source: log.address,
         event: log.eventName,
@@ -935,12 +947,13 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
         //     ? value.toString()
         //     : value // return everything else unchanged
         // ),// Too long in the table TODO: use a custom formatter
-        hash: log.transactionHash,
+        executionTime,
+        hash: hash,
       });
     }
 
     return acc;
-  }, {} as Record<string, { source: string; event: string; hash: string; /*args: string*/ }[]>);
+  }, {} as Record<string, { source: string; event: string; hash: string; executionTime: string;/*args: string*/ }[]>);
 }
 
 export async function middlewareGetL1Id(
