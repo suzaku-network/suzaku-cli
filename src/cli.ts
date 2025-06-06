@@ -611,7 +611,7 @@ async function main() {
         .argument("<nodeId>")
         .argument("<removeNodeTxHash>")
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
-        .action(async (middlewareAddress, balancerValidatorManagerAddress, nodeId, removeNodeTxHash, options) => {
+        .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey;
             const client = generateClient(opts.network, opts.privateKey);
