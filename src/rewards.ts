@@ -1,34 +1,20 @@
-import { generateClient, Network } from './client';
-import { getConfig } from './config';
-import { Hex } from 'viem';
+import { TContract } from './config';
+import type { Hex, Account } from 'viem';
 
 /**
  * Distributes rewards for a specific epoch
  */
 export async function distributeRewards(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
   batchSize: number,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'distributeRewards',
-    args: [BigInt(epoch), BigInt(batchSize)],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`distributeRewards for epoch ${epoch} with batch size ${batchSize} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.distributeRewards(
+    [epoch, batchSize],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -36,29 +22,16 @@ export async function distributeRewards(
  * Claims rewards for a staker
  */
 export async function claimRewards(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'claimRewards',
-    args: [rewardsToken, recipient],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`claimRewards completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.claimRewards(
+    [rewardsToken, recipient],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -66,29 +39,16 @@ export async function claimRewards(
  * Claims operator fees
  */
 export async function claimOperatorFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'claimOperatorFee',
-    args: [rewardsToken, recipient],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`claimOperatorFee completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.claimOperatorFee(
+    [rewardsToken, recipient],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -96,29 +56,16 @@ export async function claimOperatorFee(
  * Claims curator fees
  */
 export async function claimCuratorFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'claimCuratorFee',
-    args: [rewardsToken, recipient],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`claimCuratorFee completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.claimCuratorFee(
+    [rewardsToken, recipient],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -126,29 +73,16 @@ export async function claimCuratorFee(
  * Claims protocol fees
  */
 export async function claimProtocolFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'claimProtocolFee',
-    args: [rewardsToken, recipient],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`claimProtocolFee completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.claimProtocolFee(
+    [rewardsToken, recipient],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -156,30 +90,17 @@ export async function claimProtocolFee(
  * Claims undistributed rewards
  */
 export async function claimUndistributedRewards(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
   rewardsToken: Hex,
   recipient: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'claimUndistributedRewards',
-    args: [BigInt(epoch), rewardsToken, recipient],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`claimUndistributedRewards for epoch ${epoch} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.claimUndistributedRewards(
+    [epoch, rewardsToken, recipient],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -187,31 +108,18 @@ export async function claimUndistributedRewards(
  * Sets rewards amount for epochs
  */
 export async function setRewardsAmountForEpochs(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   startEpoch: number,
   numberOfEpochs: number,
   rewardsToken: Hex,
   rewardsAmount: bigint,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'setRewardsAmountForEpochs',
-    args: [BigInt(startEpoch), BigInt(numberOfEpochs), rewardsToken, rewardsAmount],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`setRewardsAmountForEpochs starting at epoch ${startEpoch} for ${numberOfEpochs} epochs completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.setRewardsAmountForEpochs(
+    [startEpoch,numberOfEpochs, rewardsToken, rewardsAmount],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -219,29 +127,16 @@ export async function setRewardsAmountForEpochs(
  * Sets rewards share for asset class
  */
 export async function setRewardsShareForAssetClass(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   assetClass: bigint,
   share: number,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'setRewardsShareForAssetClass',
-    args: [assetClass, share],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`setRewardsShareForAssetClass for asset class ${assetClass} with share ${share} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.setRewardsShareForAssetClass(
+    [assetClass, share],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -249,28 +144,15 @@ export async function setRewardsShareForAssetClass(
  * Sets minimum required uptime
  */
 export async function setMinRequiredUptime(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   minUptime: bigint,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'setMinRequiredUptime',
-    args: [minUptime],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`setMinRequiredUptime to ${minUptime} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.setMinRequiredUptime(
+    [minUptime],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -278,28 +160,15 @@ export async function setMinRequiredUptime(
  * Sets admin role
  */
 export async function setAdminRole(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   newAdmin: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'setAdminRole',
-    args: [newAdmin],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`setAdminRole to ${newAdmin} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.setAdminRole(
+    [newAdmin],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -307,28 +176,15 @@ export async function setAdminRole(
  * Sets protocol owner
  */
 export async function setProtocolOwner(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   newOwner: Hex,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'setProtocolOwner',
-    args: [newOwner],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`setProtocolOwner to ${newOwner} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.setProtocolOwner(
+    [newOwner],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -336,28 +192,15 @@ export async function setProtocolOwner(
  * Updates protocol fee
  */
 export async function updateProtocolFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   newFee: number,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'updateProtocolFee',
-    args: [newFee],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`updateProtocolFee to ${newFee} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.updateProtocolFee(
+    [newFee],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -365,28 +208,15 @@ export async function updateProtocolFee(
  * Updates operator fee
  */
 export async function updateOperatorFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   newFee: number,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'updateOperatorFee',
-    args: [newFee],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`updateOperatorFee to ${newFee} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.updateOperatorFee(
+    [newFee],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -394,28 +224,15 @@ export async function updateOperatorFee(
  * Updates curator fee
  */
 export async function updateCuratorFee(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   newFee: number,
-  privateKey: Hex,
-  network: Network
+  account: Account | undefined
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network, privateKey);
-
-  if (!client.account) {
-    throw new Error("No client account set.");
-  }
-
-  const txHash = await client.writeContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'updateCuratorFee',
-    args: [newFee],
-    account: client.account,
-    chain: null
-  });
-
-  console.log(`updateCuratorFee to ${newFee} completed, tx hash: ${txHash}`);
+  if (!account) throw new Error("No client account set.");
+  const txHash = await rewards.write.updateCuratorFee(
+    [newFee],
+    { chain: null, account }
+  );
   return txHash;
 }
 
@@ -423,19 +240,12 @@ export async function updateCuratorFee(
  * Gets rewards amount per token from epoch
  */
 export async function getRewardsAmountPerTokenFromEpoch(
-  rewardsAddress: Hex,
-  epoch: number,
-  network: Network
+  rewards: TContract['Rewards'],
+  epoch: number
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const result = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'getRewardsAmountPerTokenFromEpoch',
-    args: [BigInt(epoch)]
-  }) as [string[], bigint[]];
+  const result = await rewards.read.getRewardsAmountPerTokenFromEpoch(
+    [epoch]
+  ) as [string[], bigint[]];
 
   console.log(`Rewards amount per token for epoch ${epoch}:`);
   for (let i = 0; i < result[0].length; i++) {
@@ -449,20 +259,13 @@ export async function getRewardsAmountPerTokenFromEpoch(
  * Gets rewards amount for a specific token from epoch
  */
 export async function getRewardsAmountForTokenFromEpoch(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
-  token: Hex,
-  network: Network
+  token: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const amount = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'getRewardsAmountPerTokenFromEpoch',
-    args: [BigInt(epoch), token]
-  }) as bigint;
+  const amount = await rewards.read.getRewardsAmountPerTokenFromEpoch(
+    [epoch, token]
+  ) as bigint;
 
   console.log(`Rewards amount for token ${token} at epoch ${epoch}: ${amount.toString()}`);
   return amount;
@@ -472,20 +275,13 @@ export async function getRewardsAmountForTokenFromEpoch(
  * Gets operator shares for a specific epoch
  */
 export async function getOperatorShares(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
-  operator: Hex,
-  network: Network
+  operator: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const share = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'operatorShares',
-    args: [BigInt(epoch), operator]
-  }) as bigint;
+  const share = await rewards.read.operatorShares(
+    [epoch, operator]
+  ) as bigint;
 
   console.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
@@ -495,20 +291,13 @@ export async function getOperatorShares(
  * Gets vault shares for a specific epoch
  */
 export async function getVaultShares(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
-  vault: Hex,
-  network: Network
+  vault: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const share = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'vaultShares',
-    args: [BigInt(epoch), vault]
-  }) as bigint;
+  const share = await rewards.read.vaultShares(
+    [epoch, vault]
+  ) as bigint;
 
   console.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
@@ -518,20 +307,13 @@ export async function getVaultShares(
  * Gets curator shares for a specific epoch
  */
 export async function getCuratorShares(
-  rewardsAddress: Hex,
+  rewards: TContract['Rewards'],
   epoch: number,
-  curator: Hex,
-  network: Network
+  curator: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const share = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'curatorShares',
-    args: [BigInt(epoch), curator]
-  }) as bigint;
+  const share = await rewards.read.curatorShares(
+    [epoch, curator]
+  ) as bigint;
 
   console.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
@@ -541,83 +323,47 @@ export async function getCuratorShares(
  * Gets protocol rewards for a token
  */
 export async function getProtocolRewards(
-  rewardsAddress: Hex,
-  token: Hex,
-  network: Network
+  rewards: TContract['Rewards'],
+  token: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
+  const rewardsAmount = await rewards.read.protocolRewards(
+    [token]
+  ) as bigint;
 
-  const rewards = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'protocolRewards',
-    args: [token]
-  }) as bigint;
-
-  console.log(`Protocol rewards for token ${token}: ${rewards.toString()}`);
-  return rewards;
+  console.log(`Protocol rewards for token ${token}: ${rewardsAmount.toString()}`);
+  return rewardsAmount;
 }
 
 /**
  * Gets distribution batch status for an epoch
  */
 export async function getDistributionBatch(
-  rewardsAddress: Hex,
-  epoch: number,
-  network: Network
+  rewards: TContract['Rewards'],
+  epoch: number
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const result = await client.readContract({ // Changed variable name for clarity
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'distributionBatches',
-    args: [BigInt(epoch)]
-  }) as [bigint, boolean]; // Assert as a tuple (array with specific types)
+  const result = await rewards.read.distributionBatches(
+    [epoch]
+  ) as [bigint, boolean];
 
   console.log(`Distribution batch for epoch ${epoch}:`);
-  // Access elements by index
   const lastProcessedOperator = result[0];
   const isComplete = result[1];
 
   console.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
   console.log(`  Is complete: ${isComplete}`);
 
-  return { lastProcessedOperator, isComplete }; // Return as an object if preferred downstream
+  return { lastProcessedOperator, isComplete };
 }
 
 /**
  * Gets current fees configuration
  */
 export async function getFeesConfiguration(
-  rewardsAddress: Hex,
-  network: Network
+  rewards: TContract['Rewards']
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const protocolFee = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'protocolFee',
-    args: []
-  }) as number;
-
-  const operatorFee = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'operatorFee',
-    args: []
-  }) as number;
-
-  const curatorFee = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'curatorFee',
-    args: []
-  }) as number;
+  const protocolFee = await rewards.read.protocolFee();
+  const operatorFee = await rewards.read.operatorFee();
+  const curatorFee = await rewards.read.curatorFee();
 
   console.log("Fees configuration:");
   console.log(`  Protocol fee: ${protocolFee}`);
@@ -631,19 +377,12 @@ export async function getFeesConfiguration(
  * Gets rewards share for asset class
  */
 export async function getRewardsShareForAssetClass(
-  rewardsAddress: Hex,
-  assetClass: bigint,
-  network: Network
+  rewards: TContract['Rewards'],
+  assetClass: bigint
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const share = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'rewardsSharePerAssetClass',
-    args: [assetClass]
-  }) as number;
+  const share = await rewards.read.rewardsSharePerAssetClass(
+    [assetClass]
+  ) as number;
 
   console.log(`Rewards share for asset class ${assetClass}: ${share}`);
   return share;
@@ -653,18 +392,9 @@ export async function getRewardsShareForAssetClass(
  * Gets min required uptime
  */
 export async function getMinRequiredUptime(
-  rewardsAddress: Hex,
-  network: Network
+  rewards: TContract['Rewards']
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const minUptime = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'minRequiredUptime',
-    args: []
-  }) as bigint;
+  const minUptime = await rewards.read.minRequiredUptime();
 
   console.log(`Minimum required uptime: ${minUptime.toString()}`);
   return minUptime;
@@ -674,19 +404,12 @@ export async function getMinRequiredUptime(
  * Gets last claimed epoch for a staker
  */
 export async function getLastEpochClaimedStaker(
-  rewardsAddress: Hex,
-  staker: Hex,
-  network: Network
+  rewards: TContract['Rewards'],
+  staker: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const lastEpoch = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'lastEpochClaimedStaker',
-    args: [staker]
-  }) as bigint;
+  const lastEpoch = await rewards.read.lastEpochClaimedStaker(
+    [staker]
+  );
 
   console.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
   return lastEpoch;
@@ -696,19 +419,12 @@ export async function getLastEpochClaimedStaker(
  * Gets last claimed epoch for an operator
  */
 export async function getLastEpochClaimedOperator(
-  rewardsAddress: Hex,
-  operator: Hex,
-  network: Network
+  rewards: TContract['Rewards'],
+  operator: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const lastEpoch = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'lastEpochClaimedOperator',
-    args: [operator]
-  }) as bigint;
+  const lastEpoch = await rewards.read.lastEpochClaimedOperator(
+    [operator]
+  );
 
   console.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
   return lastEpoch;
@@ -718,19 +434,12 @@ export async function getLastEpochClaimedOperator(
  * Gets last claimed epoch for a curator
  */
 export async function getLastEpochClaimedCurator(
-  rewardsAddress: Hex,
-  curator: Hex,
-  network: Network
+  rewards: TContract['Rewards'],
+  curator: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const lastEpoch = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'lastEpochClaimedCurator',
-    args: [curator]
-  }) as bigint;
+  const lastEpoch = await rewards.read.lastEpochClaimedCurator(
+    [curator]
+  );
 
   console.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
   return lastEpoch;
@@ -740,20 +449,13 @@ export async function getLastEpochClaimedCurator(
  * Gets last claimed epoch for protocol
  */
 export async function getLastEpochClaimedProtocol(
-  rewardsAddress: Hex,
-  protocolOwner: Hex,
-  network: Network
+  rewards: TContract['Rewards'],
+  protocolOwner: Hex
 ) {
-  const config = getConfig(network);
-  const client = generateClient(network);
-
-  const lastEpoch = await client.readContract({
-    address: rewardsAddress,
-    abi: config.abis.Rewards,
-    functionName: 'lastEpochClaimedProtocol',
-    args: [protocolOwner]
-  }) as bigint;
+  const lastEpoch = await rewards.read.lastEpochClaimedProtocol(
+    [protocolOwner]
+  );
 
   console.log(`Last epoch claimed by protocol owner ${protocolOwner}: ${lastEpoch.toString()}`);
   return lastEpoch;
-} 
+}

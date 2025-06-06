@@ -1,6 +1,7 @@
 import cliProgress from 'cli-progress';
 import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
 import { ExtendedPublicClient } from '../client';
+import { TContract } from '../config';
 
 type CommonEvent = {
   address: string;
@@ -133,31 +134,22 @@ export async function PatchEventsTimestamp(
 }
 
 export async function fillEventsNodeId(
-  client: ExtendedPublicClient,
-  balancerAddress: Hex,
-  balancerAbi: Abi,
+  balancer: TContract['BalancerValidatorManager'],
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
-
-  const getNodeId = (validationId: Hex): Promise<{ nodeID: Hex }> => client.readContract({
-    address: balancerAddress,
-    abi: balancerAbi,
-    functionName: 'getValidator',
-    args: [validationId],
-  }) as Promise<{ nodeID: Hex }>;
 
   let validationIdMap: Record<string, string> = {};
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
-    const validationId = event.args.validationID;
+    const validationId = event.args.validationID as Hex | undefined;
     const nodeId = event.args.nodeId;
     if (nodeId && validationId) {
       validationIdMap[validationId] = nodeId;
     } else if (!nodeId && validationId && validationIdMap[validationId]) {
       event.args.nodeId = validationIdMap[validationId];
     } else if (!nodeId && validationId && !validationIdMap[validationId]) {
-      event.args.nodeId = (await getNodeId(validationId)).nodeID;
+      event.args.nodeId = (await balancer.read.getValidator([validationId])).nodeID;
       validationIdMap[event.args.validationId] = event.args.nodeId;
     }
     events[i] = event;

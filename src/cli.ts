@@ -110,6 +110,8 @@ import {
     getLastEpochClaimedProtocol
 } from "./rewards";
 import { NodeId } from "./lib/utils";
+import { TContract } from './config';
+import type { Account } from 'viem';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey);
@@ -140,19 +142,29 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
 
-            await registerL1(config, client, validatorManager, l1Middleware, metadataUrl);
+            // instantiate L1Registry and call
+            const l1Registry = config.contracts.L1Registry(config.l1Registry);
+            await registerL1(
+                l1Registry,
+                validatorManager as Hex,
+                l1Middleware as Hex,
+                metadataUrl,
+                client.account as Account
+            );
         });
 
     program
         .command("get-l1s")
         .action(async () => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
-            await getL1s(client, config.l1Registry as Hex, config.abis.L1Registry);
+            const config = getConfig(opts.network, client);
+            await getL1s(
+                config.contracts.L1Registry(config.l1Registry)
+            );
         });
 
     program
@@ -161,9 +173,15 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (l1Address, metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-            await setL1MetadataUrl(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, metadataUrl);
+            const config = getConfig(opts.network, client);
+            const l1Reg = config.contracts.L1Registry(config.l1Registry);
+            await setL1MetadataUrl(
+                l1Reg,
+                l1Address as Hex,
+                metadataUrl,
+                client.account as Account
+            );
         });
 
     program
@@ -172,9 +190,15 @@ async function main() {
         .argument("<l1Middleware>")
         .action(async (l1Address, l1Middleware) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-            await setL1Middleware(client, config.l1Registry as Hex, config.abis.L1Registry, l1Address, l1Middleware);
+            const config = getConfig(opts.network, client);
+            const l1Reg2 = config.contracts.L1Registry(config.l1Registry);
+            await setL1Middleware(
+                l1Reg2,
+                l1Address as Hex,
+                l1Middleware as Hex,
+                client.account as Account
+            );
         });
     /* --------------------------------------------------
     * OPERATOR REGISTRY COMMANDS
@@ -184,9 +208,14 @@ async function main() {
         .argument("<metadataUrl>")
         .action(async (metadataUrl) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-            await registerOperator(config, client, metadataUrl);
+            const config = getConfig(opts.network, client);
+            const opReg = config.contracts.OperatorRegistry(config.operatorRegistry);
+            await registerOperator(
+                opReg,
+                metadataUrl,
+                client.account as Account
+            );
         });
 
     program
@@ -194,9 +223,10 @@ async function main() {
         .description("List all operators registered in the operator registry")
         .action(async () => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
-            await listOperators(config, client);
+            const config = getConfig(opts.network, client);
+            const opReg2 = config.contracts.OperatorRegistry(config.operatorRegistry);
+            await listOperators(opReg2);
         });
 
     /* --------------------------------------------------
@@ -210,15 +240,16 @@ async function main() {
         .argument("<maxLimit>")
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            // instantiate VaultManager contract
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress as Hex);
             await registerVaultL1(
-                client,
-                middlewareVaultManagerAddress,
-                config.abis.VaultManager,
+                vaultManager,
                 vaultAddress as Hex,
                 BigInt(assetClass),
-                BigInt(maxLimit)
+                BigInt(maxLimit),
+                client.account as Account
             );
         });
 
@@ -230,15 +261,15 @@ async function main() {
         .argument("<maxLimit>")
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress as Hex);
             await updateVaultMaxL1Limit(
-                client,
-                middlewareVaultManagerAddress,
-                config.abis.VaultManager,
+                vaultManager,
                 vaultAddress as Hex,
                 BigInt(assetClass),
-                BigInt(maxLimit)
+                BigInt(maxLimit),
+                client.account as Account
             );
         });
 
@@ -248,13 +279,13 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
             await removeVault(
-                client,
-                middlewareVaultManager as Hex,
-                config.abis.VaultManager,
-                vaultAddress as Hex
+                vaultManager,
+                vaultAddress as Hex,
+                client.account as Account
             );
         });
 
@@ -263,13 +294,10 @@ async function main() {
         .argument("<middlewareVaultManager>")
         .action(async (middlewareVaultManager) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
-            await getVaultCount(
-                client,
-                middlewareVaultManager as Hex,
-                config.abis.VaultManager
-            );
+            const config = getConfig(opts.network, client);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
+            await getVaultCount(vaultManager);
         });
 
     program
@@ -278,12 +306,11 @@ async function main() {
         .argument("<index>")
         .action(async (middlewareVaultManager, index) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
             await getVaultAtWithTimes(
-                client,
-                middlewareVaultManager as Hex,
-                config.abis.VaultManager,
+                vaultManager,
                 BigInt(index)
             );
         });
@@ -294,12 +321,11 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
             await getVaultAssetClass(
-                client,
-                middlewareVaultManager as Hex,
-                config.abis.VaultManager,
+                vaultManager,
                 vaultAddress as Hex
             );
         });
@@ -315,16 +341,17 @@ async function main() {
         .action(async (vaultAddress, amount, options) => {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             const amountWei = parseUnits(amount, 18);
-
+            // instantiate VaultTokenized contract
+            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
             await depositVault(
                 client,
-                vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                vault,
                 onBehalfOf as Hex,
-                amountWei
+                amountWei,
+                client.account as Account
             );
         });
 
@@ -336,15 +363,15 @@ async function main() {
         .action(async (vaultAddress, amount, options) => {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             const amountWei = parseUnits(amount, 18);
+            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
             await withdrawVault(
-                client,
-                vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                vault,
                 claimer as Hex,
-                amountWei
+                amountWei,
+                client.account as Account
             );
         });
 
@@ -356,14 +383,14 @@ async function main() {
         .action(async (vaultAddress, epoch, options) => {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
             await claimVault(
-                client,
-                vaultAddress as Hex,
-                config.abis.VaultTokenized,
+                vault,
                 recipient as Hex,
-                BigInt(epoch)
+                BigInt(epoch),
+                client.account as Account
             );
         });
 
@@ -378,15 +405,16 @@ async function main() {
         .argument("<assetClass>", "Asset class")
         .action(async (delegatorAddress, l1Address, limit, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            // instantiate L1RestakeDelegator contract
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress as Hex);
             await setL1Limit(
-                client,
-                delegatorAddress as Hex,
-                config.abis.L1RestakeDelegator,
+                delegator,
                 l1Address as Hex,
                 BigInt(assetClass),
-                BigInt(limit)
+                BigInt(limit),
+                client.account as Account
             );
         });
 
@@ -399,16 +427,17 @@ async function main() {
         .argument("<assetClass>", "Asset class")
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            // instantiate L1RestakeDelegator contract
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress as Hex);
             await setOperatorL1Shares(
-                client,
-                delegatorAddress as Hex,
-                config.abis.L1RestakeDelegator,
+                delegator,
                 l1Address as Hex,
                 BigInt(assetClass),
                 operatorAddress as Hex,
-                BigInt(shares)
+                BigInt(shares),
+                client.account as Account
             );
         });
 
@@ -423,13 +452,13 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareRegisterOperator(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                operator as Hex
+                middlewareSvc,
+                operator as Hex,
+                client.account as Account
             );
         });
 
@@ -440,13 +469,13 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareDisableOperator(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                operator as Hex
+                middlewareSvc,
+                operator as Hex,
+                client.account as Account
             );
         });
 
@@ -457,13 +486,13 @@ async function main() {
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareRemoveOperator(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                operator as Hex
+                middlewareSvc,
+                operator as Hex,
+                client.account as Account
             );
         });
 
@@ -481,8 +510,9 @@ async function main() {
         .option("--pchain-disable-owner-address <address>", "P-Chain disable owner address", collectMultiple, [])
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -493,26 +523,25 @@ async function main() {
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
             const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(program.opts()))];
             const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
-            const remainingBalanceOwner: [bigint, Hex[]] = [
-                BigInt(options.pchainRemainingBalanceOwnerThreshold),
+            const remainingBalanceOwner: [number, Hex[]] = [
+                Number(options.pchainRemainingBalanceOwnerThreshold),
                 remainingBalanceOwnerAddress as Hex[]
             ];
-            const disableOwner: [bigint, Hex[]] = [
-                BigInt(options.pchainDisableOwnerThreshold),
+            const disableOwner: [number, Hex[]] = [
+                Number(options.pchainDisableOwnerThreshold),
                 disableOwnerAddress as Hex[]
             ];
 
             // Call middlewareAddNode
             await middlewareAddNode(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                nodeId,
+                middlewareSvc,
+                nodeId as NodeId,
                 blsKey as Hex,
                 registrationExpiry,
                 remainingBalanceOwner,
                 disableOwner,
                 BigInt(options.initialStake),
+                client.account as Account
             );
         });
 
@@ -528,8 +557,6 @@ async function main() {
         .option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee (default: 0.1 AVAX)", "0.1")
         .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network, opts.privateKey);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -541,11 +568,14 @@ async function main() {
             const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
             let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
 
+            const client = generateClient(opts.network, options.pchainTxPrivateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
                 client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex,
                 nodeId as NodeId,
                 options.pchainTxPrivateKey as string,
@@ -563,13 +593,13 @@ async function main() {
         .argument("<nodeId>")
         .action(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareRemoveNode(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                nodeId as NodeId
+                middlewareSvc,
+                nodeId as NodeId,
+                client.account as Account
             );
         });
 
@@ -577,31 +607,27 @@ async function main() {
     program
         .command("middleware-complete-validator-removal")
         .argument("<middlewareAddress>")
+        .argument("<balancerValidatorManagerAddress>")
         .argument("<nodeId>")
         .argument("<removeNodeTxHash>")
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
-        .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
+        .action(async (middlewareAddress, balancerValidatorManagerAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
-
-            // If pchainTxPrivateKey is not provided, use the private key
-            if (!options.pchainTxPrivateKey) {
-                options.pchainTxPrivateKey = opts.privateKey;
-            }
-
-            // Derive pchainTxAddress from the private key
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const balancerSvc = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey;
             const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
-            let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
-
+            const pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
             await middlewareCompleteValidatorRemoval(
                 client,
-                middlewareAddress as Hex,
-                config.abis,
+                middlewareSvc,
+                balancerSvc,
                 nodeId as string,
                 removeNodeTxHash as Hex,
                 options.pchainTxPrivateKey as string,
-                pchainTxAddress as string
+                pchainTxAddress
             );
         });
 
@@ -614,14 +640,14 @@ async function main() {
         .argument("<newStake>")
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareInitStakeUpdate(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 nodeId as NodeId,
-                BigInt(newStake)
+                BigInt(newStake),
+                client.account as Account
             );
         });
 
@@ -635,8 +661,6 @@ async function main() {
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
         .action(async (middlewareAddress, nodeId, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network, opts.privateKey);
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
@@ -647,15 +671,18 @@ async function main() {
             // Determine the right network prefix (e.g., 'P-fuji' vs 'P-avax')
             const networkPrefix = opts.network === 'mainnet' ? 'avax' : 'fuji';
             let pchainTxAddress = derivePChainAddressFromPrivateKey(options.pchainTxPrivateKey, networkPrefix);
+            const client = generateClient(opts.network, options.pchainTxPrivateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
 
             await middlewareCompleteStakeUpdate(
                 client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 nodeId as NodeId,
                 validatorStakeUpdateTxHash as Hex,
                 options.pchainTxPrivateKey as string,
-                pchainTxAddress as string
+                pchainTxAddress as string,
+                client.account as Account
             );
         });
 
@@ -668,23 +695,20 @@ async function main() {
         .argument("<assetClass>")
         .action(async (middlewareAddress, epoch, assetClass) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
             console.log("Calculating and caching stakes...");
 
             try {
                 if (!client.account) {
                     throw new Error('Client account is required');
                 }
-
-                const hash = await client.writeContract({
-                    address: middlewareAddress as Hex,
-                    abi: config.abis.MiddlewareService,
-                    functionName: 'calcAndCacheStakes',
-                    args: [BigInt(epoch), BigInt(assetClass)],
-                    chain: null,
-                    account: client.account,
-                });
+                const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+                const hash = await middlewareSvc.write.calcAndCacheStakes([epoch, BigInt(assetClass)],
+                    {
+                        chain: null,
+                        account: client.account,
+                    });
                 console.log("calcAndCacheStakes done, tx hash:", hash);
             } catch (error) {
                 console.error("Transaction failed:", error);
@@ -701,12 +725,12 @@ async function main() {
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareCalcNodeStakes(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                middlewareSvc,
+                client.account as Account
             );
         });
 
@@ -719,14 +743,14 @@ async function main() {
         .option("--limit-stake <stake>", "Stake limit (default: 0)", "0")
         .action(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareForceUpdateNodes(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex,
-                BigInt(options.limitStake)
+                BigInt(options.limitStake),
+                client.account as Account
             );
         });
 
@@ -738,15 +762,13 @@ async function main() {
         .argument("<epoch>")
         .argument("<assetClass>")
         .action(async (middlewareAddress, operator, epoch, assetClass) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetOperatorStake(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex,
-                BigInt(epoch),
+                Number(epoch),
                 BigInt(assetClass)
             );
         });
@@ -756,13 +778,11 @@ async function main() {
         .command("middleware-get-current-epoch")
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetCurrentEpoch(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                middlewareSvc
             );
         });
 
@@ -772,14 +792,12 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<epoch>")
         .action(async (middlewareAddress, epoch) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetEpochStartTs(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                BigInt(epoch)
+                middlewareSvc,
+                Number(epoch)
             );
         });
 
@@ -790,15 +808,13 @@ async function main() {
         .argument("<operator>")
         .argument("<epoch>")
         .action(async (middlewareAddress, operator, epoch) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetActiveNodesForEpoch(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex,
-                BigInt(epoch)
+                Number(epoch)
             );
         });
 
@@ -808,13 +824,11 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetOperatorNodesLength(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex
             );
         });
@@ -827,14 +841,12 @@ async function main() {
         .argument("<epoch>")
         .argument("<validatorId>")
         .action(async (middlewareAddress, epoch, validatorId) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetNodeStakeCache(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
-                BigInt(epoch),
+                middlewareSvc,
+                Number(epoch),
                 validatorId as Hex
             );
         });
@@ -846,13 +858,11 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetOperatorLockedStake(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex
             );
         });
@@ -864,13 +874,11 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<validatorId>")
         .action(async (middlewareAddress, validatorId) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareNodePendingRemoval(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 validatorId as Hex
             );
         });
@@ -882,13 +890,11 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<validatorId>")
         .action(async (middlewareAddress, validatorId) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareNodePendingUpdate(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 validatorId as Hex
             );
         });
@@ -900,13 +906,11 @@ async function main() {
         .argument("<middlewareAddress>")
         .argument("<operator>")
         .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetOperatorUsedStake(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService,
+                middlewareSvc,
                 operator as Hex
             );
         });
@@ -917,13 +921,11 @@ async function main() {
         .description("Get all operators registered in the middleware")
         .argument("<middlewareAddress>")
         .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const config = getConfig(opts.network);
-            const client = generateClient(opts.network);
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
             await middlewareGetAllOperators(
-                client,
-                middlewareAddress as Hex,
-                config.abis.MiddlewareService
+                middlewareSvc
             );
         });
 
@@ -935,8 +937,8 @@ async function main() {
         .option('--snowscan-api-key <string>', "Snowscan API key", "")
         .action(async (middlewareTxHash, options) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
             console.log(`nodeId: ${options.nodeId}`);
             await middlewareGetNodeLogs(
                 client,
@@ -959,15 +961,13 @@ async function main() {
         .argument("<l1Address>")
         .action(async (l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
-            // We'll assume in config you have something like: config.opL1OptIn = "0x..."
-            // and config.abis.OpL1OptIn = the ABI.
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optInL1(
-                client,
-                config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService, // or whatever your key is
+                service,
                 l1Address as Hex,
+                client.account as Account
             );
         });
 
@@ -977,13 +977,13 @@ async function main() {
         .argument("<l1Address>")
         .action(async (l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optOutL1(
-                client,
-                config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService,
+                service,
                 l1Address as Hex,
+                client.account as Account
             );
         });
 
@@ -994,14 +994,13 @@ async function main() {
         .argument("<l1Address>")
         .action(async (operator, l1Address) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await checkOptInL1(
-                client,
-                config.opL1OptIn as Hex,
-                config.abis.OperatorL1OptInService,
+                service,
                 operator as Hex,
-                l1Address as Hex,
+                l1Address as Hex
             );
         });
 
@@ -1017,13 +1016,13 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optInVault(
-                client,
-                config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                service,
                 vaultAddress as Hex,
+                client.account as Account
             );
         });
 
@@ -1033,13 +1032,13 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optOutVault(
-                client,
-                config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                service,
                 vaultAddress as Hex,
+                client.account as Account
             );
         });
 
@@ -1050,14 +1049,13 @@ async function main() {
         .argument("<vaultAddress>")
         .action(async (operator, vaultAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await checkOptInVault(
-                client,
-                config.opVaultOptIn as Hex,
-                config.abis.OperatorVaultOptInService,
+                service,
                 operator as Hex,
-                vaultAddress as Hex,
+                vaultAddress as Hex
             );
         });
 
@@ -1073,14 +1071,15 @@ async function main() {
         .argument("<maxWeight>")
         .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            // instantiate BalancerValidatorManager contract
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
             await setUpSecurityModule(
-                client,
-                balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager,
+                balancer,
                 middlewareAddress as Hex,
-                BigInt(maxWeight)
+                BigInt(maxWeight),
+                client.account as Account
             );
         });
 
@@ -1089,12 +1088,11 @@ async function main() {
         .argument("<balancerValidatorManagerAddress")
         .action(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
             await getSecurityModules(
-                client,
-                balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager
+                balancer
             );
         });
 
@@ -1104,12 +1102,11 @@ async function main() {
         .argument("<securityModule>")
         .action(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
             await getSecurityModuleWeights(
-                client,
-                balancerValidatorManagerAddress,
-                config.abis.BalancerValidatorManager,
+                balancer,
                 securityModule as Hex
             );
         });
@@ -1126,19 +1123,15 @@ async function main() {
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
         .action(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
-            const config = getConfig(opts.network);
             const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
 
             const operator = operatorAddress as Hex;
             console.log(`Operator: ${operator}`);
 
             // 1) Read total vaults from VaultManager
-            const vaultCount = (await client.readContract({
-                address: middlewareVaultManager as Hex,
-                abi: config.abis.VaultManager,
-                functionName: 'getVaultCount',
-                args: [],
-            })) as bigint;
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const vaultCount = await vaultManager.read.getVaultCount()
 
             console.log(`Found ${vaultCount} vault(s).`);
 
@@ -1146,83 +1139,48 @@ async function main() {
             const totalStakesByCollateral: Record<string, bigint> = {};
 
             // 2) Let's get all L1 addresses from the L1Registry (similar to your Python code)
-            const totalL1s = (await client.readContract({
-                address: config.l1Registry as Hex,
-                abi: config.abis.L1Registry,
-                functionName: 'totalL1s',
-                args: [],
-            })) as bigint;
+            const l1Registry = config.contracts.L1Registry(config.l1Registry)
+            const totalL1s = await l1Registry.read.totalL1s();
 
             // We'll store them in an array
             const l1Array: Hex[] = [];
             for (let i = 0n; i < totalL1s; i++) {
                 // e.g. getL1At(i) might return [address, metadataUrl], adjust as needed
-                const [l1Address, metadataUrl] = (await client.readContract({
-                    address: config.l1Registry as Hex,
-                    abi: config.abis.L1Registry,
-                    functionName: 'getL1At',
-                    args: [i],
-                })) as [Hex, string];
+                const [l1Address, metadataUrl] = await l1Registry.read.getL1At([i]);
 
                 l1Array.push(l1Address);
             }
 
             // 3) For each vault in [0..vaultCount-1], read assetClass, delegator, collateral
             for (let i = 0n; i < vaultCount; i++) {
-                const [vaultAddress] = (await client.readContract({
-                    address: middlewareVaultManager as Hex,
-                    abi: config.abis.VaultManager,
-                    functionName: 'getVaultAtWithTimes',
-                    args: [i],
-                })) as [Hex, bigint, bigint];
+                const [vaultAddress] = await vaultManager.read.getVaultAtWithTimes([i]);
 
                 console.log(`\nVault #${i}: ${vaultAddress}`);
 
                 // read the assetClass
-                const assetClass = (await client.readContract({
-                    address: middlewareVaultManager as Hex,
-                    abi: config.abis.VaultManager,
-                    functionName: 'getVaultAssetClass',
-                    args: [vaultAddress],
-                })) as bigint;
+                const assetClass = await vaultManager.read.getVaultAssetClass([vaultAddress]);
 
                 // read delegator
-                const delegator = await client.readContract({
-                    address: vaultAddress,
-                    abi: config.abis.VaultTokenized,
-                    functionName: 'delegator',
-                    args: [],
-                }) as Hex;
+                const vaultTokenized = config.contracts.VaultTokenized(vaultAddress);
+                const delegator = await vaultTokenized.read.delegator();
 
                 if (delegator === '0x0000000000000000000000000000000000000000') {
                     console.log("    (No delegator set, skipping)");
                     continue;
                 }
+                const l1RestakeDelegator = config.contracts.L1RestakeDelegator(delegator);
                 // read collateral
-                const collateral = await client.readContract({
-                    address: vaultAddress,
-                    abi: config.abis.VaultTokenized,
-                    functionName: 'collateral',
-                    args: [],
-                }) as Hex;
+                const collateral = await vaultTokenized.read.collateral();
 
                 // 4) For each L1 in l1Array, check if operator is opted in
                 for (const l1Address of l1Array) {
-                    const isOptedIn = await client.readContract({
-                        address: config.opL1OptIn as Hex,
-                        abi: config.abis.OperatorL1OptInService,
-                        functionName: 'isOptedIn',
-                        args: [operator, l1Address],
-                    }) as boolean;
+                    const operatorL1OptInService = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+                    const isOptedIn = await operatorL1OptInService.read.isOptedIn([operator, l1Address])
 
                     if (isOptedIn) {
                         // read stake
-                        const stakeValue = await client.readContract({
-                            address: delegator,
-                            abi: config.abis.L1RestakeDelegator,
-                            functionName: 'stake',
-                            args: [l1Address, assetClass, operator],
-                        }) as bigint;
+
+                        const stakeValue = await l1RestakeDelegator.read.stake([l1Address, assetClass, operator])
 
                         if (stakeValue > 0n) {
                             console.log(
@@ -1302,12 +1260,13 @@ async function main() {
         .action(async (uptimeTrackerAddress, signedUptimeHex, options) => {
             const { privateKey, network } = program.opts();
             const messageIndex = parseInt(options.messageIndex, 10);
+            const client = generateClient(network, privateKey);
+            const config = getConfig(network, client);
             await computeValidatorUptime(
-                uptimeTrackerAddress as Hex,
-                signedUptimeHex as Hex,
+                config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
                 messageIndex,
-                privateKey,
-                network
+                client.account,
+                signedUptimeHex as Hex,
             );
         });
 
@@ -1355,15 +1314,17 @@ async function main() {
                 process.exit(1);
             }
 
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+
             await reportAndSubmitValidatorUptime(
                 rpcUrl,
                 nodeId,
                 warpNetworkID,
                 sourceChainId,
-                uptimeTrackerAddress as Hex,
+                config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
                 messageIndex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1380,13 +1341,14 @@ async function main() {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             await computeOperatorUptimeAtEpoch(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 operator as Hex,
                 parseInt(epoch, 10),
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1403,14 +1365,15 @@ async function main() {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             await computeOperatorUptimeForEpochs(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 operator as Hex,
                 parseInt(startEpoch, 10),
                 parseInt(endEpoch, 10),
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1423,11 +1386,13 @@ async function main() {
         .argument("<epoch>", "Epoch number")
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             const uptime = await getValidatorUptimeForEpoch(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 validationID as Hex,
-                parseInt(epoch, 10),
-                opts.network
+                parseInt(epoch, 10)
             ) as bigint;
             console.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
@@ -1440,11 +1405,13 @@ async function main() {
         .argument("<epoch>", "Epoch number")
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             const isSet = await isValidatorUptimeSetForEpoch(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 validationID as Hex,
-                parseInt(epoch, 10),
-                opts.network
+                parseInt(epoch, 10)
             );
             console.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
         });
@@ -1457,11 +1424,13 @@ async function main() {
         .argument("<epoch>", "Epoch number")
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             const uptime = await getOperatorUptimeForEpoch(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 operator as Hex,
-                parseInt(epoch, 10),
-                opts.network
+                parseInt(epoch, 10)
             ) as bigint;
             console.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
@@ -1474,11 +1443,13 @@ async function main() {
         .argument("<epoch>", "Epoch number")
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             const isSet = await isOperatorUptimeSetForEpoch(
-                uptimeTrackerAddress as Hex,
+                uptimeTracker,
                 operator as Hex,
-                parseInt(epoch, 10),
-                opts.network
+                parseInt(epoch, 10)
             );
             console.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
         });
@@ -1490,10 +1461,12 @@ async function main() {
         .argument("<validationID>", "Validation ID of the validator")
         .action(async (uptimeTrackerAddress, validationID) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
             const checkpoint = await getLastUptimeCheckpoint(
-                uptimeTrackerAddress as Hex,
-                validationID as Hex,
-                opts.network
+                uptimeTracker,
+                validationID as Hex
             ) as { remainingUptime: bigint; attributedUptime: bigint; timestamp: bigint };
             console.log(`Last uptime checkpoint for validator ${validationID}:`);
             console.log(`  Remaining uptime: ${checkpoint.remainingUptime.toString()} seconds`);
@@ -1512,12 +1485,14 @@ async function main() {
         .argument("<batchSize>", "Number of operators to process in this batch")
         .action(async (rewardsAddress, epoch, batchSize) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await distributeRewards(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                parseInt(batchSize),
-                opts.privateKey,
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10),
+                parseInt(batchSize, 10),
+                client.account
             );
         });
 
@@ -1529,13 +1504,15 @@ async function main() {
         .option("--recipient <recipient>", "Optional recipient address")
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimRewards(
-                rewardsAddress as Hex,
+                rewardsContract,
                 rewardsToken as Hex,
                 recipient as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1547,13 +1524,15 @@ async function main() {
         .option("--recipient <recipient>", "Optional recipient address")
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimOperatorFee(
-                rewardsAddress as Hex,
+                rewardsContract,
                 rewardsToken as Hex,
                 recipient as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1565,13 +1544,15 @@ async function main() {
         .option("--recipient <recipient>", "Optional recipient address")
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimCuratorFee(
-                rewardsAddress as Hex,
+                rewardsContract,
                 rewardsToken as Hex,
                 recipient as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1583,13 +1564,15 @@ async function main() {
         .option("--recipient <recipient>", "Optional recipient address")
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimProtocolFee(
-                rewardsAddress as Hex,
+                rewardsContract,
                 rewardsToken as Hex,
                 recipient as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1602,14 +1585,16 @@ async function main() {
         .option("--recipient <recipient>", "Optional recipient address")
         .action(async (rewardsAddress, epoch, rewardsToken, options) => {
             const opts = program.opts();
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimUndistributedRewards(
-                rewardsAddress as Hex,
-                parseInt(epoch),
+                rewardsContract,
+                parseInt(epoch, 10),
                 rewardsToken as Hex,
                 recipient as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1623,14 +1608,16 @@ async function main() {
         .argument("<rewardsAmount>", "Amount of rewards in wei")
         .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await setRewardsAmountForEpochs(
-                rewardsAddress as Hex,
-                parseInt(startEpoch),
-                parseInt(numberOfEpochs),
+                rewardsContract,
+                parseInt(startEpoch, 10),
+                parseInt(numberOfEpochs, 10),
                 rewardsToken as Hex,
                 BigInt(rewardsAmount),
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1642,12 +1629,14 @@ async function main() {
         .argument("<share>", "Share in basis points (100 = 1%)")
         .action(async (rewardsAddress, assetClass, share) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await setRewardsShareForAssetClass(
-                rewardsAddress as Hex,
+                rewardsContract,
                 BigInt(assetClass),
-                parseInt(share),
-                opts.privateKey,
-                opts.network
+                parseInt(share, 10),
+                client.account
             );
         });
 
@@ -1658,11 +1647,13 @@ async function main() {
         .argument("<minUptime>", "Minimum uptime in seconds")
         .action(async (rewardsAddress, minUptime) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await setMinRequiredUptime(
-                rewardsAddress as Hex,
+                rewardsContract,
                 BigInt(minUptime),
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1673,11 +1664,13 @@ async function main() {
         .argument("<newAdmin>", "New admin address")
         .action(async (rewardsAddress, newAdmin) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await setAdminRole(
-                rewardsAddress as Hex,
+                rewardsContract,
                 newAdmin as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1688,11 +1681,13 @@ async function main() {
         .argument("<newOwner>", "New protocol owner address")
         .action(async (rewardsAddress, newOwner) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await setProtocolOwner(
-                rewardsAddress as Hex,
+                rewardsContract,
                 newOwner as Hex,
-                opts.privateKey,
-                opts.network
+                client.account
             );
         });
 
@@ -1703,11 +1698,13 @@ async function main() {
         .argument("<newFee>", "New fee in basis points (100 = 1%)")
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await updateProtocolFee(
-                rewardsAddress as Hex,
-                parseInt(newFee),
-                opts.privateKey,
-                opts.network
+                rewardsContract,
+                parseInt(newFee, 10),
+                client.account
             );
         });
 
@@ -1718,11 +1715,13 @@ async function main() {
         .argument("<newFee>", "New fee in basis points (100 = 1%)")
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await updateOperatorFee(
-                rewardsAddress as Hex,
-                parseInt(newFee),
-                opts.privateKey,
-                opts.network
+                rewardsContract,
+                parseInt(newFee, 10),
+                client.account
             );
         });
 
@@ -1733,15 +1732,16 @@ async function main() {
         .argument("<newFee>", "New fee in basis points (100 = 1%)")
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await updateCuratorFee(
-                rewardsAddress as Hex,
-                parseInt(newFee),
-                opts.privateKey,
-                opts.network
+                rewardsContract,
+                parseInt(newFee, 10),
+                client.account
             );
         });
 
-    // Read-only getter functions
     program
         .command("rewards-get-amounts")
         .description("Get rewards amounts per token for epoch")
@@ -1749,10 +1749,12 @@ async function main() {
         .argument("<epoch>", "Epoch to query")
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getRewardsAmountPerTokenFromEpoch(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10)
             );
         });
 
@@ -1764,11 +1766,13 @@ async function main() {
         .argument("<token>", "Token address")
         .action(async (rewardsAddress, epoch, token) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getRewardsAmountForTokenFromEpoch(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                token as Hex,
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10),
+                token as Hex
             );
         });
 
@@ -1780,11 +1784,13 @@ async function main() {
         .argument("<operator>", "Operator address")
         .action(async (rewardsAddress, epoch, operator) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getOperatorShares(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                operator as Hex,
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10),
+                operator as Hex
             );
         });
 
@@ -1796,11 +1802,13 @@ async function main() {
         .argument("<vault>", "Vault address")
         .action(async (rewardsAddress, epoch, vault) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getVaultShares(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                vault as Hex,
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10),
+                vault as Hex
             );
         });
 
@@ -1812,11 +1820,13 @@ async function main() {
         .argument("<curator>", "Curator address")
         .action(async (rewardsAddress, epoch, curator) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getCuratorShares(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                curator as Hex,
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10),
+                curator as Hex
             );
         });
 
@@ -1827,10 +1837,12 @@ async function main() {
         .argument("<token>", "Token address")
         .action(async (rewardsAddress, token) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getProtocolRewards(
-                rewardsAddress as Hex,
-                token as Hex,
-                opts.network
+                rewardsContract,
+                token as Hex
             );
         });
 
@@ -1841,10 +1853,12 @@ async function main() {
         .argument("<epoch>", "Epoch to query")
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getDistributionBatch(
-                rewardsAddress as Hex,
-                parseInt(epoch),
-                opts.network
+                rewardsContract,
+                parseInt(epoch, 10)
             );
         });
 
@@ -1854,9 +1868,11 @@ async function main() {
         .argument("<rewardsAddress>", "Address of the rewards contract")
         .action(async (rewardsAddress) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getFeesConfiguration(
-                rewardsAddress as Hex,
-                opts.network
+                rewardsContract
             );
         });
 
@@ -1867,10 +1883,12 @@ async function main() {
         .argument("<assetClass>", "Asset class ID")
         .action(async (rewardsAddress, assetClass) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getRewardsShareForAssetClass(
-                rewardsAddress as Hex,
-                BigInt(assetClass),
-                opts.network
+                rewardsContract,
+                BigInt(assetClass)
             );
         });
 
@@ -1880,9 +1898,11 @@ async function main() {
         .argument("<rewardsAddress>", "Address of the rewards contract")
         .action(async (rewardsAddress) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getMinRequiredUptime(
-                rewardsAddress as Hex,
-                opts.network
+                rewardsContract
             );
         });
 
@@ -1893,10 +1913,12 @@ async function main() {
         .argument("<staker>", "Staker address")
         .action(async (rewardsAddress, staker) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getLastEpochClaimedStaker(
-                rewardsAddress as Hex,
-                staker as Hex,
-                opts.network
+                rewardsContract,
+                staker as Hex
             );
         });
 
@@ -1907,10 +1929,12 @@ async function main() {
         .argument("<operator>", "Operator address")
         .action(async (rewardsAddress, operator) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getLastEpochClaimedOperator(
-                rewardsAddress as Hex,
-                operator as Hex,
-                opts.network
+                rewardsContract,
+                operator as Hex
             );
         });
 
@@ -1921,10 +1945,12 @@ async function main() {
         .argument("<curator>", "Curator address")
         .action(async (rewardsAddress, curator) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getLastEpochClaimedCurator(
-                rewardsAddress as Hex,
-                curator as Hex,
-                opts.network
+                rewardsContract,
+                curator as Hex
             );
         });
 
@@ -1935,10 +1961,12 @@ async function main() {
         .argument("<protocolOwner>", "Protocol owner address")
         .action(async (rewardsAddress, protocolOwner) => {
             const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
             await getLastEpochClaimedProtocol(
-                rewardsAddress as Hex,
-                protocolOwner as Hex,
-                opts.network
+                rewardsContract,
+                protocolOwner as Hex
             );
         });
 
