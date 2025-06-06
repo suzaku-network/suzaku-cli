@@ -284,9 +284,21 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     return response.txID;
 }
 
+export async function getCurrentValidators(subnetId: string){
+    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.getCurrentValidators({
+        subnetID: subnetId
+    });
+
+    return response.validators;
+}
+
 export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtObject> {
     const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
     const currentHeight = await pvmApi.getHeight();
+    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,

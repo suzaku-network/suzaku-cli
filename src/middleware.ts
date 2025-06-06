@@ -1,6 +1,5 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog } from 'viem';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Account, Abi } from 'viem';
 import { TContract } from './config';
-import type { Hex, Account, Abi } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
 import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
@@ -10,7 +9,7 @@ import { Config } from './config';
 import { NodeId, parseNodeID } from './lib/utils';
 import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
-import { getValidatorsAt, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
+import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
 
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -119,6 +118,7 @@ export async function middlewareAddNode(
 export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
   middleware: TContract['MiddlewareService'],
+  balancer: TContract['BalancerValidatorManager'],
   operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
@@ -135,26 +135,34 @@ export async function middlewareCompleteValidatorRegistration(
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
     const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
-    // Get the unsigned warp message and validation ID from the receipt
-    const RegisterL1ValidatorUnsignedWarpMsg = receipt.logs[0].data ?? '';
+    // Check if the node is still registered as a validator on the P-Chain
+    const L1Id = await middlewareGetL1Id(middleware, balancer, client);
+    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeId);
+    if (isValidator) {
+      console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
+    } else {
+      // Get the unsigned warp message from the receipt
+      const RegisterL1ValidatorUnsignedWarpMsg = receipt.logs[0].data ?? '';
+
+      // Collect signatures for the warp message
+      console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
+      const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
+      console.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
+
+      // Register validator on P-Chain
+      console.log("\nRegistering validator on P-Chain...");
+      const pChainTxId = await registerL1Validator({
+        privateKeyHex: pChainTxPrivateKey,
+        client,
+        blsProofOfPossession: blsProofOfPossession,
+        signedMessage,
+        initialBalance: initialBalance
+      });
+      console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
+    }
+
+    // Get the validation ID from the receipt logs
     const validationIDHex = receipt.logs[1].topics[1] ?? '';
-
-    // Collect signatures for the warp message
-    console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
-    const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
-    console.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
-
-    // Register validator on P-Chain
-    console.log("\nRegistering validator on P-Chain...");
-    const pChainTxId = await registerL1Validator({
-      privateKeyHex: pChainTxPrivateKey,
-      client,
-      blsProofOfPossession: blsProofOfPossession,
-      signedMessage,
-      initialBalance: initialBalance
-    });
-    console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
-
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
     const pChainChainID = '11111111111111111111111111111111LpoYY';
@@ -245,8 +253,7 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Check if the node is still registered as a validator on the P-Chain
     const L1Id = await middlewareGetL1Id(middleware, balancerValidatorManager, client);
-    const validators = await getValidatorsAt(L1Id)
-    const isValidator = Object.keys(validators).some((key) => key === nodeID);
+    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
     } else {

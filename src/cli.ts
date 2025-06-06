@@ -556,7 +556,7 @@ async function main() {
         .argument("<addNodeTxHash>")
         .argument("<blsProofOfPossession>")
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
-        .option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee (default: 0.1 AVAX)", "0.1")
+        .option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee (default: 0 AVAX)", "0")
         .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
@@ -568,14 +568,16 @@ async function main() {
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
             const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
 
-            // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.01 + Number(options.initialBalance)) * 1e9));
+            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance)) * 1e9));
 
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
                 client,
                 middlewareSvc,
+                balancerSvc,
                 operator as Hex,
                 nodeId as NodeId,
                 options.pchainTxPrivateKey as string,
@@ -606,7 +608,6 @@ async function main() {
     program
         .command("middleware-complete-validator-removal")
         .argument("<middlewareAddress>")
-        .argument("<balancerValidatorManagerAddress>")
         .argument("<nodeId>")
         .argument("<removeNodeTxHash>")
         .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
@@ -617,8 +618,8 @@ async function main() {
 
             const config = getConfig(opts.network, client);
             const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
-            const balancerSvc = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
-            // Check if P-Chain address have 0.01 AVAX for tx fees
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
+            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
 
             // Derive pchainTxAddress from the private key
