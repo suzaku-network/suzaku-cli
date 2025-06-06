@@ -1,18 +1,23 @@
-import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner } from "@avalabs/avalanchejs";
-import { getAddresses } from "./utils";
+import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, OutputOwners } from "@avalabs/avalanchejs";
+import { getAddresses, nToAVAX } from "./utils";
+import { ExtendedWalletClient, generateClient } from "../client";
+import { requirePChainBallance } from "./transferUtils";
 import { Hex } from "viem";
 
-export type GetValidatorAtObject = {[nodeId: string]: {publicKey: string, weight: BigInt}};
+export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
 
-export interface CreateChainParams {
+export interface PChainBaseParams {
     privateKeyHex: string;
+    client: ExtendedWalletClient;
+}
+
+export interface CreateChainParams extends PChainBaseParams {
     chainName: string;
     subnetId: string;
     genesisData: string;
 }
 
-export interface ConvertToL1Params {
-    privateKeyHex: string;
+export interface ConvertToL1Params extends PChainBaseParams {
     subnetId: string;
     chainId: string;
     managerAddress: Hex;
@@ -25,29 +30,23 @@ export interface ConvertToL1Params {
     }[];
 }
 
-export interface RegisterL1ValidatorParams {
-    privateKeyHex: string;
-    pChainAddress: string;
+export interface RegisterL1ValidatorParams extends PChainBaseParams {
     blsProofOfPossession: string;
     signedMessage: string;
     initialBalance: number;
 }
 
-export interface RemoveL1ValidatorParams {
-    privateKeyHex: string;
-    pChainAddress: string;
+export interface RemoveL1ValidatorParams extends PChainBaseParams {
     validationID: string;
 }
 
-export interface SetValidatorWeightParams {
-    privateKeyHex: string;
-    pChainAddress: string;
+export interface SetValidatorWeightParams extends PChainBaseParams {
     validationID: string;
     message: string;
 }
 
 export const SUBNET_EVM_ID = "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN";
-const RPC_ENDPOINT = "https://api.avax-test.network"; // Replace with your actual RPC endpoint
+export const RPC_ENDPOINT = "https://api.avax-test.network"; // Replace with your actual RPC endpoint
 
 async function addSigToAllCreds(
     unsignedTx: UnsignedTx,
@@ -66,8 +65,8 @@ async function addSigToAllCreds(
     }
 }
 
-export async function createSubnet(privateKeyHex: string): Promise<string> {
-    if (!privateKeyHex) {
+export async function createSubnet(params: PChainBaseParams): Promise<string> {
+    if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
 
@@ -75,7 +74,7 @@ export async function createSubnet(privateKeyHex: string): Promise<string> {
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
 
-    const { P: pAddress } = getAddresses(privateKeyHex);
+    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -92,11 +91,11 @@ export async function createSubnet(privateKeyHex: string): Promise<string> {
         context,
     );
 
-    await addSigToAllCreds(tx, utils.hexToBuffer(privateKeyHex));
+    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
 
     // Sleep for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await waitPChainTx(response.txID, pvmApi);
 
     return response.txID;
 }
@@ -110,7 +109,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
 
-    const { P: pAddress } = getAddresses(params.privateKeyHex);
+    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -136,7 +135,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
 
     // Sleep for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await waitPChainTx(response.txID, pvmApi);
 
     console.log('Created chain: ', response.txID);
     return response.txID;
@@ -151,7 +150,7 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
 
-    const { P: pAddress } = getAddresses(params.privateKeyHex);
+    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -196,7 +195,7 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
 
     // Sleep for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await waitPChainTx(response.txID, pvmApi);
 
     return response.txID;
 }
@@ -209,11 +208,12 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
     const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
 
-    const addressBytes = utils.bech32ToBytes(params.pChainAddress);
+    const addressBytes = utils.bech32ToBytes(pChainAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
-        addresses: [params.pChainAddress]
+        addresses: [pChainAddress]
     });
 
     // Create a new register validator transaction
@@ -235,11 +235,7 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
 
     // Wait for transaction to be confirmed
     // console.log("Waiting for P-Chain confirmation...");
-    while (true) {
-        let status = await pvmApi.getTxStatus({ txID: response.txID });
-        if (status.status === "Committed") break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    await waitPChainTx(response.txID, pvmApi);
     // console.log("P-Chain transaction confirmed");
 
     return response.txID;
@@ -254,10 +250,11 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
 
-    const addressBytes = utils.bech32ToBytes(params.pChainAddress);
+    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const addressBytes = utils.bech32ToBytes(pChainAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
-        addresses: [params.pChainAddress]
+        addresses: [pChainAddress]
     });
 
     // Create a new disable validator transaction
@@ -281,19 +278,27 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
 
     // Wait for transaction to be confirmed
     console.log("Waiting for P-Chain confirmation...");
-    while (true) {
-        let status = await pvmApi.getTxStatus({ txID: response.txID });
-        if (status.status === "Committed") break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    await waitPChainTx(response.txID, pvmApi);
     console.log("P-Chain transaction confirmed");
 
     return response.txID;
 }
 
+export async function getCurrentValidators(subnetId: string){
+    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.getCurrentValidators({
+        subnetID: subnetId
+    });
+
+    return response.validators;
+}
+
 export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtObject> {
     const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
     const currentHeight = await pvmApi.getHeight();
+    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,
@@ -315,11 +320,11 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(RPC_ENDPOINT);
-
-    const addressBytes = utils.bech32ToBytes(params.pChainAddress);
+    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const addressBytes = utils.bech32ToBytes(pChainAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
-        addresses: [params.pChainAddress]
+        addresses: [pChainAddress]
     });
 
     // Create a new set validator weight transaction
@@ -342,23 +347,22 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
 
     // Wait for transaction to be confirmed
     console.log("Waiting for P-Chain confirmation...");
-    while (true) {
-        let status = await pvmApi.getTxStatus({ txID: response.txID });
-        if (status.status === "Committed") break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    await waitPChainTx(response.txID, pvmApi);
     console.log("P-Chain transaction confirmed");
 
     return response.txID;
 }
 
-export function derivePChainAddressFromPrivateKey(privateKeyHex: string, networkPrefix: string): string {
-    const publicKey = secp256k1.getPublicKey(utils.hexToBuffer(privateKeyHex));
-    const hrp = networkPrefix;
-    const address = utils.formatBech32(
-        hrp,
-        secp256k1.publicKeyBytesToAddress(publicKey),
-    );
-
-    return "P-" + address;
+// Wait p chain tx until it is confirmed with a timeout
+export async function waitPChainTx(txID: string, pvmApi: pvm.PVMApi, pollingInterval: number = 3, retryCount: number = 10) {
+    let response = await pvmApi.getTxStatus({ txID });
+    let retry = 0;
+    while (response.status !== 'Committed' && retry < retryCount) {
+        response = await pvmApi.getTxStatus({ txID });
+        await new Promise(resolve => setTimeout(resolve, pollingInterval * 1000));
+        retry++;
+    }
+    if (response.status !== 'Committed') {
+        throw new Error(`P-Chain transaction ${txID} not committed after ${retryCount} retries`);
+    }
 }

@@ -41,11 +41,12 @@ interface AddressMap {
  * @param privateKeyHex - Private key in hexadecimal format
  * @returns Object containing derived addresses for different chains
  */
-export function getAddresses(privateKeyHex: string): AddressMap {
-    const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex));
+export function getAddresses(privateKeyHex: string, network: string): AddressMap {
+    const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';
+    const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
 
     const pChainAddress = `P-${utils.formatBech32(
-        "fuji",
+        networkPrefix,
         secp256k1.publicKeyBytesToAddress(publicKey)
     )}`;
 
@@ -131,4 +132,25 @@ export const parseNodeID = (nodeID: NodeId): Hex => {
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
     const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
     return padded as Hex
+}
+
+export function prompt(question: string): Promise<string> {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    return new Promise(resolve => {
+        rl.question(question, (answer) => {
+            rl.close();
+            resolve(answer.trim());
+        });
+    });
+}
+
+export function nToAVAX(value: bigint): string {
+    const avaxValue = value / BigInt(1e9);
+    const decimalValue = value % BigInt(1e9);
+    const decimalString = decimalValue.toString().padStart(9, '0');
+    return `${avaxValue}.${decimalString}`;
 }
