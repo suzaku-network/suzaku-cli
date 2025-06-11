@@ -3,7 +3,7 @@ import { Pass } from "./lib/pass";
 import * as path from 'path';
 import * as os from 'os';
 
-const passPath = path.join(os.homedir(), path.sep, '.suzaku-cli/.password-store');
+export const passPath = path.join(os.homedir(), path.sep, '.suzaku-cli/.password-store');
 
 export function buildCommands(program: Command) {
   program
@@ -13,7 +13,7 @@ export function buildCommands(program: Command) {
 
   program
     .command("init")
-    .description("Initialize the key sore")
+    .description("Initialize the keystore")
     .argument("<gpgKeyIds...>", "desired gpg key ids used to encrypt/decrypt the key store")
     .action(async (gpgKeyIds: string[]) => {
       const pass = new Pass(passPath, gpgKeyIds)

@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { parseUnits, Hex } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
@@ -114,7 +114,18 @@ import { NodeId } from "./lib/utils";
 import { TContract } from './config';
 import type { Account } from 'viem';
 
-import { buildCommands as buildKeyStoreCmds } from "./keyStore";
+import { buildCommands as buildKeyStoreCmds, passPath } from "./keyStore";
+import { Pass } from "./lib/pass";
+
+// Commander help functions
+function parseSecretName(value: string, previousValue: string): string {
+    const pass = new Pass(passPath)
+    const secret = pass.show(value);
+    if (typeof secret !== 'string' || secret.trim() === '') {
+        throw new Error("Secret name cannot be empty");
+    }
+    return secret;
+}
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey);
@@ -125,14 +136,20 @@ function collectMultiple(value: string, previous: string[]): string[] {
     return previous.concat([value]);
 }
 
-
+// Main function to set up the CLI commands
 async function main() {
     const program = new Command();
 
     program
         .name('suzaku-cli')
-        .option('-k, --private-key <privateKey>', '', process.env.PK)
-        .option('-n, --network <network>', '', 'fuji')
+        .addOption(new Option('-n, --network <network>')
+            .choices(['fuji', 'mainnet', 'anvil'])
+            .default('fuji'))
+        .addOption(new Option('-k, --private-key <privateKey>')
+            .env('PK'))
+        .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
+            .conflicts('privateKey')
+            .argParser(parseSecretName))
         .version('0.1.0');
 
     /* --------------------------------------------------
@@ -721,9 +738,8 @@ async function main() {
                     });
                 console.log("calcAndCacheStakes done, tx hash:", hash);
             } catch (error) {
-                console.error("Transaction failed:", error);
                 if (error instanceof Error) {
-                    console.error("Error message:", error.message);
+                    console.error(error.message);
                 }
             }
         });
@@ -1979,14 +1995,23 @@ async function main() {
                 protocolOwner as Hex
             );
         });
-    
+
     buildKeyStoreCmds(
         program
-            .command("key")
-            .description("Manage the cli keystore (advanced users can use pass)")
+            .command("secret")
+            .description("Manage the cli keystore (advanced users can use pass directly)")
     )
-    
-        
+
+    program.hook("preAction", (thisCommand, actionCommand) => {
+        const opts = program.opts();
+        // Block manually private key on mainnet
+        if (opts.privateKey && opts.network === "mainnet") {
+            console.error("Using private key on mainnet is not allowed. Use the secret keystore instead.");
+            process.exit(1);
+        }
+        // Ensure privateKey is set if opts.secret is provided
+        opts.privateKey = opts.privateKey || opts.secretName;
+    });
 
     program.parse(process.argv);
 }
