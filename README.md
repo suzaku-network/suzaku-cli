@@ -32,6 +32,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
   - [Utility Commands](#utility-commands)
   - [Uptime Tracking Commands](#uptime-tracking-commands)
   - [Rewards Commands](#rewards-commands)
+  - [Secret Commands](#secret-commands)
 
 ## Requirements
 
@@ -540,6 +541,45 @@ Here's a recommended sequence of commands to test the rewards functionality:
    ```bash
    # This should be done after epoch 99+2 to ensure all claims are done
    pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS_FUJI 99 $SAVAX
+   ```
+
+### Secret Commands
+
+The following commands allow you to manage the cli secrets keystore. Under the wood, it uses [pass](https://www.passwordstore.org/), the standard unix password manager.
+It's a mandatory dependency when working on the mainnet with this cli.
+
+1. **Initialize cli keystore**
+   ```bash
+   # Acquire available gpg key ids
+   pnpm cli secret list-gpg-ids
+   > [suzabro@domain.com
+   > avabro@domain.com]
+   # Initialize the keystore using the ids that are supposed to interact with.
+   pnpm cli secret init suzabro@domain.com avabro@domain.com ...
+   ```
+
+2. **Create new secret**
+   ```bash
+   pnpm cli secret create operator $OPERATOR_PK
+   ```
+
+3. **Use your secret name instead of raw private key**
+   ```bash
+   pnpm cli middleware-add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
+   ```
+   You'll be prompted like using [pass](https://www.passwordstore.org/) normally and it will use the underlying private key
+
+4. **List all available secrets**
+   ```bash
+   pnpm cli secret list
+   > Available secrets:
+   > .password-store
+   > └── operator
+   ```
+
+5. **Remove a secret**
+   ```bash
+   pnpm cli secret rm operator
    ```
 
 ---

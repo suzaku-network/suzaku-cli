@@ -4,6 +4,9 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
+    "setup": "pnpm i && pnpm tsc",
+    "build": "tsc",
+    "suzaku-cli": "node dist/cli.js",
     "cli": "ts-node src/cli.ts"
   },
   "keywords": [],

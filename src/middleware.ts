@@ -29,9 +29,8 @@ export async function middlewareRegisterOperator(
     );
     console.log("registerOperator done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -52,9 +51,8 @@ export async function middlewareDisableOperator(
     );
     console.log("disableOperator done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -75,9 +73,8 @@ export async function middlewareRemoveOperator(
     );
     console.log("removeOperator done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -102,14 +99,13 @@ export async function middlewareAddNode(
     const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await middleware.write.addNode(
-      [nodeIdHex32, blsKey, registrationExpiry, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner [1]}, initialStake],
+      [nodeIdHex32, blsKey, registrationExpiry, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake],
       { chain: null, account }
     );
     console.log("addNode executed successfully, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -184,10 +180,10 @@ export async function middlewareCompleteValidatorRegistration(
     // Simulate completeValidatorRegistration transaction
     await middleware.simulate.completeValidatorRegistration([operator, nodeIdHex32, 0],
       {
-        account: client.account? client.account : null,
+        account: client.account ? client.account : null,
         gas: BigInt(5000000),
         accessList
-    });
+      });
 
     console.log("\nCalling function completeValidatorRegistration...");
     const hash = await middleware.write.completeValidatorRegistration(
@@ -196,9 +192,8 @@ export async function middlewareCompleteValidatorRegistration(
     );
     console.log("completeValidatorRegistration executed successfully, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -223,9 +218,8 @@ export async function middlewareRemoveNode(
     );
     console.log("removeNode executed successfully, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -298,27 +292,27 @@ export async function middlewareCompleteValidatorRemoval(
     // console.log("\nSimulating completeEndValidation transaction...");
     const { request: completeRequest } = await middleware.simulate.completeValidatorRemoval([0],
       {
-        account: client.account? client.account : null,
+        account: client.account ? client.account : null,
         gas: BigInt(5000000),
         accessList
-    });
+      });
 
     // Execute completeEndValidation transaction
     console.log("Executing completeEndValidation transaction...");
     const completeHash = await middleware.write.completeValidatorRemoval([0],
-      {account: client.account,
-      chain: null,
-      accessList
-    });
+      {
+        account: client.account,
+        chain: null,
+        accessList
+      });
 
-      console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
-    } catch (error) {
-      console.error("Transaction failed:", error);
-      if (error instanceof Error) {
-        console.error("Error message:", error.message);
-      }
+    console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
     }
   }
+}
 
 // initializeValidatorWeightUpdate
 export async function middlewareInitStakeUpdate(
@@ -341,9 +335,8 @@ export async function middlewareInitStakeUpdate(
     );
     console.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -424,9 +417,8 @@ export async function middlewareCompleteStakeUpdate(
     );
     console.log("completeStakeUpdate done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -446,9 +438,8 @@ export async function middlewareCalcNodeStakes(
     );
     console.log("calcAndCacheNodeStakeForAllOperators done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -471,9 +462,8 @@ export async function middlewareForceUpdateNodes(
     );
     console.log("forceUpdateNodes executed successfully, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -495,7 +485,7 @@ export async function middlewareGetOperatorStake(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -512,7 +502,7 @@ export async function middlewareGetCurrentEpoch(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -532,7 +522,7 @@ export async function middlewareGetEpochStartTs(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -553,7 +543,7 @@ export async function middlewareGetActiveNodesForEpoch(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -569,7 +559,7 @@ export async function middlewareGetOperatorNodesLength(
     console.log(length);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -585,7 +575,7 @@ export async function middlewareGetNodeStakeCache(
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -600,7 +590,7 @@ export async function middlewareGetOperatorLockedStake(
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -615,7 +605,7 @@ export async function middlewareNodePendingRemoval(
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -630,7 +620,7 @@ export async function middlewareNodePendingUpdate(
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -645,7 +635,7 @@ export async function middlewareGetOperatorUsedStake(
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -659,7 +649,7 @@ export async function middlewareGetAllOperators(
     console.log(operators);
   } catch (error) {
     console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error("Error message:", error.message);
+    if (error instanceof Error) console.error(error.message);
   }
 }
 
@@ -671,7 +661,7 @@ export async function middlewareGetNodeLogs(
   snowscanApiKey?: string,
 ) {
   console.log("Reading logs from middleware and balancer...");
-  
+
   const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
   const middlewareAddress = receipt.to ? receipt.to as Hex : receipt.contractAddress as Hex;
   const from = receipt.blockNumber
@@ -683,7 +673,7 @@ export async function middlewareGetNodeLogs(
   bar && bar.start(0, 0);
 
   let logsProm = []
-  
+
   logsProm.push(GetContractEvents(
     client,
     middlewareAddress,
@@ -718,11 +708,11 @@ export async function middlewareGetNodeLogs(
     ));
   }
   const balancer = config.contracts.BalancerValidatorManager(balancerAddress as Hex);
-  
+
   const allLogs = await Promise.all(logsProm);
   let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
   logs = await fillEventsNodeId(balancer, logs);
-  
+
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
     log.address = log.address.toLowerCase() === middlewareAddress.toLowerCase() ? "Middleware" : "ValidatorManager";
@@ -794,7 +784,7 @@ export async function middlewareGetL1Id(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
     throw error; // Re-throw the error to handle it in the calling function
   }

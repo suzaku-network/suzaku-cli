@@ -33,7 +33,6 @@ export async function depositVault(
     console.log("Deposit done, tx hash:", hash);
 
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 
@@ -54,7 +53,6 @@ export async function withdrawVault(
     );
     console.log("Withdraw done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 
@@ -76,7 +74,6 @@ export async function claimVault(
     );
     console.log("Claim done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 

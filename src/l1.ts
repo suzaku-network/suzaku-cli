@@ -19,9 +19,8 @@ export async function registerL1(
 
         console.log("Registered L1 successfully, Transaction hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -43,9 +42,8 @@ export async function setL1MetadataUrl(
 
         console.log("Set L1 Metadata URL successfully, Transaction hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -67,9 +65,8 @@ export async function setL1Middleware(
 
         console.log("Set L1 Middleware successfully, Transaction hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -96,7 +93,7 @@ export async function getL1s(l1Registry: TContract['L1Registry']) {
     } catch (error) {
         console.error("Failed to get L1s:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
         return [];
     }

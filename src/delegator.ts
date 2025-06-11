@@ -19,9 +19,8 @@ export async function setL1Limit(
     );
     console.log("setL1Limit done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -45,9 +44,8 @@ export async function setOperatorL1Shares(
     );
     console.log("setOperatorL1Shares done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
