@@ -114,6 +114,8 @@ import { NodeId } from "./lib/utils";
 import { TContract } from './config';
 import type { Account } from 'viem';
 
+import { buildCommands as buildKeyStoreCmds } from "./keyStore";
+
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey);
     return client.account?.address as Hex;
@@ -1977,6 +1979,14 @@ async function main() {
                 protocolOwner as Hex
             );
         });
+    
+    buildKeyStoreCmds(
+        program
+            .command("key")
+            .description("Manage the cli key store")
+    )
+    
+        
 
     program.parse(process.argv);
 }
