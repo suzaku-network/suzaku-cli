@@ -9,7 +9,7 @@
   "keywords": [],
   "author": "",
   "dependencies": {
-    "@avalabs/avalanchejs": "4.1.2-alpha.4",
+    "@avalabs/avalanchejs": "5.0.0",
     "@noble/hashes": "^1.7.2",
     "@scure/base": "^1.2.4",
     "@types/cli-progress": "^3.11.6",
