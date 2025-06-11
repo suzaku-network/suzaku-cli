@@ -170,13 +170,21 @@ export class Pass {
 
     /** Run a command in the context of the store and return stdout as string (trimmed). */
   private run(cmd: string): string {
-    const out = execSync(cmd, {
-      stdio: ['ignore', 'pipe', 'inherit'],
-      env: process.env,
-      // cwd: this.storeDir,
-    }).toString()
-      .replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI color codes
-    return out.trim();
+    try {
+      const out = execSync(cmd, {
+        stdio: ['ignore', 'pipe', 'inherit'],
+        env: process.env,
+        // cwd: this.storeDir,
+      }).toString()
+        .replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI color codes
+      return out.trim();
+    } catch (error) {
+      if (cmd.includes('show') || cmd.includes('insert')) {// Hide secrets
+        throw new Error(`Command failed: ${(error as Error).message}`);
+      } else {
+        throw error
+      }
+    }
   }
 
   static listGPGIds(): string[] {

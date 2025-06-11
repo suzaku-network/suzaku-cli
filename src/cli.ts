@@ -1983,7 +1983,7 @@ async function main() {
     buildKeyStoreCmds(
         program
             .command("key")
-            .description("Manage the cli key store")
+            .description("Manage the cli keystore (advanced users can use pass)")
     )
     
         
