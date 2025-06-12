@@ -1,8 +1,8 @@
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 export async function setL1Limit(
-  delegator: TContract['L1RestakeDelegator'],
+  delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
   assetClass: bigint,
   limit: bigint,
@@ -13,7 +13,7 @@ export async function setL1Limit(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await delegator.write.setL1Limit(
+    const hash = await delegator.safeWrite.setL1Limit(
       [l1Address, assetClass, limit],
       { chain: null, account }
     );
@@ -26,7 +26,7 @@ export async function setL1Limit(
 }
 
 export async function setOperatorL1Shares(
-  delegator: TContract['L1RestakeDelegator'],
+  delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
   assetClass: bigint,
   operatorAddress: Hex,
@@ -38,7 +38,7 @@ export async function setOperatorL1Shares(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await delegator.write.setOperatorL1Shares(
+    const hash = await delegator.safeWrite.setOperatorL1Shares(
       [l1Address, assetClass, operatorAddress, shares],
       { chain: null, account }
     );

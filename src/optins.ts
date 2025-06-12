@@ -1,21 +1,21 @@
-import { TContract } from "./config";
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 /**
  * Operator -> L1
  */
-  export async function optInL1(
-  service: TContract['OperatorL1OptInService'],
-      l1Address: Hex,
-        account: Account | undefined
-        ) {
-    console.log(`Opting in to L1: ${l1Address}`);
-    try {
-        if (!account) throw new Error('Client account is required');
-        const hash = await service.write.optIn(
+export async function optInL1(
+  service: SafeSuzakuContract['OperatorL1OptInService'],
+  l1Address: Hex,
+  account: Account | undefined
+) {
+  console.log(`Opting in to L1: ${l1Address}`);
+  try {
+    if (!account) throw new Error('Client account is required');
+    const hash = await service.safeWrite.optIn(
       [l1Address],
-            { chain: null, account }
-          );
+      { chain: null, account }
+    );
     console.log("optInL1 successful! Tx hash:", hash);
   } catch (error) {
     console.error("optInL1 failed:", error);
@@ -23,14 +23,14 @@ import type { Hex, Account } from 'viem';
 }
 
 export async function optOutL1(
-  service: TContract['OperatorL1OptInService'],
+  service: SafeSuzakuContract['OperatorL1OptInService'],
   l1Address: Hex,
   account: Account | undefined
 ) {
   console.log(`Opting out from L1: ${l1Address}`);
   try {
     if (!account) throw new Error('Client account is required');
-    const hash = await service.write.optOut(
+    const hash = await service.safeWrite.optOut(
       [l1Address],
       { chain: null, account }
     );
@@ -41,7 +41,7 @@ export async function optOutL1(
 }
 
 export async function checkOptInL1(
-  service: TContract['OperatorL1OptInService'],
+  service: SafeSuzakuContract['OperatorL1OptInService'],
   operator: Hex,
   l1Address: Hex
 ) {
@@ -60,14 +60,14 @@ export async function checkOptInL1(
  * Operator -> Vault
  */
 export async function optInVault(
-  service: TContract['OperatorVaultOptInService'],
+  service: SafeSuzakuContract['OperatorVaultOptInService'],
   vaultAddress: Hex,
   account: Account | undefined
 ) {
   console.log(`Opting in to Vault: ${vaultAddress}`);
   try {
     if (!account) throw new Error('Client account is required');
-    const hash = await service.write.optIn(
+    const hash = await service.safeWrite.optIn(
       [vaultAddress],
       { chain: null, account }
     );
@@ -78,14 +78,14 @@ export async function optInVault(
 }
 
 export async function optOutVault(
-  service: TContract['OperatorVaultOptInService'],
+  service: SafeSuzakuContract['OperatorVaultOptInService'],
   vaultAddress: Hex,
   account: Account | undefined
 ) {
   console.log(`Opting out from Vault: ${vaultAddress}`);
   try {
     if (!account) throw new Error('Client account is required');
-    const hash = await service.write.optOut(
+    const hash = await service.safeWrite.optOut(
       [vaultAddress],
       { chain: null, account }
     );
@@ -96,7 +96,7 @@ export async function optOutVault(
 }
 
 export async function checkOptInVault(
-  service: TContract['OperatorVaultOptInService'],
+  service: SafeSuzakuContract['OperatorVaultOptInService'],
   operator: Hex,
   vaultAddress: Hex
 ) {
