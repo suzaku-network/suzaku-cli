@@ -1,8 +1,8 @@
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 export async function registerVaultL1(
-    vaultManager: TContract['VaultManager'],
+    vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
     assetClass: bigint,
     maxLimit: bigint,
@@ -12,7 +12,7 @@ export async function registerVaultL1(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.write.registerVault(
+        const hash = await vaultManager.safeWrite.registerVault(
             [vaultAddress, assetClass, maxLimit],
             { chain: null, account }
         );
@@ -25,7 +25,7 @@ export async function registerVaultL1(
 }
 
 export async function updateVaultMaxL1Limit(
-    vaultManager: TContract['VaultManager'],
+    vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
     assetClass: bigint,
     maxLimit: bigint,
@@ -35,7 +35,7 @@ export async function updateVaultMaxL1Limit(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.write.updateVaultMaxL1Limit(
+        const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit(
             [vaultAddress, assetClass, maxLimit],
             { chain: null, account }
         );
@@ -48,7 +48,7 @@ export async function updateVaultMaxL1Limit(
 }
 
 export async function removeVault(
-    vaultManager: TContract['VaultManager'],
+    vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
     account: Account | undefined
 ) {
@@ -56,7 +56,7 @@ export async function removeVault(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.write.removeVault(
+        const hash = await vaultManager.safeWrite.removeVault(
             [vaultAddress],
             { chain: null, account }
         );
@@ -69,7 +69,7 @@ export async function removeVault(
 }
 
 export async function getVaultCount(
-    vaultManager: TContract['VaultManager']
+    vaultManager: SafeSuzakuContract['VaultManager']
 ) {
     console.log("Getting vault count...");
 
@@ -85,7 +85,7 @@ export async function getVaultCount(
 }
 
 export async function getVaultAtWithTimes(
-    vaultManager: TContract['VaultManager'],
+    vaultManager: SafeSuzakuContract['VaultManager'],
     index: bigint
 ) {
     console.log("Getting vault at index with times...");
@@ -102,7 +102,7 @@ export async function getVaultAtWithTimes(
 }
 
 export async function getVaultAssetClass(
-    vaultManager: TContract['VaultManager'],
+    vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex
 ) {
     console.log("Getting vault asset class...");

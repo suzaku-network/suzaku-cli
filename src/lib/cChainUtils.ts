@@ -1,7 +1,7 @@
 import cliProgress from 'cli-progress';
 import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
 import { ExtendedPublicClient } from '../client';
-import { TContract } from '../config';
+import { SafeSuzakuContract } from './viemUtils';
 
 type CommonEvent = {
   address: string;
@@ -134,7 +134,7 @@ export async function PatchEventsTimestamp(
 }
 
 export async function fillEventsNodeId(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
 

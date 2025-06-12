@@ -111,7 +111,7 @@ import {
 import { requirePChainBallance } from "./lib/transferUtils";
 import { getAddresses } from "./lib/utils";
 import { NodeId } from "./lib/utils";
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
 
 import { buildCommands as buildKeyStoreCmds, passPath } from "./keyStore";
@@ -474,7 +474,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareRegisterOperator(
                 middlewareSvc,
                 operator as Hex,
@@ -491,7 +491,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareDisableOperator(
                 middlewareSvc,
                 operator as Hex,
@@ -508,7 +508,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareRemoveOperator(
                 middlewareSvc,
                 operator as Hex,
@@ -533,7 +533,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -586,7 +586,7 @@ async function main() {
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
@@ -615,7 +615,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareRemoveNode(
                 middlewareSvc,
                 nodeId as NodeId,
@@ -636,7 +636,7 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey);
 
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
@@ -666,7 +666,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareInitStakeUpdate(
                 middlewareSvc,
                 nodeId as NodeId,
@@ -693,9 +693,9 @@ async function main() {
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
 
-            
+
             // Check if P-Chain address have 0.01 AVAX for tx fees
             await requirePChainBallance(opts.privateKey, client, BigInt(0.01 * 1e9));
 
@@ -730,8 +730,8 @@ async function main() {
                 if (!client.account) {
                     throw new Error('Client account is required');
                 }
-                const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
-                const hash = await middlewareSvc.write.calcAndCacheStakes([epoch, BigInt(assetClass)],
+                const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
+                const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, BigInt(assetClass)],
                     {
                         chain: null,
                         account: client.account,
@@ -753,7 +753,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareCalcNodeStakes(
                 middlewareSvc,
                 client.account as Account
@@ -771,7 +771,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareForceUpdateNodes(
                 middlewareSvc,
                 operator as Hex,
@@ -790,7 +790,7 @@ async function main() {
         .action(async (middlewareAddress, operator, epoch, assetClass) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetOperatorStake(
                 middlewareSvc,
                 operator as Hex,
@@ -806,7 +806,7 @@ async function main() {
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetCurrentEpoch(
                 middlewareSvc
             );
@@ -820,7 +820,7 @@ async function main() {
         .action(async (middlewareAddress, epoch) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetEpochStartTs(
                 middlewareSvc,
                 Number(epoch)
@@ -836,7 +836,7 @@ async function main() {
         .action(async (middlewareAddress, operator, epoch) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetActiveNodesForEpoch(
                 middlewareSvc,
                 operator as Hex,
@@ -852,7 +852,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetOperatorNodesLength(
                 middlewareSvc,
                 operator as Hex
@@ -869,7 +869,7 @@ async function main() {
         .action(async (middlewareAddress, epoch, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
                 Number(epoch),
@@ -886,7 +886,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetOperatorLockedStake(
                 middlewareSvc,
                 operator as Hex
@@ -902,7 +902,7 @@ async function main() {
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
                 validatorId as Hex
@@ -918,7 +918,7 @@ async function main() {
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareNodePendingUpdate(
                 middlewareSvc,
                 validatorId as Hex
@@ -934,7 +934,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
                 operator as Hex
@@ -949,7 +949,7 @@ async function main() {
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress as Hex);
             await middlewareGetAllOperators(
                 middlewareSvc
             );
