@@ -44,7 +44,6 @@ export async function getValidationUptimeMessage(
 
 export async function computeValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  messageIndex: number,
   account: Account | undefined,
   signedUptimeHex: Hex
 ) {
@@ -54,7 +53,7 @@ export async function computeValidatorUptime(
   const accessList = packWarpIntoAccessList(warpBytes);
 
   const txHash = await uptimeTracker.safeWrite.computeValidatorUptime(
-    [messageIndex],
+    [0],
     { chain: null, account, accessList }
   );
 
@@ -72,7 +71,6 @@ export async function reportAndSubmitValidatorUptime(
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  messageIndex: number,
   account: Account | undefined
 ) {
   console.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
@@ -113,7 +111,6 @@ export async function reportAndSubmitValidatorUptime(
   console.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
   const txHash = await computeValidatorUptime(
     uptimeTracker,
-    messageIndex,
     account,
     signedUptimeHex as Hex
   );

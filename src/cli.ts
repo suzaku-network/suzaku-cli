@@ -1282,15 +1282,12 @@ async function main() {
         .command('compute-validator-uptime')
         .argument('<uptimeTrackerAddress>')
         .argument('<signedUptimeHex>')
-        .option('--messageIndex <int>', 'Warp message index', '0')
-        .action(async (uptimeTrackerAddress, signedUptimeHex, options) => {
+        .action(async (uptimeTrackerAddress, signedUptimeHex) => {
             const { privateKey, network } = program.opts();
-            const messageIndex = parseInt(options.messageIndex, 10);
             const client = generateClient(network, privateKey);
             const config = getConfig(network, client);
             await computeValidatorUptime(
                 config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                messageIndex,
                 client.account,
                 signedUptimeHex as Hex,
             );
@@ -1304,10 +1301,9 @@ async function main() {
         .argument("<sourceChainId>", "The Chain ID for which the uptime is being reported (used in the Warp message)")
         .argument("<nodeId>", "The NodeID of the validator (e.g., NodeID-xxxxxxxxxxx)")
         .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract on the C-Chain")
-        .option("--messageIndex <number>", "Warp message index for the UptimeTracker contract call", "0")
         // Optional: Add an explicit option if deriving warpNetworkID is complex
         // .option("--warp-network-id <number>", "Avalanche Network ID for the Warp message (e.g., 1 for Mainnet, 5 for Fuji)")
-        .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress, options) => {
+        .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress) => {
             const opts = program.opts();
             if (!opts.privateKey) {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
@@ -1334,12 +1330,6 @@ async function main() {
                 );
             }
 
-            const messageIndex = parseInt(options.messageIndex, 10);
-            if (isNaN(messageIndex)) {
-                console.error("Error: Invalid message index. Must be a number.");
-                process.exit(1);
-            }
-
             const client = generateClient(opts.network, opts.privateKey);
             const config = getConfig(opts.network, client);
 
@@ -1349,7 +1339,6 @@ async function main() {
                 warpNetworkID,
                 sourceChainId,
                 config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                messageIndex,
                 client.account
             );
         });

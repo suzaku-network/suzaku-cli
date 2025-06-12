@@ -353,9 +353,9 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 - **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**  
   Gets the validation uptime message for a given validator in the specified L1 RPC.
-- **compute-validator-uptime `<uptimeTrackerAddress>` `<signedUptimeHex>` [--messageIndex `<int>`]**
+- **compute-validator-uptime `<uptimeTrackerAddress>` `<signedUptimeHex>`**
   Computes validator uptime based on the signed uptime message.
-- **report-uptime-validator `<rpcUrl>` `<sourceChainId>` `<nodeId>` `<uptimeTrackerAddress>` [--messageIndex `<number>`]**
+- **report-uptime-validator `<rpcUrl>` `<sourceChainId>` `<nodeId>` `<uptimeTrackerAddress>`**
   Gets a validator's signed uptime message and submits it to the UptimeTracker contract.
 
 ---
