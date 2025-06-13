@@ -142,7 +142,7 @@ export async function middlewareCompleteValidatorRegistration(
 
       // Collect signatures for the warp message
       console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
-      const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
+      const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
       console.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
       // Register validator on P-Chain
@@ -167,7 +167,7 @@ export async function middlewareCompleteValidatorRegistration(
 
     // Aggregate signatures from validators
     console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
     console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
@@ -249,7 +249,7 @@ export async function middlewareCompleteValidatorRemoval(
 
       // Aggregate signatures from validators
       // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-      const signedL1ValidatorWeightMessage = await collectSignatures(unsignedL1ValidatorWeightMessage);
+      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
       console.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -273,7 +273,7 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
     console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
@@ -364,7 +364,7 @@ export async function middlewareCompleteStakeUpdate(
 
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
     console.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -384,7 +384,7 @@ export async function middlewareCompleteStakeUpdate(
 
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
     console.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list

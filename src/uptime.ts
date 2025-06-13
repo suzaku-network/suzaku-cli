@@ -4,8 +4,10 @@ import { hexToBytes, Hex } from 'viem';
 import { packWarpIntoAccessList } from './lib/warpUtils';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
+import { Network } from "./client";
 
 export async function getValidationUptimeMessage(
+  network: Network,
   rpcUrl: string,
   nodeId: string,
   networkID: number,
@@ -35,7 +37,7 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   console.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const signedValidationUptimeMessage = await collectSignatures(unsignedValidationUptimeMessageHex);
+  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
   console.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
@@ -65,6 +67,7 @@ export async function computeValidatorUptime(
 // New orchestrator function
 export async function reportAndSubmitValidatorUptime(
   // Parameters for getting the uptime message
+  network: Network,
   rpcUrl: string,
   nodeId: string,
   warpNetworkID: number, // Avalanche Network ID (1 for Mainnet, 5 for Fuji)
@@ -78,6 +81,7 @@ export async function reportAndSubmitValidatorUptime(
 
   // Step 1: Get the signed validation uptime message
   let signedUptimeHex = await getValidationUptimeMessage(
+    network,
     rpcUrl,
     nodeId,
     warpNetworkID,
