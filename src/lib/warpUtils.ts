@@ -5,6 +5,7 @@ import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
 import { cb58ToHex } from './utils';
 import { Network } from '../client';
+import { pChainChainID } from '../config';
 
 interface PackL1ConversionMessageArgs {
     subnetId: string;
@@ -162,7 +163,6 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         balance: number;
     }[];
 }): Promise<string> {
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
 
     // Pack the message locally
     const [message, justification] = packL1ConversionMessage({
@@ -216,7 +216,7 @@ export async function collectSignatures(network: Network, message: string, justi
     const body: { message: string; justification?: string; signingSubnetId?: string } = { message };
     if (justification) {
         body.justification = justification;
-        // body.signingSubnetId = "11111111111111111111111111111111LpoYY";
+        // body.signingSubnetId = pChainChainID;
     }
 
     // console.log("message", message);

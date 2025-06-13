@@ -5,7 +5,7 @@ import { GetRegistrationJustification, hexToUint8Array } from './lib/justificati
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
-import { Config } from './config';
+import { Config, pChainChainID } from './config';
 import { NodeId, parseNodeID } from './lib/utils';
 import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
@@ -161,7 +161,6 @@ export async function middlewareCompleteValidatorRegistration(
     const validationIDHex = receipt.logs[1].topics[1] ?? '';
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
@@ -263,11 +262,10 @@ export async function middlewareCompleteValidatorRemoval(
     }
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
-    const justification = await GetRegistrationJustification(nodeID, validationID, '11111111111111111111111111111111LpoYY', client);
+    const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client);
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationID as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
@@ -378,7 +376,6 @@ export async function middlewareCompleteStakeUpdate(
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
