@@ -54,3 +54,6 @@ function getConfig(network: Network, client: PublicClient | WalletClient): Confi
 }
 
 export { Config, getConfig };
+
+// Constants
+export const pChainChainID = '11111111111111111111111111111111LpoYY';
