@@ -1272,9 +1272,9 @@ async function main() {
         .action(async (rpcUrl, chainId, nodeId) => {
             const opts = program.opts();
             if (opts.network === "fuji") {
-                await getValidationUptimeMessage(rpcUrl, nodeId, 5, chainId);
+                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 5, chainId);
             } else {
-                await getValidationUptimeMessage(rpcUrl, nodeId, 1, chainId);
+                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 1, chainId);
             }
         });
 
@@ -1334,6 +1334,7 @@ async function main() {
             const config = getConfig(opts.network, client);
 
             await reportAndSubmitValidatorUptime(
+                opts.network,
                 rpcUrl,
                 nodeId,
                 warpNetworkID,

@@ -4,6 +4,7 @@ import { cb58ToBytes, bytesToCB58, interruptiblePause } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
 import { cb58ToHex } from './utils';
+import { Network } from '../client';
 
 interface PackL1ConversionMessageArgs {
     subnetId: string;
@@ -149,6 +150,7 @@ interface SignatureResponse {
 }
 
 export async function collectSignaturesInitializeValidatorSet(params: {
+    network: Network, 
     subnetId: string;
     validatorManagerBlockchainID: string;
     managerAddress: Hex;
@@ -184,7 +186,8 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     console.log("Justification:", fromBytes(justification, 'hex'));
 
     // Use the signature aggregation API from Glacier
-    const signResponse = await fetch('https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures', {
+    const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const signResponse = await fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
@@ -205,7 +208,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     return signedMessage;
 }
 
-export async function collectSignatures(message: string, justification?: string): Promise<string> {
+export async function collectSignatures(network: Network, message: string, justification?: string): Promise<string> {
     // Add 30 second pause
     await interruptiblePause(30);
 
@@ -218,7 +221,8 @@ export async function collectSignatures(message: string, justification?: string)
 
     // console.log("message", message);
     // console.log("justification", justification);
-    const signResponse = await fetch('https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures', {
+    const baseURL = network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const signResponse = await fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
