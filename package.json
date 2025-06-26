@@ -17,13 +17,14 @@
     "@scure/base": "^1.2.4",
     "@types/cli-progress": "^3.11.6",
     "cli-progress": "^3.12.0",
-    "commander": "^12.0.0",
+    "commander": "^14.0.0",
     "console-log-colors": "^0.5.0",
     "dotenv": "^16.4.7",
     "micro-eth-signer": "0.7.2",
     "viem": "^2.24.2"
   },
   "devDependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

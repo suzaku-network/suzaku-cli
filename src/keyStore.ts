@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import * as path from 'path';
 import * as os from 'os';
