@@ -111,27 +111,12 @@ import {
 import { requirePChainBallance } from "./lib/transferUtils";
 import { getAddresses } from "./lib/utils";
 
-import { buildCommands as buildKeyStoreCmds, passPath } from "./keyStore";
-import { Pass } from "./lib/pass";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID } from "./lib/cliUtils";
-
-// Commander help functions
-function parseSecretName(value: string, previousValue: string): string {
-    const pass = new Pass(passPath)
-    const secret = pass.show(value);
-    if (typeof secret !== 'string' || secret.trim() === '') {
-        throw new Error("Secret name cannot be empty");
-    }
-    return secret;
-}
+import { buildCommands as buildKeyStoreCmds } from "./keyStore";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple } from "./lib/cliParser";
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
     return client.account?.address as Hex;
-}
-
-function collectMultiple(value: string, previous: Hex[]): Hex[] {
-    return previous.concat([ParserAddress(value)]);
 }
 
 // Main function to set up the CLI commands
