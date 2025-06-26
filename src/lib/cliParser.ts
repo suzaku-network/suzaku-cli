@@ -2,6 +2,12 @@ import { Argument } from '@commander-js/extra-typings';
 import { utils } from "@avalabs/avalanchejs";
 import { Hex, parseUnits } from 'viem';
 import { NodeId } from './utils';
+import { Pass } from "./pass";
+import { passPath } from "../keyStore";
+
+export function collectMultiple(value: string, previous: Hex[]): Hex[] {
+  return previous.concat([ParserAddress(value)]);
+}
 
 // Base validators
 
@@ -25,6 +31,15 @@ function isValidHex(hex: string, bytes?: number): boolean {
 }
 
 // Parser (may be used by args or opts)
+
+export function parseSecretName(value: string, previousValue: string): string {
+    const pass = new Pass(passPath)
+    const secret = pass.show(value);
+    if (typeof secret !== 'string' || secret.trim() === '') {
+        throw new Error("Secret name cannot be empty");
+    }
+    return secret;
+}
 
 export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
   if (!isValidHex(value, bytes)) {
