@@ -7,6 +7,8 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+export const confPath ='~/.suzaku-cli'
+
 // Define the configuration interface
 interface Config {
   l1Registry: Hex;

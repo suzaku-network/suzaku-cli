@@ -312,6 +312,22 @@ export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtO
     return response.validators as GetValidatorAtObject;
 }
 
+export async function validates(subnetId: string): Promise<string | undefined> {
+    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const currentHeight = await pvmApi.getHeight();
+    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.validates({
+        subnetID: subnetId,
+    });
+
+    if (!response.blockchainIDs || response.blockchainIDs.length === 0) {
+        return undefined;
+    }
+
+    return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
+}
+
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
