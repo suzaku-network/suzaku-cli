@@ -133,7 +133,7 @@ export async function middlewareCompleteValidatorRegistration(
 
     // Check if the node is still registered as a validator on the P-Chain
     const L1Id = await middlewareGetL1Id(middleware, balancer, client);
-    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeId);
+    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeId);
     if (isValidator) {
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
     } else {
@@ -238,7 +238,7 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Check if the node is still registered as a validator on the P-Chain
     const L1Id = await middlewareGetL1Id(middleware, balancerValidatorManager, client);
-    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeID);
+    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
     } else {
