@@ -1,9 +1,8 @@
 import { Command } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
-import * as path from 'path';
-import * as os from 'os';
+import { confPath } from './config';
 
-export const passPath = path.join(os.homedir(), path.sep, '.suzaku-cli/.password-store');
+export const passPath = confPath + '/.password-store'
 
 export function buildCommands(program: Command) {
   program

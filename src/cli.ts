@@ -1288,26 +1288,6 @@ async function main() {
                 process.exit(1);
             }
 
-            // Determine the Avalanche Network ID for the Warp message based on the --network option
-            let warpNetworkID: number;
-            if (opts.network === "fuji") {
-                warpNetworkID = 5;
-            } else if (opts.network === "mainnet") {
-                warpNetworkID = 1;
-            } else if (opts.network === "anvil") {
-                // For Anvil, decide if it's simulating Fuji (5) or Mainnet (1)
-                // Or if it needs a different ID. Defaulting to Fuji's ID for local testing.
-                console.warn("Using Warp Network ID 5 (Fuji) for Anvil. Adjust if Anvil simulates Mainnet or another network context for Warp.");
-                warpNetworkID = 5;
-            } else {
-                // Fallback or error for unsupported networks for warpNetworkID derivation
-                // You might want to make this an explicit option if network names get more complex
-                throw new Error(
-                    `Network '${opts.network}' is not configured for determining Warp Network ID. ` +
-                    `Use 'fuji', 'mainnet', or 'anvil', or extend this logic.`
-                );
-            }
-
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
 
@@ -1315,7 +1295,6 @@ async function main() {
                 opts.network,
                 rpcUrl,
                 nodeId,
-                warpNetworkID,
                 sourceChainId,
                 config.contracts.UptimeTracker(uptimeTrackerAddress),
                 client.account
@@ -1952,9 +1931,9 @@ async function main() {
 
     program.hook("preAction", (thisCommand, actionCommand) => {
         
-        console.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
-        console.log(`Executing action: ${actionCommand}`);
-        console.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
+        // console.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
+        // console.log(`Executing action: ${actionCommand}`);
+        // console.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
         const opts = program.opts();
         // Block manually private key on mainnet
         if (opts.privateKey! && opts.network === "mainnet") {

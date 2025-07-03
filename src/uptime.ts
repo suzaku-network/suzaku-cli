@@ -70,7 +70,6 @@ export async function reportAndSubmitValidatorUptime(
   network: Network,
   rpcUrl: string,
   nodeId: string,
-  warpNetworkID: number, // Avalanche Network ID (1 for Mainnet, 5 for Fuji)
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
@@ -78,6 +77,8 @@ export async function reportAndSubmitValidatorUptime(
 ) {
   console.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   console.log(`Target UptimeTracker: ${uptimeTracker.address}`);
+
+  const warpNetworkID = network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
 
   // Step 1: Get the signed validation uptime message
   let signedUptimeHex = await getValidationUptimeMessage(
