@@ -14,6 +14,7 @@ const chains = {
 // Create extended client type that includes public actions and network type
 export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network };
 export type ExtendedPublicClient = PublicClient & { network: Network };
+export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
 export function generateClient(network: Network, privateKey: Hex): ExtendedWalletClient;
