@@ -1,53 +1,51 @@
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import { Hex } from 'viem';
 import type { Account } from 'viem';
 
 // L1 opt-in functionality
 export async function optInL1(
-  optInService: TContract['OperatorL1OptInService'],
+  optInService: SafeSuzakuContract['OperatorL1OptInService'],
   l1Address: Hex,
   account: Account | undefined
 ) {
   if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await optInService.write.optIn(
+    const hash = await optInService.safeWrite.optIn(
       [l1Address],
       { chain: null, account }
     );
     console.log("L1 opt-in successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function optOutL1(
-  optInService: TContract['OperatorL1OptInService'],
+  optInService: SafeSuzakuContract['OperatorL1OptInService'],
   l1Address: Hex,
   account: Account | undefined
 ) {
   if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await optInService.write.optOut(
+    const hash = await optInService.safeWrite.optOut(
       [l1Address],
       { chain: null, account }
     );
     console.log("L1 opt-out successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function checkOptInL1(
-  optInService: TContract['OperatorL1OptInService'],
+  optInService: SafeSuzakuContract['OperatorL1OptInService'],
   operator: Hex,
   l1Address: Hex
 ) {
@@ -60,7 +58,7 @@ export async function checkOptInL1(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
     return false;
   }
@@ -68,49 +66,47 @@ export async function checkOptInL1(
 
 // Vault opt-in functionality
 export async function optInVault(
-  optInService: TContract['OperatorVaultOptInService'],
+  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
   vaultAddress: Hex,
   account: Account | undefined
 ) {
   if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await optInService.write.optIn(
+    const hash = await optInService.safeWrite.optIn(
       [vaultAddress],
       { chain: null, account }
     );
     console.log("Vault opt-in successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function optOutVault(
-  optInService: TContract['OperatorVaultOptInService'],
+  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
   vaultAddress: Hex,
   account: Account | undefined
 ) {
   if (!account) throw new Error('Client account is required');
 
   try {
-    const hash = await optInService.write.optOut(
+    const hash = await optInService.safeWrite.optOut(
       [vaultAddress],
       { chain: null, account }
     );
     console.log("Vault opt-out successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function checkOptInVault(
-  optInService: TContract['OperatorVaultOptInService'],
+  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
   operator: Hex,
   vaultAddress: Hex
 ) {
@@ -123,7 +119,7 @@ export async function checkOptInVault(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
     return false;
   }

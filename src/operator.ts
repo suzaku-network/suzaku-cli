@@ -1,9 +1,9 @@
 import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
-import { TContract } from "./config";
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from "viem";
 
 async function registerOperator(
-    operatorRegistry: TContract['OperatorRegistry'],
+    operatorRegistry: SafeSuzakuContract['OperatorRegistry'],
     metadataUrl: string,
     account: Account | undefined
 ) {
@@ -11,22 +11,21 @@ async function registerOperator(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await operatorRegistry.write.registerOperator(
+        const hash = await operatorRegistry.safeWrite.registerOperator(
             [metadataUrl],
             { chain: null, account }
         );
 
         console.log("Registered operator successfully, Transaction hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
 
 async function listOperators(
-    operatorRegistry: TContract['OperatorRegistry']
+    operatorRegistry: SafeSuzakuContract['OperatorRegistry']
 ) {
     console.log("Listing operators...");
 
@@ -46,7 +45,7 @@ async function listOperators(
     } catch (error) {
         console.error("Failed to list operators:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }

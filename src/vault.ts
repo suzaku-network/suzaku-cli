@@ -1,11 +1,11 @@
 import { ExtendedWalletClient } from './client';
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 // deposit
 export async function depositVault(
   client: ExtendedWalletClient,
-  vault: TContract['VaultTokenized'],
+  vault: SafeSuzakuContract['VaultTokenized'],
   onBehalfOf: Hex,
   amountWei: bigint,
   account: Account | undefined
@@ -18,7 +18,7 @@ export async function depositVault(
     const collateralAddress = await vault.read.collateral();
 
     console.log("Approving collateral token for vault deposit...");
-    const approveTx = await vault.write.approve(
+    const approveTx = await vault.safeWrite.approve(
       [vault.address, amountWei],
       { chain: null, account }
     );
@@ -26,19 +26,18 @@ export async function depositVault(
     await client.waitForTransactionReceipt({ hash: approveTx });
 
     // === Existing deposit code (unchanged) ===
-    const hash = await vault.write.deposit(
+    const hash = await vault.safeWrite.deposit(
       [onBehalfOf, amountWei],
       { chain: null, account }
     );
     console.log("Deposit done, tx hash:", hash);
 
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 
 export async function withdrawVault(
-  vault: TContract['VaultTokenized'],
+  vault: SafeSuzakuContract['VaultTokenized'],
   claimer: Hex,
   amountWei: bigint,
   account: Account | undefined
@@ -48,19 +47,18 @@ export async function withdrawVault(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await vault.write.withdraw(
+    const hash = await vault.safeWrite.withdraw(
       [claimer, amountWei],
       { chain: null, account }
     );
     console.log("Withdraw done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 
 // claim
 export async function claimVault(
-  vault: TContract['VaultTokenized'],
+  vault: SafeSuzakuContract['VaultTokenized'],
   recipient: Hex,
   epoch: bigint,
   account: Account | undefined
@@ -70,24 +68,23 @@ export async function claimVault(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await vault.write.claim(
+    const hash = await vault.safeWrite.claim(
       [recipient, epoch],
       { chain: null, account }
     );
     console.log("Claim done, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
   }
 }
 
 export async function getVaultDelegator(
-  vault: TContract['VaultTokenized']
+  vault: SafeSuzakuContract['VaultTokenized']
 ) {
   return await vault.read.delegator();
 }
 
 export async function getStake(
-  delegator: TContract['L1RestakeDelegator'],
+  delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
   assetClass: bigint,
   operatorAddress: Hex

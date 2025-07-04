@@ -1,8 +1,8 @@
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 export async function setUpSecurityModule(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex,
   maxWeight: bigint,
   account: Account | undefined
@@ -12,21 +12,20 @@ export async function setUpSecurityModule(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await balancer.write.setUpSecurityModule(
+    const hash = await balancer.safeWrite.setUpSecurityModule(
       [securityModule, maxWeight],
       { chain: null, account }
     );
     console.log("Security module updated, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function getSecurityModules(
-  balancer: TContract['BalancerValidatorManager']
+  balancer: SafeSuzakuContract['BalancerValidatorManager']
 ) {
   console.log("Getting security modules...");
 
@@ -36,13 +35,13 @@ export async function getSecurityModules(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
 
 export async function getSecurityModuleWeights(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
   console.log("Getting security module weights...");
@@ -55,7 +54,7 @@ export async function getSecurityModuleWeights(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }

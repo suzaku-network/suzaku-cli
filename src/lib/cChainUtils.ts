@@ -1,7 +1,7 @@
 import cliProgress from 'cli-progress';
 import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
 import { ExtendedPublicClient } from '../client';
-import { TContract } from '../config';
+import { SafeSuzakuContract } from './viemUtils';
 
 type CommonEvent = {
   address: string;
@@ -76,7 +76,7 @@ export async function GetContractEvents(
         bar.setTotal(bar.getTotal() + blockToScan);
       }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
-        
+
         let toSub = i + 2000 > toBlock ? toBlock : i + 2000;
         events.push(...await client.getContractEvents({
           address: address,
@@ -92,22 +92,22 @@ export async function GetContractEvents(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 
   // Filter and format events
   const result = events.filter((log: CommonEvent) => eventNames ? eventNames.includes(log.eventName!) : true)
-        .map(log => {
-        return {
-          blockNumber: typeof (log.blockNumber) === 'bigint' ? log.blockNumber : BigInt(log.blockNumber),
-          transactionHash: log.transactionHash,
-          eventName: log.eventName,
-          args: log.args,
-          address: log.address,
-          timestamp: Number(log.timeStamp!)
-        } as DecodedEvent
-        });
+    .map(log => {
+      return {
+        blockNumber: typeof (log.blockNumber) === 'bigint' ? log.blockNumber : BigInt(log.blockNumber),
+        transactionHash: log.transactionHash,
+        eventName: log.eventName,
+        args: log.args,
+        address: log.address,
+        timestamp: Number(log.timeStamp!)
+      } as DecodedEvent
+    });
   return forceTimestamp ? snowscanApiKey ? result : PatchEventsTimestamp(client, result) : result;
 }
 
@@ -122,10 +122,10 @@ export async function PatchEventsTimestamp(
         includeTransactions: false,
       })))
   )
-  .reduce((acc, block) => {
-    acc[Number(block.number)] = Number(block.timestamp);
-    return acc;
-  }, {} as Record<number, number>);
+    .reduce((acc, block) => {
+      acc[Number(block.number)] = Number(block.timestamp);
+      return acc;
+    }, {} as Record<number, number>);
 
   return events.map(event => ({
     ...event,
@@ -134,7 +134,7 @@ export async function PatchEventsTimestamp(
 }
 
 export async function fillEventsNodeId(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
 

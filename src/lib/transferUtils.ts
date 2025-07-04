@@ -1,7 +1,7 @@
 import { pvm, evm, addTxSignatures, Context, utils, avaxSerial, EVMUnsignedTx } from "@avalabs/avalanchejs";
 import { getAddresses, nToAVAX } from "./utils";
 import { ExtendedWalletClient } from "../client";
-import { RPC_ENDPOINT, waitPChainTx } from "./pChainUtils";
+import { getRPCEndpoint, waitPChainTx } from "./pChainUtils";
 import { prompt } from "./utils";
 
 // Wait c chain tx until it is confirmed with a timeout
@@ -17,9 +17,9 @@ export async function waitCChainTx(txID: string, evmApi: evm.EVMApi, pollingInte
 }
 
 async function prepareCchainExport(privateKeyHex: string, pAddress: string, cAddress: `0x${string}`, client: ExtendedWalletClient, amount: bigint): Promise<[avaxSerial.SignedTx, bigint]> {
-
-  const evmapi = new evm.EVMApi(RPC_ENDPOINT);
-  const context = await Context.getContextFromURI(RPC_ENDPOINT);
+  const rpcUrl = getRPCEndpoint(client);
+  const evmapi = new evm.EVMApi(rpcUrl);
+  const context = await Context.getContextFromURI(rpcUrl);
   const txCount = await client.getTransactionCount({ address: cAddress });
   const baseFee = await evmapi.getBaseFee();
   const pAddressBytes = utils.bech32ToBytes(pAddress);
@@ -56,9 +56,9 @@ async function prepareCchainExport(privateKeyHex: string, pAddress: string, cAdd
 export async function pChainImport(client: ExtendedWalletClient, privateKeyHex: string) {
 
   const { P: pAddress } = getAddresses(privateKeyHex, client.network);
-
-  const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
-  const context = await Context.getContextFromURI(RPC_ENDPOINT);
+  const rpcUrl = getRPCEndpoint(client);
+  const pvmApi = new pvm.PVMApi(rpcUrl);
+  const context = await Context.getContextFromURI(rpcUrl);
   const feeState = await pvmApi.getFeeState();
 
   
@@ -98,9 +98,9 @@ export async function pChainImport(client: ExtendedWalletClient, privateKeyHex: 
 // @throws - An error if the user doesn't have enough AVAX in the P-Chain address
 export async function requirePChainBallance(privateKeyHex: string, client: ExtendedWalletClient, amount: bigint = BigInt(0), signedTx?: avaxSerial.SignedTx, checkRetry: number = 3) {
 
-
-  const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
-  const evmapi = new evm.EVMApi(RPC_ENDPOINT);
+  const rpcUrl = getRPCEndpoint(client);
+  const pvmApi = new pvm.PVMApi(rpcUrl);
+  const evmapi = new evm.EVMApi(rpcUrl);
   const { P: pAddress, C: cAddress } = getAddresses(privateKeyHex, client.network!);
   // Check on the P-Chain
   let pBalance = await pvmApi.getBalance({ addresses: [pAddress] })

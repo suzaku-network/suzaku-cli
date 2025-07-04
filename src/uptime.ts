@@ -2,10 +2,12 @@ import { packValidationUptimeMessage, collectSignatures } from "./lib/warpUtils"
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
 import { packWarpIntoAccessList } from './lib/warpUtils';
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
+import { Network } from "./client";
 
 export async function getValidationUptimeMessage(
+  network: Network,
   rpcUrl: string,
   nodeId: string,
   networkID: number,
@@ -35,7 +37,7 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   console.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const signedValidationUptimeMessage = await collectSignatures(unsignedValidationUptimeMessageHex);
+  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
   console.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
@@ -43,8 +45,7 @@ export async function getValidationUptimeMessage(
 
 
 export async function computeValidatorUptime(
-  uptimeTracker: TContract['UptimeTracker'],
-  messageIndex: number,
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   account: Account | undefined,
   signedUptimeHex: Hex
 ) {
@@ -53,8 +54,8 @@ export async function computeValidatorUptime(
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
 
-  const txHash = await uptimeTracker.write.computeValidatorUptime(
-    [messageIndex],
+  const txHash = await uptimeTracker.safeWrite.computeValidatorUptime(
+    [0],
     { chain: null, account, accessList }
   );
 
@@ -66,20 +67,22 @@ export async function computeValidatorUptime(
 // New orchestrator function
 export async function reportAndSubmitValidatorUptime(
   // Parameters for getting the uptime message
+  network: Network,
   rpcUrl: string,
   nodeId: string,
-  warpNetworkID: number, // Avalanche Network ID (1 for Mainnet, 5 for Fuji)
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
-  uptimeTracker: TContract['UptimeTracker'],
-  messageIndex: number,
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   account: Account | undefined
 ) {
   console.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   console.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
+  const warpNetworkID = network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
+
   // Step 1: Get the signed validation uptime message
   let signedUptimeHex = await getValidationUptimeMessage(
+    network,
     rpcUrl,
     nodeId,
     warpNetworkID,
@@ -113,7 +116,6 @@ export async function reportAndSubmitValidatorUptime(
   console.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
   const txHash = await computeValidatorUptime(
     uptimeTracker,
-    messageIndex,
     account,
     signedUptimeHex as Hex
   );
@@ -127,14 +129,14 @@ export async function reportAndSubmitValidatorUptime(
  * Compute uptime for an operator at a specific epoch
  */
 export async function computeOperatorUptimeAtEpoch(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number,
   account: Account | undefined
 ) {
   if (!account) throw new Error('Client account is required');
 
-  const txHash = await uptimeTracker.write.computeOperatorUptimeAt(
+  const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt(
     [operator, epoch],
     { chain: null, account }
   );
@@ -147,7 +149,7 @@ export async function computeOperatorUptimeAtEpoch(
  * Compute uptime for an operator across multiple epochs
  */
 export async function computeOperatorUptimeForEpochs(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
   startEpoch: number,
   endEpoch: number,
@@ -158,7 +160,7 @@ export async function computeOperatorUptimeForEpochs(
   let currentNonce = initialNonce ?? 0;
 
   for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
-    const txHash = await uptimeTracker.write.computeOperatorUptimeAt(
+    const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt(
       [operator, epoch],
       { chain: null, account, nonce: currentNonce }
     );
@@ -170,7 +172,7 @@ export async function computeOperatorUptimeForEpochs(
  * Get validator uptime for a specific epoch
  */
 export async function getValidatorUptimeForEpoch(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   validationID: Hex,
   epoch: number
 ) {
@@ -183,7 +185,7 @@ export async function getValidatorUptimeForEpoch(
  * Check if validator uptime is set for a specific epoch
  */
 export async function isValidatorUptimeSetForEpoch(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   validationID: Hex,
   epoch: number
 ) {
@@ -196,7 +198,7 @@ export async function isValidatorUptimeSetForEpoch(
  * Get operator uptime for a specific epoch
  */
 export async function getOperatorUptimeForEpoch(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number
 ) {
@@ -209,7 +211,7 @@ export async function getOperatorUptimeForEpoch(
  * Check if operator uptime is set for a specific epoch
  */
 export async function isOperatorUptimeSetForEpoch(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number
 ) {
@@ -222,7 +224,7 @@ export async function isOperatorUptimeSetForEpoch(
  * Get last uptime checkpoint for a validator
  */
 export async function getLastUptimeCheckpoint(
-  uptimeTracker: TContract['UptimeTracker'],
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   validationID: Hex
 ) {
   return await uptimeTracker.read.getLastUptimeCheckpoint(
