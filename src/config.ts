@@ -3,11 +3,12 @@ import { Network } from './client';
 import { Hex, PublicClient, WalletClient } from 'viem';
 import { curriedContract, CurriedSuzakuContractMap, SuzakuABINames, TSuzakuABI } from './lib/viemUtils';
 import dotenv from 'dotenv';
+import * as os from 'os';
 
 // Load environment variables
 dotenv.config();
 
-export const confPath ='~/.suzaku-cli'
+export const confPath =os.homedir()+'/.suzaku-cli'
 
 // Define the configuration interface
 interface Config {
