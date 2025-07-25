@@ -71,7 +71,7 @@ The specific commands and required information (such as contract addresses and p
 When deploying on Fuji, run commands using the `fuji` network parameter. For example:
 
 ```bash
-pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
+pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com
 ```
 
 
@@ -80,16 +80,23 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **L1 & Vault Registration:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER_FUJI $VAULT_MANAGER_FUJI https://l1.com
-  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT_MANAGER_FUJI $VAULT 1 200000000000000000000000
+  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com
+  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT_MANAGER $VAULT 1 200000000000000000000000
+  ```
+
+- **(Optional) Modify L1 Middleware:**
+
+  ```bash
+  # Update the middleware associated with a registered L1
+  pnpm cli --network fuji --private-key $L1_OWNER set-l1-middleware $BALANCER_VALIDATOR_MANAGER $NEW_MIDDLEWARE_ADDRESS
   ```
 
 - **Operator Setup & Opt-In:**
 
   ```bash
   pnpm cli --network fuji --private-key $OPERATOR_OWNER register-operator https://operator1.com
-  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-l1 $BALANCER_VALIDATOR_MANAGER_FUJI
-  pnpm cli --network fuji check-opt-in-l1 $OPERATOR $BALANCER_VALIDATOR_MANAGER_FUJI
+  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-l1 $BALANCER_VALIDATOR_MANAGER
+  pnpm cli --network fuji check-opt-in-l1 $OPERATOR $BALANCER_VALIDATOR_MANAGER
   pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-vault $VAULT
   pnpm cli --network fuji check-opt-in-vault $OPERATOR $VAULT
   ```
@@ -97,8 +104,8 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **Set Limits & Operator Shares:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER_FUJI 100000000000000000000000 1
-  pnpm cli --network fuji --private-key $L1_OWNER set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER_FUJI $OPERATOR 10 1
+  pnpm cli --network fuji --private-key $L1_OWNER set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 100000000000000000000000 1
+  pnpm cli --network fuji --private-key $L1_OWNER set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER $OPERATOR 10 1
   ```
 
 - **(Optional) Mint & Approve sAVAX, Then Deposit via `cast`**
@@ -136,7 +143,7 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   
 - **Check Stakes & Epochs**
    ```bash
-   pnpm cli --network fuji opstakes $VAULT_MANAGER_FUJI $OPERATOR
+   pnpm cli --network fuji opstakes $VAULT_MANAGER $OPERATOR
    pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
    pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
    pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
@@ -145,8 +152,8 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 
 - **Balancer / Security Module Setup**
     ```bash
-    pnpm cli --network fuji balancer-set-up-security-module $BALANCERVALIDATORMANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
-    pnpm cli --network fuji balancer-get-security-modules $BALANCERVALIDATORMANAGER
+    pnpm cli --network fuji balancer-set-up-security-module $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
+    pnpm cli --network fuji balancer-get-security-modules $BALANCER_VALIDATOR_MANAGER
     ```
 
 - **Check Epoch Information**
@@ -194,6 +201,8 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Lists all registered L1s.
 - **set-l1-metadata-url `<l1Address>` `<metadataUrl>`**  
   Updates the metadata URL for a registered L1.
+- **set-l1-middleware `<l1Address>` `<l1Middleware>`**  
+  Updates the middleware associated with a registered L1.
 
 ---
 
@@ -436,19 +445,19 @@ Here's a recommended sequence of commands to test the rewards functionality:
 1. **Initial Setup and Configuration**
    ```bash
    # Check current fees configuration
-   pnpm cli --network fuji rewards-get-fees-config $REWARDS_FUJI
+   pnpm cli --network fuji rewards-get-fees-config $REWARDS
 
    # Set appropriate fees if needed
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-protocol-fee $REWARDS_FUJI 1000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-operator-fee $REWARDS_FUJI 2000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-curator-fee $REWARDS_FUJI 500
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-protocol-fee $REWARDS 1000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-operator-fee $REWARDS 2000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-curator-fee $REWARDS 500
 
    # Configure minimum required uptime
-   pnpm cli --network fuji rewards-get-min-uptime $REWARDS_FUJI
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS_FUJI 3000
+   pnpm cli --network fuji rewards-get-min-uptime $REWARDS
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS 3000
 
    # Set rewards share for asset classes
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-asset-class $REWARDS_FUJI 1 5000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-asset-class $REWARDS 1 5000
    ```
 
 1.1. **Mint & Approve Reward Tokens**
@@ -463,11 +472,11 @@ Here's a recommended sequence of commands to test the rewards functionality:
      --rpc-url $RPC_URL
      
    # Check current allowance
-   cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS_FUJI" \
+   cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS" \
      --rpc-url $RPC_URL
      
    # Approve reward tokens to be used by the rewards contract
-   cast send "$SAVAX" "approve(address,uint256)" "$REWARDS_FUJI" 10000000000000000000000000 \
+   cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000000 \
      --rpc-url $RPC_URL \
      --private-key "$L1_OWNER"
    ```
@@ -477,70 +486,70 @@ Here's a recommended sequence of commands to test the rewards functionality:
 2. **Allocate Rewards**
    ```bash
    # Set rewards amount for the epochs you want to test
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS_FUJI 99 5 $SAVAX 1000000000000000000
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS 99 5 $SAVAX 1000000000000000000
 
    # Verify rewards allocation
-   pnpm cli --network fuji rewards-get-amounts $REWARDS_FUJI 99
+   pnpm cli --network fuji rewards-get-amounts $REWARDS 99
    ```
 
 3. **Distribute Rewards**
    ```bash
    # Distribute rewards for epoch 99 with batch size 10
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS_FUJI 99 10
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
 
    # Check distribution status
-   pnpm cli --network fuji rewards-get-distribution-batch $REWARDS_FUJI 99
+   pnpm cli --network fuji rewards-get-distribution-batch $REWARDS 99
 
    # Continue distribution if not complete
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS_FUJI 99 10
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
    ```
 
 4. **Verify Shares Calculation**
    ```bash
    # Check operator shares
-   pnpm cli --network fuji rewards-get-operator-shares $REWARDS_FUJI 99 $OPERATOR
+   pnpm cli --network fuji rewards-get-operator-shares $REWARDS 99 $OPERATOR
 
    # Check vault shares
-   pnpm cli --network fuji rewards-get-vault-shares $REWARDS_FUJI 99 $VAULT
+   pnpm cli --network fuji rewards-get-vault-shares $REWARDS 99 $VAULT
 
    # Check curator shares
-   pnpm cli --network fuji rewards-get-curator-shares $REWARDS_FUJI 99 $CURATOR
+   pnpm cli --network fuji rewards-get-curator-shares $REWARDS 99 $CURATOR
    ```
 
 5. **Claim Rewards**
    ```bash
    # Claim operator fees
-   pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS_FUJI $SAVAX
+   pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS $SAVAX
 
    # Claim staker rewards
-   pnpm cli --network fuji --private-key $STAKER_KEY rewards-claim $REWARDS_FUJI $SAVAX
+   pnpm cli --network fuji --private-key $STAKER_KEY rewards-claim $REWARDS $SAVAX
 
    # Claim curator fees
-   pnpm cli --network fuji --private-key $CURATOR_KEY rewards-claim-curator-fee $REWARDS_FUJI $SAVAX
+   pnpm cli --network fuji --private-key $CURATOR_KEY rewards-claim-curator-fee $REWARDS $SAVAX
 
    # Claim protocol fees
-   pnpm cli --network fuji --private-key $PROTOCOL_OWNER rewards-claim-protocol-fee $REWARDS_FUJI $SAVAX
+   pnpm cli --network fuji --private-key $PROTOCOL_OWNER rewards-claim-protocol-fee $REWARDS $SAVAX
    ```
 
 6. **Verify Claim Status**
    ```bash
    # Check last claimed epoch for operator
-   pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS_FUJI $OPERATOR
+   pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS $OPERATOR
 
    # Check last claimed epoch for staker
-   pnpm cli --network fuji rewards-get-last-claimed-staker $REWARDS_FUJI $STAKER
+   pnpm cli --network fuji rewards-get-last-claimed-staker $REWARDS $STAKER
 
    # Check last claimed epoch for curator
-   pnpm cli --network fuji rewards-get-last-claimed-curator $REWARDS_FUJI $CURATOR
+   pnpm cli --network fuji rewards-get-last-claimed-curator $REWARDS $CURATOR
 
    # Check last claimed epoch for protocol owner
-   pnpm cli --network fuji rewards-get-last-claimed-protocol $REWARDS_FUJI $PROTOCOL_OWNER
+   pnpm cli --network fuji rewards-get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER
    ```
 
 7. **Claim Undistributed Rewards (if applicable)**
    ```bash
    # This should be done after epoch 99+2 to ensure all claims are done
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS_FUJI 99 $SAVAX
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS 99 $SAVAX
    ```
 
 ### Secret Commands
