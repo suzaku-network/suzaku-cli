@@ -1166,7 +1166,7 @@ async function main() {
                 console.log(`\nVault #${i}: ${vaultAddress}`);
 
                 // read the assetClass
-                const assetClass = await vaultManager.read.getVaultAssetClass([vaultAddress]);
+                const assetClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
 
                 // read delegator
                 const vaultTokenized = config.contracts.VaultTokenized(vaultAddress);

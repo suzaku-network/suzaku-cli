@@ -202,6 +202,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "getL1ID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "l1ID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "getMaximumChurnPercentage",
         "inputs": [],
         "outputs": [
@@ -353,9 +366,9 @@ export default [
                         "internalType": "uint64"
                     },
                     {
-                        "name": "migratedValidations",
-                        "type": "bytes32[]",
-                        "internalType": "bytes32[]"
+                        "name": "migratedValidators",
+                        "type": "bytes[]",
+                        "internalType": "bytes[]"
                     }
                 ]
             }
@@ -375,7 +388,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "validator",
                 "type": "tuple",
                 "internalType": "struct Validator",
                 "components": [
@@ -568,7 +581,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "validator",
+                "name": "",
                 "type": "tuple",
                 "internalType": "struct Validator",
                 "components": [
@@ -961,6 +974,27 @@ export default [
     },
     {
         "type": "error",
+        "name": "BalancerValidatorManager__InitialSecurityModuleMaxWeightLowerThanTotalWeight",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "initialMaxWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "totalWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "BalancerValidatorManager__InvalidNonce",
         "inputs": [
             {
@@ -972,10 +1006,10 @@ export default [
     },
     {
         "type": "error",
-        "name": "BalancerValidatorManager__MigratedValidationsTotalWeightMismatch",
+        "name": "BalancerValidatorManager__MigratedValidatorsTotalWeightMismatch",
         "inputs": [
             {
-                "name": "migratedValidationsTotalWeight",
+                "name": "migratedValidatorsTotalWeight",
                 "type": "uint64",
                 "internalType": "uint64"
             },
@@ -1079,6 +1113,17 @@ export default [
     },
     {
         "type": "error",
+        "name": "BalancerValidatorManager__ValidatorAlreadyMigrated",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "BalancerValidatorManager__ValidatorNotBelongingToSecurityModule",
         "inputs": [
             {
@@ -1090,22 +1135,6 @@ export default [
                 "name": "securityModule",
                 "type": "address",
                 "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "BalancerValidatorManager__WeightUpdateMismatch",
-        "inputs": [
-            {
-                "name": "newWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "expectedWeight",
-                "type": "uint64",
-                "internalType": "uint64"
             }
         ]
     },

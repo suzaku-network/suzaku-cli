@@ -3,12 +3,12 @@ export default [
         "type": "constructor",
         "inputs": [
             {
-                "name": "l1Middleware_",
+                "name": "middleware_",
                 "type": "address",
                 "internalType": "address payable"
             },
             {
-                "name": "l1ChainID_",
+                "name": "l1ID_",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }

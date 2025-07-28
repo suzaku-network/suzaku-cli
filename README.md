@@ -88,7 +88,7 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 
   ```bash
   # Update the middleware associated with a registered L1
-  pnpm cli --network fuji --private-key $L1_OWNER set-l1-middleware $BALANCER_VALIDATOR_MANAGER $NEW_MIDDLEWARE_ADDRESS
+  pnpm cli --network fuji --private-key $L1_OWNER set-l1-middleware $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE
   ```
 
 - **Operator Setup & Opt-In:**

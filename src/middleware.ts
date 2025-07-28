@@ -596,7 +596,7 @@ export async function middlewareNodePendingUpdate(
 ) {
   console.log("Reading nodePendingUpdate...");
   try {
-    const val = await middleware.read.nodePendingUpdate([validatorId]);
+    const val = await middleware.read.isNodePendingUpdate([validatorId]);
     console.log(val);
   } catch (error) {
     console.error("Read contract failed:", error);

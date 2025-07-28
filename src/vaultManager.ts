@@ -108,7 +108,7 @@ export async function getVaultAssetClass(
     console.log("Getting vault asset class...");
 
     try {
-        const val = await vaultManager.read.getVaultAssetClass([vaultAddress]);
+        const val = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
         console.log("Vault asset class:", val);
     } catch (error) {
         console.error("Read contract failed:", error);
