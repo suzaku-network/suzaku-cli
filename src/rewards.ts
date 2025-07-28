@@ -166,8 +166,12 @@ export async function setAdminRole(
 ) {
   if (!account) throw new Error("No client account set.");
   
-  const txHash = await rewards.safeWrite.setAdminRole(
-    [newAdmin],
+  // Get the DEFAULT_ADMIN_ROLE constant
+  const DEFAULT_ADMIN_ROLE = await rewards.read.DEFAULT_ADMIN_ROLE();
+  
+  // Grant admin role to the new admin
+  const txHash = await rewards.safeWrite.grantRole(
+    [DEFAULT_ADMIN_ROLE, newAdmin],
     { chain: null, account }
   );
   return txHash;
@@ -406,13 +410,12 @@ export async function getMinRequiredUptime(
  */
 export async function getLastEpochClaimedStaker(
   rewards: SafeSuzakuContract['Rewards'],
-  staker: Hex
+  staker: Hex,
+  rewardToken: Hex
 ) {
-  // TODO: ABI needs update - lastEpochClaimedStaker now takes only 1 parameter (address) not 2 (address, token)
-  console.warn("lastEpochClaimedStaker ABI needs update");
-  const lastEpoch = BigInt(0); // Placeholder until ABI is updated
+  const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker, rewardToken]);
 
-  console.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
+  console.log(`Last epoch claimed by staker ${staker} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -421,13 +424,12 @@ export async function getLastEpochClaimedStaker(
  */
 export async function getLastEpochClaimedOperator(
   rewards: SafeSuzakuContract['Rewards'],
-  operator: Hex
+  operator: Hex,
+  rewardToken: Hex
 ) {
-  // TODO: ABI needs update - lastEpochClaimedOperator now takes only 1 parameter (address) not 2 (address, token)
-  console.warn("lastEpochClaimedOperator ABI needs update");
-  const lastEpoch = BigInt(0); // Placeholder until ABI is updated
+  const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator, rewardToken]);
 
-  console.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
+  console.log(`Last epoch claimed by operator ${operator} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -436,13 +438,12 @@ export async function getLastEpochClaimedOperator(
  */
 export async function getLastEpochClaimedCurator(
   rewards: SafeSuzakuContract['Rewards'],
-  curator: Hex
+  curator: Hex,
+  rewardToken: Hex
 ) {
-  // TODO: ABI needs update - lastEpochClaimedCurator now takes only 1 parameter (address) not 2 (address, token)
-  console.warn("lastEpochClaimedCurator ABI needs update");
-  const lastEpoch = BigInt(0); // Placeholder until ABI is updated
+  const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator, rewardToken]);
 
-  console.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
+  console.log(`Last epoch claimed by curator ${curator} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -451,12 +452,11 @@ export async function getLastEpochClaimedCurator(
  */
 export async function getLastEpochClaimedProtocol(
   rewards: SafeSuzakuContract['Rewards'],
-  protocolOwner: Hex
+  protocolOwner: Hex,
+  rewardToken: Hex
 ) {
-  // TODO: ABI needs update - lastEpochClaimedProtocol now takes only 1 parameter (address) not 2 (address, token)  
-  console.warn("lastEpochClaimedProtocol ABI needs update");
-  const lastEpoch = BigInt(0); // Placeholder until ABI is updated
+  const lastEpoch = await rewards.read.lastEpochClaimedProtocol([protocolOwner, rewardToken]);
 
-  console.log(`Last epoch claimed by protocol owner ${protocolOwner}: ${lastEpoch.toString()}`);
+  console.log(`Last epoch claimed by protocol owner ${protocolOwner} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }

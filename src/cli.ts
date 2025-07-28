@@ -1865,14 +1865,16 @@ async function main() {
         .description("Get last claimed epoch for a staker")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgAddress("staker", "Staker address"))
-        .action(async (rewardsAddress, staker) => {
+        .addArgument(ArgAddress("rewardToken", "Reward token address"))
+        .action(async (rewardsAddress, staker, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
-                staker
+                staker,
+                rewardToken
             );
         });
 
@@ -1881,14 +1883,16 @@ async function main() {
         .description("Get last claimed epoch for an operator")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgAddress("operator", "Operator address"))
-        .action(async (rewardsAddress, operator) => {
+        .addArgument(ArgAddress("rewardToken", "Reward token address"))
+        .action(async (rewardsAddress, operator, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
-                operator
+                operator,
+                rewardToken
             );
         });
 
@@ -1897,14 +1901,16 @@ async function main() {
         .description("Get last claimed epoch for a curator")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgAddress("curator", "Curator address"))
-        .action(async (rewardsAddress, curator) => {
+        .addArgument(ArgAddress("rewardToken", "Reward token address"))
+        .action(async (rewardsAddress, curator, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
-                curator
+                curator,
+                rewardToken
             );
         });
 
@@ -1913,14 +1919,16 @@ async function main() {
         .description("Get last claimed epoch for protocol owner")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgAddress("protocolOwner", "Protocol owner address"))
-        .action(async (rewardsAddress, protocolOwner) => {
+        .addArgument(ArgAddress("rewardToken", "Reward token address"))
+        .action(async (rewardsAddress, protocolOwner, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedProtocol(
                 rewardsContract,
-                protocolOwner
+                protocolOwner,
+                rewardToken
             );
         });
 
