@@ -124,17 +124,17 @@ export async function setRewardsAmountForEpochs(
 }
 
 /**
- * Sets rewards share for asset class
+ * Sets rewards share for collateral class
  */
-export async function setRewardsShareForAssetClass(
+export async function setRewardsShareForCollateralClass(
   rewards: SafeSuzakuContract['Rewards'],
-  assetClass: bigint,
+  collateralClass: bigint,
   share: number,
   account: Account | undefined
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.setRewardsShareForCollateralClass(
-    [assetClass, share],
+    [collateralClass, share],
     { chain: null, account }
   );
   return txHash;
@@ -234,8 +234,28 @@ export async function updateCuratorFee(
   account: Account | undefined
 ) {
   if (!account) throw new Error("No client account set.");
+  
   const txHash = await rewards.safeWrite.updateCuratorFee(
     [newFee],
+    { chain: null, account }
+  );
+  return txHash;
+}
+
+/**
+ * Updates all fees at once to avoid order dependency issues
+ */
+export async function updateAllFees(
+  rewards: SafeSuzakuContract['Rewards'],
+  newProtocolFee: number,
+  newOperatorFee: number,
+  newCuratorFee: number,
+  account: Account | undefined
+) {
+  if (!account) throw new Error("No client account set.");
+  
+  const txHash = await rewards.safeWrite.updateAllFees(
+    [newProtocolFee, newOperatorFee, newCuratorFee],
     { chain: null, account }
   );
   return txHash;
@@ -379,17 +399,17 @@ export async function getFeesConfiguration(
 }
 
 /**
- * Gets rewards share for asset class
+ * Gets rewards share for collateral class
  */
-export async function getRewardsShareForAssetClass(
+export async function getRewardsShareForCollateralClass(
   rewards: SafeSuzakuContract['Rewards'],
-  assetClass: bigint
+  collateralClass: bigint
 ) {
   const share = await rewards.read.rewardsSharePerCollateralClass(
-    [assetClass]
-  ) as number;
+    [collateralClass]
+  );
 
-  console.log(`Rewards share for asset class ${assetClass}: ${share}`);
+  console.log(`Rewards share for collateral class ${collateralClass}: ${share}`);
   return share;
 }
 

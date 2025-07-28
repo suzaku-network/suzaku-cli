@@ -10,7 +10,7 @@ import {
     removeVault,
     getVaultCount,
     getVaultAtWithTimes,
-    getVaultAssetClass
+    getVaultCollateralClass
 } from "./vaultManager";
 import {
     depositVault,
@@ -48,6 +48,8 @@ import {
     middlewareNodePendingUpdate,
     middlewareGetOperatorUsedStake,
     middlewareGetAllOperators,
+    getCollateralClassIds,
+    getActiveCollateralClasses,
     middlewareGetNodeLogs
 } from "./middleware";
 
@@ -86,13 +88,14 @@ import {
     claimProtocolFee,
     claimUndistributedRewards,
     setRewardsAmountForEpochs,
-    setRewardsShareForAssetClass,
+    setRewardsShareForCollateralClass,
     setMinRequiredUptime,
     setAdminRole,
     setProtocolOwner,
     updateProtocolFee,
     updateOperatorFee,
     updateCuratorFee,
+    updateAllFees,
     getRewardsAmountPerTokenFromEpoch,
     getRewardsAmountForTokenFromEpoch,
     getOperatorShares,
@@ -101,7 +104,7 @@ import {
     getProtocolRewards,
     getDistributionBatch,
     getFeesConfiguration,
-    getRewardsShareForAssetClass,
+    getRewardsShareForCollateralClass,
     getMinRequiredUptime,
     getLastEpochClaimedStaker,
     getLastEpochClaimedOperator,
@@ -238,9 +241,9 @@ async function main() {
         .command("vault-manager-register-vault-l1")
         .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
-        .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
+        .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
@@ -249,7 +252,7 @@ async function main() {
             await registerVaultL1(
                 vaultManager,
                 vaultAddress,
-                assetClass,
+                collateralClass,
                 maxLimit,
                 client.account!
             );
@@ -259,9 +262,9 @@ async function main() {
         .command("vault-manager-update-vault-max-l1-limit")
         .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
-        .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
+        .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
@@ -269,7 +272,7 @@ async function main() {
             await updateVaultMaxL1Limit(
                 vaultManager,
                 vaultAddress,
-                assetClass,
+                collateralClass,
                 maxLimit,
                 client.account!
             );
@@ -318,7 +321,7 @@ async function main() {
         });
 
     program
-        .command("get-vault-asset-class")
+        .command("get-vault-collateral-class")
         .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (middlewareVaultManager, vaultAddress) => {
@@ -326,7 +329,7 @@ async function main() {
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
-            await getVaultAssetClass(
+            await getVaultCollateralClass(
                 vaultManager,
                 vaultAddress
             );
@@ -404,8 +407,8 @@ async function main() {
         .addArgument(ArgAddress("delegatorAddress", "Delegator contract address"))
         .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .addArgument(ArgBigInt("limit", "Limit amount"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
-        .action(async (delegatorAddress, l1Address, limit, assetClass) => {
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(async (delegatorAddress, l1Address, limit, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
@@ -414,7 +417,7 @@ async function main() {
             await setL1Limit(
                 delegator,
                 l1Address,
-                assetClass,
+                collateralClass,
                 limit,
                 client.account!
             );
@@ -426,8 +429,8 @@ async function main() {
         .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .addArgument(ArgAddress("operatorAddress", "Operator address"))
         .addArgument(ArgBigInt("shares", "Shares amount"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
-        .action(async (delegatorAddress, l1Address, operatorAddress, shares, assetClass) => {
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(async (delegatorAddress, l1Address, operatorAddress, shares, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
@@ -436,7 +439,7 @@ async function main() {
             await setOperatorL1Shares(
                 delegator,
                 l1Address,
-                assetClass,
+                collateralClass,
                 operatorAddress,
                 shares,
                 client.account!
@@ -701,8 +704,8 @@ async function main() {
         .description("Calculate and cache stakes for operators")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
-        .action(async (middlewareAddress, epoch, assetClass) => {
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(async (middlewareAddress, epoch, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
@@ -713,7 +716,7 @@ async function main() {
                     throw new Error('Client account is required');
                 }
                 const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-                const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, assetClass],
+                const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, collateralClass],
                     {
                         chain: null,
                         account: client.account,
@@ -768,8 +771,8 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
-        .action(async (middlewareAddress, operator, epoch, assetClass) => {
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(async (middlewareAddress, operator, epoch, collateralClass) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
@@ -777,7 +780,7 @@ async function main() {
                 middlewareSvc,
                 operator,
                 epoch,
-                assetClass
+                collateralClass
             );
         });
 
@@ -933,6 +936,34 @@ async function main() {
             const config = getConfig(program.opts().network, client);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetAllOperators(
+                middlewareSvc
+            );
+        });
+
+    // getCollateralClassIds (read)
+    program
+        .command("middleware-get-collateral-class-ids")
+        .description("Get all collateral class IDs from the middleware")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .action(async (middlewareAddress) => {
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await getCollateralClassIds(
+                middlewareSvc
+            );
+        });
+
+    // getActiveCollateralClasses (read)
+    program
+        .command("middleware-get-active-collateral-classes")
+        .description("Get active collateral classes (primary and secondary)")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .action(async (middlewareAddress) => {
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await getActiveCollateralClasses(
                 middlewareSvc
             );
         });
@@ -1159,14 +1190,14 @@ async function main() {
                 l1Array.push(l1Address);
             }
 
-            // 3) For each vault in [0..vaultCount-1], read assetClass, delegator, collateral
+            // 3) For each vault in [0..vaultCount-1], read collateralClass, delegator, collateral
             for (let i = 0n; i < vaultCount; i++) {
                 const [vaultAddress] = await vaultManager.read.getVaultAtWithTimes([i]);
 
                 console.log(`\nVault #${i}: ${vaultAddress}`);
 
-                // read the assetClass
-                const assetClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
+                // read the collateralClass
+                const collateralClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
 
                 // read delegator
                 const vaultTokenized = config.contracts.VaultTokenized(vaultAddress);
@@ -1187,7 +1218,7 @@ async function main() {
 
                     if (isOptedIn) {
                         // read stake
-                        const stakeValue = await l1RestakeDelegator.read.stake([l1Address, assetClass, operator])
+                        const stakeValue = await l1RestakeDelegator.read.stake([l1Address, collateralClass, operator])
 
                         if (stakeValue > 0n) {
                             console.log(
@@ -1576,19 +1607,19 @@ async function main() {
         });
 
     program
-        .command("rewards-set-share-asset-class")
-        .description("Set rewards share for asset class")
+        .command("rewards-set-share-collateral-class")
+        .description("Set rewards share for collateral class")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .addArgument(ArgNumber("share", "Share in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, assetClass, share) => {
+        .action(async (rewardsAddress, collateralClass, share) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setRewardsShareForAssetClass(
+            await setRewardsShareForCollateralClass(
                 rewardsContract,
-                assetClass,
+                collateralClass,
                 share,
                 client.account
             );
@@ -1692,6 +1723,27 @@ async function main() {
             await updateCuratorFee(
                 rewardsContract,
                 newFee,
+                client.account
+            );
+        });
+
+    program
+        .command("rewards-update-all-fees")
+        .description("Update all fees at once (protocol, operator, curator)")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("protocolFee", "New protocol fee in basis points (100 = 1%)"))
+        .addArgument(ArgNumber("operatorFee", "New operator fee in basis points (100 = 1%)"))
+        .addArgument(ArgNumber("curatorFee", "New curator fee in basis points (100 = 1%)"))
+        .action(async (rewardsAddress, protocolFee, operatorFee, curatorFee) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            await updateAllFees(
+                rewardsContract,
+                protocolFee,
+                operatorFee,
+                curatorFee,
                 client.account
             );
         });
@@ -1831,18 +1883,18 @@ async function main() {
         });
 
     program
-        .command("rewards-get-share-asset-class")
-        .description("Get rewards share for asset class")
+        .command("rewards-get-share-collateral-class")
+        .description("Get rewards share for collateral class")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
-        .action(async (rewardsAddress, assetClass) => {
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(async (rewardsAddress, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await getRewardsShareForAssetClass(
+            await getRewardsShareForCollateralClass(
                 rewardsContract,
-                assetClass
+                collateralClass
             );
         });
 

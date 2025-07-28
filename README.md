@@ -176,6 +176,159 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
       --private-key $OPERATOR_OWNER
     ```
 
+### Rewards Testing Sequence
+
+Here's a recommended sequence of commands to test the rewards functionality:
+
+1. **Initial Setup and Configuration**
+   ```bash
+   # Check current fees configuration
+   pnpm cli --network fuji rewards-get-fees-config $REWARDS
+
+   # Set appropriate fees if needed
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-protocol-fee $REWARDS 1000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-operator-fee $REWARDS 2000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-curator-fee $REWARDS 500
+
+   # Configure minimum required uptime
+   pnpm cli --network fuji rewards-get-min-uptime $REWARDS
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS 3000
+
+   # Set rewards share for collateral classes
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-asset-class $REWARDS 1 5000
+   ```
+
+1.1. **Mint & Approve Reward Tokens**
+   ```bash
+   # Mint reward tokens to the admin
+   cast send "$SAVAX" "mint(address,uint256)" "$L1_OWNER_ADDRESS" 10000000000000000000000000 \
+     --rpc-url $RPC_URL \
+     --private-key "$CURATOR_OWNER"
+   
+   # Check balance
+   cast call "$SAVAX" "balanceOf(address)" "$L1_OWNER_ADDRESS" \
+     --rpc-url $RPC_URL
+     
+   # Check current allowance
+   cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS" \
+     --rpc-url $RPC_URL
+     
+   # Approve reward tokens to be used by the rewards contract
+   cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000000 \
+     --rpc-url $RPC_URL \
+     --private-key "$L1_OWNER"
+   ```
+   
+   > **Note:** Make sure `$SAVAX` in this step corresponds to the same token address you plan to use as `$SAVAX` in the next step. The admin account needs a sufficient balance and allowance for the rewards contract to transfer tokens during the rewards allocation process.
+
+2. **Allocate Rewards**
+   ```bash
+   # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable)
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS 99 5 $REWARDS_TOKEN 1000000000000000000
+
+   # Verify rewards allocation
+   pnpm cli --network fuji rewards-get-amounts $REWARDS 99
+   ```
+
+3. **Distribute Rewards**
+   ```bash
+   # Distribute rewards for epoch 99 with batch size 10
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
+
+   # Check distribution status
+   pnpm cli --network fuji rewards-get-distribution-batch $REWARDS 99
+
+   # Continue distribution if not complete
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
+   ```
+
+4. **Verify Shares Calculation**
+   ```bash
+   # Check operator shares
+   pnpm cli --network fuji rewards-get-operator-shares $REWARDS 99 $OPERATOR
+
+   # Check vault shares
+   pnpm cli --network fuji rewards-get-vault-shares $REWARDS 99 $VAULT
+
+   # Check curator shares
+   pnpm cli --network fuji rewards-get-curator-shares $REWARDS 99 $CURATOR
+   ```
+
+5. **Claim Rewards**
+   ```bash
+   # Claim operator fees
+   pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS $REWARDS_TOKEN
+
+   # Claim staker rewards
+   pnpm cli --network fuji --private-key $STAKER_KEY rewards-claim $REWARDS $REWARDS_TOKEN
+
+   # Claim curator fees
+   pnpm cli --network fuji --private-key $CURATOR_KEY rewards-claim-curator-fee $REWARDS $REWARDS_TOKEN
+
+   # Claim protocol fees
+   pnpm cli --network fuji --private-key $PROTOCOL_OWNER rewards-claim-protocol-fee $REWARDS $REWARDS_TOKEN
+   ```
+
+6. **Verify Claim Status**
+   ```bash
+   # Check last claimed epoch for operator
+   pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS $OPERATOR
+
+   # Check last claimed epoch for staker
+   pnpm cli --network fuji rewards-get-last-claimed-staker $REWARDS $STAKER
+
+   # Check last claimed epoch for curator
+   pnpm cli --network fuji rewards-get-last-claimed-curator $REWARDS $CURATOR
+
+   # Check last claimed epoch for protocol owner
+   pnpm cli --network fuji rewards-get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER
+   ```
+
+7. **Claim Undistributed Rewards (if applicable)**
+   ```bash
+   # This should be done after epoch 99+2 to ensure all claims are done
+   pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS 99 $REWARDS_TOKEN
+   ```
+
+### Secret Commands
+
+The following commands allow you to manage the cli secrets keystore. Under the wood, it uses [pass](https://www.passwordstore.org/), the standard unix password manager.
+It's a mandatory dependency when working on the mainnet with this cli.
+
+1. **Initialize cli keystore**
+   ```bash
+   # Acquire available gpg key ids
+   pnpm cli secret list-gpg-ids
+   > [suzabro@domain.com
+   > avabro@domain.com]
+   # Initialize the keystore using the ids that are supposed to interact with.
+   pnpm cli secret init suzabro@domain.com avabro@domain.com ...
+   ```
+
+2. **Create new secret**
+   ```bash
+   pnpm cli secret create operator $OPERATOR_PK
+   ```
+
+3. **Use your secret name instead of raw private key**
+   ```bash
+   pnpm cli middleware-add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
+   ```
+   You'll be prompted like using [pass](https://www.passwordstore.org/) normally and it will use the underlying private key
+
+4. **List all available secrets**
+   ```bash
+   pnpm cli secret list
+   > Available secrets:
+   > .password-store
+   > └── operator
+   ```
+
+5. **Remove a secret**
+   ```bash
+   pnpm cli secret rm operator
+   ```
+
 For a complete list of commands, see the [Commands Reference](#commands-reference) below.
 
 ---
@@ -217,9 +370,9 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 ### Vault Manager Commands
 
-- **vault-manager-register-vault-l1 `<middlewareVaultManager>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+- **vault-manager-register-vault-l1 `<middlewareVaultManager>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**  
   Registers a vault for an L1 with the given parameters.
-- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManager>` `<vaultAddress>` `<assetClass>` `<maxLimit>`**  
+- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManager>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**  
   Updates the maximum L1 limit of a registered vault.
 - **vault-manager-remove-vault `<middlewareVaultManager>` `<vaultAddress>`**  
   Removes a registered vault.
@@ -228,7 +381,7 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 - **get-vault-at-with-times `<middlewareVaultManager>` `<index>`**  
   Returns vault details at a specified index, including related timestamps.
 - **get-vault-asset-class `<middlewareVaultManager>` `<vaultAddress>`**  
-  Returns the asset class associated with the given vault.
+  Returns the collateral class associated with the given vault.
 
 ---
 
@@ -245,9 +398,9 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 ### L1RestakeDelegator Commands
 
-- **set-l1-limit `<delegatorAddress>` `<l1Address>` `<limit>` `<assetClass>`**  
+- **set-l1-limit `<delegatorAddress>` `<l1Address>` `<limit>` `<collateralClass>`**  
   Sets the staking limit for the given L1 address within a delegator.
-- **set-operator-l1-shares `<delegatorAddress>` `<l1Address>` `<operatorAddress>` `<shares>` `<assetClass>`**  
+- **set-operator-l1-shares `<delegatorAddress>` `<l1Address>` `<operatorAddress>` `<shares>` `<collateralClass>`**  
   Sets the share allocation for an operator under the given L1 in the delegator contract.
 
 ---
@@ -282,8 +435,8 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Initiates a node stake update.
 - **middleware-complete-stake-update `<middlewareAddress>` `<nodeId>` `<validatorStakeUpdateTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**  
   Completes a node's stake update.
-- **middleware-operator-cache `<middlewareAddress>` `<epoch>` `<assetClass>`**  
-  Caches operator stakes for a specified epoch and asset class.
+- **middleware-operator-cache `<middlewareAddress>` `<epoch>` `<collateralClass>`**  
+  Caches operator stakes for a specified epoch and collateral class.
 - **middleware-calc-node-stakes `<middlewareAddress>`**  
   Calculates and caches node stakes for all operators.
 - **middleware-force-update-nodes `<middlewareAddress>` `<operator>` [--limit-stake `<stake>`]**  
@@ -291,8 +444,8 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 
 #### Middleware Read Operations
 
-- **middleware-get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<assetClass>`**  
-  Retrieves the stake of an operator for the specified epoch and asset class.
+- **middleware-get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<collateralClass>`**  
+  Retrieves the stake of an operator for the specified epoch and collateral class.
 - **middleware-get-current-epoch `<middlewareAddress>`**  
   Returns the current epoch.
 - **middleware-get-epoch-start-ts `<middlewareAddress>` `<epoch>`**  
@@ -308,7 +461,7 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
 - **middleware-node-pending-removal `<middlewareAddress>` `<validatorId>`**  
   Checks if a node is pending removal.
 - **middleware-node-pending-update `<middlewareAddress>` `<validatorId>`**  
-  Checks if a node is pending an update.
+  Checks if a node is pending an update. (Note: Currently not available in the contract - placeholder for future versions)
 - **middleware-get-operator-used-stake `<middlewareAddress>` `<operator>`**  
   Retrieves the used stake for an operator.
 
@@ -392,8 +545,8 @@ The following commands allow you to interact with the Rewards contract, which di
 
 - **rewards-set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsToken>` `<rewardsAmount>`**  
   Set rewards amount for a range of epochs.
-- **rewards-set-share-asset-class `<rewardsAddress>` `<assetClass>` `<share>`**  
-  Set rewards share for an asset class (in basis points, 100 = 1%).
+- **rewards-set-share-asset-class `<rewardsAddress>` `<collateralClass>` `<share>`**  
+  Set rewards share for an collateral class (in basis points, 100 = 1%).
 - **rewards-set-min-uptime `<rewardsAddress>` `<minUptime>`**  
   Set minimum required uptime for rewards eligibility (in seconds).
 - **rewards-set-admin `<rewardsAddress>` `<newAdmin>`**  
@@ -425,8 +578,8 @@ The following commands allow you to interact with the Rewards contract, which di
   Get distribution batch status for an epoch.
 - **rewards-get-fees-config `<rewardsAddress>`**  
   Get current fees configuration.
-- **rewards-get-share-asset-class `<rewardsAddress>` `<assetClass>`**  
-  Get rewards share for asset class.
+- **rewards-get-share-asset-class `<rewardsAddress>` `<collateralClass>`**  
+  Get rewards share for collateral class.
 - **rewards-get-min-uptime `<rewardsAddress>`**  
   Get minimum required uptime for rewards eligibility.
 - **rewards-get-last-claimed-staker `<rewardsAddress>` `<staker>`**  
@@ -437,159 +590,6 @@ The following commands allow you to interact with the Rewards contract, which di
   Get last claimed epoch for a curator.
 - **rewards-get-last-claimed-protocol `<rewardsAddress>` `<protocolOwner>`**  
   Get last claimed epoch for protocol owner.
-
-#### Rewards Testing Sequence
-
-Here's a recommended sequence of commands to test the rewards functionality:
-
-1. **Initial Setup and Configuration**
-   ```bash
-   # Check current fees configuration
-   pnpm cli --network fuji rewards-get-fees-config $REWARDS
-
-   # Set appropriate fees if needed
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-protocol-fee $REWARDS 1000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-operator-fee $REWARDS 2000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-curator-fee $REWARDS 500
-
-   # Configure minimum required uptime
-   pnpm cli --network fuji rewards-get-min-uptime $REWARDS
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS 3000
-
-   # Set rewards share for asset classes
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-asset-class $REWARDS 1 5000
-   ```
-
-1.1. **Mint & Approve Reward Tokens**
-   ```bash
-   # Mint reward tokens to the admin
-   cast send "$SAVAX" "mint(address,uint256)" "$L1_OWNER_ADDRESS" 10000000000000000000000000 \
-     --rpc-url $RPC_URL \
-     --private-key "$CURATOR_OWNER"
-   
-   # Check balance
-   cast call "$SAVAX" "balanceOf(address)" "$L1_OWNER_ADDRESS" \
-     --rpc-url $RPC_URL
-     
-   # Check current allowance
-   cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS" \
-     --rpc-url $RPC_URL
-     
-   # Approve reward tokens to be used by the rewards contract
-   cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000000 \
-     --rpc-url $RPC_URL \
-     --private-key "$L1_OWNER"
-   ```
-   
-   > **Note:** Make sure `$SAVAX` in this step corresponds to the same token address you plan to use as `$SAVAX` in the next step. The admin account needs a sufficient balance and allowance for the rewards contract to transfer tokens during the rewards allocation process.
-
-2. **Allocate Rewards**
-   ```bash
-   # Set rewards amount for the epochs you want to test
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS 99 5 $SAVAX 1000000000000000000
-
-   # Verify rewards allocation
-   pnpm cli --network fuji rewards-get-amounts $REWARDS 99
-   ```
-
-3. **Distribute Rewards**
-   ```bash
-   # Distribute rewards for epoch 99 with batch size 10
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
-
-   # Check distribution status
-   pnpm cli --network fuji rewards-get-distribution-batch $REWARDS 99
-
-   # Continue distribution if not complete
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
-   ```
-
-4. **Verify Shares Calculation**
-   ```bash
-   # Check operator shares
-   pnpm cli --network fuji rewards-get-operator-shares $REWARDS 99 $OPERATOR
-
-   # Check vault shares
-   pnpm cli --network fuji rewards-get-vault-shares $REWARDS 99 $VAULT
-
-   # Check curator shares
-   pnpm cli --network fuji rewards-get-curator-shares $REWARDS 99 $CURATOR
-   ```
-
-5. **Claim Rewards**
-   ```bash
-   # Claim operator fees
-   pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS $SAVAX
-
-   # Claim staker rewards
-   pnpm cli --network fuji --private-key $STAKER_KEY rewards-claim $REWARDS $SAVAX
-
-   # Claim curator fees
-   pnpm cli --network fuji --private-key $CURATOR_KEY rewards-claim-curator-fee $REWARDS $SAVAX
-
-   # Claim protocol fees
-   pnpm cli --network fuji --private-key $PROTOCOL_OWNER rewards-claim-protocol-fee $REWARDS $SAVAX
-   ```
-
-6. **Verify Claim Status**
-   ```bash
-   # Check last claimed epoch for operator
-   pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS $OPERATOR
-
-   # Check last claimed epoch for staker
-   pnpm cli --network fuji rewards-get-last-claimed-staker $REWARDS $STAKER
-
-   # Check last claimed epoch for curator
-   pnpm cli --network fuji rewards-get-last-claimed-curator $REWARDS $CURATOR
-
-   # Check last claimed epoch for protocol owner
-   pnpm cli --network fuji rewards-get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER
-   ```
-
-7. **Claim Undistributed Rewards (if applicable)**
-   ```bash
-   # This should be done after epoch 99+2 to ensure all claims are done
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS 99 $SAVAX
-   ```
-
-### Secret Commands
-
-The following commands allow you to manage the cli secrets keystore. Under the wood, it uses [pass](https://www.passwordstore.org/), the standard unix password manager.
-It's a mandatory dependency when working on the mainnet with this cli.
-
-1. **Initialize cli keystore**
-   ```bash
-   # Acquire available gpg key ids
-   pnpm cli secret list-gpg-ids
-   > [suzabro@domain.com
-   > avabro@domain.com]
-   # Initialize the keystore using the ids that are supposed to interact with.
-   pnpm cli secret init suzabro@domain.com avabro@domain.com ...
-   ```
-
-2. **Create new secret**
-   ```bash
-   pnpm cli secret create operator $OPERATOR_PK
-   ```
-
-3. **Use your secret name instead of raw private key**
-   ```bash
-   pnpm cli middleware-add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
-   ```
-   You'll be prompted like using [pass](https://www.passwordstore.org/) normally and it will use the underlying private key
-
-4. **List all available secrets**
-   ```bash
-   pnpm cli secret list
-   > Available secrets:
-   > .password-store
-   > └── operator
-   ```
-
-5. **Remove a secret**
-   ```bash
-   pnpm cli secret rm operator
-   ```
 
 ---
 

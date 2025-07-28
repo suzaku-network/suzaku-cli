@@ -453,13 +453,13 @@ export async function middlewareGetOperatorStake(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   epoch: number,
-  assetClass: bigint
+  collateralClass: bigint
 ) {
   console.log("Reading operator stake...");
 
   try {
     const val = await middleware.read.getOperatorStake(
-      [operator, epoch, assetClass]
+      [operator, epoch, collateralClass]
     );
     console.log(val);
   } catch (error) {
@@ -589,19 +589,14 @@ export async function middlewareNodePendingRemoval(
   }
 }
 
-// nodePendingUpdate
+// nodePendingUpdate - Note: This function is not available in the current contract
 export async function middlewareNodePendingUpdate(
   middleware: SafeSuzakuContract['L1Middleware'],
   validatorId: Hex
 ) {
-  console.log("Reading nodePendingUpdate...");
-  try {
-    const val = await middleware.read.isNodePendingUpdate([validatorId]);
-    console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+  console.log("Node pending update check is not available in the current contract version");
+  console.log(`ValidatorId: ${validatorId}`);
+  console.log("This functionality may be available through other contract methods or in future versions");
 }
 
 // getOperatorUsedStakeCached
@@ -631,6 +626,39 @@ export async function middlewareGetAllOperators(
     console.error("Read contract failed:", error);
     if (error instanceof Error) console.error(error.message);
   }
+}
+
+/**
+ * Gets all operator nodes
+ */
+export async function getAllOperators(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  const operators = await middleware.read.getAllOperators();
+  console.log("All operators:", operators);
+  return operators;
+}
+
+/**
+ * Gets all collateral class IDs
+ */
+export async function getCollateralClassIds(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  const collateralClassIds = await middleware.read.getCollateralClassIds();
+  console.log("Collateral class IDs:", collateralClassIds);
+  return collateralClassIds;
+}
+
+/**
+ * Gets active collateral classes (primary and secondary)
+ */
+export async function getActiveCollateralClasses(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  const result = await middleware.read.getActiveCollateralClasses();
+  console.log("Active collateral classes - Primary:", result[0], "Secondaries:", result[1]);
+  return result;
 }
 
 export async function middlewareGetNodeLogs(

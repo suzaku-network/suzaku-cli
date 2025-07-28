@@ -86,10 +86,10 @@ export async function getVaultDelegator(
 export async function getStake(
   delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
-  assetClass: bigint,
+  collateralClass: bigint,
   operatorAddress: Hex
 ) {
   return await delegator.read.stake(
-    [l1Address, assetClass, operatorAddress]
+    [l1Address, collateralClass, operatorAddress]
   );
 }

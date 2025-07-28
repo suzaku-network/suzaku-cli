@@ -4,7 +4,7 @@ import type { Hex, Account } from 'viem';
 export async function registerVaultL1(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
-    assetClass: bigint,
+    collateralClass: bigint,
     maxLimit: bigint,
     account: Account | undefined
 ) {
@@ -13,7 +13,7 @@ export async function registerVaultL1(
     try {
         if (!account) throw new Error('Client account is required');
         const hash = await vaultManager.safeWrite.registerVault(
-            [vaultAddress, assetClass, maxLimit],
+            [vaultAddress, collateralClass, maxLimit],
             { chain: null, account }
         );
         console.log("Vault registered, tx hash:", hash);
@@ -27,7 +27,7 @@ export async function registerVaultL1(
 export async function updateVaultMaxL1Limit(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
-    assetClass: bigint,
+    collateralClass: bigint,
     maxLimit: bigint,
     account: Account | undefined
 ) {
@@ -36,7 +36,7 @@ export async function updateVaultMaxL1Limit(
     try {
         if (!account) throw new Error('Client account is required');
         const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit(
-            [vaultAddress, assetClass, maxLimit],
+            [vaultAddress, collateralClass, maxLimit],
             { chain: null, account }
         );
         console.log("Max L1 limit updated, tx hash:", hash);
@@ -101,19 +101,19 @@ export async function getVaultAtWithTimes(
     }
 }
 
-export async function getVaultAssetClass(
+export async function getVaultCollateralClass(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex
 ) {
-    console.log("Getting vault asset class...");
+    console.log("Getting vault collateral class...");
 
     try {
         const val = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
-        console.log("Vault asset class:", val);
+        console.log("Vault collateral class:", val);
     } catch (error) {
         console.error("Read contract failed:", error);
         if (error instanceof Error) {
-            console.error(error.message);
+            console.error("Error message:", error.message);
         }
     }
 }
