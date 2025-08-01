@@ -163,6 +163,18 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
     pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1
     ```
 
+- **Process Node Stake Cache**
+    ```bash
+    # Process 1 epoch (default)
+    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --private-key $L1_OWNER
+    
+    # Process 5 epochs at once
+    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 5 --private-key $L1_OWNER
+    
+    # Process 100 epochs in batches of 10, with 2 second delay between batches
+    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --delay 2000 --private-key $L1_OWNER
+    ```
+
 - **Initialize and Complete Node Addition**
     ```bash
     pnpm cli --network fuji middleware-add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER
@@ -441,6 +453,11 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Calculates and caches node stakes for all operators.
 - **middleware-force-update-nodes `<middlewareAddress>` `<operator>` [--limit-stake `<stake>`]**  
   Forces an update of nodes for an operator with an optional stake limit (default: 0).
+- **middleware-process-node-stake-cache `<middlewareAddress>` [--epochs `<epochs>`] [--loop-epochs `<count>`] [--delay `<milliseconds>`]**  
+  Manually processes node stake cache for one or more epochs.
+  - `--epochs`: Number of epochs to process per call (default: 1)
+  - `--loop-epochs`: Number of iterations to perform
+  - `--delay`: Delay between iterations in milliseconds (default: 1000)
 
 #### Middleware Read Operations
 

@@ -50,7 +50,8 @@ import {
     middlewareGetAllOperators,
     getCollateralClassIds,
     getActiveCollateralClasses,
-    middlewareGetNodeLogs
+    middlewareGetNodeLogs,
+    middlewareManualProcessNodeStakeCache
 } from "./middleware";
 
 import {
@@ -501,7 +502,42 @@ async function main() {
             );
         });
 
-    // TODO: Automate `cast send 0x1C1B9F55BBa4C0D4E695459a0340130c6eAe4074 "manualProcessNodeStakeCache(uint48)" 1000 --rpc-url https://api.avax-test.network/ext/bc/C/rpc --private-key $PK`
+    // Process node stake cache
+    program
+        .command("middleware-process-node-stake-cache")
+        .description("Manually process node stake cache for one or more epochs")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addOption(new Option("--epochs <epochs>", "Number of epochs to process (default: 1)").default(1).argParser(ParserNumber))
+        .addOption(new Option("--loop-epochs <count>", "Loop through multiple epochs, processing --epochs at a time").argParser(ParserNumber))
+        .addOption(new Option("--delay <milliseconds>", "Delay between loop iterations in milliseconds (default: 1000)").default(1000).argParser(ParserNumber))
+        .action(async (middlewareAddress, options) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            
+            const epochsPerCall = options.epochs;
+            const loopCount = options.loopEpochs || 1;
+            
+            console.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
+            
+            for (let i = 0; i < loopCount; i++) {
+                console.log(`\nIteration ${i + 1}/${loopCount}`);
+                await middlewareManualProcessNodeStakeCache(
+                    middlewareSvc,
+                    epochsPerCall,
+                    client.account!
+                );
+                
+                if (i < loopCount - 1 && options.delay > 0) {
+                    console.log(`Waiting ${options.delay}ms before next iteration...`);
+                    await new Promise(resolve => setTimeout(resolve, options.delay));
+                }
+            }
+            
+            console.log(`\nCompleted processing ${loopCount * epochsPerCall} total epochs`);
+        });
+
     // Add node
     program
         .command("middleware-add-node")

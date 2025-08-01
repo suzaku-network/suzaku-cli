@@ -799,3 +799,25 @@ export async function middlewareGetL1Id(
 
   return utils.base58check.encode(hexToUint8Array(L1Id as Hex))
 }
+
+export async function middlewareManualProcessNodeStakeCache(
+  middleware: SafeSuzakuContract['L1Middleware'],
+  numEpochsToProcess: number,
+  account: Account | undefined
+) {
+  console.log("Processing node stake cache...");
+
+  try {
+    if (!account) throw new Error('Client account is required');
+
+    const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
+      [numEpochsToProcess],
+      { chain: null, account }
+    );
+    console.log("manualProcessNodeStakeCache done, tx hash:", hash);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+  }
+}
