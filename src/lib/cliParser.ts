@@ -53,7 +53,7 @@ export const ParserPrivateKey = (value: string) => ParserHex(value, 32, 'Invalid
 export const ParserAddress = (value: string) => ParserHex(value, 20, 'Invalid Address format. Address must be a 20-byte Hex string');
 
 export const ParserAVAX = (value: string) => {
-  const avaxAmount = parseUnits(value, 9);
+  const avaxAmount = parseUnits(value, 18);
   if (isNaN(Number(avaxAmount))) {
     throw new Error('Invalid AVAX amount');
   }

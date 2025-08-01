@@ -15,11 +15,16 @@ export async function depositVault(
   try {
     if (!account) throw new Error('Client account is required');
 
-    console.log("Depositing amount:", amountWei.toString(), "wei");
+    // Calculate human-readable amount (assuming 9 decimals based on the parser)
+    const humanAmount = Number(amountWei) / 1e9;
+    console.log("\n=== Deposit Details ===");
+    console.log("Amount:", humanAmount, "tokens");
+    console.log("Amount in wei:", amountWei.toString());
+    console.log("Decimals used:", "9");
     
     // Get the collateral token address
     const collateralAddress = await vault.read.collateral();
-    console.log("Collateral token:", collateralAddress);
+    console.log("\nCollateral token:", collateralAddress);
     console.log("Vault address:", vault.address);
 
     // Create a minimal ERC20 interface for the collateral token
@@ -37,7 +42,10 @@ export async function depositVault(
     ] as const;
 
     // Approve the vault to spend collateral tokens
-    console.log("Approving collateral token for vault deposit...");
+    console.log("\n=== Approval ===");
+    console.log("Approving:", humanAmount, "tokens");
+    console.log("Approval amount in wei:", amountWei.toString());
+    console.log("Spender (vault):", vault.address);
     const approveTx = await client.writeContract({
       address: collateralAddress,
       abi: erc20Abi,
@@ -54,12 +62,15 @@ export async function depositVault(
     console.log("Approval confirmed in block:", approvalReceipt.blockNumber);
 
     // === Existing deposit code (unchanged) ===
-    console.log("Executing deposit...");
+    console.log("\n=== Executing Deposit ===");
+    console.log("Depositing:", humanAmount, "tokens");
+    console.log("Deposit amount in wei:", amountWei.toString());
+    console.log("On behalf of:", onBehalfOf);
     const hash = await vault.safeWrite.deposit(
       [onBehalfOf, amountWei],
       { chain: null, account }
     );
-    console.log("Deposit done, tx hash:", hash);
+    console.log("Deposit tx hash:", hash);
     
     // Wait for deposit confirmation
     console.log("Waiting for deposit confirmation...");
