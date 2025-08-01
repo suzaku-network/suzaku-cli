@@ -20,6 +20,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
   - [Operator Registry Commands](#operator-registry-commands)
   - [Vault Manager Commands](#vault-manager-commands)
   - [Vault Deposit/Withdraw/Claim Commands](#vault-depositwithdrawclaim-commands)
+  - [Vault Read Commands](#vault-read-commands)
   - [L1RestakeDelegator Commands](#l1restakedelegator-commands)
   - [Middleware Commands](#middleware-commands)
     - [Operator-Related Actions](#operator-related-actions)
@@ -122,13 +123,13 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
       ```
    3. Approve:
       ```bash
-      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 200000000000000000000 \
+      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 400000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
    4. Deposit on Vault's `deposit(address,uint256)`:
       ```bash
-      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 200000000000000000000 \
+      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
@@ -139,6 +140,24 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   pnpm cli --network fuji --private-key $STAKER_OWNER deposit $VAULT 400
   pnpm cli --network fuji --private-key $STAKER_OWNER withdraw $VAULT 100
   pnpm cli --network fuji --private-key $STAKER_OWNER claim $VAULT 100
+  ```
+
+- **Check Vault Information**
+  ```bash
+  # Get vault collateral token
+  pnpm cli --network fuji get-vault-collateral $VAULT
+  
+  # Get vault delegator
+  pnpm cli --network fuji get-vault-delegator $VAULT
+  
+  # Check your vault balance
+  pnpm cli --network fuji get-vault-balance $VAULT --account $STAKER_OWNER
+  
+  # Check total vault supply
+  pnpm cli --network fuji get-vault-total-supply $VAULT
+  
+  # Check withdrawal shares for an epoch
+  pnpm cli --network fuji get-vault-withdrawal-shares $VAULT 100 --account $STAKER_OWNER
   ```
   
 - **Check Stakes & Epochs**
@@ -405,6 +424,25 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Withdraws the specified amount from the vault. Optionally, designate a different claimer address.
 - **claim `<vaultAddress>` `<epoch>` [--recipient `<address>`]**  
   Claims withdrawal for a specific epoch. Optionally, specify the recipient address.
+
+---
+
+### Vault Read Commands
+
+- **get-vault-collateral `<vaultAddress>`**  
+  Returns the collateral token address of the vault.
+- **get-vault-delegator `<vaultAddress>`**  
+  Returns the delegator address of the vault.
+- **get-vault-balance `<vaultAddress>` [--account `<address>`]**  
+  Returns the vault token balance for an account (defaults to sender).
+- **get-vault-active-balance `<vaultAddress>` [--account `<address>`]**  
+  Returns the active vault balance for an account (tokens not pending withdrawal).
+- **get-vault-total-supply `<vaultAddress>`**  
+  Returns the total supply of vault tokens.
+- **get-vault-withdrawal-shares `<vaultAddress>` `<epoch>` [--account `<address>`]**  
+  Returns the withdrawal shares for an account at a specific epoch.
+- **get-vault-withdrawals `<vaultAddress>` `<epoch>` [--account `<address>`]**  
+  Returns the withdrawal amount for an account at a specific epoch.
 
 ---
 

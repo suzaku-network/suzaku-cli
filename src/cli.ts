@@ -17,7 +17,13 @@ import {
     withdrawVault,
     claimVault,
     getVaultDelegator,
-    getStake
+    getStake,
+    getVaultCollateral,
+    getVaultBalanceOf,
+    getVaultActiveBalanceOf,
+    getVaultTotalSupply,
+    getVaultWithdrawalSharesOf,
+    getVaultWithdrawalsOf
 } from "./vault";
 
 import {
@@ -398,6 +404,104 @@ async function main() {
                 epoch,
                 client.account!
             );
+        });
+
+    /* --------------------------------------------------
+    * VAULT READ COMMANDS
+    * -------------------------------------------------- */
+    program
+        .command("get-vault-collateral")
+        .description("Get the collateral token address of a vault")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .action(async (vaultAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultCollateral(vault);
+        });
+
+    program
+        .command("get-vault-delegator")
+        .description("Get the delegator address of a vault")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .action(async (vaultAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const delegator = await getVaultDelegator(vault);
+            console.log("Vault delegator:", delegator);
+        });
+
+    program
+        .command("get-vault-balance")
+        .description("Get vault token balance for an account")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
+        .action(async (vaultAddress, options) => {
+            const account = options.account ?? (await getDefaultAccount(program.opts()));
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultBalanceOf(vault, account);
+        });
+
+    program
+        .command("get-vault-active-balance")
+        .description("Get active vault balance for an account")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
+        .action(async (vaultAddress, options) => {
+            const account = options.account ?? (await getDefaultAccount(program.opts()));
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultActiveBalanceOf(vault, account);
+        });
+
+    program
+        .command("get-vault-total-supply")
+        .description("Get total supply of vault tokens")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .action(async (vaultAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultTotalSupply(vault);
+        });
+
+    program
+        .command("get-vault-withdrawal-shares")
+        .description("Get withdrawal shares for an account at a specific epoch")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
+        .action(async (vaultAddress, epoch, options) => {
+            const account = options.account ?? (await getDefaultAccount(program.opts()));
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultWithdrawalSharesOf(vault, epoch, account);
+        });
+
+    program
+        .command("get-vault-withdrawals")
+        .description("Get withdrawal amount for an account at a specific epoch")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
+        .action(async (vaultAddress, epoch, options) => {
+            const account = options.account ?? (await getDefaultAccount(program.opts()));
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await getVaultWithdrawalsOf(vault, epoch, account);
         });
 
     /* --------------------------------------------------
