@@ -1,5 +1,5 @@
 import { Command, Option } from '@commander-js/extra-typings';
-import { Hex } from "viem";
+import { Hex, parseUnits } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -348,16 +348,16 @@ async function main() {
     program
         .command("deposit")
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgAVAX("amount", "Amount to deposit in AVAX"))
+        .argument("amount", "Amount of token to deposit in the vault")
         .addOption(new Option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address").argParser(ParserAddress))
         .action(async (vaultAddress, amount, options) => {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const amountWei = amount;
             // instantiate VaultTokenized contract
             const vault = config.contracts.VaultTokenized(vaultAddress);
+            const amountWei = parseUnits(amount, await vault.read.decimals())
             await depositVault(
                 client,
                 vault,
@@ -370,15 +370,15 @@ async function main() {
     program
         .command("withdraw")
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgAVAX("amount", "Amount to withdraw in AVAX"))
+        .argument("amount", "Amount of token to withdraw in the vault")
         .addOption(new Option("--claimer <claimer>", "Optional claimer").argParser(ParserAddress))
         .action(async (vaultAddress, amount, options) => {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const amountWei = amount;
             const vault = config.contracts.VaultTokenized(vaultAddress);
+            const amountWei = parseUnits(amount, await vault.read.decimals())
             await withdrawVault(
                 vault,
                 claimer,
