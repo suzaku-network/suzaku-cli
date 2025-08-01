@@ -119,7 +119,7 @@ import {
     getLastEpochClaimedProtocol
 } from "./rewards";
 import { requirePChainBallance } from "./lib/transferUtils";
-import { getAddresses } from "./lib/utils";
+import { getAddresses, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple } from "./lib/cliParser";
@@ -1288,6 +1288,56 @@ async function main() {
                 balancer,
                 securityModule
             );
+        });
+
+    /**
+     * --------------------------------------------------
+     * POA-Security-Module
+     * --------------------------------------------------
+     * This section is for the POA Security Module commands.
+     * It includes commands to add or remove validators
+     */
+
+    program
+        .command("poa-initialize-end-validation")
+        .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
+        .addArgument(ArgNodeID())
+        .action(async (poaSecurityModuleAddress, nodeID) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const balancerValidatorManagerAddress = await poaSecurityModule.read.balancerValidatorManager();
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
+            // Convert nodeID to Hex if necessary
+            const nodeIdHex = parseNodeID(nodeID);
+            const validationId = await balancer.read.registeredValidators([nodeIdHex]);
+            poaSecurityModule.safeWrite.initializeEndValidation([validationId], {
+                chain: null,
+                account: client.account!,
+            }).then((txHash) => {
+                console.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
+            }).catch((error) => {
+                console.error(`Failed to initialize end validation for node ${nodeID}:`, error);
+            });
+        });
+
+    program
+        .command("poa-complete-end-validation")
+        .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
+        .action(async (poaSecurityModuleAddress, TxID) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            poaSecurityModule.safeWrite.completeEndValidation([0], {
+                chain: null,
+                account: client.account!,
+            }).then((txHash) => {
+                console.log(`End validation initialized for node . Transaction hash: ${txHash}`);
+            }).catch((error) => {
+                console.error(`Failed to initialize end validation for node :`, error);
+            });
         });
 
     /**

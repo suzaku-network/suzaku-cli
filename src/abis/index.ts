@@ -10,6 +10,7 @@ import OperatorVaultOptInService from './OperatorVaultOptInService';
 import OperatorL1OptInService from './OperatorL1OptInService';
 import UptimeTracker from './UptimeTracker';
 import Rewards from './Rewards';
+import PoASecurityModule from './PoASecurityModule';
 
 export const SuzakuABI = {
   L1Registry,
@@ -23,5 +24,6 @@ export const SuzakuABI = {
   OperatorVaultOptInService,
   OperatorL1OptInService,
   UptimeTracker,
-  Rewards
+  Rewards,
+  PoASecurityModule
 };
