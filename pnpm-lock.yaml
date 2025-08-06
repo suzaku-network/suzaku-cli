@@ -11,6 +11,9 @@ importers:
       '@avalabs/avalanchejs':
         specifier: 5.0.0
         version: 5.0.0
+      '@commander-js/extra-typings':
+        specifier: ^14.0.0
+        version: 14.0.0(commander@14.0.0)
       '@noble/hashes':
         specifier: ^1.7.2
         version: 1.8.0
@@ -39,9 +42,6 @@ importers:
         specifier: ^2.24.2
         version: 2.32.0(typescript@5.8.3)
     devDependencies:
-      '@commander-js/extra-typings':
-        specifier: ^14.0.0
-        version: 14.0.0(commander@14.0.0)
       '@types/node':
         specifier: ^24.1.0
         version: 24.1.0

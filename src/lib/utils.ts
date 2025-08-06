@@ -125,13 +125,12 @@ export async function interruptiblePause(seconds: number): Promise<void> {
 
 export type NodeId = `NodeID-${string}`;
 
-export const parseNodeID = (nodeID: NodeId): Hex => {
+export const parseNodeID = (nodeID: NodeId, padding = true): Hex => {
     const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
-    return padded as Hex
+    return padding ? pad(nodeIDHexTrimmed as Hex, { size: 32 }) as Hex : nodeIDHexTrimmed as Hex;
 }
 
 export function prompt(question: string): Promise<string> {

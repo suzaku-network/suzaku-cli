@@ -24,7 +24,7 @@ export function buildCommands(program: Command) {
     .description("create a new encrypted secret")
     .argument("<name>", "Name of the secret to create")
     .argument("<value>", "Value of the secret to create")
-    .action(async (name, value) => {
+    .action(async (name: string, value: string) => {
       const pass = new Pass(passPath)
       pass.insert(name, value)
       console.log(`Secret '${name}' created successfully.`);
@@ -34,7 +34,7 @@ export function buildCommands(program: Command) {
     .command("rm")
     .description("remove an encrypted secret")
     .argument("<name>", "Name of the secret to remove")
-    .action(async (name) => {
+    .action(async (name: string) => {
       const pass = new Pass(passPath)
       pass.rm(name)
       console.log(`Secret '${name}' removed successfully.`);
