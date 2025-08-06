@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "setup": "pnpm i && pnpm tsc",
     "build": "tsc",
     "suzaku-cli": "node dist/cli.js",
-    "cli": "ts-node src/cli.ts"
+    "cli": "ts-node src/cli.ts",
+    "prepare": "tsc"
   },
   "keywords": [],
   "author": "",
@@ -28,11 +32,5 @@
     "@types/node": "^24.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
-    }
   }
 }
