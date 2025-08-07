@@ -5,3 +5,4 @@ export * from './lib/utils';
 export * from './lib/warpUtils';
 
 export * from './client'
+export * from './config';
