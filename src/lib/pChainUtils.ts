@@ -1,8 +1,8 @@
 import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, OutputOwners } from "@avalabs/avalanchejs";
-import { getAddresses, nToAVAX } from "./utils";
+import { cb58ToBytes, getAddresses, NodeId, nToAVAX } from "./utils";
 import { ExtendedClient, ExtendedWalletClient, generateClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { Hex } from "viem";
+import { bytesToHex, Hex } from "viem";
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
 
@@ -371,6 +371,54 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     console.log("Waiting for P-Chain confirmation...");
     await waitPChainTx(response.txID, pvmApi);
     console.log("P-Chain transaction confirmed");
+
+    return response.txID;
+}
+
+export async function increasePChainValidatorBalance(
+    client: ExtendedWalletClient,
+    privateKeyHex: string,
+    amount: number,
+    validationId: string
+): Promise<string> {
+    if (!privateKeyHex) {
+        throw new Error("Private key required");
+    }
+    const rpcUrl = getRPCEndpoint(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
+    const feeState = await pvmApi.getFeeState();
+    const context = await Context.getContextFromURI(rpcUrl);
+
+    const { P: pChainAddress } = getAddresses(privateKeyHex, client.network!);
+    const addressBytes = utils.bech32ToBytes(pChainAddress);
+    const nAVAX = BigInt(amount * 1e9); // Convert AVAX to nAVAX
+    // Ensure the P-Chain address has enough balance
+    await requirePChainBallance(privateKeyHex, client, nAVAX);
+
+    const { utxos } = await pvmApi.getUTXOs({
+        addresses: [pChainAddress]
+    });
+
+    // Create a new increase balance transaction
+    const tx = pvm.e.newIncreaseL1ValidatorBalanceTx(
+        {
+            feeState,
+            fromAddressesBytes: [addressBytes],
+            utxos,
+            balance: nAVAX, // Convert to nAVAX
+            validationId
+        },
+        context,
+    );
+
+    // Sign the transaction
+    await addSigToAllCreds(tx, utils.hexToBuffer(privateKeyHex));
+
+    // Issue the signed transaction
+    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+
+    // Wait for transaction to be confirmed
+    await waitPChainTx(response.txID, pvmApi);
 
     return response.txID;
 }

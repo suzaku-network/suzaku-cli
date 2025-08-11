@@ -123,7 +123,7 @@ import { getAddresses, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple } from "./lib/cliParser";
-import { getRPCEndpoint, setValidatorWeight } from './lib/pChainUtils';
+import { getRPCEndpoint, setValidatorWeight, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { color } from 'console-log-colors';
 import { collectSignatures, packL1ValidatorRegistration, packWarpIntoAccessList } from './lib/warpUtils';
 import { GetRegistrationJustification } from './lib/justification';
@@ -1396,6 +1396,24 @@ async function main() {
                 accessList
             })
             console.log(`End validation initialized for node . Transaction hash: ${txHash}`);
+        });
+    
+    program
+        .command("l1-validator-balance-top-up")
+        .description("Top up L1 validator balance on the P-Chain")
+        .addArgument(ArgCB58("validationId", "Validation ID for the node on its subnet"))
+        .addArgument(ArgNumber("amount", "Amount to top up in AVAX"))
+        .action(async (validatorId, amount) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+
+            const txHash = await increasePChainValidatorBalance(
+                client,
+                opts.privateKey!,
+                amount,
+                validatorId
+            );
+            console.log(`Top-up transaction hash: ${txHash}`);
         });
 
     /**
