@@ -1,5 +1,6 @@
 import { getContract, PublicClient, GetContractReturnType, Address, WalletClient } from 'viem';
 import { SuzakuABI } from '../abis';
+import { exit } from 'process';
 
 export type TClient = PublicClient | WalletClient;
 
@@ -32,13 +33,18 @@ export function withSafeWrite<T extends SuzakuABINames>(
       const fn = (target as any)[prop]
       if (typeof fn !== 'function') return fn
       return async (...args: any[]) => {
-        const simulateFn = (contract as any).simulate?.[prop]
-        if (typeof simulateFn === 'function') {
-          // console.log(`Simulating ${String(prop)}`);
-          await simulateFn(...args)
+        try {
+          const simulateFn = (contract as any).simulate?.[prop]
+          if (typeof simulateFn === 'function') {
+            // console.log(`Simulating ${String(prop)}`);
+            await simulateFn(...args)
+          }
+          // console.log(`Executing ${String(prop)}`);
+          return fn(...args)
+        } catch (error: any) {
+          console.log(error.message)
+          exit(1)
         }
-        // console.log(`Executing ${String(prop)}`);
-        return fn(...args)
       }
     },
   };

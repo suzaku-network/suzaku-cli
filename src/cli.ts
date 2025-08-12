@@ -1316,14 +1316,12 @@ async function main() {
             const nodeIdHex = parseNodeID(nodeID, false);
             console.log(nodeIdHex)
             const validationId = await balancer.read.registeredValidators([nodeIdHex]);
-            poaSecurityModule.safeWrite.initializeEndValidation([validationId], {
+            const txHash = await poaSecurityModule.safeWrite.initializeEndValidation([validationId], {
                 chain: null,
                 account: client.account!,
-            }).then((txHash) => {
-                console.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
-            }).catch((error) => {
-                console.error(`Failed to initialize end validation for node ${nodeID}:`, error);
-            });
+            })
+            console.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
+            
         });
 
     program
