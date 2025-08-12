@@ -639,7 +639,7 @@ export async function convertSubnetToL1(params:
   const accessList = packWarpIntoAccessList(signedBytes);
 
   // 4) call initializeValidatorSet
-  const args = await getValidatorManagerInitializationArgsFromWarpTx(params.subnetId, convertTx, client);
+    const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
   const initHash = await params.poASecurityModule.safeWrite.initializeValidatorSet(args, {
     account: client.account!,
     chain: null,
