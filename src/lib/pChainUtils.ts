@@ -1,8 +1,10 @@
-import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, OutputOwners } from "@avalabs/avalanchejs";
-import { cb58ToBytes, getAddresses, NodeId, nToAVAX } from "./utils";
+import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, networkIDs } from "@avalabs/avalanchejs";
+import { cb58ToBytes, cb58ToHex, getAddresses, NodeId, nToAVAX } from "./utils";
 import { ExtendedClient, ExtendedWalletClient, generateClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { bytesToHex, Hex } from "viem";
+import { bytesToHex, Hex, hexToBytes } from "viem";
+import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
+import { SafeSuzakuContract } from "./viemUtils";
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
 
@@ -45,6 +47,109 @@ export interface SetValidatorWeightParams extends PChainBaseParams {
     validationID: string;
     message: string;
 }
+  
+export type ExtractWarpMessageFromTxParams = {
+    txId: string;
+}
+
+interface AddressObject {
+    threshold: number;
+    addresses: string[];
+}
+
+interface ValidatorSigner {
+    publicKey: string;
+    proofOfPossession: string;
+}
+  
+interface Validator {
+    nodeID: string;
+    weight: number;
+    balance: number;
+    signer: ValidatorSigner;
+    remainingBalanceOwner: AddressObject;
+    deactivationOwner: AddressObject;
+  }
+
+export type ExtractWarpMessageFromTxResponse = {
+    message: string;
+    justification: string;
+    subnetId: string;
+    signingSubnetId: string;
+    networkId: typeof networkIDs.FujiID | typeof networkIDs.MainnetID;
+    validators: Validator[];
+    chainId: string;
+    managerAddress: string;
+}
+
+interface OutputObject {
+    addresses: string[];
+    amount: number;
+    locktime: number;
+    threshold: number;
+}
+  
+interface Output {
+    assetID: string;
+    fxID: string;
+    output: OutputObject;
+}
+
+interface InputObject {
+    amount: number;
+    signatureIndices: number[];
+}
+
+interface Input {
+    txID: string;
+    outputIndex: number;
+    assetID: string;
+    fxID: string;
+    input: InputObject;
+}
+  
+interface SubnetAuthorization {
+    signatureIndices: number[];
+  }
+
+interface UnsignedConvertTx {
+    networkID: number;
+    blockchainID: string;
+    outputs: Output[];
+    inputs: Input[];
+    memo: string;
+    subnetID: string;
+    chainID: string;
+    address: string;
+    validators: Validator[];
+    subnetAuthorization: SubnetAuthorization;
+}
+
+interface Credential {
+    signatures: string[];
+}
+
+interface Transaction {
+    unsignedTx: UnsignedConvertTx;
+    credentials: Credential[];
+    id: string;
+  }
+
+interface TransactionResult {
+    tx: Transaction;
+    encoding: string;
+}
+
+interface ConversionDataResponse {
+    result: TransactionResult;
+  }
+  
+type InitializeValidatorSetArgs = [{ l1ID: `0x${string}`; validatorManagerBlockchainID: `0x${string}`; validatorManagerAddress: `0x${string}`; initialValidators: readonly { nodeID: `0x${string}`; blsPublicKey: `0x${string}`; weight: bigint; }[]; }, number]
+
+export function add0x(hex: string) {
+    return /^0x/i.test(hex) ? hex : `0x${hex}`;
+}
+  
 export const getRPCEndpoint = (client: ExtendedClient): string => {
     const url = new URL(client.chain!.rpcUrls.default.http[0]);
     return `${url.protocol}//${url.host}`;
@@ -436,3 +541,148 @@ export async function waitPChainTx(txID: string, pvmApi: pvm.PVMApi, pollingInte
         throw new Error(`P-Chain transaction ${txID} not committed after ${retryCount} retries`);
     }
 }
+
+export async function extractWarpMessageFromPChainTx(subnetId: string, txId: string, client: ExtendedClient): Promise<ExtractWarpMessageFromTxResponse> {
+    const rpcEndpoint = getRPCEndpoint(client);
+    const networkId = networkIDs.FujiID;
+
+    //Fixme: here we do a direct call instead of using avalanchejs, because we need to get the raw response from the node
+    const response = await fetch(rpcEndpoint + "/ext/bc/P", {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'platform.getTx',
+            params: {
+                txID: txId,
+                encoding: 'json'
+            },
+            id: 1
+        })
+    });
+
+    const data = await response.json() as ConversionDataResponse
+
+    if (!data?.result?.tx?.unsignedTx?.subnetID || !data?.result?.tx?.unsignedTx?.chainID || !data?.result?.tx?.unsignedTx?.address || !data?.result?.tx?.unsignedTx?.validators) {
+        console.log('txId', txId)
+        console.log('data', data)
+        throw new Error("Invalid transaction data, are you sure this is a conversion transaction?");
+    }
+
+    const conversionArgs: PackL1ConversionMessageArgs = {
+        subnetId: data.result.tx.unsignedTx.subnetID,
+        managerChainID: data.result.tx.unsignedTx.chainID,
+        managerAddress: data.result.tx.unsignedTx.address as Hex,
+        validators: data.result.tx.unsignedTx.validators.map((validator) => {
+            return {
+                nodeID: validator.nodeID,
+                nodePOP: validator.signer,
+                weight: validator.weight
+            }
+        })
+    };
+
+    const [message, justification] = packL1ConversionMessage(conversionArgs, networkId, data.result.tx.unsignedTx.blockchainID);
+    return {
+        message: utils.bufferToHex(message),
+        justification: utils.bufferToHex(justification),
+        subnetId: data.result.tx.unsignedTx.subnetID,
+        signingSubnetId: subnetId,
+        networkId,
+        validators: data.result.tx.unsignedTx.validators,
+        chainId: data.result.tx.unsignedTx.chainID,
+        managerAddress: data.result.tx.unsignedTx.address,
+    }
+}
+
+export default interface NodeConfig {
+  nodeID: NodeId,
+  blsPublicKey: Hex,
+  blsProofOfPossession: Hex,
+  weight: number,
+  balance: number
+}
+
+export async function convertSubnetToL1(params:
+  {
+    subnetId: string;
+    chainId: string;
+    poASecurityModule: SafeSuzakuContract['PoASecurityModule'];
+    client: ExtendedWalletClient;
+    privateKeyHex: string;
+    validators: NodeConfig[];
+  }) {
+  const managerAddress = params.poASecurityModule.address;
+  const { client, privateKeyHex, validators } = params;
+  // 1) convert to L1
+  const convertTx = await convertToL1({
+    client,
+    privateKeyHex: privateKeyHex,
+    subnetId: params.subnetId,
+    chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+    managerAddress,
+    validators: params.validators,
+  });
+  // 2) collect signatures
+  const signed = await collectSignaturesInitializeValidatorSet({
+    network: client.network,
+    subnetId: params.subnetId,
+    validatorManagerBlockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+    managerAddress,
+    validators,
+  });
+
+  // 3) pack warp → accessList
+  const signedBytes = hexToBytes(`0x${signed}`);
+  const accessList = packWarpIntoAccessList(signedBytes);
+
+  // 4) call initializeValidatorSet
+  const args = await getValidatorManagerInitializationArgsFromWarpTx(params.subnetId, convertTx, client);
+  const initHash = await params.poASecurityModule.safeWrite.initializeValidatorSet(args, {
+    account: client.account!,
+    chain: null,
+    accessList
+  });
+
+  await client.waitForTransactionReceipt({
+    hash: initHash as Hex,
+    confirmations: 2
+  })
+
+  return { txHash: convertTx, initHash };
+
+}
+
+export async function getValidatorManagerInitializationArgsFromWarpTx(conversionTxID: string, subnetId: string, client: ExtendedClient): Promise<InitializeValidatorSetArgs> {
+    const { validators, chainId, managerAddress } = await extractWarpMessageFromPChainTx(subnetId, conversionTxID, client );
+    // Prepare transaction arguments
+    return [
+        {
+            l1ID: cb58ToHex(subnetId) as Hex,
+            validatorManagerBlockchainID: cb58ToHex(chainId) as Hex,
+            validatorManagerAddress: managerAddress as Hex,
+            initialValidators: validators
+                .map(({ nodeID, weight, signer }: { nodeID: string, weight: number, signer: { publicKey: string } }) => {
+                    // Ensure nodeID and blsPublicKey are properly formatted
+                    // If nodeID is in BinTools format, convert to hex
+                    const nodeIDBytes = nodeID.startsWith('0x')
+                        ? nodeID
+                        : add0x(nodeID);
+
+                    // If blsPublicKey is in BinTools format, convert to hex
+                    const blsPublicKeyBytes = signer.publicKey.startsWith('0x')
+                        ? signer.publicKey
+                        : add0x(signer.publicKey);
+
+                    return {
+                        nodeID: nodeIDBytes as Hex,
+                        blsPublicKey: blsPublicKeyBytes as Hex,
+                        weight: BigInt(weight)
+                    };
+                })
+        },
+        0 // messageIndex parameter
+    ];
+  }
