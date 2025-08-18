@@ -1,11 +1,14 @@
 import { ExtendedWalletClient } from './client';
+import { Config } from './config';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { prompt } from "./lib/utils";
 
 // deposit
 export async function depositVault(
   client: ExtendedWalletClient,
-  vault: SafeSuzakuContract['VaultTokenized'],
+  config: Config,
+  vaultAddress: Hex,
   onBehalfOf: Hex,
   amountWei: bigint,
   account: Account | undefined
@@ -15,45 +18,55 @@ export async function depositVault(
   try {
     if (!account) throw new Error('Client account is required');
 
-    // Calculate human-readable amount (assuming 9 decimals based on the parser)
-    const humanAmount = Number(amountWei) / 1e9;
+    // Get the collateral token address
+    const vault = config.contracts.VaultTokenized(vaultAddress);
+    const collateralAddress = await vault.read.collateral();
+    const collateral = config.contracts.DefaultCollateral(collateralAddress);
+    const assetAddress = await collateral.read.asset();
+    const asset = config.contracts.ERC20(assetAddress);
+    const decimals = await asset.read.decimals();
+    // Calculate human-readable amount
+    const humanAmount = Number(amountWei) / 10 ** decimals;
     console.log("\n=== Deposit Details ===");
     console.log("Amount:", humanAmount, "tokens");
     console.log("Amount in wei:", amountWei.toString());
-    console.log("Decimals used:", "9");
+    console.log("Decimals used:", decimals);
     
-    // Get the collateral token address
-    const collateralAddress = await vault.read.collateral();
-    console.log("\nCollateral token:", collateralAddress);
+    
+    console.log("Asset address:", assetAddress);
+    console.log("Collateral address:", collateralAddress);
     console.log("Vault address:", vault.address);
 
-    // Create a minimal ERC20 interface for the collateral token
-    const erc20Abi = [
-      {
-        inputs: [
-          { name: "spender", type: "address" },
-          { name: "amount", type: "uint256" }
-        ],
-        name: "approve",
-        outputs: [{ name: "", type: "bool" }],
-        stateMutability: "nonpayable",
-        type: "function"
+    // Check if the collateral balance is sufficient
+    const collateralBalance = await collateral.read.balanceOf([account.address]);
+    if (collateralBalance < amountWei) {
+      console.log(`You don't have enough collateral tokens in your account (${collateralBalance} < ${amountWei})`);
+      const tokenToHave = amountWei - collateralBalance;
+      console.log(`Depositing ${Number(tokenToHave) / 10 ** decimals} tokens to the collateral...`);
+      const tokenBallance = await asset.read.balanceOf([account.address]);
+      if (tokenBallance < tokenToHave) {
+        throw new Error(`You don't have enough tokens in your account (${tokenBallance} < ${tokenToHave})`);
       }
-    ] as const;
+      else {
+        if ((await prompt(`Do you want to deposit ${Number(tokenToHave) / 10 ** decimals} tokens to the collateral? (y/n)`)).toLowerCase() !== 'y') {
+          throw new Error(`Deposit canceled by the user`);
+        }
+        collateral.safeWrite.deposit(
+          [account.address, amountWei],
+          { chain: null, account }
+        )
+      }
+    }
 
     // Approve the vault to spend collateral tokens
-    console.log("\n=== Approval ===");
+    console.log("\n=== Collateral Approval ===");
     console.log("Approving:", humanAmount, "tokens");
     console.log("Approval amount in wei:", amountWei.toString());
     console.log("Spender (vault):", vault.address);
-    const approveTx = await client.writeContract({
-      address: collateralAddress,
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [vault.address, amountWei],
-      account,
-      chain: null
-    });
+    const approveTx = await collateral.safeWrite.approve(
+      [vault.address, amountWei],
+      { chain: null, account }
+    );
     console.log("Approval tx hash:", approveTx);
     
     // Wait for the approval transaction to be mined
