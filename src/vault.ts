@@ -1,7 +1,7 @@
 import { ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import { type Hex, type Account, parseUnits } from 'viem';
 import { prompt } from "./lib/utils";
 
 // deposit
@@ -10,7 +10,7 @@ export async function depositVault(
   config: Config,
   vaultAddress: Hex,
   onBehalfOf: Hex,
-  amountWei: bigint,
+  amount: string,
   account: Account | undefined
 ) {
   console.log("Depositing...");
@@ -26,9 +26,9 @@ export async function depositVault(
     const asset = config.contracts.ERC20(assetAddress);
     const decimals = await asset.read.decimals();
     // Calculate human-readable amount
-    const humanAmount = Number(amountWei) / 10 ** decimals;
+    const amountWei = parseUnits(amount, decimals)
     console.log("\n=== Deposit Details ===");
-    console.log("Amount:", humanAmount, "tokens");
+    console.log("Amount:", amount, "tokens");
     console.log("Amount in wei:", amountWei.toString());
     console.log("Decimals used:", decimals);
     
@@ -60,7 +60,7 @@ export async function depositVault(
 
     // Approve the vault to spend collateral tokens
     console.log("\n=== Collateral Approval ===");
-    console.log("Approving:", humanAmount, "tokens");
+    console.log("Approving:", amount, "tokens");
     console.log("Approval amount in wei:", amountWei.toString());
     console.log("Spender (vault):", vault.address);
     const approveTx = await collateral.safeWrite.approve(
@@ -76,7 +76,7 @@ export async function depositVault(
 
     // === Existing deposit code (unchanged) ===
     console.log("\n=== Executing Deposit ===");
-    console.log("Depositing:", humanAmount, "tokens");
+    console.log("Depositing:", amount, "tokens");
     console.log("Deposit amount in wei:", amountWei.toString());
     console.log("On behalf of:", onBehalfOf);
     const hash = await vault.safeWrite.deposit(

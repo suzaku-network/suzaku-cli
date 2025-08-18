@@ -380,14 +380,12 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            // instantiate VaultTokenized contract
-            const vault = config.contracts.VaultTokenized(vaultAddress);
-            const amountWei = parseUnits(amount, await vault.read.decimals())
             await depositVault(
                 client,
-                vault,
+                config,
+                vaultAddress,
                 onBehalfOf,
-                amountWei,
+                amount,
                 client.account!
             );
         });
