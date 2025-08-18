@@ -368,7 +368,7 @@ async function main() {
         });
 
     /* --------------------------------------------------
-    * VAULT DEPOSIT/WITHDRAW/CLAIM
+    * VAULT DEPOSIT/WITHDRAW/CLAIM/GRANT
     * -------------------------------------------------- */
     program
         .command("deposit")
@@ -429,6 +429,23 @@ async function main() {
                 epoch,
                 client.account!
             );
+        });
+    
+    program
+        .command("vault-grant-staker-role")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAddress("account", "Account to grant the role to"))
+        .action(async (vaultAddress, account) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await vault.safeWrite.grantRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
+                {
+                    chain: null,
+                    account: client.account!,
+                })
+            console.log(`Granted staker role to ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
         });
 
     /* --------------------------------------------------
