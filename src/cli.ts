@@ -1,5 +1,5 @@
-import { Command, Option } from "commander";
-import { parseUnits, Hex } from "viem";
+import { Command, Option } from '@commander-js/extra-typings';
+import { Hex } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -110,43 +110,25 @@ import {
 } from "./rewards";
 import { requirePChainBallance } from "./lib/transferUtils";
 import { getAddresses } from "./lib/utils";
-import { NodeId } from "./lib/utils";
-import { TContract } from './config';
-import type { Account } from 'viem';
 
-import { buildCommands as buildKeyStoreCmds, passPath } from "./keyStore";
-import { Pass } from "./lib/pass";
-
-// Commander help functions
-function parseSecretName(value: string, previousValue: string): string {
-    const pass = new Pass(passPath)
-    const secret = pass.show(value);
-    if (typeof secret !== 'string' || secret.trim() === '') {
-        throw new Error("Secret name cannot be empty");
-    }
-    return secret;
-}
+import { buildCommands as buildKeyStoreCmds } from "./keyStore";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple } from "./lib/cliParser";
+import { getRPCEndpoint } from './lib/pChainUtils';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
-    const client = generateClient(opts.network, opts.privateKey);
+    const client = generateClient(opts.network, opts.privateKey!);
     return client.account?.address as Hex;
-}
-
-function collectMultiple(value: string, previous: string[]): string[] {
-    return previous.concat([value]);
 }
 
 // Main function to set up the CLI commands
 async function main() {
-    const program = new Command();
-
-    program
+    const program = new Command()
         .name('suzaku-cli')
         .addOption(new Option('-n, --network <network>')
             .choices(['fuji', 'mainnet', 'anvil'])
             .default('fuji'))
         .addOption(new Option('-k, --private-key <privateKey>')
-            .env('PK'))
+            .env('PK').argParser(ParserPrivateKey))
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
             .conflicts('privateKey')
             .argParser(parseSecretName))
@@ -157,22 +139,22 @@ async function main() {
    * -------------------------------------------------- */
     program
         .command("register-l1")
-        .argument("<validatorManager>")
-        .argument("<l1Middleware>")
-        .argument("<metadataUrl>")
+        .addArgument(ArgAddress("validatorManager", "Validator manager contract address"))
+        .addArgument(ArgAddress("l1Middleware", "L1 middleware contract address"))
+        .addArgument(ArgURI("metadataUrl", "Metadata URL for the L1"))
         .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
 
             // instantiate L1Registry and call
             const l1Registry = config.contracts.L1Registry(config.l1Registry);
             await registerL1(
                 l1Registry,
-                validatorManager as Hex,
-                l1Middleware as Hex,
+                validatorManager,
+                l1Middleware,
                 metadataUrl,
-                client.account as Account
+                client.account
             );
         });
 
@@ -189,35 +171,35 @@ async function main() {
 
     program
         .command("set-l1-metadata-url")
-        .argument("<l1Address>")
-        .argument("<metadataUrl>")
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgURI("metadataUrl", "New metadata URL"))
         .action(async (l1Address, metadataUrl) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const l1Reg = config.contracts.L1Registry(config.l1Registry);
             await setL1MetadataUrl(
                 l1Reg,
-                l1Address as Hex,
+                l1Address,
                 metadataUrl,
-                client.account as Account
+                client.account!
             );
         });
 
     program
         .command("set-l1-middleware")
-        .argument("<l1Address>")
-        .argument("<l1Middleware>")
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgAddress("l1Middleware", "New L1 middleware address"))
         .action(async (l1Address, l1Middleware) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const l1Reg2 = config.contracts.L1Registry(config.l1Registry);
             await setL1Middleware(
                 l1Reg2,
-                l1Address as Hex,
-                l1Middleware as Hex,
-                client.account as Account
+                l1Address,
+                l1Middleware,
+                client.account!
             );
         });
     /* --------------------------------------------------
@@ -225,16 +207,16 @@ async function main() {
     * -------------------------------------------------- */
     program
         .command("register-operator")
-        .argument("<metadataUrl>")
+        .addArgument(ArgURI("metadataUrl", "Operator metadata URL"))
         .action(async (metadataUrl) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const opReg = config.contracts.OperatorRegistry(config.operatorRegistry);
             await registerOperator(
                 opReg,
                 metadataUrl,
-                client.account as Account
+                client.account!
             );
         });
 
@@ -254,99 +236,99 @@ async function main() {
     * -------------------------------------------------- */
     program
         .command("vault-manager-register-vault-l1")
-        .argument("<middlewareVaultManagerAddress>")
-        .argument("<vaultAddress>")
-        .argument("<assetClass>")
-        .argument("<maxLimit>")
+        .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             // instantiate VaultManager contract
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
             await registerVaultL1(
                 vaultManager,
-                vaultAddress as Hex,
-                BigInt(assetClass),
-                BigInt(maxLimit),
-                client.account as Account
+                vaultAddress,
+                assetClass,
+                maxLimit,
+                client.account!
             );
         });
 
     program
         .command("vault-manager-update-vault-max-l1-limit")
-        .argument("<middlewareVaultManagerAddress>")
-        .argument("<vaultAddress>")
-        .argument("<assetClass>")
-        .argument("<maxLimit>")
+        .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
         .action(async (middlewareVaultManagerAddress, vaultAddress, assetClass, maxLimit) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
             await updateVaultMaxL1Limit(
                 vaultManager,
-                vaultAddress as Hex,
-                BigInt(assetClass),
-                BigInt(maxLimit),
-                client.account as Account
+                vaultAddress,
+                assetClass,
+                maxLimit,
+                client.account!
             );
         });
 
     program
         .command("vault-manager-remove-vault")
-        .argument("<middlewareVaultManager>")
-        .argument("<vaultAddress>")
+        .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await removeVault(
                 vaultManager,
-                vaultAddress as Hex,
-                client.account as Account
+                vaultAddress,
+                client.account!
             );
         });
 
     program
         .command("get-vault-count")
-        .argument("<middlewareVaultManager>")
+        .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
         .action(async (middlewareVaultManager) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCount(vaultManager);
         });
 
     program
         .command("get-vault-at-with-times")
-        .argument("<middlewareVaultManager>")
-        .argument("<index>")
+        .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
+        .addArgument(ArgBigInt("index", "Vault index"))
         .action(async (middlewareVaultManager, index) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultAtWithTimes(
                 vaultManager,
-                BigInt(index)
+                index
             );
         });
 
     program
         .command("get-vault-asset-class")
-        .argument("<middlewareVaultManager>")
-        .argument("<vaultAddress>")
+        .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager as Hex);
+            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultAssetClass(
                 vaultManager,
-                vaultAddress as Hex
+                vaultAddress
             );
         });
 
@@ -355,62 +337,62 @@ async function main() {
     * -------------------------------------------------- */
     program
         .command("deposit")
-        .argument("<vaultAddress>")
-        .argument("<amount>")
-        .option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAVAX("amount", "Amount to deposit in AVAX"))
+        .addOption(new Option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address").argParser(ParserAddress))
         .action(async (vaultAddress, amount, options) => {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const amountWei = parseUnits(amount, 18);
+            const amountWei = amount;
             // instantiate VaultTokenized contract
-            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
             await depositVault(
                 client,
                 vault,
-                onBehalfOf as Hex,
+                onBehalfOf,
                 amountWei,
-                client.account as Account
+                client.account!
             );
         });
 
     program
         .command("withdraw")
-        .argument("<vaultAddress>")
-        .argument("<amount>")
-        .option("--claimer <claimer>", "Optional claimer")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAVAX("amount", "Amount to withdraw in AVAX"))
+        .addOption(new Option("--claimer <claimer>", "Optional claimer").argParser(ParserAddress))
         .action(async (vaultAddress, amount, options) => {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const amountWei = parseUnits(amount, 18);
-            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
+            const amountWei = amount;
+            const vault = config.contracts.VaultTokenized(vaultAddress);
             await withdrawVault(
                 vault,
-                claimer as Hex,
+                claimer,
                 amountWei,
-                client.account as Account
+                client.account!
             );
         });
 
     program
         .command("claim")
-        .argument("<vaultAddress>")
-        .argument("<epoch>")
-        .option("--recipient <recipient>", "Optional recipient")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient").argParser(ParserAddress))
         .action(async (vaultAddress, epoch, options) => {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const vault = config.contracts.VaultTokenized(vaultAddress as Hex);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
             await claimVault(
                 vault,
-                recipient as Hex,
-                BigInt(epoch),
-                client.account as Account
+                recipient,
+                epoch,
+                client.account!
             );
         });
 
@@ -419,45 +401,45 @@ async function main() {
     * -------------------------------------------------- */
     program
         .command("set-l1-limit")
-        .argument("<delegatorAddress>")
-        .argument("<l1Address>")
-        .argument("<limit>")
-        .argument("<assetClass>", "Asset class")
+        .addArgument(ArgAddress("delegatorAddress", "Delegator contract address"))
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgBigInt("limit", "Limit amount"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
         .action(async (delegatorAddress, l1Address, limit, assetClass) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             // instantiate L1RestakeDelegator contract
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress as Hex);
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
             await setL1Limit(
                 delegator,
-                l1Address as Hex,
-                BigInt(assetClass),
-                BigInt(limit),
-                client.account as Account
+                l1Address,
+                assetClass,
+                limit,
+                client.account!
             );
         });
 
     program
         .command("set-operator-l1-shares")
-        .argument("<delegatorAddress>")
-        .argument("<l1Address>")
-        .argument("<operatorAddress>")
-        .argument("<shares>")
-        .argument("<assetClass>", "Asset class")
+        .addArgument(ArgAddress("delegatorAddress", "Delegator contract address"))
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgAddress("operatorAddress", "Operator address"))
+        .addArgument(ArgBigInt("shares", "Shares amount"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, assetClass) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             // instantiate L1RestakeDelegator contract
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress as Hex);
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
             await setOperatorL1Shares(
                 delegator,
-                l1Address as Hex,
-                BigInt(assetClass),
-                operatorAddress as Hex,
-                BigInt(shares),
-                client.account as Account
+                l1Address,
+                assetClass,
+                operatorAddress,
+                shares,
+                client.account!
             );
         });
 
@@ -468,51 +450,51 @@ async function main() {
     // Register operator
     program
         .command("middleware-register-operator")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRegisterOperator(
                 middlewareSvc,
-                operator as Hex,
-                client.account as Account
+                operator,
+                client.account!
             );
         });
 
     // Disable operator
     program
         .command("middleware-disable-operator")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareDisableOperator(
                 middlewareSvc,
-                operator as Hex,
-                client.account as Account
+                operator,
+                client.account!
             );
         });
 
     // Remove operator
     program
         .command("middleware-remove-operator")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveOperator(
                 middlewareSvc,
-                operator as Hex,
-                client.account as Account
+                operator,
+                client.account!
             );
         });
 
@@ -520,20 +502,20 @@ async function main() {
     // Add node
     program
         .command("middleware-add-node")
-        .argument("<middlewareAddress>")
-        .argument("<nodeId>")
-        .argument("<blsKey>")
-        .option("--initial-stake <initialStake>", "Initial stake amount (default: 0)", "0")
-        .option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)")
-        .option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold (default: 1)", "1")
-        .option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold (default: 1)", "1")
-        .option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address", collectMultiple, [])
-        .option("--pchain-disable-owner-address <address>", "P-Chain disable owner address", collectMultiple, [])
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("blsKey", "BLS public key"))
+        .addOption(new Option("--initial-stake <initialStake>", "Initial stake amount (default: 0)").default(0n).argParser(ParserAVAX))
+        .addOption(new Option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)"))
+        .addOption(new Option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple))
+        .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple))
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -542,66 +524,66 @@ async function main() {
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
-            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(program.opts()))];
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
             const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
             const remainingBalanceOwner: [number, Hex[]] = [
                 Number(options.pchainRemainingBalanceOwnerThreshold),
-                remainingBalanceOwnerAddress as Hex[]
+                remainingBalanceOwnerAddress
             ];
             const disableOwner: [number, Hex[]] = [
                 Number(options.pchainDisableOwnerThreshold),
-                disableOwnerAddress as Hex[]
+                disableOwnerAddress
             ];
 
             // Call middlewareAddNode
             await middlewareAddNode(
                 middlewareSvc,
-                nodeId as NodeId,
-                blsKey as Hex,
+                nodeId,
+                blsKey,
                 registrationExpiry,
                 remainingBalanceOwner,
                 disableOwner,
-                BigInt(options.initialStake),
-                client.account as Account
+                options.initialStake,
+                client.account!
             );
         });
 
     // Complete validator registration
     program
         .command("middleware-complete-validator-registration")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
-        .argument("<nodeId>")
-        .argument("<addNodeTxHash>")
-        .argument("<blsProofOfPossession>")
-        .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
-        .option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee (default: 0 AVAX)", "0")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
+        .addArgument(ArgBLSPOP())
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(0n).argParser(ParserAVAX))
         .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
-                options.pchainTxPrivateKey = opts.privateKey;
+                options.pchainTxPrivateKey = opts.privateKey!;
             }
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance)) * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance))));
 
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
                 client,
                 middlewareSvc,
                 balancerSvc,
-                operator as Hex,
-                nodeId as NodeId,
-                options.pchainTxPrivateKey as string,
-                blsProofOfPossession as string,
-                addNodeTxHash as Hex,
+                operator,
+                nodeId,
+                options.pchainTxPrivateKey,
+                blsProofOfPossession,
+                addNodeTxHash,
                 Number(options.initialBalance)
             );
         });
@@ -609,35 +591,35 @@ async function main() {
     // Remove node
     program
         .command("middleware-remove-node")
-        .argument("<middlewareAddress>")
-        .argument("<nodeId>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
         .action(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveNode(
                 middlewareSvc,
-                nodeId as NodeId,
-                client.account as Account
+                nodeId,
+                client.account!
             );
         });
 
     // Complete validator removal
     program
         .command("middleware-complete-validator-removal")
-        .argument("<middlewareAddress>")
-        .argument("<nodeId>")
-        .argument("<removeNodeTxHash>")
-        .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
             const opts = program.opts();
-            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey;
-            const client = generateClient(opts.network, opts.privateKey);
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = generateClient(opts.network, opts.privateKey!);
 
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager() as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
 
@@ -648,9 +630,9 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
-                nodeId as string,
-                removeNodeTxHash as Hex,
-                options.pchainTxPrivateKey as string,
+                nodeId,
+                removeNodeTxHash,
+                options.pchainTxPrivateKey,
                 pchainTxAddress
             );
         });
@@ -659,19 +641,19 @@ async function main() {
     program
         .command("middleware-init-stake-update")
         .description("Initialize validator stake update and lock")
-        .argument("<middlewareAddress>")
-        .argument("<nodeId>")
-        .argument("<newStake>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgBigInt("newStake", "New stake amount"))
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareInitStakeUpdate(
                 middlewareSvc,
-                nodeId as NodeId,
-                BigInt(newStake),
-                client.account as Account
+                nodeId,
+                newStake,
+                client.account!
             );
         });
 
@@ -679,25 +661,25 @@ async function main() {
     program
         .command("middleware-complete-stake-update")
         .description("Complete validator stake update")
-        .argument("<middlewareAddress>")
-        .argument("<nodeId>")
-        .argument("<validatorStakeUpdateTxHash>")
-        .option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .action(async (middlewareAddress, nodeId, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
             if (!options.pchainTxPrivateKey) {
-                options.pchainTxPrivateKey = opts.privateKey;
+                options.pchainTxPrivateKey = opts.privateKey!;
             }
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
-            
+
             // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(opts.privateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9));
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -705,11 +687,11 @@ async function main() {
             await middlewareCompleteStakeUpdate(
                 client,
                 middlewareSvc,
-                nodeId as NodeId,
-                validatorStakeUpdateTxHash as Hex,
-                options.pchainTxPrivateKey as string,
-                pchainTxAddress as string,
-                client.account as Account
+                nodeId,
+                validatorStakeUpdateTxHash,
+                options.pchainTxPrivateKey,
+                pchainTxAddress,
+                client.account!
             );
         });
 
@@ -717,12 +699,12 @@ async function main() {
     program
         .command("middleware-operator-cache")
         .description("Calculate and cache stakes for operators")
-        .argument("<middlewareAddress>")
-        .argument("<epoch>")
-        .argument("<assetClass>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
         .action(async (middlewareAddress, epoch, assetClass) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             console.log("Calculating and caching stakes...");
 
@@ -730,8 +712,8 @@ async function main() {
                 if (!client.account) {
                     throw new Error('Client account is required');
                 }
-                const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
-                const hash = await middlewareSvc.write.calcAndCacheStakes([epoch, BigInt(assetClass)],
+                const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+                const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, assetClass],
                     {
                         chain: null,
                         account: client.account,
@@ -748,15 +730,15 @@ async function main() {
     program
         .command("middleware-calc-node-stakes")
         .description("Calculate and cache node stakes for all operators")
-        .argument("<middlewareAddress>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareCalcNodeStakes(
                 middlewareSvc,
-                client.account as Account
+                client.account!
             );
         });
 
@@ -764,49 +746,49 @@ async function main() {
     program
         .command("middleware-force-update-nodes")
         .description("Force update operator nodes with stake limit")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
-        .option("--limit-stake <stake>", "Stake limit (default: 0)", "0")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addOption(new Option("--limit-stake <stake>", "Stake limit").default(0n).argParser(ParserAVAX))
         .action(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareForceUpdateNodes(
                 middlewareSvc,
-                operator as Hex,
-                BigInt(options.limitStake),
-                client.account as Account
+                operator,
+                options.limitStake,
+                client.account!
             );
         });
 
     // getOperatorStake (read)
     program
         .command("middleware-get-operator-stake")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
-        .argument("<epoch>")
-        .argument("<assetClass>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
         .action(async (middlewareAddress, operator, epoch, assetClass) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorStake(
                 middlewareSvc,
-                operator as Hex,
-                Number(epoch),
-                BigInt(assetClass)
+                operator,
+                epoch,
+                assetClass
             );
         });
 
     // getCurrentEpoch (read)
     program
         .command("middleware-get-current-epoch")
-        .argument("<middlewareAddress>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCurrentEpoch(
                 middlewareSvc
             );
@@ -815,47 +797,47 @@ async function main() {
     // getEpochStartTs (read)
     program
         .command("middleware-get-epoch-start-ts")
-        .argument("<middlewareAddress>")
-        .argument("<epoch>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (middlewareAddress, epoch) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetEpochStartTs(
                 middlewareSvc,
-                Number(epoch)
+                epoch
             );
         });
 
     // getActiveNodesForEpoch (read)
     program
         .command("middleware-get-active-nodes-for-epoch")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
-        .argument("<epoch>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (middlewareAddress, operator, epoch) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetActiveNodesForEpoch(
                 middlewareSvc,
-                operator as Hex,
-                Number(epoch)
+                operator,
+                epoch
             );
         });
 
     // getOperatorNodesLength (read)
     program
         .command("middleware-get-operator-nodes-length")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorNodesLength(
                 middlewareSvc,
-                operator as Hex
+                operator
             );
         });
 
@@ -863,17 +845,17 @@ async function main() {
     program
         .command("middleware-get-node-stake-cache")
         .description("Get node stake cache for a specific epoch and validator")
-        .argument("<middlewareAddress>")
-        .argument("<epoch>")
-        .argument("<validatorId>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
+        .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, epoch, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
-                Number(epoch),
-                validatorId as Hex
+                epoch,
+                validatorId
             );
         });
 
@@ -881,15 +863,15 @@ async function main() {
     program
         .command("middleware-get-operator-locked-stake")
         .description("Get operator locked stake")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorLockedStake(
                 middlewareSvc,
-                operator as Hex
+                operator
             );
         });
 
@@ -897,15 +879,15 @@ async function main() {
     program
         .command("middleware-node-pending-removal")
         .description("Check if node is pending removal")
-        .argument("<middlewareAddress>")
-        .argument("<validatorId>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
-                validatorId as Hex
+                validatorId
             );
         });
 
@@ -913,15 +895,15 @@ async function main() {
     program
         .command("middleware-node-pending-update")
         .description("Check if node is pending stake update")
-        .argument("<middlewareAddress>")
-        .argument("<validatorId>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingUpdate(
                 middlewareSvc,
-                validatorId as Hex
+                validatorId
             );
         });
 
@@ -929,15 +911,15 @@ async function main() {
     program
         .command("middleware-get-operator-used-stake")
         .description("Get operator used stake from cache")
-        .argument("<middlewareAddress>")
-        .argument("<operator>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
-                operator as Hex
+                operator
             );
         });
 
@@ -945,11 +927,11 @@ async function main() {
     program
         .command("middleware-get-all-operators")
         .description("Get all operators registered in the middleware")
-        .argument("<middlewareAddress>")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client);
-            const middlewareSvc = config.contracts.MiddlewareService(middlewareAddress as Hex);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetAllOperators(
                 middlewareSvc
             );
@@ -958,9 +940,9 @@ async function main() {
     program
         .command("middleware-node-logs")
         .description("Get middleware node logs")
-        .argument("<middlewareTxHash>")
-        .option("--node-id <nodeId>", "Node ID to filter logs", undefined)
-        .option('--snowscan-api-key <string>', "Snowscan API key", "")
+        .addArgument(ArgHex("middlewareTxHash", "Middleware transaction hash"))
+        .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
+        .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
         .action(async (middlewareTxHash, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
@@ -968,7 +950,7 @@ async function main() {
             console.log(`nodeId: ${options.nodeId}`);
             await middlewareGetNodeLogs(
                 client,
-                middlewareTxHash as Hex,
+                middlewareTxHash,
                 config,
                 options.nodeId,
                 options.snowscanApiKey
@@ -984,40 +966,40 @@ async function main() {
     program
         .command("opt-in-l1")
         .description("Operator opts in to a given L1")
-        .argument("<l1Address>")
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .action(async (l1Address) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optInL1(
                 service,
-                l1Address as Hex,
-                client.account as Account
+                l1Address,
+                client.account!
             );
         });
 
     program
         .command("opt-out-l1")
         .description("Operator opts out from a given L1")
-        .argument("<l1Address>")
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .action(async (l1Address) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optOutL1(
                 service,
-                l1Address as Hex,
-                client.account as Account
+                l1Address,
+                client.account!
             );
         });
 
     program
         .command("check-opt-in-l1")
         .description("Check if an operator is opted in to a given L1")
-        .argument("<operator>")
-        .argument("<l1Address>")
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .action(async (operator, l1Address) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
@@ -1025,8 +1007,8 @@ async function main() {
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await checkOptInL1(
                 service,
-                operator as Hex,
-                l1Address as Hex
+                operator,
+                l1Address
             );
         });
 
@@ -1039,40 +1021,40 @@ async function main() {
     program
         .command("opt-in-vault")
         .description("Operator opts in to a given Vault")
-        .argument("<vaultAddress>")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optInVault(
                 service,
-                vaultAddress as Hex,
-                client.account as Account
+                vaultAddress,
+                client.account!
             );
         });
 
     program
         .command("opt-out-vault")
         .description("Operator opts out from a given Vault")
-        .argument("<vaultAddress>")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (vaultAddress) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optOutVault(
                 service,
-                vaultAddress as Hex,
-                client.account as Account
+                vaultAddress,
+                client.account!
             );
         });
 
     program
         .command("check-opt-in-vault")
         .description("Check if an operator is opted in to a given Vault")
-        .argument("<operator>")
-        .argument("<vaultAddress>")
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .action(async (operator, vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
@@ -1080,8 +1062,8 @@ async function main() {
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await checkOptInVault(
                 service,
-                operator as Hex,
-                vaultAddress as Hex
+                operator,
+                vaultAddress
             );
         });
 
@@ -1092,31 +1074,31 @@ async function main() {
      */
     program
         .command("balancer-set-up-security-module")
-        .argument("<balancerValidatorManagerAddress>")
-        .argument("<middlewareAddress>")
-        .argument("<maxWeight>")
+        .addArgument(ArgAddress("balancerValidatorManagerAddress", "Balancer validator manager address"))
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("maxWeight", "Maximum weight"))
         .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             // instantiate BalancerValidatorManager contract
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await setUpSecurityModule(
                 balancer,
-                middlewareAddress as Hex,
-                BigInt(maxWeight),
-                client.account as Account
+                middlewareAddress,
+                maxWeight,
+                client.account!
             );
         });
 
     program
         .command("balancer-get-security-modules")
-        .argument("<balancerValidatorManagerAddress")
+        .addArgument(ArgAddress("balancerValidatorManagerAddress", "Balancer validator manager address"))
         .action(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModules(
                 balancer
             );
@@ -1124,16 +1106,16 @@ async function main() {
 
     program
         .command("balancer-get-security-module-weights")
-        .argument("<balancerValidatorManagerAddress>")
-        .argument("<securityModule>")
+        .addArgument(ArgAddress("balancerValidatorManagerAddress", "Balancer validator manager address"))
+        .addArgument(ArgAddress("securityModule", "Security module address"))
         .action(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress as Hex);
+            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModuleWeights(
                 balancer,
-                securityModule as Hex
+                securityModule
             );
         });
 
@@ -1144,15 +1126,15 @@ async function main() {
          */
     program
         .command("opstakes")
-        .argument("<middlewareVaultManager>")
-        .argument("<operatorAddress>")
+        .addArgument(ArgAddress("middlewareVaultManager", "Middleware vault manager address"))
+        .addArgument(ArgAddress("operatorAddress", "Operator address"))
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
         .action(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
 
-            const operator = operatorAddress as Hex;
+            const operator = operatorAddress;
             console.log(`Operator: ${operator}`);
 
             // 1) Read total vaults from VaultManager
@@ -1205,7 +1187,6 @@ async function main() {
 
                     if (isOptedIn) {
                         // read stake
-
                         const stakeValue = await l1RestakeDelegator.read.stake([l1Address, assetClass, operator])
 
                         if (stakeValue > 0n) {
@@ -1237,7 +1218,7 @@ async function main() {
 
     program
         .command("l1stakes")
-        .argument("<validatorManagerAddress>")
+        .addArgument(ArgAddress("validatorManagerAddress", "Validator manager address"))
         .description("Show L1 stakes for a given validator manager")
         .action(async (validatorManagerAddress) => {
             // TODO: Implement
@@ -1266,31 +1247,28 @@ async function main() {
     program
         .command("get-validation-uptime-message")
         .description("Get the validation uptime message for a given validator in the given L1 RPC")
-        .argument("<rpcUrl>")
-        .argument("<chainId>")
-        .argument("<nodeId>")
+        .addArgument(ArgURI("rpcUrl", "RPC URL"))
+        .addArgument(ArgCB58("chainId", "Chain ID"))
+        .addArgument(ArgNodeID())
         .action(async (rpcUrl, chainId, nodeId) => {
             const opts = program.opts();
             if (opts.network === "fuji") {
-                await getValidationUptimeMessage(rpcUrl, nodeId, 5, chainId);
+                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 5, chainId);
             } else {
-                await getValidationUptimeMessage(rpcUrl, nodeId, 1, chainId);
+                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 1, chainId);
             }
         });
 
     program
         .command('compute-validator-uptime')
-        .argument('<uptimeTrackerAddress>')
-        .argument('<signedUptimeHex>')
-        .option('--messageIndex <int>', 'Warp message index', '0')
-        .action(async (uptimeTrackerAddress, signedUptimeHex, options) => {
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Uptime tracker contract address"))
+        .addArgument(ArgHex("signedUptimeHex", "Signed uptime hex"))
+        .action(async (uptimeTrackerAddress, signedUptimeHex) => {
             const { privateKey, network } = program.opts();
-            const messageIndex = parseInt(options.messageIndex, 10);
-            const client = generateClient(network, privateKey);
+            const client = generateClient(network, privateKey!);
             const config = getConfig(network, client);
             await computeValidatorUptime(
                 config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                messageIndex,
                 client.account,
                 signedUptimeHex as Hex,
             );
@@ -1300,56 +1278,26 @@ async function main() {
     program
         .command("report-uptime-validator")
         .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
-        .argument("<rpcUrl>", "RPC URL of the L1/Subnet (e.g., http://localhost:9650/ext/bc/CHAIN_ID)")
-        .argument("<sourceChainId>", "The Chain ID for which the uptime is being reported (used in the Warp message)")
-        .argument("<nodeId>", "The NodeID of the validator (e.g., NodeID-xxxxxxxxxxx)")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract on the C-Chain")
-        .option("--messageIndex <number>", "Warp message index for the UptimeTracker contract call", "0")
-        // Optional: Add an explicit option if deriving warpNetworkID is complex
-        // .option("--warp-network-id <number>", "Avalanche Network ID for the Warp message (e.g., 1 for Mainnet, 5 for Fuji)")
-        .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress, options) => {
+        .addArgument(ArgURI("rpcUrl", "RPC URL of the L1/Subnet"))
+        .addArgument(ArgCB58("sourceChainId", "The Chain ID for which the uptime is being reported"))
+        .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract on the C-Chain"))
+        .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress) => {
             const opts = program.opts();
-            if (!opts.privateKey) {
+            if (!opts.privateKey!) {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
 
-            // Determine the Avalanche Network ID for the Warp message based on the --network option
-            let warpNetworkID: number;
-            if (opts.network === "fuji") {
-                warpNetworkID = 5;
-            } else if (opts.network === "mainnet") {
-                warpNetworkID = 1;
-            } else if (opts.network === "anvil") {
-                // For Anvil, decide if it's simulating Fuji (5) or Mainnet (1)
-                // Or if it needs a different ID. Defaulting to Fuji's ID for local testing.
-                console.warn("Using Warp Network ID 5 (Fuji) for Anvil. Adjust if Anvil simulates Mainnet or another network context for Warp.");
-                warpNetworkID = 5;
-            } else {
-                // Fallback or error for unsupported networks for warpNetworkID derivation
-                // You might want to make this an explicit option if network names get more complex
-                throw new Error(
-                    `Network '${opts.network}' is not configured for determining Warp Network ID. ` +
-                    `Use 'fuji', 'mainnet', or 'anvil', or extend this logic.`
-                );
-            }
-
-            const messageIndex = parseInt(options.messageIndex, 10);
-            if (isNaN(messageIndex)) {
-                console.error("Error: Invalid message index. Must be a number.");
-                process.exit(1);
-            }
-
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
 
             await reportAndSubmitValidatorUptime(
+                opts.network,
                 rpcUrl,
                 nodeId,
-                warpNetworkID,
                 sourceChainId,
-                config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                messageIndex,
+                config.contracts.UptimeTracker(uptimeTrackerAddress),
                 client.account
             );
         });
@@ -1358,22 +1306,22 @@ async function main() {
     program
         .command("compute-operator-uptime")
         .description("Compute uptime for an operator at a specific epoch")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<operator>", "Address of the operator")
-        .argument("<epoch>", "Epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgAddress("operator", "Address of the operator"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
-            if (!opts.privateKey) {
+            if (!opts.privateKey!) {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeAtEpoch(
                 uptimeTracker,
-                operator as Hex,
-                parseInt(epoch, 10),
+                operator,
+                epoch,
                 client.account
             );
         });
@@ -1381,24 +1329,24 @@ async function main() {
     program
         .command("compute-operator-uptime-range")
         .description("Compute uptime for an operator over a range of epochs (client-side looping)")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<operator>", "Address of the operator")
-        .argument("<startEpoch>", "Starting epoch number")
-        .argument("<endEpoch>", "Ending epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgAddress("operator", "Address of the operator"))
+        .addArgument(ArgNumber("startEpoch", "Starting epoch number"))
+        .addArgument(ArgNumber("endEpoch", "Ending epoch number"))
         .action(async (uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
             const opts = program.opts();
-            if (!opts.privateKey) {
+            if (!opts.privateKey!) {
                 console.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeForEpochs(
                 uptimeTracker,
-                operator as Hex,
-                parseInt(startEpoch, 10),
-                parseInt(endEpoch, 10),
+                operator,
+                startEpoch,
+                endEpoch,
                 client.account
             );
         });
@@ -1407,37 +1355,37 @@ async function main() {
     program
         .command("get-validator-uptime")
         .description("Get the recorded uptime for a validator at a specific epoch")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<validationID>", "Validation ID of the validator")
-        .argument("<epoch>", "Epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgHex("validationID", "Validation ID of the validator"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getValidatorUptimeForEpoch(
                 uptimeTracker,
-                validationID as Hex,
-                parseInt(epoch, 10)
-            ) as bigint;
+                validationID,
+                epoch
+            );
             console.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
 
     program
         .command("check-validator-uptime-set")
         .description("Check if uptime data is set for a validator at a specific epoch")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<validationID>", "Validation ID of the validator")
-        .argument("<epoch>", "Epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgHex("validationID", "Validation ID of the validator"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isValidatorUptimeSetForEpoch(
                 uptimeTracker,
-                validationID as Hex,
-                parseInt(epoch, 10)
+                validationID,
+                epoch
             );
             console.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
         });
@@ -1445,59 +1393,39 @@ async function main() {
     program
         .command("get-operator-uptime")
         .description("Get the recorded uptime for an operator at a specific epoch")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<operator>", "Address of the operator")
-        .argument("<epoch>", "Epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgAddress("operator", "Address of the operator"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getOperatorUptimeForEpoch(
                 uptimeTracker,
-                operator as Hex,
-                parseInt(epoch, 10)
-            ) as bigint;
+                operator,
+                epoch
+            );
             console.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
 
     program
         .command("check-operator-uptime-set")
         .description("Check if uptime data is set for an operator at a specific epoch")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<operator>", "Address of the operator")
-        .argument("<epoch>", "Epoch number")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgAddress("operator", "Address of the operator"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
+            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isOperatorUptimeSetForEpoch(
                 uptimeTracker,
-                operator as Hex,
-                parseInt(epoch, 10)
+                operator,
+                epoch
             );
             console.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
-        });
-
-    program
-        .command("get-last-uptime-checkpoint")
-        .description("Get the last uptime checkpoint for a validator")
-        .argument("<uptimeTrackerAddress>", "Address of the UptimeTracker contract")
-        .argument("<validationID>", "Validation ID of the validator")
-        .action(async (uptimeTrackerAddress, validationID) => {
-            const opts = program.opts();
-            const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress as Hex);
-            const checkpoint = await getLastUptimeCheckpoint(
-                uptimeTracker,
-                validationID as Hex
-            ) as { remainingUptime: bigint; attributedUptime: bigint; timestamp: bigint };
-            console.log(`Last uptime checkpoint for validator ${validationID}:`);
-            console.log(`  Remaining uptime: ${checkpoint.remainingUptime.toString()} seconds`);
-            console.log(`  Attributed uptime: ${checkpoint.attributedUptime.toString()} seconds`);
-            console.log(`  Timestamp: ${checkpoint.timestamp.toString()} (${new Date(Number(checkpoint.timestamp) * 1000).toISOString()})`);
         });
 
     /* --------------------------------------------------
@@ -1506,18 +1434,18 @@ async function main() {
     program
         .command("rewards-distribute")
         .description("Distribute rewards for a specific epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to distribute rewards for")
-        .argument("<batchSize>", "Number of operators to process in this batch")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to distribute rewards for"))
+        .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
         .action(async (rewardsAddress, epoch, batchSize) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await distributeRewards(
                 rewardsContract,
-                parseInt(epoch, 10),
-                parseInt(batchSize, 10),
+                epoch,
+                batchSize,
                 client.account
             );
         });
@@ -1525,19 +1453,19 @@ async function main() {
     program
         .command("rewards-claim")
         .description("Claim rewards for a staker")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .option("--recipient <recipient>", "Optional recipient address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimRewards(
                 rewardsContract,
-                rewardsToken as Hex,
-                recipient as Hex,
+                rewardsToken,
+                recipient,
                 client.account
             );
         });
@@ -1545,19 +1473,19 @@ async function main() {
     program
         .command("rewards-claim-operator-fee")
         .description("Claim operator fees")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .option("--recipient <recipient>", "Optional recipient address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimOperatorFee(
                 rewardsContract,
-                rewardsToken as Hex,
-                recipient as Hex,
+                rewardsToken,
+                recipient,
                 client.account
             );
         });
@@ -1565,19 +1493,19 @@ async function main() {
     program
         .command("rewards-claim-curator-fee")
         .description("Claim curator fees")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .option("--recipient <recipient>", "Optional recipient address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimCuratorFee(
                 rewardsContract,
-                rewardsToken as Hex,
-                recipient as Hex,
+                rewardsToken,
+                recipient,
                 client.account
             );
         });
@@ -1585,19 +1513,19 @@ async function main() {
     program
         .command("rewards-claim-protocol-fee")
         .description("Claim protocol fees (only for protocol owner)")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .option("--recipient <recipient>", "Optional recipient address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimProtocolFee(
                 rewardsContract,
-                rewardsToken as Hex,
-                recipient as Hex,
+                rewardsToken,
+                recipient,
                 client.account
             );
         });
@@ -1605,21 +1533,21 @@ async function main() {
     program
         .command("rewards-claim-undistributed")
         .description("Claim undistributed rewards (admin only)")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to claim undistributed rewards for")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .option("--recipient <recipient>", "Optional recipient address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to claim undistributed rewards for"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .action(async (rewardsAddress, epoch, rewardsToken, options) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimUndistributedRewards(
                 rewardsContract,
-                parseInt(epoch, 10),
-                rewardsToken as Hex,
-                recipient as Hex,
+                epoch,
+                rewardsToken,
+                recipient,
                 client.account
             );
         });
@@ -1627,22 +1555,22 @@ async function main() {
     program
         .command("rewards-set-amount")
         .description("Set rewards amount for epochs")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<startEpoch>", "Starting epoch")
-        .argument("<numberOfEpochs>", "Number of epochs")
-        .argument("<rewardsToken>", "Address of the rewards token")
-        .argument("<rewardsAmount>", "Amount of rewards in wei")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("startEpoch", "Starting epoch"))
+        .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
+        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addArgument(ArgBigInt("rewardsAmount", "Amount of rewards in wei"))
         .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setRewardsAmountForEpochs(
                 rewardsContract,
-                parseInt(startEpoch, 10),
-                parseInt(numberOfEpochs, 10),
-                rewardsToken as Hex,
-                BigInt(rewardsAmount),
+                startEpoch,
+                numberOfEpochs,
+                rewardsToken,
+                rewardsAmount,
                 client.account
             );
         });
@@ -1650,18 +1578,18 @@ async function main() {
     program
         .command("rewards-set-share-asset-class")
         .description("Set rewards share for asset class")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<assetClass>", "Asset class ID")
-        .argument("<share>", "Share in basis points (100 = 1%)")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
+        .addArgument(ArgNumber("share", "Share in basis points (100 = 1%)"))
         .action(async (rewardsAddress, assetClass, share) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setRewardsShareForAssetClass(
                 rewardsContract,
-                BigInt(assetClass),
-                parseInt(share, 10),
+                assetClass,
+                share,
                 client.account
             );
         });
@@ -1669,16 +1597,16 @@ async function main() {
     program
         .command("rewards-set-min-uptime")
         .description("Set minimum required uptime for rewards eligibility")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<minUptime>", "Minimum uptime in seconds")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgBigInt("minUptime", "Minimum uptime in seconds"))
         .action(async (rewardsAddress, minUptime) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setMinRequiredUptime(
                 rewardsContract,
-                BigInt(minUptime),
+                minUptime,
                 client.account
             );
         });
@@ -1686,16 +1614,16 @@ async function main() {
     program
         .command("rewards-set-admin")
         .description("Set admin role (DEFAULT_ADMIN_ROLE only)")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<newAdmin>", "New admin address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("newAdmin", "New admin address"))
         .action(async (rewardsAddress, newAdmin) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setAdminRole(
                 rewardsContract,
-                newAdmin as Hex,
+                newAdmin,
                 client.account
             );
         });
@@ -1703,16 +1631,16 @@ async function main() {
     program
         .command("rewards-set-protocol-owner")
         .description("Set protocol owner (DEFAULT_ADMIN_ROLE only)")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<newOwner>", "New protocol owner address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("newOwner", "New protocol owner address"))
         .action(async (rewardsAddress, newOwner) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setProtocolOwner(
                 rewardsContract,
-                newOwner as Hex,
+                newOwner,
                 client.account
             );
         });
@@ -1720,16 +1648,16 @@ async function main() {
     program
         .command("rewards-update-protocol-fee")
         .description("Update protocol fee")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateProtocolFee(
                 rewardsContract,
-                parseInt(newFee, 10),
+                newFee,
                 client.account
             );
         });
@@ -1737,16 +1665,16 @@ async function main() {
     program
         .command("rewards-update-operator-fee")
         .description("Update operator fee")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateOperatorFee(
                 rewardsContract,
-                parseInt(newFee, 10),
+                newFee,
                 client.account
             );
         });
@@ -1754,16 +1682,16 @@ async function main() {
     program
         .command("rewards-update-curator-fee")
         .description("Update curator fee")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<newFee>", "New fee in basis points (100 = 1%)")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateCuratorFee(
                 rewardsContract,
-                parseInt(newFee, 10),
+                newFee,
                 client.account
             );
         });
@@ -1771,132 +1699,132 @@ async function main() {
     program
         .command("rewards-get-amounts")
         .description("Get rewards amounts per token for epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountPerTokenFromEpoch(
                 rewardsContract,
-                parseInt(epoch, 10)
+                epoch
             );
         });
 
     program
         .command("rewards-get-amount-for-token")
         .description("Get rewards amount for a specific token from epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
-        .argument("<token>", "Token address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
+        .addArgument(ArgAddress("token", "Token address"))
         .action(async (rewardsAddress, epoch, token) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountForTokenFromEpoch(
                 rewardsContract,
-                parseInt(epoch, 10),
-                token as Hex
+                epoch,
+                token
             );
         });
 
     program
         .command("rewards-get-operator-shares")
         .description("Get operator shares for a specific epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
-        .argument("<operator>", "Operator address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (rewardsAddress, epoch, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getOperatorShares(
                 rewardsContract,
-                parseInt(epoch, 10),
-                operator as Hex
+                epoch,
+                operator
             );
         });
 
     program
         .command("rewards-get-vault-shares")
         .description("Get vault shares for a specific epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
-        .argument("<vault>", "Vault address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
+        .addArgument(ArgAddress("vault", "Vault address"))
         .action(async (rewardsAddress, epoch, vault) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getVaultShares(
                 rewardsContract,
-                parseInt(epoch, 10),
-                vault as Hex
+                epoch,
+                vault
             );
         });
 
     program
         .command("rewards-get-curator-shares")
         .description("Get curator shares for a specific epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
-        .argument("<curator>", "Curator address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
+        .addArgument(ArgAddress("curator", "Curator address"))
         .action(async (rewardsAddress, epoch, curator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getCuratorShares(
                 rewardsContract,
-                parseInt(epoch, 10),
-                curator as Hex
+                epoch,
+                curator
             );
         });
 
     program
         .command("rewards-get-protocol-rewards")
         .description("Get protocol rewards for a token")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<token>", "Token address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("token", "Token address"))
         .action(async (rewardsAddress, token) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getProtocolRewards(
                 rewardsContract,
-                token as Hex
+                token
             );
         });
 
     program
         .command("rewards-get-distribution-batch")
         .description("Get distribution batch status for an epoch")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<epoch>", "Epoch to query")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgNumber("epoch", "Epoch to query"))
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getDistributionBatch(
                 rewardsContract,
-                parseInt(epoch, 10)
+                epoch
             );
         });
 
     program
         .command("rewards-get-fees-config")
         .description("Get current fees configuration")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .action(async (rewardsAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getFeesConfiguration(
                 rewardsContract
             );
@@ -1905,28 +1833,28 @@ async function main() {
     program
         .command("rewards-get-share-asset-class")
         .description("Get rewards share for asset class")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<assetClass>", "Asset class ID")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgBigInt("assetClass", "Asset class ID"))
         .action(async (rewardsAddress, assetClass) => {
             const opts = program.opts();
-            const client = generateClient(opts.network);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsShareForAssetClass(
                 rewardsContract,
-                BigInt(assetClass)
+                assetClass
             );
         });
 
     program
         .command("rewards-get-min-uptime")
         .description("Get minimum required uptime for rewards eligibility")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .action(async (rewardsAddress) => {
             const opts = program.opts();
-            const client = generateClient(opts.network);
+            const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getMinRequiredUptime(
                 rewardsContract
             );
@@ -1935,64 +1863,64 @@ async function main() {
     program
         .command("rewards-get-last-claimed-staker")
         .description("Get last claimed epoch for a staker")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<staker>", "Staker address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("staker", "Staker address"))
         .action(async (rewardsAddress, staker) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
-                staker as Hex
+                staker
             );
         });
 
     program
         .command("rewards-get-last-claimed-operator")
         .description("Get last claimed epoch for an operator")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<operator>", "Operator address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (rewardsAddress, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
-                operator as Hex
+                operator
             );
         });
 
     program
         .command("rewards-get-last-claimed-curator")
         .description("Get last claimed epoch for a curator")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<curator>", "Curator address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("curator", "Curator address"))
         .action(async (rewardsAddress, curator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
-                curator as Hex
+                curator
             );
         });
 
     program
         .command("rewards-get-last-claimed-protocol")
         .description("Get last claimed epoch for protocol owner")
-        .argument("<rewardsAddress>", "Address of the rewards contract")
-        .argument("<protocolOwner>", "Protocol owner address")
+        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
+        .addArgument(ArgAddress("protocolOwner", "Protocol owner address"))
         .action(async (rewardsAddress, protocolOwner) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress as Hex);
+            const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedProtocol(
                 rewardsContract,
-                protocolOwner as Hex
+                protocolOwner
             );
         });
 
@@ -2003,14 +1931,18 @@ async function main() {
     )
 
     program.hook("preAction", (thisCommand, actionCommand) => {
+        
+        // console.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
+        // console.log(`Executing action: ${actionCommand}`);
+        // console.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
         const opts = program.opts();
         // Block manually private key on mainnet
-        if (opts.privateKey && opts.network === "mainnet") {
+        if (opts.privateKey! && opts.network === "mainnet") {
             console.error("Using private key on mainnet is not allowed. Use the secret keystore instead.");
             process.exit(1);
         }
         // Ensure privateKey is set if opts.secret is provided
-        opts.privateKey = opts.privateKey || opts.secretName;
+        opts.privateKey! = opts.privateKey! || opts.secretName;
     });
 
     program.parse(process.argv);

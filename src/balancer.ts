@@ -1,8 +1,8 @@
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 
 export async function setUpSecurityModule(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex,
   maxWeight: bigint,
   account: Account | undefined
@@ -12,7 +12,7 @@ export async function setUpSecurityModule(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await balancer.write.setUpSecurityModule(
+    const hash = await balancer.safeWrite.setUpSecurityModule(
       [securityModule, maxWeight],
       { chain: null, account }
     );
@@ -25,7 +25,7 @@ export async function setUpSecurityModule(
 }
 
 export async function getSecurityModules(
-  balancer: TContract['BalancerValidatorManager']
+  balancer: SafeSuzakuContract['BalancerValidatorManager']
 ) {
   console.log("Getting security modules...");
 
@@ -41,7 +41,7 @@ export async function getSecurityModules(
 }
 
 export async function getSecurityModuleWeights(
-  balancer: TContract['BalancerValidatorManager'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
   console.log("Getting security module weights...");

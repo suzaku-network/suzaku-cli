@@ -1,11 +1,11 @@
 import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Account, Abi } from 'viem';
-import { TContract } from './config';
+import { SafeSuzakuContract } from './lib/viemUtils';
 import { utils } from '@avalabs/avalanchejs';
 import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
 import { ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
-import { Config } from './config';
+import { Config, pChainChainID } from './config';
 import { NodeId, parseNodeID } from './lib/utils';
 import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
@@ -14,7 +14,7 @@ import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentVal
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   account: Account | undefined
 ) {
@@ -23,7 +23,7 @@ export async function middlewareRegisterOperator(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await middleware.write.registerOperator(
+    const hash = await middleware.safeWrite.registerOperator(
       [operator],
       { chain: null, account }
     );
@@ -36,16 +36,16 @@ export async function middlewareRegisterOperator(
 }
 
 export async function middlewareDisableOperator(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   account: Account | undefined
 ) {
   console.log("Disabling operator...");
-
+  
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await middleware.write.disableOperator(
+    const hash = await middleware.safeWrite.disableOperator(
       [operator],
       { chain: null, account }
     );
@@ -58,7 +58,7 @@ export async function middlewareDisableOperator(
 }
 
 export async function middlewareRemoveOperator(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   account: Account | undefined
 ) {
@@ -67,7 +67,7 @@ export async function middlewareRemoveOperator(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await middleware.write.removeOperator(
+    const hash = await middleware.safeWrite.removeOperator(
       [operator],
       { chain: null, account }
     );
@@ -81,7 +81,7 @@ export async function middlewareRemoveOperator(
 
 // addNode
 export async function middlewareAddNode(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   blsKey: Hex,
   registrationExpiry: bigint,
@@ -98,7 +98,7 @@ export async function middlewareAddNode(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await middleware.write.addNode(
+    const hash = await middleware.safeWrite.addNode(
       [nodeIdHex32, blsKey, registrationExpiry, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake],
       { chain: null, account }
     );
@@ -113,8 +113,8 @@ export async function middlewareAddNode(
 // completeValidatorRegistration
 export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
-  middleware: TContract['MiddlewareService'],
-  balancer: TContract['BalancerValidatorManager'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
   operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
@@ -133,7 +133,7 @@ export async function middlewareCompleteValidatorRegistration(
 
     // Check if the node is still registered as a validator on the P-Chain
     const L1Id = await middlewareGetL1Id(middleware, balancer, client);
-    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeId);
+    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeId);
     if (isValidator) {
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
     } else {
@@ -142,7 +142,7 @@ export async function middlewareCompleteValidatorRegistration(
 
       // Collect signatures for the warp message
       console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
-      const signedMessage = await collectSignatures(RegisterL1ValidatorUnsignedWarpMsg);
+      const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
       console.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
       // Register validator on P-Chain
@@ -161,13 +161,12 @@ export async function middlewareCompleteValidatorRegistration(
     const validationIDHex = receipt.logs[1].topics[1] ?? '';
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
     // Aggregate signatures from validators
     console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
     console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
@@ -177,16 +176,8 @@ export async function middlewareCompleteValidatorRegistration(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    // Simulate completeValidatorRegistration transaction
-    await middleware.simulate.completeValidatorRegistration([operator, nodeIdHex32, 0],
-      {
-        account: client.account ? client.account : null,
-        gas: BigInt(5000000),
-        accessList
-      });
-
     console.log("\nCalling function completeValidatorRegistration...");
-    const hash = await middleware.write.completeValidatorRegistration(
+    const hash = await middleware.safeWrite.completeValidatorRegistration(
       [operator, nodeIdHex32, 0],
       { chain: null, account: client.account, accessList }
     );
@@ -200,7 +191,7 @@ export async function middlewareCompleteValidatorRegistration(
 
 // removeNode
 export async function middlewareRemoveNode(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   account: Account | undefined
 ) {
@@ -212,7 +203,7 @@ export async function middlewareRemoveNode(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await middleware.write.removeNode(
+    const hash = await middleware.safeWrite.removeNode(
       [nodeIdHex32],
       { chain: null, account }
     );
@@ -227,8 +218,8 @@ export async function middlewareRemoveNode(
 // completeValidatorRemoval
 export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
-  middleware: TContract['MiddlewareService'],
-  balancerValidatorManager: TContract['BalancerValidatorManager'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
   nodeID: string,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
@@ -247,7 +238,7 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Check if the node is still registered as a validator on the P-Chain
     const L1Id = await middlewareGetL1Id(middleware, balancerValidatorManager, client);
-    const isValidator = (await getCurrentValidators(L1Id)).some((v) => v.nodeID === nodeID);
+    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
     } else {
@@ -257,7 +248,7 @@ export async function middlewareCompleteValidatorRemoval(
 
       // Aggregate signatures from validators
       // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-      const signedL1ValidatorWeightMessage = await collectSignatures(unsignedL1ValidatorWeightMessage);
+      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
       console.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -270,36 +261,26 @@ export async function middlewareCompleteValidatorRemoval(
       console.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
     }
 
-      // get justification for original register validator tx (the unsigned warp msg emitted)
-      const justification = await GetRegistrationJustification(nodeID, validationID, '11111111111111111111111111111111LpoYY', client);
+    // get justification for original register validator tx (the unsigned warp msg emitted)
+    const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client);
 
-      // Pack and sign the P-Chain warp message
-      const validationIDBytes = hexToBytes(validationID as Hex);
-      const pChainChainID = '11111111111111111111111111111111LpoYY';
-      const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
-      const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
+    // Pack and sign the P-Chain warp message
+    const validationIDBytes = hexToBytes(validationID as Hex);
+    const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
+    const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
-      // Aggregate signatures from validators
-      // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-      const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
-      console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
+    // Aggregate signatures from validators
+    // console.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+    console.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
-      // Convert the signed warp message to bytes and pack into access list
-      const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-      const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-
-    // Simulate completeEndValidation transaction
-    // console.log("\nSimulating completeEndValidation transaction...");
-    const { request: completeRequest } = await middleware.simulate.completeValidatorRemoval([0],
-      {
-        account: client.account ? client.account : null,
-        gas: BigInt(5000000),
-        accessList
-      });
+    // Convert the signed warp message to bytes and pack into access list
+    const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
+    const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     // Execute completeEndValidation transaction
     console.log("Executing completeEndValidation transaction...");
-    const completeHash = await middleware.write.completeValidatorRemoval([0],
+    const completeHash = await middleware.safeWrite.completeValidatorRemoval([0],
       {
         account: client.account,
         chain: null,
@@ -316,7 +297,7 @@ export async function middlewareCompleteValidatorRemoval(
 
 // initializeValidatorWeightUpdate
 export async function middlewareInitStakeUpdate(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   newStake: bigint,
   account: Account | undefined
@@ -329,7 +310,7 @@ export async function middlewareInitStakeUpdate(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await middleware.write.initializeValidatorStakeUpdate(
+    const hash = await middleware.safeWrite.initializeValidatorStakeUpdate(
       [nodeIdHex32, newStake],
       { chain: null, account }
     );
@@ -344,7 +325,7 @@ export async function middlewareInitStakeUpdate(
 // completeStakeUpdate
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
@@ -381,7 +362,7 @@ export async function middlewareCompleteStakeUpdate(
 
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
     console.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -395,13 +376,12 @@ export async function middlewareCompleteStakeUpdate(
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
-    const pChainChainID = '11111111111111111111111111111111LpoYY';
     const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), 5, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
     console.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
@@ -411,7 +391,7 @@ export async function middlewareCompleteStakeUpdate(
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
 
-    const hash = await middleware.write.completeStakeUpdate(
+    const hash = await middleware.safeWrite.completeStakeUpdate(
       [nodeIdHex32, 0],
       { chain: null, account, accessList }
     );
@@ -425,7 +405,7 @@ export async function middlewareCompleteStakeUpdate(
 
 // calcAndCacheNodeStakeForAllOperators
 export async function middlewareCalcNodeStakes(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   account: Account | undefined
 ) {
   console.log("Calculating node stakes for all operators...");
@@ -433,7 +413,7 @@ export async function middlewareCalcNodeStakes(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await middleware.write.calcAndCacheNodeStakeForAllOperators(
+    const hash = await middleware.safeWrite.calcAndCacheNodeStakeForAllOperators(
       { chain: null, account }
     );
     console.log("calcAndCacheNodeStakeForAllOperators done, tx hash:", hash);
@@ -446,7 +426,7 @@ export async function middlewareCalcNodeStakes(
 
 // forceUpdateNodes
 export async function middlewareForceUpdateNodes(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   limitStake: bigint,
   account: Account | undefined
@@ -456,7 +436,7 @@ export async function middlewareForceUpdateNodes(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const hash = await middleware.write.forceUpdateNodes(
+    const hash = await middleware.safeWrite.forceUpdateNodes(
       [operator, limitStake],
       { chain: null, account }
     );
@@ -470,7 +450,7 @@ export async function middlewareForceUpdateNodes(
 
 // getOperatorStake
 export async function middlewareGetOperatorStake(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   epoch: number,
   assetClass: bigint
@@ -492,7 +472,7 @@ export async function middlewareGetOperatorStake(
 
 // getCurrentEpoch
 export async function middlewareGetCurrentEpoch(
-  middleware: TContract['MiddlewareService']
+  middleware: SafeSuzakuContract['L1Middleware']
 ) {
   console.log("Reading current epoch...");
 
@@ -509,7 +489,7 @@ export async function middlewareGetCurrentEpoch(
 
 // getEpochStartTs
 export async function middlewareGetEpochStartTs(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   epoch: number
 ) {
   console.log("Reading epoch start timestamp...");
@@ -529,7 +509,7 @@ export async function middlewareGetEpochStartTs(
 
 // getActiveNodesForEpoch
 export async function middlewareGetActiveNodesForEpoch(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   epoch: number
 ) {
@@ -550,7 +530,7 @@ export async function middlewareGetActiveNodesForEpoch(
 
 // getOperatorNodesLength
 export async function middlewareGetOperatorNodesLength(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   console.log("Reading operator nodes length...");
@@ -565,7 +545,7 @@ export async function middlewareGetOperatorNodesLength(
 
 // nodeStakeCache
 export async function middlewareGetNodeStakeCache(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   epoch: number,
   validatorId: Hex
 ) {
@@ -581,7 +561,7 @@ export async function middlewareGetNodeStakeCache(
 
 // operatorLockedStake
 export async function middlewareGetOperatorLockedStake(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   console.log("Reading operator locked stake...");
@@ -596,7 +576,7 @@ export async function middlewareGetOperatorLockedStake(
 
 // nodePendingRemoval
 export async function middlewareNodePendingRemoval(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   validatorId: Hex
 ) {
   console.log("Reading nodePendingRemoval...");
@@ -611,7 +591,7 @@ export async function middlewareNodePendingRemoval(
 
 // nodePendingUpdate
 export async function middlewareNodePendingUpdate(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   validatorId: Hex
 ) {
   console.log("Reading nodePendingUpdate...");
@@ -626,7 +606,7 @@ export async function middlewareNodePendingUpdate(
 
 // getOperatorUsedStakeCached
 export async function middlewareGetOperatorUsedStake(
-  middleware: TContract['MiddlewareService'],
+  middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   console.log("Reading operator used stake cached...");
@@ -641,7 +621,7 @@ export async function middlewareGetOperatorUsedStake(
 
 // getAllOperators
 export async function middlewareGetAllOperators(
-  middleware: TContract['MiddlewareService']
+  middleware: SafeSuzakuContract['L1Middleware']
 ) {
   console.log("Reading all operators from middleware...");
   try {
@@ -667,7 +647,7 @@ export async function middlewareGetNodeLogs(
   const from = receipt.blockNumber
   const to = await client.getBlockNumber();
 
-  const middleware = config.contracts.MiddlewareService(middlewareAddress);
+  const middleware = config.contracts.L1Middleware(middlewareAddress);
 
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   bar && bar.start(0, 0);
@@ -679,7 +659,7 @@ export async function middlewareGetNodeLogs(
     middlewareAddress,
     Number(from),
     Number(to),
-    config.abis.MiddlewareService,
+    config.abis.L1Middleware,
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey,
     snowscanApiKey ? false : true,
@@ -766,8 +746,8 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
 }
 
 export async function middlewareGetL1Id(
-  middleware: TContract['MiddlewareService'],
-  balancerValidatorManager: TContract['BalancerValidatorManager'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
   client: ExtendedWalletClient,
 ): Promise<string> {
   console.log("Reading L1 ID from Validator Manager...");

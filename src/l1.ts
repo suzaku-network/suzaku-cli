@@ -1,8 +1,8 @@
-import { TContract } from "./config";
+import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from "viem";
 
 export async function registerL1(
-    l1Registry: TContract['L1Registry'],
+    l1Registry: SafeSuzakuContract['L1Registry'],
     validatorManager: Hex,
     l1Middleware: Hex,
     metadataUrl: string,
@@ -12,7 +12,7 @@ export async function registerL1(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await l1Registry.write.registerL1(
+        const hash = await l1Registry.safeWrite.registerL1(
             [validatorManager, l1Middleware, metadataUrl],
             { value: BigInt(10000000000000000), chain: null, account }
         );
@@ -26,7 +26,7 @@ export async function registerL1(
 }
 
 export async function setL1MetadataUrl(
-    l1Registry: TContract['L1Registry'],
+    l1Registry: SafeSuzakuContract['L1Registry'],
     l1Address: Hex,
     metadataUrl: string,
     account: Account | undefined
@@ -35,7 +35,7 @@ export async function setL1MetadataUrl(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await l1Registry.write.setMetadataURL(
+        const hash = await l1Registry.safeWrite.setMetadataURL(
             [l1Address, metadataUrl],
             { chain: null, account }
         );
@@ -49,7 +49,7 @@ export async function setL1MetadataUrl(
 }
 
 export async function setL1Middleware(
-    l1Registry: TContract['L1Registry'],
+    l1Registry: SafeSuzakuContract['L1Registry'],
     validatorManager: Hex,
     newMiddleware: Hex,
     account: Account | undefined
@@ -58,7 +58,7 @@ export async function setL1Middleware(
 
     try {
         if (!account) throw new Error('Client account is required');
-        const hash = await l1Registry.write.setL1Middleware(
+        const hash = await l1Registry.safeWrite.setL1Middleware(
             [validatorManager, newMiddleware],
             { chain: null, account }
         );
@@ -71,7 +71,7 @@ export async function setL1Middleware(
     }
 }
 
-export async function getL1s(l1Registry: TContract['L1Registry']) {
+export async function getL1s(l1Registry: SafeSuzakuContract['L1Registry']) {
     console.log("Getting L1s...");
 
     try {

@@ -1,6 +1,6 @@
 import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, OutputOwners } from "@avalabs/avalanchejs";
 import { getAddresses, nToAVAX } from "./utils";
-import { ExtendedWalletClient, generateClient } from "../client";
+import { ExtendedClient, ExtendedWalletClient, generateClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
 import { Hex } from "viem";
 
@@ -15,6 +15,7 @@ export interface CreateChainParams extends PChainBaseParams {
     chainName: string;
     subnetId: string;
     genesisData: string;
+    SubnetEVMId?: string;
 }
 
 export interface ConvertToL1Params extends PChainBaseParams {
@@ -44,9 +45,11 @@ export interface SetValidatorWeightParams extends PChainBaseParams {
     validationID: string;
     message: string;
 }
+export const getRPCEndpoint = (client: ExtendedClient): string => {
+    const url = new URL(client.chain!.rpcUrls.default.http[0]);
+    return `${url.protocol}//${url.host}`;
+};
 
-export const SUBNET_EVM_ID = "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN";
-export const RPC_ENDPOINT = "https://api.avax-test.network"; // Replace with your actual RPC endpoint
 
 async function addSigToAllCreds(
     unsignedTx: UnsignedTx,
@@ -69,10 +72,10 @@ export async function createSubnet(params: PChainBaseParams): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
 
     const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
@@ -104,10 +107,10 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
 
     const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
@@ -115,7 +118,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pAddress]
     });
-
+    console.log(`Using default EVM VM ID: ${params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN"}`);
     const tx = pvm.e.newCreateChainTx(
         {
             feeState,
@@ -124,7 +127,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
             chainName: params.chainName,
             subnetAuth: [0],
             subnetId: params.subnetId,
-            vmId: SUBNET_EVM_ID,
+            vmId: params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN", // Default to EVM VM ID
             fxIds: [],
             genesisData: JSON.parse(params.genesisData),
         },
@@ -145,10 +148,10 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
 
     const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pAddress);
@@ -204,10 +207,10 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
     const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
 
     const addressBytes = utils.bech32ToBytes(pChainAddress);
@@ -245,10 +248,10 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
 
     const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pChainAddress);
@@ -284,8 +287,9 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     return response.txID;
 }
 
-export async function getCurrentValidators(subnetId: string){
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+export async function getCurrentValidators(client: ExtendedClient, subnetId: string) {
+    const rpcUrl = getRPCEndpoint(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getCurrentValidators({
@@ -295,8 +299,9 @@ export async function getCurrentValidators(subnetId: string){
     return response.validators;
 }
 
-export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtObject> {
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+export async function getValidatorsAt(client: ExtendedClient, subnetId: string): Promise<GetValidatorAtObject> {
+    const rpcUrl = getRPCEndpoint(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const currentHeight = await pvmApi.getHeight();
     console.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
@@ -312,14 +317,31 @@ export async function getValidatorsAt(subnetId: string): Promise<GetValidatorAtO
     return response.validators as GetValidatorAtObject;
 }
 
+export async function validates(client: ExtendedClient, subnetId: string): Promise<string | undefined> {
+    const rpcUrl = getRPCEndpoint(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
+    const currentHeight = await pvmApi.getHeight();
+    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.validates({
+        subnetID: subnetId,
+    });
+
+    if (!response.blockchainIDs || response.blockchainIDs.length === 0) {
+        return undefined;
+    }
+
+    return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
+}
+
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
-
-    const pvmApi = new pvm.PVMApi(RPC_ENDPOINT);
+    const rpcUrl = getRPCEndpoint(params.client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(RPC_ENDPOINT);
+    const context = await Context.getContextFromURI(rpcUrl);
     const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
     const addressBytes = utils.bech32ToBytes(pChainAddress);
 
