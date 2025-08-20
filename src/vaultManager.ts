@@ -18,9 +18,8 @@ export async function registerVaultL1(
         );
         console.log("Vault registered, tx hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -42,9 +41,8 @@ export async function updateVaultMaxL1Limit(
         );
         console.log("Max L1 limit updated, tx hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -64,9 +62,8 @@ export async function removeVault(
         );
         console.log("Vault removed, tx hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -82,7 +79,7 @@ export async function getVaultCount(
     } catch (error) {
         console.error("Read contract failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -99,7 +96,7 @@ export async function getVaultAtWithTimes(
     } catch (error) {
         console.error("Read contract failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -116,7 +113,7 @@ export async function getVaultAssetClass(
     } catch (error) {
         console.error("Read contract failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }

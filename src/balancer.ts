@@ -18,9 +18,8 @@ export async function setUpSecurityModule(
     );
     console.log("Security module updated, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -36,7 +35,7 @@ export async function getSecurityModules(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -55,7 +54,7 @@ export async function getSecurityModuleWeights(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }

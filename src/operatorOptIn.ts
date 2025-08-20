@@ -18,9 +18,8 @@ export async function optInL1(
     );
     console.log("L1 opt-in successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -39,9 +38,8 @@ export async function optOutL1(
     );
     console.log("L1 opt-out successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -60,7 +58,7 @@ export async function checkOptInL1(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
     return false;
   }
@@ -81,9 +79,8 @@ export async function optInVault(
     );
     console.log("Vault opt-in successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -102,9 +99,8 @@ export async function optOutVault(
     );
     console.log("Vault opt-out successful, tx hash:", hash);
   } catch (error) {
-    console.error("Transaction failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
   }
 }
@@ -123,7 +119,7 @@ export async function checkOptInVault(
   } catch (error) {
     console.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
+      console.error(error.message);
     }
     return false;
   }

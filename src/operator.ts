@@ -18,9 +18,8 @@ async function registerOperator(
 
         console.log("Registered operator successfully, Transaction hash:", hash);
     } catch (error) {
-        console.error("Transaction failed:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
@@ -46,7 +45,7 @@ async function listOperators(
     } catch (error) {
         console.error("Failed to list operators:", error);
         if (error instanceof Error) {
-            console.error("Error message:", error.message);
+            console.error(error.message);
         }
     }
 }
