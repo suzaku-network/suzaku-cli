@@ -2,7 +2,6 @@ import { ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account, parseUnits } from 'viem';
-import { prompt } from "./lib/utils";
 
 // deposit
 export async function depositVault(
@@ -22,9 +21,7 @@ export async function depositVault(
     const vault = config.contracts.VaultTokenized(vaultAddress);
     const collateralAddress = await vault.read.collateral();
     const collateral = config.contracts.DefaultCollateral(collateralAddress);
-    const assetAddress = await collateral.read.asset();
-    const asset = config.contracts.ERC20(assetAddress);
-    const decimals = await asset.read.decimals();
+    const decimals = await collateral.read.decimals();
     // Calculate human-readable amount
     const amountWei = parseUnits(amount, decimals)
     console.log("\n=== Deposit Details ===");
@@ -32,31 +29,8 @@ export async function depositVault(
     console.log("Amount in wei:", amountWei.toString());
     console.log("Decimals used:", decimals);
     
-    
-    console.log("Asset address:", assetAddress);
     console.log("Collateral address:", collateralAddress);
     console.log("Vault address:", vault.address);
-
-    // Check if the collateral balance is sufficient
-    const collateralBalance = await collateral.read.balanceOf([account.address]);
-    if (collateralBalance < amountWei) {
-      console.log(`You don't have enough collateral tokens in your account (${collateralBalance} < ${amountWei})`);
-      const tokenToHave = amountWei - collateralBalance;
-      console.log(`Depositing ${Number(tokenToHave) / 10 ** decimals} tokens to the collateral...`);
-      const tokenBallance = await asset.read.balanceOf([account.address]);
-      if (tokenBallance < tokenToHave) {
-        throw new Error(`You don't have enough tokens in your account (${tokenBallance} < ${tokenToHave})`);
-      }
-      else {
-        if ((await prompt(`Do you want to deposit ${Number(tokenToHave) / 10 ** decimals} tokens to the collateral? (y/n)`)).toLowerCase() !== 'y') {
-          throw new Error(`Deposit canceled by the user`);
-        }
-        collateral.safeWrite.deposit(
-          [account.address, amountWei],
-          { chain: null, account }
-        )
-      }
-    }
 
     // Approve the vault to spend collateral tokens
     console.log("\n=== Collateral Approval ===");
@@ -264,6 +238,71 @@ export async function getVaultWithdrawalsOf(
     return withdrawalAmount;
   } catch (error) {
     console.error("Failed to read withdrawals:", error);
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+  }
+}
+
+// Curator transfer reward token to L1Owner
+export async function transferRewardToken(
+  config: Config,
+  vaultAddress: Hex,
+  l1Owner: Hex,
+  amount: string,
+  account: Account | undefined
+) {
+  console.log("Transferring reward token...");
+
+  try {
+    if (!account) throw new Error('Client account is required');
+
+    const vault = config.contracts.VaultTokenized(vaultAddress);
+    const collateralAddress = await vault.read.collateral();
+    const collateral = config.contracts.DefaultCollateral(collateralAddress);
+    const rewardTokenAddress = await collateral.read.asset();
+    const rewardToken = config.contracts.ERC20(rewardTokenAddress);
+
+    const amountWei = parseUnits(amount, await vault.read.decimals());
+    const hash = await rewardToken.safeWrite.transfer(
+      [l1Owner, amountWei],
+      { chain: null, account }
+    );
+    console.log("Mint done, tx hash:", hash);
+    console.log("✅ Mint completed successfully!");
+  } catch (error) {
+    console.error("❌ Mint failed:", error);
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+  }
+}
+
+// L1Owner approve collateral
+export async function approveCollateral(
+  config: Config,
+  vaultAddress: Hex,
+  amount: bigint,
+  account: Account | undefined
+) {
+  console.log("Approving collateral...");
+
+  try {
+    if (!account) throw new Error('Client account is required');
+
+    const vault = config.contracts.VaultTokenized(vaultAddress);
+    const collateralAddress = await vault.read.collateral();
+    const collateral = config.contracts.DefaultCollateral(collateralAddress);
+    const rewardTokenAddress = await collateral.read.asset();
+    const rewardToken = config.contracts.ERC20(rewardTokenAddress);
+    const hash = await rewardToken.safeWrite.approve(
+      [collateralAddress, amount],
+      { chain: null, account }
+    );
+    console.log("Approval done, tx hash:", hash);
+    console.log("✅ Approval completed successfully!");
+  } catch (error) {
+    console.error("❌ Approval failed:", error);
     if (error instanceof Error) {
       console.error(error.message);
     }

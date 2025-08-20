@@ -23,7 +23,9 @@ import {
     getVaultActiveBalanceOf,
     getVaultTotalSupply,
     getVaultWithdrawalSharesOf,
-    getVaultWithdrawalsOf
+    getVaultWithdrawalsOf,
+    transferRewardToken,
+    approveCollateral
 } from "./vault";
 
 import {
@@ -444,6 +446,58 @@ async function main() {
                     account: client.account!,
                 })
             console.log(`Granted staker role to ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
+        });
+    
+    program
+        .command("vault-revoke-staker-role")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAddress("account", "Account to revoke the role from"))
+        .action(async (vaultAddress, account) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            await vault.safeWrite.revokeRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
+                {
+                    chain: null,
+                    account: client.account!,
+                })
+            console.log(`Revoked staker role from ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
+        });
+    
+    program
+        .command("vault-curator-token-to-l1owner")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAddress("l1owner", "L1 owner account to allow"))
+        .addArgument(ArgAddress("amount", "Amount of token to allow"))
+        .action(async (vaultAddress, l1owner, amount) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            await transferRewardToken(
+                config,
+                vaultAddress,
+                l1owner,
+                amount,
+                client.account!
+            );
+
+        })
+    
+    program
+        .command("vault-l1owner-allow-collateral")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgBigInt("amount", "Amount of collateral to allow"))
+        .action(async (vaultAddress, amount) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client);
+            await approveCollateral(
+                config,
+                vaultAddress,
+                amount,
+                client.account!
+            );
         });
 
     /* --------------------------------------------------
