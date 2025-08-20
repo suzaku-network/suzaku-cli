@@ -50,22 +50,22 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "primaryAsset",
+                "name": "primaryCollateral",
                 "type": "address",
                 "internalType": "address"
             },
             {
-                "name": "primaryAssetMaxStake",
+                "name": "primaryCollateralMaxStake",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetMinStake",
+                "name": "primaryCollateralMinStake",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetWeightScaleFactor",
+                "name": "primaryCollateralWeightScaleFactor",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1303,13 +1303,13 @@ export default [
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetMinStake",
+                "name": "primaryCollateralMinStake",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetMaxStake",
+                "name": "primaryCollateralMaxStake",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"

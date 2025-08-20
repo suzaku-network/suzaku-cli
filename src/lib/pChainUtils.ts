@@ -47,7 +47,7 @@ export interface SetValidatorWeightParams extends PChainBaseParams {
     validationID: string;
     message: string;
 }
-  
+
 export type ExtractWarpMessageFromTxParams = {
     txId: string;
 }
@@ -61,7 +61,7 @@ interface ValidatorSigner {
     publicKey: string;
     proofOfPossession: string;
 }
-  
+
 interface Validator {
     nodeID: string;
     weight: number;
@@ -69,7 +69,7 @@ interface Validator {
     signer: ValidatorSigner;
     remainingBalanceOwner: AddressObject;
     deactivationOwner: AddressObject;
-  }
+}
 
 export type ExtractWarpMessageFromTxResponse = {
     message: string;
@@ -88,9 +88,9 @@ interface OutputObject {
     locktime: number;
     threshold: number;
 }
-  
+
 interface Output {
-    assetID: string;
+    collateralID: string;
     fxID: string;
     output: OutputObject;
 }
@@ -103,14 +103,14 @@ interface InputObject {
 interface Input {
     txID: string;
     outputIndex: number;
-    assetID: string;
+    collateralID: string;
     fxID: string;
     input: InputObject;
 }
-  
+
 interface SubnetAuthorization {
     signatureIndices: number[];
-  }
+}
 
 interface UnsignedConvertTx {
     networkID: number;
@@ -133,7 +133,7 @@ interface Transaction {
     unsignedTx: UnsignedConvertTx;
     credentials: Credential[];
     id: string;
-  }
+}
 
 interface TransactionResult {
     tx: Transaction;
@@ -142,14 +142,14 @@ interface TransactionResult {
 
 interface ConversionDataResponse {
     result: TransactionResult;
-  }
-  
+}
+
 type InitializeValidatorSetArgs = [{ l1ID: `0x${string}`; validatorManagerBlockchainID: `0x${string}`; validatorManagerAddress: `0x${string}`; initialValidators: readonly { nodeID: `0x${string}`; blsPublicKey: `0x${string}`; weight: bigint; }[]; }, number]
 
 export function add0x(hex: string) {
     return /^0x/i.test(hex) ? hex : `0x${hex}`;
 }
-  
+
 export const getRPCEndpoint = (client: ExtendedClient): string => {
     const url = new URL(client.chain!.rpcUrls.default.http[0]);
     return `${url.protocol}//${url.host}`;
@@ -395,7 +395,7 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string) {
     const rpcUrl = getRPCEndpoint(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-    
+
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getCurrentValidators({
         subnetID: subnetId
@@ -412,7 +412,7 @@ export async function getValidatorsAt(client: ExtendedClient, subnetId: string):
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,
-        height: currentHeight.height, 
+        height: currentHeight.height,
     });
 
     if (!response.validators) {
@@ -598,65 +598,65 @@ export async function extractWarpMessageFromPChainTx(subnetId: string, txId: str
 }
 
 export default interface NodeConfig {
-  nodeID: NodeId,
-  blsPublicKey: Hex,
-  blsProofOfPossession: Hex,
-  weight: number,
-  balance: number
+    nodeID: NodeId,
+    blsPublicKey: Hex,
+    blsProofOfPossession: Hex,
+    weight: number,
+    balance: number
 }
 
 export async function convertSubnetToL1(params:
-  {
-    subnetId: string;
-    chainId: string;
-    poASecurityModule: SafeSuzakuContract['PoASecurityModule'];
-    client: ExtendedWalletClient;
-    privateKeyHex: string;
-    validators: NodeConfig[];
-  }) {
-  const managerAddress = params.poASecurityModule.address;
-  const { client, privateKeyHex, validators } = params;
-  // 1) convert to L1
-  const convertTx = await convertToL1({
-    client,
-    privateKeyHex: privateKeyHex,
-    subnetId: params.subnetId,
-    chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
-    managerAddress,
-    validators: params.validators,
-  });
-  // 2) collect signatures
-  const signed = await collectSignaturesInitializeValidatorSet({
-    network: client.network,
-    subnetId: params.subnetId,
-    validatorManagerBlockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
-    managerAddress,
-    validators,
-  });
+    {
+        subnetId: string;
+        chainId: string;
+        poASecurityModule: SafeSuzakuContract['PoASecurityModule'];
+        client: ExtendedWalletClient;
+        privateKeyHex: string;
+        validators: NodeConfig[];
+    }) {
+    const managerAddress = params.poASecurityModule.address;
+    const { client, privateKeyHex, validators } = params;
+    // 1) convert to L1
+    const convertTx = await convertToL1({
+        client,
+        privateKeyHex: privateKeyHex,
+        subnetId: params.subnetId,
+        chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+        managerAddress,
+        validators: params.validators,
+    });
+    // 2) collect signatures
+    const signed = await collectSignaturesInitializeValidatorSet({
+        network: client.network,
+        subnetId: params.subnetId,
+        validatorManagerBlockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+        managerAddress,
+        validators,
+    });
 
-  // 3) pack warp → accessList
-  const signedBytes = hexToBytes(`0x${signed}`);
-  const accessList = packWarpIntoAccessList(signedBytes);
+    // 3) pack warp → accessList
+    const signedBytes = hexToBytes(`0x${signed}`);
+    const accessList = packWarpIntoAccessList(signedBytes);
 
-  // 4) call initializeValidatorSet
+    // 4) call initializeValidatorSet
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
-  const initHash = await params.poASecurityModule.safeWrite.initializeValidatorSet(args, {
-    account: client.account!,
-    chain: null,
-    accessList
-  });
+    const initHash = await params.poASecurityModule.safeWrite.initializeValidatorSet(args, {
+        account: client.account!,
+        chain: null,
+        accessList
+    });
 
-  await client.waitForTransactionReceipt({
-    hash: initHash as Hex,
-    confirmations: 2
-  })
+    await client.waitForTransactionReceipt({
+        hash: initHash as Hex,
+        confirmations: 2
+    })
 
-  return { txHash: convertTx, initHash };
+    return { txHash: convertTx, initHash };
 
 }
 
 export async function getValidatorManagerInitializationArgsFromWarpTx(conversionTxID: string, subnetId: string, client: ExtendedClient): Promise<InitializeValidatorSetArgs> {
-    const { validators, chainId, managerAddress } = await extractWarpMessageFromPChainTx(subnetId, conversionTxID, client );
+    const { validators, chainId, managerAddress } = await extractWarpMessageFromPChainTx(subnetId, conversionTxID, client);
     // Prepare transaction arguments
     return [
         {
@@ -685,4 +685,4 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
         },
         0 // messageIndex parameter
     ];
-  }
+}

@@ -2,8 +2,10 @@
 
 A simple CLI tool to interact with Suzaku core smart contracts on the Fuji network. The commands let you register L1s, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
 
-> **Note:**  
-> - The default usage is aimed at launching on Fuji.  
+> **Note:**
+>
+> - The default usage is aimed at launching on Fuji.
+
 ---
 
 ## Table of Contents
@@ -43,7 +45,6 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
 
 ---
 
-
 ## Installation
 
 1. **Clone the repository and navigate to it:**
@@ -74,7 +75,6 @@ When deploying on Fuji, run commands using the `fuji` network parameter. For exa
 ```bash
 pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com
 ```
-
 
 ### L1 Setup Sequence on Fuji
 
@@ -110,26 +110,26 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   ```
 
 - **(Optional) Mint & Approve sAVAX, Then Deposit via `cast`**
-   1. Mint:
+  1.  Mint:
       ```bash
       cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 50000000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$CURATOR_OWNER"
       ```
-   2. Check allowance:
+  2.  Check allowance:
       ```bash
-      cast call "$SAVAX" "allowance(address,address)" "$STAKER" "$PRIMARY_ASSET" \
+      cast call "$SAVAX" "allowance(address,address)" "$STAKER" "$PRIMARY_COLLATERAL" \
       --rpc-url $RPC_URL
       ```
-   3. Approve:
+  3.  Approve:
       ```bash
-      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_ASSET" 400000000000000000000 \
+      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_COLLATERAL" 400000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
-   4. Deposit on Vault's `deposit(address,uint256)`:
+  4.  Deposit on Vault's `deposit(address,uint256)`:
       ```bash
-      cast send $PRIMARY_ASSET "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
+      cast send $PRIMARY_COLLATERAL "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$STAKER_OWNER"
       ```
@@ -143,75 +143,82 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
   ```
 
 - **Check Vault Information**
+
   ```bash
   # Get vault collateral token
   pnpm cli --network fuji get-vault-collateral $VAULT
-  
+
   # Get vault delegator
   pnpm cli --network fuji get-vault-delegator $VAULT
-  
+
   # Check your vault balance
   pnpm cli --network fuji get-vault-balance $VAULT --account $STAKER_OWNER
-  
+
   # Check total vault supply
   pnpm cli --network fuji get-vault-total-supply $VAULT
-  
+
   # Check withdrawal shares for an epoch
   pnpm cli --network fuji get-vault-withdrawal-shares $VAULT 100 --account $STAKER_OWNER
   ```
-  
+
 - **Check Stakes & Epochs**
-   ```bash
-   pnpm cli --network fuji opstakes $VAULT_MANAGER $OPERATOR
-   pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
-   pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
-   pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
-   pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <current-epoch> 1
-   ```
+
+  ```bash
+  pnpm cli --network fuji opstakes $VAULT_MANAGER $OPERATOR
+  pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
+  pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
+  pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
+  pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <current-epoch> 1
+  ```
 
 - **Balancer / Security Module Setup**
-    ```bash
-    pnpm cli --network fuji balancer-set-up-security-module $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
-    pnpm cli --network fuji balancer-get-security-modules $BALANCER_VALIDATOR_MANAGER
-    ```
+
+  ```bash
+  pnpm cli --network fuji balancer-set-up-security-module $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
+  pnpm cli --network fuji balancer-get-security-modules $BALANCER_VALIDATOR_MANAGER
+  ```
 
 - **Check Epoch Information**
-    ```bash
-    pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
-    pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
-    pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1
-    ```
+
+  ```bash
+  pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
+  pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
+  pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1
+  ```
 
 - **Process Node Stake Cache**
-    ```bash
-    # Process 1 epoch (default)
-    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --private-key $L1_OWNER
-    
-    # Process 5 epochs at once
-    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 5 --private-key $L1_OWNER
-    
-    # Process 100 epochs in batches of 10, with 2 second delay between batches
-    pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --delay 2000 --private-key $L1_OWNER
-    ```
+
+  ```bash
+  # Process 1 epoch (default)
+  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --private-key $L1_OWNER
+
+  # Process 5 epochs at once
+  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 5 --private-key $L1_OWNER
+
+  # Process 100 epochs in batches of 10, with 2 second delay between batches
+  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --delay 2000 --private-key $L1_OWNER
+  ```
 
 - **Initialize and Complete Node Addition**
-    ```bash
-    pnpm cli --network fuji middleware-add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER
 
-    pnpm cli --network fuji middleware-complete-validator-registration \
-      $MIDDLEWARE \
-      $OPERATOR \
-      $NODE_ID \
-      $ADD_NODE_TX_HASH \
-      $BLS_PROOF_OF_POSSESSION \
-      --private-key $OPERATOR_OWNER
-    ```
+  ```bash
+  pnpm cli --network fuji middleware-add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER
+
+  pnpm cli --network fuji middleware-complete-validator-registration \
+    $MIDDLEWARE \
+    $OPERATOR \
+    $NODE_ID \
+    $ADD_NODE_TX_HASH \
+    $BLS_PROOF_OF_POSSESSION \
+    --private-key $OPERATOR_OWNER
+  ```
 
 ### Rewards Testing Sequence
 
 Here's a recommended sequence of commands to test the rewards functionality:
 
 1. **Initial Setup and Configuration**
+
    ```bash
    # Check current fees configuration
    pnpm cli --network fuji rewards-get-fees-config $REWARDS
@@ -226,33 +233,35 @@ Here's a recommended sequence of commands to test the rewards functionality:
    pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS 3000
 
    # Set rewards share for collateral classes
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-asset-class $REWARDS 1 5000
+   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-collateral-class $REWARDS 1 5000
    ```
 
 1.1. **Mint & Approve Reward Tokens**
-   ```bash
-   # Mint reward tokens to the admin
-   cast send "$SAVAX" "mint(address,uint256)" "$L1_OWNER_ADDRESS" 10000000000000000000000000 \
-     --rpc-url $RPC_URL \
-     --private-key "$CURATOR_OWNER"
-   
-   # Check balance
-   cast call "$SAVAX" "balanceOf(address)" "$L1_OWNER_ADDRESS" \
-     --rpc-url $RPC_URL
-     
-   # Check current allowance
-   cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS" \
-     --rpc-url $RPC_URL
-     
-   # Approve reward tokens to be used by the rewards contract
-   cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000000 \
-     --rpc-url $RPC_URL \
-     --private-key "$L1_OWNER"
-   ```
-   
-   > **Note:** Make sure `$SAVAX` in this step corresponds to the same token address you plan to use as `$SAVAX` in the next step. The admin account needs a sufficient balance and allowance for the rewards contract to transfer tokens during the rewards allocation process.
+
+```bash
+# Mint reward tokens to the admin
+cast send "$SAVAX" "mint(address,uint256)" "$L1_OWNER_ADDRESS" 10000000000000000000000000 \
+  --rpc-url $RPC_URL \
+  --private-key "$CURATOR_OWNER"
+
+# Check balance
+cast call "$SAVAX" "balanceOf(address)" "$L1_OWNER_ADDRESS" \
+  --rpc-url $RPC_URL
+
+# Check current allowance
+cast call "$SAVAX" "allowance(address,address)" "$L1_OWNER_ADDRESS" "$REWARDS" \
+  --rpc-url $RPC_URL
+
+# Approve reward tokens to be used by the rewards contract
+cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000000 \
+  --rpc-url $RPC_URL \
+  --private-key "$L1_OWNER"
+```
+
+> **Note:** Make sure `$SAVAX` in this step corresponds to the same token address you plan to use as `$SAVAX` in the next step. The admin account needs a sufficient balance and allowance for the rewards contract to transfer tokens during the rewards allocation process.
 
 2. **Allocate Rewards**
+
    ```bash
    # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable)
    pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS 99 5 $REWARDS_TOKEN 1000000000000000000
@@ -262,6 +271,7 @@ Here's a recommended sequence of commands to test the rewards functionality:
    ```
 
 3. **Distribute Rewards**
+
    ```bash
    # Distribute rewards for epoch 99 with batch size 10
    pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
@@ -274,6 +284,7 @@ Here's a recommended sequence of commands to test the rewards functionality:
    ```
 
 4. **Verify Shares Calculation**
+
    ```bash
    # Check operator shares
    pnpm cli --network fuji rewards-get-operator-shares $REWARDS 99 $OPERATOR
@@ -286,6 +297,7 @@ Here's a recommended sequence of commands to test the rewards functionality:
    ```
 
 5. **Claim Rewards**
+
    ```bash
    # Claim operator fees
    pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS $REWARDS_TOKEN
@@ -301,6 +313,7 @@ Here's a recommended sequence of commands to test the rewards functionality:
    ```
 
 6. **Verify Claim Status**
+
    ```bash
    # Check last claimed epoch for operator
    pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS $OPERATOR
@@ -327,6 +340,7 @@ The following commands allow you to manage the cli secrets keystore. Under the w
 It's a mandatory dependency when working on the mainnet with this cli.
 
 1. **Initialize cli keystore**
+
    ```bash
    # Acquire available gpg key ids
    pnpm cli secret list-gpg-ids
@@ -337,17 +351,21 @@ It's a mandatory dependency when working on the mainnet with this cli.
    ```
 
 2. **Create new secret**
+
    ```bash
    pnpm cli secret create operator $OPERATOR_PK
    ```
 
 3. **Use your secret name instead of raw private key**
+
    ```bash
    pnpm cli middleware-add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
    ```
+
    You'll be prompted like using [pass](https://www.passwordstore.org/) normally and it will use the underlying private key
 
 4. **List all available secrets**
+
    ```bash
    pnpm cli secret list
    > Available secrets:
@@ -371,6 +389,7 @@ Run the help command for a full listing of available commands and options:
 ```bash
 pnpm cli --help
 ```
+
 ## Command Reference
 
 Below is a complete list of all commands available in the Suzaku CLI tool. Global options (such as `--private-key` and `--network`) apply to every command. Use `pnpm cli --help` for more details on each command.
@@ -411,7 +430,7 @@ Below is a complete list of all commands available in the Suzaku CLI tool. Globa
   Retrieves the total number of registered vaults.
 - **get-vault-at-with-times `<middlewareVaultManager>` `<index>`**  
   Returns vault details at a specified index, including related timestamps.
-- **get-vault-asset-class `<middlewareVaultManager>` `<vaultAddress>`**  
+- **get-vault-collateral-class `<middlewareVaultManager>` `<vaultAddress>`**  
   Returns the collateral class associated with the given vault.
 
 ---
@@ -600,7 +619,7 @@ The following commands allow you to interact with the Rewards contract, which di
 
 - **rewards-set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsToken>` `<rewardsAmount>`**  
   Set rewards amount for a range of epochs.
-- **rewards-set-share-asset-class `<rewardsAddress>` `<collateralClass>` `<share>`**  
+- **rewards-set-share-collateral-class `<rewardsAddress>` `<collateralClass>` `<share>`**  
   Set rewards share for an collateral class (in basis points, 100 = 1%).
 - **rewards-set-min-uptime `<rewardsAddress>` `<minUptime>`**  
   Set minimum required uptime for rewards eligibility (in seconds).
@@ -633,7 +652,7 @@ The following commands allow you to interact with the Rewards contract, which di
   Get distribution batch status for an epoch.
 - **rewards-get-fees-config `<rewardsAddress>`**  
   Get current fees configuration.
-- **rewards-get-share-asset-class `<rewardsAddress>` `<collateralClass>`**  
+- **rewards-get-share-collateral-class `<rewardsAddress>` `<collateralClass>`**  
   Get rewards share for collateral class.
 - **rewards-get-min-uptime `<rewardsAddress>`**  
   Get minimum required uptime for rewards eligibility.
@@ -648,7 +667,8 @@ The following commands allow you to interact with the Rewards contract, which di
 
 ---
 
-*Bullet Points for Clarification:*
+_Bullet Points for Clarification:_
+
 - Global options like `--private-key` and `--network` are inherited by every command.
 - Optional flags are shown in square brackets and have default values where applicable.
 - Numeric inputs are processed as BigInt values when needed.

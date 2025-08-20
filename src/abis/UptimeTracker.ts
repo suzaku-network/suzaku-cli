@@ -8,7 +8,7 @@ export default [
                 "internalType": "address payable"
             },
             {
-                "name": "l1ID_",
+                "name": "uptimeBlockchainID_",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }

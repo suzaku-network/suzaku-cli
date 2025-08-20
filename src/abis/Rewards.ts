@@ -1402,6 +1402,28 @@ export default [
     },
     {
         "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AddressInsufficientBalance",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AlreadyClaimedForLatestEpoch",
         "inputs": [
             {
@@ -1514,6 +1536,11 @@ export default [
                 "internalType": "uint48"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "FailedInnerCall",
+        "inputs": []
     },
     {
         "type": "error",
@@ -1684,6 +1711,11 @@ export default [
                 "internalType": "address"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "MathOverflowedMulDiv",
+        "inputs": []
     },
     {
         "type": "error",
