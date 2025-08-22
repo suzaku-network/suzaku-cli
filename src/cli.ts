@@ -776,7 +776,7 @@ async function main() {
         .command("middleware-process-node-stake-cache")
         .description("Manually process node stake cache for one or more epochs")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addOption(new Option("--epochs <epochs>", "Number of epochs to process (default: 1)").default(1).argParser(ParserNumber))
+        .addOption(new Option("--epochs <epochs>", "Number of epochs to process (default: all)").default(0).argParser(ParserNumber))
         .addOption(new Option("--loop-epochs <count>", "Loop through multiple epochs, processing --epochs at a time").argParser(ParserNumber))
         .addOption(new Option("--delay <milliseconds>", "Delay between loop iterations in milliseconds (default: 1000)").default(1000).argParser(ParserNumber))
         .action(async (middlewareAddress, options) => {
@@ -785,7 +785,7 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             
-            const epochsPerCall = options.epochs;
+            const epochsPerCall = options.epochs || await middlewareSvc.read.getCurrentEpoch() - await middlewareSvc.read.lastGlobalNodeStakeUpdateEpoch() + 1;
             const loopCount = options.loopEpochs || 1;
             
             console.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
