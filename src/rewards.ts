@@ -8,7 +8,7 @@ export async function distributeRewards(
   rewards: SafeSuzakuContract['Rewards'],
   epoch: number,
   batchSize: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.distributeRewards(
@@ -25,7 +25,7 @@ export async function claimRewards(
   rewards: SafeSuzakuContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.claimRewards(
@@ -42,7 +42,7 @@ export async function claimOperatorFee(
   rewards: SafeSuzakuContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.claimOperatorFee(
@@ -59,7 +59,7 @@ export async function claimCuratorFee(
   rewards: SafeSuzakuContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.claimCuratorFee(
@@ -76,7 +76,7 @@ export async function claimProtocolFee(
   rewards: SafeSuzakuContract['Rewards'],
   rewardsToken: Hex,
   recipient: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.claimProtocolFee(
@@ -94,7 +94,7 @@ export async function claimUndistributedRewards(
   epoch: number,
   rewardsToken: Hex,
   recipient: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.claimUndistributedRewards(
@@ -113,7 +113,7 @@ export async function setRewardsAmountForEpochs(
   numberOfEpochs: number,
   rewardsToken: Hex,
   rewardsAmount: bigint,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.setRewardsAmountForEpochs(
@@ -130,7 +130,7 @@ export async function setRewardsShareForCollateralClass(
   rewards: SafeSuzakuContract['Rewards'],
   collateralClass: bigint,
   share: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.setRewardsShareForCollateralClass(
@@ -146,7 +146,7 @@ export async function setRewardsShareForCollateralClass(
 export async function setMinRequiredUptime(
   rewards: SafeSuzakuContract['Rewards'],
   minUptime: bigint,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.setMinRequiredUptime(
@@ -162,13 +162,13 @@ export async function setMinRequiredUptime(
 export async function setAdminRole(
   rewards: SafeSuzakuContract['Rewards'],
   newAdmin: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
-  
+
   // Get the DEFAULT_ADMIN_ROLE constant
   const DEFAULT_ADMIN_ROLE = await rewards.read.DEFAULT_ADMIN_ROLE();
-  
+
   // Grant admin role to the new admin
   const txHash = await rewards.safeWrite.grantRole(
     [DEFAULT_ADMIN_ROLE, newAdmin],
@@ -183,7 +183,7 @@ export async function setAdminRole(
 export async function setProtocolOwner(
   rewards: SafeSuzakuContract['Rewards'],
   newOwner: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.setProtocolOwner(
@@ -199,7 +199,7 @@ export async function setProtocolOwner(
 export async function updateProtocolFee(
   rewards: SafeSuzakuContract['Rewards'],
   newFee: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.updateProtocolFee(
@@ -215,7 +215,7 @@ export async function updateProtocolFee(
 export async function updateOperatorFee(
   rewards: SafeSuzakuContract['Rewards'],
   newFee: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
   const txHash = await rewards.safeWrite.updateOperatorFee(
@@ -231,10 +231,10 @@ export async function updateOperatorFee(
 export async function updateCuratorFee(
   rewards: SafeSuzakuContract['Rewards'],
   newFee: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
-  
+
   const txHash = await rewards.safeWrite.updateCuratorFee(
     [newFee],
     { chain: null, account }
@@ -250,10 +250,10 @@ export async function updateAllFees(
   newProtocolFee: number,
   newOperatorFee: number,
   newCuratorFee: number,
-  account: Account | undefined
+  account: Account
 ) {
   if (!account) throw new Error("No client account set.");
-  
+
   const txHash = await rewards.safeWrite.updateAllFees(
     [newProtocolFee, newOperatorFee, newCuratorFee],
     { chain: null, account }

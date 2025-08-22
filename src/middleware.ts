@@ -16,67 +16,43 @@ import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentVal
 export async function middlewareRegisterOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Registering operator...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.registerOperator(
       [operator],
       { chain: null, account }
     );
     console.log("registerOperator done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function middlewareDisableOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Disabling operator...");
-  
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.disableOperator(
       [operator],
       { chain: null, account }
     );
     console.log("disableOperator done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function middlewareRemoveOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Removing operator...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.removeOperator(
       [operator],
       { chain: null, account }
     );
     console.log("removeOperator done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // addNode
@@ -88,12 +64,9 @@ export async function middlewareAddNode(
   remainingBalanceOwner: [number, `0x${string}`[]],
   disableOwner: [number, `0x${string}`[]],
   initialStake: bigint,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Calling function addNode...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
@@ -103,11 +76,6 @@ export async function middlewareAddNode(
       { chain: null, account }
     );
     console.log("addNode executed successfully, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // completeValidatorRegistration
@@ -123,9 +91,6 @@ export async function middlewareCompleteValidatorRegistration(
   initialBalance: number
 ) {
   console.log("Completing validator registration...");
-
-  try {
-    if (!client.account) throw new Error('Client account is required');
 
     // Wait for transaction receipt to extract warp message and validation ID
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
@@ -179,26 +144,18 @@ export async function middlewareCompleteValidatorRegistration(
     console.log("\nCalling function completeValidatorRegistration...");
     const hash = await middleware.safeWrite.completeValidatorRegistration(
       [operator, nodeIdHex32, 0],
-      { chain: null, account: client.account, accessList }
+      { chain: null, account: client.account!, accessList }
     );
     console.log("completeValidatorRegistration executed successfully, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // removeNode
 export async function middlewareRemoveNode(
   middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Calling function removeNode...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
@@ -208,11 +165,6 @@ export async function middlewareRemoveNode(
       { chain: null, account }
     );
     console.log("removeNode executed successfully, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // completeValidatorRemoval
@@ -226,11 +178,6 @@ export async function middlewareCompleteValidatorRemoval(
   pChainTxAddress: string,
 ) {
   console.log("Completing validator removal...");
-
-  try {
-    if (!client.account) {
-      throw new Error('Client account is required');
-    }
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
     const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash })
@@ -282,17 +229,12 @@ export async function middlewareCompleteValidatorRemoval(
     console.log("Executing completeEndValidation transaction...");
     const completeHash = await middleware.safeWrite.completeValidatorRemoval([0],
       {
-        account: client.account,
+        account: client.account!,
         chain: null,
         accessList
       });
 
     console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // initializeValidatorWeightUpdate
@@ -300,12 +242,9 @@ export async function middlewareInitStakeUpdate(
   middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   newStake: bigint,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Calling function initializeValidatorStakeUpdate...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     // Parse NodeID to bytes32 format
     const nodeIdHex32 = parseNodeID(nodeId)
@@ -315,11 +254,6 @@ export async function middlewareInitStakeUpdate(
       { chain: null, account }
     );
     console.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // completeStakeUpdate
@@ -330,12 +264,9 @@ export async function middlewareCompleteStakeUpdate(
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Completing node stake update...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
     const receipt = await client.waitForTransactionReceipt({ hash: validatorStakeUpdateTxHash })
@@ -396,32 +327,19 @@ export async function middlewareCompleteStakeUpdate(
       { chain: null, account, accessList }
     );
     console.log("completeStakeUpdate done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // calcAndCacheNodeStakeForAllOperators
 export async function middlewareCalcNodeStakes(
   middleware: SafeSuzakuContract['L1Middleware'],
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Calculating node stakes for all operators...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.calcAndCacheNodeStakeForAllOperators(
       { chain: null, account }
     );
     console.log("calcAndCacheNodeStakeForAllOperators done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // forceUpdateNodes
@@ -429,23 +347,15 @@ export async function middlewareForceUpdateNodes(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   limitStake: bigint,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Calling forceUpdateNodes...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.forceUpdateNodes(
       [operator, limitStake],
       { chain: null, account }
     );
     console.log("forceUpdateNodes executed successfully, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // getOperatorStake
@@ -457,17 +367,10 @@ export async function middlewareGetOperatorStake(
 ) {
   console.log("Reading operator stake...");
 
-  try {
     const val = await middleware.read.getOperatorStake(
       [operator, epoch, collateralClass]
     );
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // getCurrentEpoch
@@ -475,16 +378,8 @@ export async function middlewareGetCurrentEpoch(
   middleware: SafeSuzakuContract['L1Middleware']
 ) {
   console.log("Reading current epoch...");
-
-  try {
     const val = await middleware.read.getCurrentEpoch();
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // getEpochStartTs
@@ -494,17 +389,10 @@ export async function middlewareGetEpochStartTs(
 ) {
   console.log("Reading epoch start timestamp...");
 
-  try {
     const val = await middleware.read.getEpochStartTs(
       [epoch]
     );
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // getActiveNodesForEpoch
@@ -515,17 +403,10 @@ export async function middlewareGetActiveNodesForEpoch(
 ) {
   console.log("Reading active nodes for epoch...");
 
-  try {
     const nodeIds = await middleware.read.getActiveNodesForEpoch(
       [operator, epoch]
     ) as Hex[];
     console.log(nodeIds.map((b: Hex) => b));
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // getOperatorNodesLength
@@ -534,13 +415,10 @@ export async function middlewareGetOperatorNodesLength(
   operator: Hex
 ) {
   console.log("Reading operator nodes length...");
-  try {
+
     const length = await middleware.read.getOperatorNodesLength([operator]);
     console.log(length);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 // nodeStakeCache
@@ -550,13 +428,10 @@ export async function middlewareGetNodeStakeCache(
   validatorId: Hex
 ) {
   console.log("Reading node stake cache...");
-  try {
+
     const val = await middleware.read.nodeStakeCache([epoch, validatorId]);
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 // operatorLockedStake
@@ -565,13 +440,10 @@ export async function middlewareGetOperatorLockedStake(
   operator: Hex
 ) {
   console.log("Reading operator locked stake...");
-  try {
+
     const val = await middleware.read.operatorLockedStake([operator]);
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 // nodePendingRemoval
@@ -580,13 +452,10 @@ export async function middlewareNodePendingRemoval(
   validatorId: Hex
 ) {
   console.log("Reading nodePendingRemoval...");
-  try {
+
     const val = await middleware.read.nodePendingRemoval([validatorId]);
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 // nodePendingUpdate - Note: This function is not available in the current contract
@@ -605,13 +474,10 @@ export async function middlewareGetOperatorUsedStake(
   operator: Hex
 ) {
   console.log("Reading operator used stake cached...");
-  try {
+
     const val = await middleware.read.getOperatorUsedStakeCached([operator]);
     console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 // getAllOperators
@@ -619,13 +485,10 @@ export async function middlewareGetAllOperators(
   middleware: SafeSuzakuContract['L1Middleware']
 ) {
   console.log("Reading all operators from middleware...");
-  try {
+
     const operators = await middleware.read.getAllOperators();
     console.log(operators);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) console.error(error.message);
-  }
+
 }
 
 /**
@@ -780,7 +643,6 @@ export async function middlewareGetL1Id(
 ): Promise<string> {
   console.log("Reading L1 ID from Validator Manager...");
   let L1Id
-  try {
     const l1ValidatorManagerAddress = await middleware.read.L1_VALIDATOR_MANAGER();
 
     const VALIDATOR_MANAGER_STORAGE_LOCATION = await balancerValidatorManager.read.VALIDATOR_MANAGER_STORAGE_LOCATION();
@@ -789,13 +651,6 @@ export async function middlewareGetL1Id(
       address: l1ValidatorManagerAddress as Hex,
       slot: VALIDATOR_MANAGER_STORAGE_LOCATION as Hex
     })
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-    throw error; // Re-throw the error to handle it in the calling function
-  }
 
   return utils.base58check.encode(hexToUint8Array(L1Id as Hex))
 }
@@ -803,21 +658,13 @@ export async function middlewareGetL1Id(
 export async function middlewareManualProcessNodeStakeCache(
   middleware: SafeSuzakuContract['L1Middleware'],
   numEpochsToProcess: number,
-  account: Account | undefined
+  account: Account
 ) {
   console.log("Processing node stake cache...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
 
     const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
       [numEpochsToProcess],
       { chain: null, account }
     );
     console.log("manualProcessNodeStakeCache done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }

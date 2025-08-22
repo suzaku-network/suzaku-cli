@@ -193,7 +193,7 @@ async function main() {
                 validatorManager,
                 l1Middleware,
                 metadataUrl,
-                client.account
+                client.account!
             );
         });
 
@@ -932,7 +932,6 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
             console.log("Calculating and caching stakes...");
 
-            try {
                 if (!client.account) {
                     throw new Error('Client account is required');
                 }
@@ -943,11 +942,7 @@ async function main() {
                         account: client.account,
                     });
                 console.log("calcAndCacheStakes done, tx hash:", hash);
-            } catch (error) {
-                if (error instanceof Error) {
-                    console.error(error.message);
-                }
-            }
+
         });
 
     // calcAndCacheNodeStakeForAllOperators
@@ -1580,7 +1575,7 @@ async function main() {
             const config = getConfig(network, client, wait);
             await computeValidatorUptime(
                 config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                client.account,
+                client.account!,
                 signedUptimeHex as Hex,
             );
         });
@@ -1609,7 +1604,7 @@ async function main() {
                 nodeId,
                 sourceChainId,
                 config.contracts.UptimeTracker(uptimeTrackerAddress),
-                client.account
+                client.account!
             );
         });
 
@@ -1633,7 +1628,7 @@ async function main() {
                 uptimeTracker,
                 operator,
                 epoch,
-                client.account
+                client.account!
             );
         });
 
@@ -1658,7 +1653,7 @@ async function main() {
                 operator,
                 startEpoch,
                 endEpoch,
-                client.account
+                client.account!
             );
         });
 
@@ -1757,7 +1752,7 @@ async function main() {
                 rewardsContract,
                 epoch,
                 batchSize,
-                client.account
+                client.account!
             );
         });
 
@@ -1777,7 +1772,7 @@ async function main() {
                 rewardsContract,
                 rewardsToken,
                 recipient,
-                client.account
+                client.account!
             );
         });
 
@@ -1797,7 +1792,7 @@ async function main() {
                 rewardsContract,
                 rewardsToken,
                 recipient,
-                client.account
+                client.account!
             );
         });
 
@@ -1817,7 +1812,7 @@ async function main() {
                 rewardsContract,
                 rewardsToken,
                 recipient,
-                client.account
+                client.account!
             );
         });
 
@@ -1837,7 +1832,7 @@ async function main() {
                 rewardsContract,
                 rewardsToken,
                 recipient,
-                client.account
+                client.account!
             );
         });
 
@@ -1859,7 +1854,7 @@ async function main() {
                 epoch,
                 rewardsToken,
                 recipient,
-                client.account
+                client.account!
             );
         });
 
@@ -1882,7 +1877,7 @@ async function main() {
                 numberOfEpochs,
                 rewardsToken,
                 rewardsAmount,
-                client.account
+                client.account!
             );
         });
 
@@ -1901,7 +1896,7 @@ async function main() {
                 rewardsContract,
                 collateralClass,
                 share,
-                client.account
+                client.account!
             );
         });
 
@@ -1918,7 +1913,7 @@ async function main() {
             await setMinRequiredUptime(
                 rewardsContract,
                 minUptime,
-                client.account
+                client.account!
             );
         });
 
@@ -1935,7 +1930,7 @@ async function main() {
             await setAdminRole(
                 rewardsContract,
                 newAdmin,
-                client.account
+                client.account!
             );
         });
 
@@ -1952,7 +1947,7 @@ async function main() {
             await setProtocolOwner(
                 rewardsContract,
                 newOwner,
-                client.account
+                client.account!
             );
         });
 
@@ -1969,7 +1964,7 @@ async function main() {
             await updateProtocolFee(
                 rewardsContract,
                 newFee,
-                client.account
+                client.account!
             );
         });
 
@@ -1986,7 +1981,7 @@ async function main() {
             await updateOperatorFee(
                 rewardsContract,
                 newFee,
-                client.account
+                client.account!
             );
         });
 
@@ -2003,7 +1998,7 @@ async function main() {
             await updateCuratorFee(
                 rewardsContract,
                 newFee,
-                client.account
+                client.account!
             );
         });
 
@@ -2024,7 +2019,7 @@ async function main() {
                 protocolFee,
                 operatorFee,
                 curatorFee,
-                client.account
+                client.account!
             );
         });
 
@@ -2288,4 +2283,4 @@ async function main() {
     program.parse(process.argv);
 }
 
-main().catch((err) => console.error(err));
+main()
