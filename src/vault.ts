@@ -248,7 +248,7 @@ export async function getVaultWithdrawalsOf(
 export async function approveAndDepositCollateral(
   client: ExtendedWalletClient,
   config: Config,
-  vaultAddress: Hex,
+  collateralAddress: Hex,
   amount: string,
 ) {
   console.log("Approving collateral...");
@@ -256,8 +256,6 @@ export async function approveAndDepositCollateral(
   try {
     if (!account) throw new Error('Client account is required');
 
-    const vault = config.contracts.VaultTokenized(vaultAddress);
-    const collateralAddress = await vault.read.collateral();
     const collateral = config.contracts.DefaultCollateral(collateralAddress);
     const rewardTokenAddress = await collateral.read.asset();
     const rewardToken = config.contracts.ERC20(rewardTokenAddress);

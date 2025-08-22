@@ -469,16 +469,16 @@ async function main() {
     
     program
         .command("collateral-deposit")
-        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .argument("amount", "Amount of token to deposit in the vault")
-        .action(async (vaultAddress, amount) => {
+        .addArgument(ArgAddress("collateralAddress", "Collateral contract address"))
+        .argument("amount", "Amount of token to deposit in the collateral")
+        .action(async (collateralAddress, amount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
             await approveAndDepositCollateral(
                 client,
                 config,
-                vaultAddress,
+                collateralAddress,
                 amount,
             );
 
