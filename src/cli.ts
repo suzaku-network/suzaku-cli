@@ -278,18 +278,20 @@ async function main() {
         .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
+        .argument("maxLimit", "Maximum limit")
         .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
             // instantiate VaultManager contract
             const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const maxLimitWei = parseUnits(maxLimit, await vault.read.decimals())
             await registerVaultL1(
                 vaultManager,
                 vaultAddress,
                 collateralClass,
-                maxLimit,
+                maxLimitWei,
                 client.account!
             );
         });
@@ -299,17 +301,19 @@ async function main() {
         .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .addArgument(ArgBigInt("maxLimit", "Maximum limit"))
+        .argument("maxLimit", "Maximum limit")
         .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const maxLimitWei = parseUnits(maxLimit, await vault.read.decimals())
             await updateVaultMaxL1Limit(
                 vaultManager,
                 vaultAddress,
                 collateralClass,
-                maxLimit,
+                maxLimitWei,
                 client.account!
             );
         });
