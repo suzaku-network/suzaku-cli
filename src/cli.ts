@@ -684,6 +684,42 @@ async function main() {
             console.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
         });
     
+    // activateSecondaryCollateralClass
+    program
+        .command("middleware-activate-collateral-class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .action(async (middlewareAddress, collateralClassId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.activateSecondaryCollateralClass([collateralClassId],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            console.log(`Activated collateral class ${collateralClassId}`);
+        });
+    
+    // deactivateSecondaryCollateralClass
+    program
+        .command("middleware-deactivate-collateral-class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .action(async (middlewareAddress, collateralClassId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.deactivateSecondaryCollateralClass([collateralClassId],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            console.log(`Deactivated collateral class ${collateralClassId}`);
+        });
+    
     // Register operator
     program
         .command("middleware-register-operator")
