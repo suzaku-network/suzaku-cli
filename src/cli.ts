@@ -2367,4 +2367,12 @@ async function main() {
     program.parse(process.argv);
 }
 
-main()
+// handle waggmi gigantic errors
+main().catch((error) => {
+    if (error instanceof Error && error.message.includes("contractAddress")) {
+        console.error(error.message);
+    } else {
+        console.error(error);
+    }
+    process.exit(1);
+});
