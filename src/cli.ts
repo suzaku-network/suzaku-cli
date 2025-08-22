@@ -640,6 +640,50 @@ async function main() {
     * MIDDLEWARE
     * -------------------------------------------------- */
 
+    // Add secondary collateral class
+    program
+        .command("middleware-add-collateral-class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .argument("minValidatorStake", "Minimum validator stake amount")
+        .argument("maxValidatorStake", "Maximum validator stake amount")
+        .addArgument(ArgAddress("initialCollateral", "Initial collateral address"))
+        .action(async (middlewareAddress, collateralClassId, minValidatorStake, maxValidatorStake, initialCollateral) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const collateral = config.contracts.DefaultCollateral(initialCollateral);
+            const decimals = await collateral.read.decimals();
+            const minStakeWei = parseUnits(minValidatorStake, decimals);
+            const maxStakeWei = parseUnits(maxValidatorStake, decimals);
+            await middlewareSvc.safeWrite.addCollateralClass([collateralClassId, minStakeWei, maxStakeWei, initialCollateral],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            console.log(`Added collateral class ${collateralClassId} with min stake ${minValidatorStake} and max stake ${maxValidatorStake} using collateral at ${initialCollateral}`);
+        });
+    
+    // Add collateral to class
+    program
+        .command("middleware-add-collateral-to-class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .addArgument(ArgAddress("collateralAddress", "Collateral address to add"))
+        .action(async (middlewareAddress, collateralClassId, collateralAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.addAssetToClass([collateralClassId, collateralAddress],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            console.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
+        });
+    
     // Register operator
     program
         .command("middleware-register-operator")
