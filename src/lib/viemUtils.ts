@@ -1,15 +1,14 @@
 import { getContract, PublicClient, GetContractReturnType, Address, WalletClient } from 'viem';
 import { SuzakuABI } from '../abis';
 import { exit } from 'process';
-
-export type TClient = PublicClient | WalletClient;
+import { ExtendedClient } from '../client';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
 export type TSuzakuABI = { [K in SuzakuABINames]: typeof SuzakuABI[K] };
 
 // Define the type for the contract instances
-export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typeof SuzakuABI[K], TClient> };
+export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typeof SuzakuABI[K], ExtendedClient> };
 
 // Define the type to use the same signature write methods of each contract
 export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] extends { write: infer W } ? W : never };
@@ -54,12 +53,53 @@ export function withSafeWrite<T extends SuzakuABINames>(
   return contract as unknown as SafeSuzakuContract[T];
 }
 
-export const curriedContract = <T extends SuzakuABINames>(abi: T, client: TClient): CurriedContractFn<T> =>
+// Map a proxy handler on write methods of the contract to wait for transaction receipt after executing it
+export function withWaitForReceipt<T extends SuzakuABINames>(
+  contract: SuzakuContracts[T],
+  client: ExtendedClient,
+  confirmations = 1
+): SuzakuContracts[T] {
+  if (!('write' in contract)) {
+    throw new Error('Contract does not have a write property');
+  }
+  const handler: ProxyHandler<Record<string, any>> = {
+    get(target, prop, _recv) {
+      const fn = (target as any)[prop]
+      if (typeof fn !== 'function') return fn
+      return async (...args: any[]) => {
+        try {
+          const hash = await fn(...args)
+          await client.waitForTransactionReceipt({ hash, confirmations })
+          return hash
+        } catch (error: any) {
+          console.log(error.message)
+          exit(1)
+        }
+      }
+    },
+  };
+
+  (contract as any).write = new Proxy(contract.write as Record<string, any>, handler);
+
+  return contract as unknown as SuzakuContracts[T];
+}
+
+export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0): CurriedContractFn<T> =>
   (address: Address) =>
-    withSafeWrite(
-      getContract({
-        abi: SuzakuABI[abi],
-        address,
+  {
+    let contract = getContract({
+      abi: SuzakuABI[abi],
+      address,
+      client,
+    }) as SuzakuContracts[T];
+    if (wait > 0) {
+      contract = withWaitForReceipt(
+        contract,
         client,
-      }) as SafeSuzakuContract[T]
-    );
+        wait
+      )
+    }
+    return withSafeWrite(
+      contract
+    )
+  };

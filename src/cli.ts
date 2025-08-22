@@ -144,6 +144,9 @@ async function main() {
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
             .conflicts('privateKey')
             .argParser(parseSecretName))
+        .addOption(new Option('-w, --wait <confirmations>', 'Number of confirmations to wait after a write transaction')
+            .default(0)
+            .argParser(ParserNumber))
         .version('0.1.0');
     
     /* --------------------------------------------------
@@ -181,7 +184,7 @@ async function main() {
         .action(async (validatorManager, l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
 
             // instantiate L1Registry and call
             const l1Registry = config.contracts.L1Registry(config.l1Registry);
@@ -199,7 +202,7 @@ async function main() {
         .action(async () => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             await getL1s(
                 config.contracts.L1Registry(config.l1Registry)
             );
@@ -212,7 +215,7 @@ async function main() {
         .action(async (l1Address, metadataUrl) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const l1Reg = config.contracts.L1Registry(config.l1Registry);
             await setL1MetadataUrl(
                 l1Reg,
@@ -229,7 +232,7 @@ async function main() {
         .action(async (l1Address, l1Middleware) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const l1Reg2 = config.contracts.L1Registry(config.l1Registry);
             await setL1Middleware(
                 l1Reg2,
@@ -247,7 +250,7 @@ async function main() {
         .action(async (metadataUrl) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const opReg = config.contracts.OperatorRegistry(config.operatorRegistry);
             await registerOperator(
                 opReg,
@@ -262,7 +265,7 @@ async function main() {
         .action(async () => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const opReg2 = config.contracts.OperatorRegistry(config.operatorRegistry);
             await listOperators(opReg2);
         });
@@ -279,7 +282,7 @@ async function main() {
         .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             // instantiate VaultManager contract
             const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
             await registerVaultL1(
@@ -300,7 +303,7 @@ async function main() {
         .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
             await updateVaultMaxL1Limit(
                 vaultManager,
@@ -318,7 +321,7 @@ async function main() {
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await removeVault(
                 vaultManager,
@@ -333,7 +336,7 @@ async function main() {
         .action(async (middlewareVaultManager) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCount(vaultManager);
         });
@@ -345,7 +348,7 @@ async function main() {
         .action(async (middlewareVaultManager, index) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultAtWithTimes(
                 vaultManager,
@@ -360,7 +363,7 @@ async function main() {
         .action(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCollateralClass(
                 vaultManager,
@@ -380,7 +383,7 @@ async function main() {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             await depositVault(
                 client,
                 config,
@@ -400,7 +403,7 @@ async function main() {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             const amountWei = parseUnits(amount, await vault.read.decimals())
             await withdrawVault(
@@ -420,7 +423,7 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await claimVault(
                 vault,
@@ -437,7 +440,7 @@ async function main() {
         .action(async (vaultAddress, account) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.grantRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
@@ -454,7 +457,7 @@ async function main() {
         .action(async (vaultAddress, account) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.revokeRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
@@ -471,7 +474,7 @@ async function main() {
         .action(async (vaultAddress, amount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             await approveAndDepositCollateral(
                 client,
                 config,
@@ -491,7 +494,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultCollateral(vault);
         });
@@ -503,7 +506,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             const delegator = await getVaultDelegator(vault);
             console.log("Vault delegator:", delegator);
@@ -518,7 +521,7 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultBalanceOf(vault, account);
         });
@@ -532,7 +535,7 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultActiveBalanceOf(vault, account);
         });
@@ -544,7 +547,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultTotalSupply(vault);
         });
@@ -559,7 +562,7 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalSharesOf(vault, epoch, account);
         });
@@ -574,7 +577,7 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalsOf(vault, epoch, account);
         });
@@ -591,7 +594,7 @@ async function main() {
         .action(async (delegatorAddress, l1Address, limit, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             // instantiate L1RestakeDelegator contract
             const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
             const vaultAddress = await delegator.read.vault()
@@ -616,7 +619,7 @@ async function main() {
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             // instantiate L1RestakeDelegator contract
             const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
             await setOperatorL1Shares(
@@ -641,7 +644,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRegisterOperator(
                 middlewareSvc,
@@ -658,7 +661,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareDisableOperator(
                 middlewareSvc,
@@ -675,7 +678,7 @@ async function main() {
         .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveOperator(
                 middlewareSvc,
@@ -695,7 +698,7 @@ async function main() {
         .action(async (middlewareAddress, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             
             const epochsPerCall = options.epochs;
@@ -735,7 +738,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
             // Default registration expiry to now + 12 hours if not provided
@@ -788,7 +791,7 @@ async function main() {
             }
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
@@ -817,7 +820,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveNode(
                 middlewareSvc,
@@ -838,7 +841,7 @@ async function main() {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = generateClient(opts.network, opts.privateKey!);
 
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
@@ -868,7 +871,7 @@ async function main() {
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareInitStakeUpdate(
                 middlewareSvc,
@@ -895,7 +898,7 @@ async function main() {
             }
 
             const client = generateClient(opts.network, options.pchainTxPrivateKey);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
 
@@ -926,7 +929,7 @@ async function main() {
         .action(async (middlewareAddress, epoch, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             console.log("Calculating and caching stakes...");
 
             try {
@@ -955,7 +958,7 @@ async function main() {
         .action(async (middlewareAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareCalcNodeStakes(
                 middlewareSvc,
@@ -973,7 +976,7 @@ async function main() {
         .action(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareForceUpdateNodes(
                 middlewareSvc,
@@ -992,7 +995,7 @@ async function main() {
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(async (middlewareAddress, operator, epoch, collateralClass) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorStake(
                 middlewareSvc,
@@ -1008,7 +1011,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCurrentEpoch(
                 middlewareSvc
@@ -1022,7 +1025,7 @@ async function main() {
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (middlewareAddress, epoch) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetEpochStartTs(
                 middlewareSvc,
@@ -1038,7 +1041,7 @@ async function main() {
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(async (middlewareAddress, operator, epoch) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetActiveNodesForEpoch(
                 middlewareSvc,
@@ -1054,7 +1057,7 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorNodesLength(
                 middlewareSvc,
@@ -1071,7 +1074,7 @@ async function main() {
         .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, epoch, validatorId) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
@@ -1088,7 +1091,7 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorLockedStake(
                 middlewareSvc,
@@ -1104,7 +1107,7 @@ async function main() {
         .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
@@ -1120,7 +1123,7 @@ async function main() {
         .addArgument(ArgHex("validatorId", "Validator ID"))
         .action(async (middlewareAddress, validatorId) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingUpdate(
                 middlewareSvc,
@@ -1136,7 +1139,7 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(async (middlewareAddress, operator) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
@@ -1151,7 +1154,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetAllOperators(
                 middlewareSvc
@@ -1165,7 +1168,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await getCollateralClassIds(
                 middlewareSvc
@@ -1179,7 +1182,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(async (middlewareAddress) => {
             const client = generateClient(program.opts().network);
-            const config = getConfig(program.opts().network, client);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await getActiveCollateralClasses(
                 middlewareSvc
@@ -1195,7 +1198,7 @@ async function main() {
         .action(async (middlewareTxHash, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             console.log(`nodeId: ${options.nodeId}`);
             await middlewareGetNodeLogs(
                 client,
@@ -1219,7 +1222,7 @@ async function main() {
         .action(async (l1Address) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optInL1(
                 service,
@@ -1235,7 +1238,7 @@ async function main() {
         .action(async (l1Address) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optOutL1(
                 service,
@@ -1252,7 +1255,7 @@ async function main() {
         .action(async (operator, l1Address) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await checkOptInL1(
                 service,
@@ -1274,7 +1277,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optInVault(
                 service,
@@ -1290,7 +1293,7 @@ async function main() {
         .action(async (vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optOutVault(
                 service,
@@ -1307,7 +1310,7 @@ async function main() {
         .action(async (operator, vaultAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await checkOptInVault(
                 service,
@@ -1329,7 +1332,7 @@ async function main() {
         .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             // instantiate BalancerValidatorManager contract
             const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await setUpSecurityModule(
@@ -1346,7 +1349,7 @@ async function main() {
         .action(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModules(
                 balancer
@@ -1360,7 +1363,7 @@ async function main() {
         .action(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModuleWeights(
                 balancer,
@@ -1383,7 +1386,7 @@ async function main() {
         .action(async (poaSecurityModuleAddress, nodeID) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerValidatorManagerAddress = await poaSecurityModule.read.balancerValidatorManager();
             const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
@@ -1409,7 +1412,7 @@ async function main() {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
@@ -1440,7 +1443,7 @@ async function main() {
         .action(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
 
             const operator = operatorAddress;
             console.log(`Operator: ${operator}`);
@@ -1572,9 +1575,9 @@ async function main() {
         .addArgument(ArgAddress("uptimeTrackerAddress", "Uptime tracker contract address"))
         .addArgument(ArgHex("signedUptimeHex", "Signed uptime hex"))
         .action(async (uptimeTrackerAddress, signedUptimeHex) => {
-            const { privateKey, network } = program.opts();
+            const { privateKey, network, wait } = program.opts();
             const client = generateClient(network, privateKey!);
-            const config = getConfig(network, client);
+            const config = getConfig(network, client, wait);
             await computeValidatorUptime(
                 config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
                 client.account,
@@ -1598,7 +1601,7 @@ async function main() {
             }
 
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
 
             await reportAndSubmitValidatorUptime(
                 opts.network,
@@ -1624,7 +1627,7 @@ async function main() {
                 process.exit(1);
             }
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeAtEpoch(
                 uptimeTracker,
@@ -1648,7 +1651,7 @@ async function main() {
                 process.exit(1);
             }
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeForEpochs(
                 uptimeTracker,
@@ -1669,7 +1672,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getValidatorUptimeForEpoch(
                 uptimeTracker,
@@ -1688,7 +1691,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isValidatorUptimeSetForEpoch(
                 uptimeTracker,
@@ -1707,7 +1710,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getOperatorUptimeForEpoch(
                 uptimeTracker,
@@ -1726,7 +1729,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isOperatorUptimeSetForEpoch(
                 uptimeTracker,
@@ -1748,7 +1751,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, batchSize) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await distributeRewards(
                 rewardsContract,
@@ -1767,7 +1770,7 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimRewards(
@@ -1787,7 +1790,7 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimOperatorFee(
@@ -1807,7 +1810,7 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimCuratorFee(
@@ -1827,7 +1830,7 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimProtocolFee(
@@ -1848,7 +1851,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, rewardsToken, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             await claimUndistributedRewards(
@@ -1871,7 +1874,7 @@ async function main() {
         .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setRewardsAmountForEpochs(
                 rewardsContract,
@@ -1892,7 +1895,7 @@ async function main() {
         .action(async (rewardsAddress, collateralClass, share) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setRewardsShareForCollateralClass(
                 rewardsContract,
@@ -1910,7 +1913,7 @@ async function main() {
         .action(async (rewardsAddress, minUptime) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setMinRequiredUptime(
                 rewardsContract,
@@ -1927,7 +1930,7 @@ async function main() {
         .action(async (rewardsAddress, newAdmin) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setAdminRole(
                 rewardsContract,
@@ -1944,7 +1947,7 @@ async function main() {
         .action(async (rewardsAddress, newOwner) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await setProtocolOwner(
                 rewardsContract,
@@ -1961,7 +1964,7 @@ async function main() {
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateProtocolFee(
                 rewardsContract,
@@ -1978,7 +1981,7 @@ async function main() {
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateOperatorFee(
                 rewardsContract,
@@ -1995,7 +1998,7 @@ async function main() {
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateCuratorFee(
                 rewardsContract,
@@ -2014,7 +2017,7 @@ async function main() {
         .action(async (rewardsAddress, protocolFee, operatorFee, curatorFee) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await updateAllFees(
                 rewardsContract,
@@ -2033,7 +2036,7 @@ async function main() {
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountPerTokenFromEpoch(
                 rewardsContract,
@@ -2050,7 +2053,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, token) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountForTokenFromEpoch(
                 rewardsContract,
@@ -2068,7 +2071,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, operator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getOperatorShares(
                 rewardsContract,
@@ -2086,7 +2089,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, vault) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getVaultShares(
                 rewardsContract,
@@ -2104,7 +2107,7 @@ async function main() {
         .action(async (rewardsAddress, epoch, curator) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getCuratorShares(
                 rewardsContract,
@@ -2121,7 +2124,7 @@ async function main() {
         .action(async (rewardsAddress, token) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getProtocolRewards(
                 rewardsContract,
@@ -2137,7 +2140,7 @@ async function main() {
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getDistributionBatch(
                 rewardsContract,
@@ -2152,7 +2155,7 @@ async function main() {
         .action(async (rewardsAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getFeesConfiguration(
                 rewardsContract
@@ -2167,7 +2170,7 @@ async function main() {
         .action(async (rewardsAddress, collateralClass) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getRewardsShareForCollateralClass(
                 rewardsContract,
@@ -2182,7 +2185,7 @@ async function main() {
         .action(async (rewardsAddress) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getMinRequiredUptime(
                 rewardsContract
@@ -2198,7 +2201,7 @@ async function main() {
         .action(async (rewardsAddress, staker, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
@@ -2216,7 +2219,7 @@ async function main() {
         .action(async (rewardsAddress, operator, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
@@ -2234,7 +2237,7 @@ async function main() {
         .action(async (rewardsAddress, curator, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
@@ -2252,7 +2255,7 @@ async function main() {
         .action(async (rewardsAddress, protocolOwner, rewardToken) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
-            const config = getConfig(opts.network, client);
+            const config = getConfig(opts.network, client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedProtocol(
                 rewardsContract,
