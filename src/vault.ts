@@ -246,13 +246,13 @@ export async function getVaultWithdrawalsOf(
 
 // Staker approve collateral and deposit tokens to collateral contract
 export async function approveAndDepositCollateral(
+  client: ExtendedWalletClient,
   config: Config,
   vaultAddress: Hex,
   amount: string,
-  account: Account | undefined
 ) {
   console.log("Approving collateral...");
-
+  const account = client.account
   try {
     if (!account) throw new Error('Client account is required');
 
@@ -267,8 +267,10 @@ export async function approveAndDepositCollateral(
       [collateralAddress, amountWei],
       { chain: null, account }
     );
+    await client.waitForTransactionReceipt({ hash })
     console.log("Approval done, tx hash:", hash);
-    const depositTx = await collateral.safeWrite.deposit([account.address, amountWei], { chain: null, account });
+    const depositTx = await collateral.write.deposit([account.address, amountWei], { chain: null, account });
+    await client.waitForTransactionReceipt({ hash: depositTx })
     console.log("Deposit to collateral done, tx hash:", depositTx);
   } catch (error) {
     console.error("❌ Approval failed:", error);

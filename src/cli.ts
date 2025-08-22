@@ -473,10 +473,10 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
             await approveAndDepositCollateral(
+                client,
                 config,
                 vaultAddress,
                 amount,
-                client.account!
             );
 
         })
