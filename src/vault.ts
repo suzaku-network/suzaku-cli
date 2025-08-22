@@ -244,45 +244,11 @@ export async function getVaultWithdrawalsOf(
   }
 }
 
-// Curator transfer reward token to L1Owner
-export async function transferRewardToken(
+// Staker approve collateral and deposit tokens to collateral contract
+export async function approveAndDepositCollateral(
   config: Config,
   vaultAddress: Hex,
-  l1Owner: Hex,
   amount: string,
-  account: Account | undefined
-) {
-  console.log("Transferring reward token...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
-
-    const vault = config.contracts.VaultTokenized(vaultAddress);
-    const collateralAddress = await vault.read.collateral();
-    const collateral = config.contracts.DefaultCollateral(collateralAddress);
-    const rewardTokenAddress = await collateral.read.asset();
-    const rewardToken = config.contracts.ERC20(rewardTokenAddress);
-
-    const amountWei = parseUnits(amount, await vault.read.decimals());
-    const hash = await rewardToken.safeWrite.transfer(
-      [l1Owner, amountWei],
-      { chain: null, account }
-    );
-    console.log("Mint done, tx hash:", hash);
-    console.log("✅ Mint completed successfully!");
-  } catch (error) {
-    console.error("❌ Mint failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
-}
-
-// L1Owner approve collateral
-export async function approveCollateral(
-  config: Config,
-  vaultAddress: Hex,
-  amount: bigint,
   account: Account | undefined
 ) {
   console.log("Approving collateral...");
@@ -295,12 +261,15 @@ export async function approveCollateral(
     const collateral = config.contracts.DefaultCollateral(collateralAddress);
     const rewardTokenAddress = await collateral.read.asset();
     const rewardToken = config.contracts.ERC20(rewardTokenAddress);
+    const decimals = await collateral.read.decimals();
+    const amountWei = parseUnits(amount, decimals)
     const hash = await rewardToken.safeWrite.approve(
-      [collateralAddress, amount],
+      [collateralAddress, amountWei],
       { chain: null, account }
     );
     console.log("Approval done, tx hash:", hash);
-    console.log("✅ Approval completed successfully!");
+    const depositTx = await collateral.safeWrite.deposit([account.address, amountWei], { chain: null, account });
+    console.log("Deposit to collateral done, tx hash:", depositTx);
   } catch (error) {
     console.error("❌ Approval failed:", error);
     if (error instanceof Error) {

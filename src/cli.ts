@@ -24,8 +24,7 @@ import {
     getVaultTotalSupply,
     getVaultWithdrawalSharesOf,
     getVaultWithdrawalsOf,
-    transferRewardToken,
-    approveCollateral
+    approveAndDepositCollateral
 } from "./vault";
 
 import {
@@ -466,39 +465,21 @@ async function main() {
         });
     
     program
-        .command("vault-curator-token-to-l1owner")
+        .command("collateral-deposit")
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgAddress("l1owner", "L1 owner account to allow"))
-        .addArgument(ArgAddress("amount", "Amount of token to allow"))
-        .action(async (vaultAddress, l1owner, amount) => {
+        .argument("amount", "Amount of token to deposit in the vault")
+        .action(async (vaultAddress, amount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client);
-            await transferRewardToken(
+            await approveAndDepositCollateral(
                 config,
                 vaultAddress,
-                l1owner,
                 amount,
                 client.account!
             );
 
         })
-    
-    program
-        .command("vault-l1owner-allow-collateral")
-        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
-        .addArgument(ArgBigInt("amount", "Amount of collateral to allow"))
-        .action(async (vaultAddress, amount) => {
-            const opts = program.opts();
-            const client = generateClient(opts.network, opts.privateKey!);
-            const config = getConfig(opts.network, client);
-            await approveCollateral(
-                config,
-                vaultAddress,
-                amount,
-                client.account!
-            );
-        });
 
     /* --------------------------------------------------
     * VAULT READ COMMANDS
@@ -605,7 +586,7 @@ async function main() {
         .command("set-l1-limit")
         .addArgument(ArgAddress("delegatorAddress", "Delegator contract address"))
         .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
-        .addArgument(ArgBigInt("limit", "Limit amount"))
+        .argument("limit", "Limit amount")
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(async (delegatorAddress, l1Address, limit, collateralClass) => {
             const opts = program.opts();
@@ -613,11 +594,14 @@ async function main() {
             const config = getConfig(opts.network, client);
             // instantiate L1RestakeDelegator contract
             const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const vaultAddress = await delegator.read.vault()
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const limitWei = parseUnits(limit, await vault.read.decimals())
             await setL1Limit(
                 delegator,
                 l1Address,
                 collateralClass,
-                limit,
+                limitWei,
                 client.account!
             );
         });
