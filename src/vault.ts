@@ -14,7 +14,6 @@ export async function depositVault(
 ) {
   console.log("Depositing...");
 
-  try {
     if (!account) throw new Error('Client account is required');
 
     // Get the collateral token address
@@ -64,13 +63,6 @@ export async function depositVault(
     const depositReceipt = await client.waitForTransactionReceipt({ hash: hash });
     console.log("Deposit confirmed in block:", depositReceipt.blockNumber);
     console.log("✅ Deposit completed successfully!");
-
-  } catch (error) {
-    console.error("❌ Deposit failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function withdrawVault(
@@ -81,7 +73,6 @@ export async function withdrawVault(
 ) {
   console.log("Withdrawing...");
 
-  try {
     if (!account) throw new Error('Client account is required');
 
     const hash = await vault.safeWrite.withdraw(
@@ -90,12 +81,6 @@ export async function withdrawVault(
     );
     console.log("Withdraw done, tx hash:", hash);
     console.log("✅ Withdrawal completed successfully!");
-  } catch (error) {
-    console.error("❌ Withdrawal failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // claim
@@ -107,7 +92,6 @@ export async function claimVault(
 ) {
   console.log("Claiming...");
 
-  try {
     if (!account) throw new Error('Client account is required');
 
     const hash = await vault.safeWrite.claim(
@@ -116,12 +100,6 @@ export async function claimVault(
     );
     console.log("Claim done, tx hash:", hash);
     console.log("✅ Claim completed successfully!");
-  } catch (error) {
-    console.error("❌ Claim failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultDelegator(
@@ -146,16 +124,9 @@ export async function getVaultCollateral(
   vault: SafeSuzakuContract['VaultTokenized']
 ) {
   console.log("Reading vault collateral...");
-  try {
     const collateral = await vault.read.collateral();
     console.log("Collateral token:", collateral);
     return collateral;
-  } catch (error) {
-    console.error("Failed to read collateral:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultBalanceOf(
@@ -163,16 +134,9 @@ export async function getVaultBalanceOf(
   account: Hex
 ) {
   console.log(`Reading vault balance for ${account}...`);
-  try {
     const balance = await vault.read.balanceOf([account]);
     console.log("Vault token balance:", balance.toString());
     return balance;
-  } catch (error) {
-    console.error("Failed to read balance:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultActiveBalanceOf(
@@ -180,32 +144,18 @@ export async function getVaultActiveBalanceOf(
   account: Hex
 ) {
   console.log(`Reading active vault balance for ${account}...`);
-  try {
     const activeBalance = await vault.read.activeBalanceOf([account]);
     console.log("Active vault balance:", activeBalance.toString());
     return activeBalance;
-  } catch (error) {
-    console.error("Failed to read active balance:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultTotalSupply(
   vault: SafeSuzakuContract['VaultTokenized']
 ) {
   console.log("Reading vault total supply...");
-  try {
     const totalSupply = await vault.read.totalSupply();
     console.log("Total supply:", totalSupply.toString());
     return totalSupply;
-  } catch (error) {
-    console.error("Failed to read total supply:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultWithdrawalSharesOf(
@@ -214,16 +164,9 @@ export async function getVaultWithdrawalSharesOf(
   account: Hex
 ) {
   console.log(`Reading withdrawal shares for ${account} at epoch ${epoch}...`);
-  try {
     const shares = await vault.read.withdrawalSharesOf([epoch, account]);
     console.log("Withdrawal shares:", shares.toString());
     return shares;
-  } catch (error) {
-    console.error("Failed to read withdrawal shares:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 export async function getVaultWithdrawalsOf(
@@ -232,16 +175,9 @@ export async function getVaultWithdrawalsOf(
   account: Hex
 ) {
   console.log(`Reading withdrawals for ${account} at epoch ${epoch}...`);
-  try {
     const withdrawalAmount = await vault.read.withdrawalsOf([epoch, account]);
     console.log("Withdrawal amount:", withdrawalAmount.toString());
     return withdrawalAmount;
-  } catch (error) {
-    console.error("Failed to read withdrawals:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
 
 // Staker approve collateral and deposit tokens to collateral contract
@@ -253,7 +189,6 @@ export async function approveAndDepositCollateral(
 ) {
   console.log("Approving collateral...");
 
-  try {
     if (!account) throw new Error('Client account is required');
 
     const vault = config.contracts.VaultTokenized(vaultAddress);
@@ -270,10 +205,4 @@ export async function approveAndDepositCollateral(
     console.log("Approval done, tx hash:", hash);
     const depositTx = await collateral.safeWrite.deposit([account.address, amountWei], { chain: null, account });
     console.log("Deposit to collateral done, tx hash:", depositTx);
-  } catch (error) {
-    console.error("❌ Approval failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
 }
