@@ -1,19 +1,6 @@
 export default [
     {
         "type": "function",
-        "name": "ADMIN_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "BASIS_POINTS_DENOMINATOR",
         "inputs": [],
         "outputs": [
@@ -21,6 +8,19 @@ export default [
                 "name": "",
                 "type": "uint16",
                 "internalType": "uint16"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "CLAIM_GRACE_PERIOD_EPOCHS",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ],
         "stateMutability": "view"
@@ -40,7 +40,59 @@ export default [
     },
     {
         "type": "function",
+        "name": "DISTRIBUTION_EARLIEST_OFFSET",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "FUNDING_DEADLINE_OFFSET",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "PROTOCOL_OWNER_ROLE",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "REWARDS_DISTRIBUTOR_ROLE",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "REWARDS_MANAGER_ROLE",
         "inputs": [],
         "outputs": [
             {
@@ -240,6 +292,30 @@ export default [
     },
     {
         "type": "function",
+        "name": "epochStatus",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "funded",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "distributionComplete",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "getRewardsAmountPerTokenFromEpoch",
         "inputs": [
             {
@@ -362,7 +438,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "l1Middleware_",
+                "name": "middleware_",
                 "type": "address",
                 "internalType": "address payable"
             },
@@ -397,23 +473,15 @@ export default [
     },
     {
         "type": "function",
-        "name": "l1Middleware",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "contract AvalancheL1Middleware"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "lastEpochClaimedCurator",
         "inputs": [
             {
                 "name": "curator",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "rewardToken",
                 "type": "address",
                 "internalType": "address"
             }
@@ -435,6 +503,11 @@ export default [
                 "name": "operator",
                 "type": "address",
                 "internalType": "address"
+            },
+            {
+                "name": "rewardToken",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "outputs": [
@@ -452,6 +525,11 @@ export default [
         "inputs": [
             {
                 "name": "protocolOwner",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "rewardToken",
                 "type": "address",
                 "internalType": "address"
             }
@@ -473,6 +551,11 @@ export default [
                 "name": "staker",
                 "type": "address",
                 "internalType": "address"
+            },
+            {
+                "name": "rewardToken",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "outputs": [
@@ -480,6 +563,19 @@ export default [
                 "name": "epoch",
                 "type": "uint48",
                 "internalType": "uint48"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "middleware",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract AvalancheL1Middleware"
             }
         ],
         "stateMutability": "view"
@@ -512,7 +608,7 @@ export default [
     },
     {
         "type": "function",
-        "name": "operatorBeneficiariesShares",
+        "name": "operatorBeneficiariesSharesPerCollateralClass",
         "inputs": [
             {
                 "name": "epoch",
@@ -523,6 +619,11 @@ export default [
                 "name": "operator",
                 "type": "address",
                 "internalType": "address"
+            },
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "internalType": "uint96"
             }
         ],
         "outputs": [
@@ -641,10 +742,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "rewardsSharePerAssetClass",
+        "name": "rewardsSharePerCollateralClass",
         "inputs": [
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -657,19 +758,6 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "setAdminRole",
-        "inputs": [
-            {
-                "name": "newAdmin",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -727,10 +815,36 @@ export default [
     },
     {
         "type": "function",
-        "name": "setRewardsShareForAssetClass",
+        "name": "setRewardsDistributorRole",
         "inputs": [
             {
-                "name": "assetClass",
+                "name": "newRewardsDistributor",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setRewardsManagerRole",
+        "inputs": [
+            {
+                "name": "newRewardsManager",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setRewardsShareForCollateralClass",
+        "inputs": [
+            {
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -761,6 +875,29 @@ export default [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "updateAllFees",
+        "inputs": [
+            {
+                "name": "newProtocolFee",
+                "type": "uint16",
+                "internalType": "uint16"
+            },
+            {
+                "name": "newOperatorFee",
+                "type": "uint16",
+                "internalType": "uint16"
+            },
+            {
+                "name": "newCuratorFee",
+                "type": "uint16",
+                "internalType": "uint16"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -1062,10 +1199,36 @@ export default [
     },
     {
         "type": "event",
+        "name": "RewardsDistributorRoleAssigned",
+        "inputs": [
+            {
+                "name": "rewardsDistributor",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RewardsManagerRoleAssigned",
+        "inputs": [
+            {
+                "name": "rewardsManager",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "RewardsShareUpdated",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "indexed": true,
                 "internalType": "uint96"
@@ -1186,6 +1349,37 @@ export default [
         "anonymous": false
     },
     {
+        "type": "event",
+        "name": "ZeroRewardsClaim",
+        "inputs": [
+            {
+                "name": "claimer",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "rewardsToken",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "lastEpoch",
+                "type": "uint48",
+                "indexed": false,
+                "internalType": "uint48"
+            },
+            {
+                "name": "claimType",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
         "name": "AccessControlBadConfirmation",
         "inputs": []
@@ -1203,28 +1397,6 @@ export default [
                 "name": "neededRole",
                 "type": "bytes32",
                 "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AddressEmptyCode",
-        "inputs": [
-            {
-                "name": "target",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AddressInsufficientBalance",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
             }
         ]
     },
@@ -1257,12 +1429,34 @@ export default [
     },
     {
         "type": "error",
-        "name": "AssetClassNotFound",
+        "name": "CollateralClassNotFound",
         "inputs": [
             {
                 "name": "vault",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassSharesExceed100",
+        "inputs": [
+            {
+                "name": "totalBp",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "DistributionAlreadyStarted",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ]
     },
@@ -1301,6 +1495,17 @@ export default [
     },
     {
         "type": "error",
+        "name": "EpochNotFunded",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "EpochStillClaimable",
         "inputs": [
             {
@@ -1312,8 +1517,14 @@ export default [
     },
     {
         "type": "error",
-        "name": "FailedInnerCall",
-        "inputs": []
+        "name": "FeeConfigurationExceeds100",
+        "inputs": [
+            {
+                "name": "totalBp",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
     },
     {
         "type": "error",
@@ -1323,6 +1534,17 @@ export default [
                 "name": "fee",
                 "type": "uint16",
                 "internalType": "uint16"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "FundingWindowClosed",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ]
     },
@@ -1358,7 +1580,7 @@ export default [
         "name": "InvalidL1Middleware",
         "inputs": [
             {
-                "name": "l1Middleware",
+                "name": "middleware",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1465,17 +1687,28 @@ export default [
     },
     {
         "type": "error",
-        "name": "MathOverflowedMulDiv",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "NoRewardsToClaim",
         "inputs": [
             {
                 "name": "user",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NoRewardsToClaimEpoch",
+        "inputs": [
+            {
+                "name": "user",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "lastClaimedEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ]
     },
@@ -1499,6 +1732,11 @@ export default [
                 "internalType": "uint48"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "ReentrancyGuardReentrantCall",
+        "inputs": []
     },
     {
         "type": "error",

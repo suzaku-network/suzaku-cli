@@ -158,7 +158,7 @@ export default [
     },
     {
         "type": "function",
-        "name": "l1Middleware",
+        "name": "middleware",
         "inputs": [
             {
                 "name": "",
@@ -211,7 +211,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "l1Middleware_",
+                "name": "middleware_",
                 "type": "address",
                 "internalType": "address"
             },
@@ -254,7 +254,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "l1Middleware_",
+                "name": "middleware_",
                 "type": "address",
                 "internalType": "address"
             }
@@ -320,6 +320,26 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "function",
+        "name": "unclaimedFees",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "withdrawFees",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
         "type": "event",
         "name": "OwnershipTransferred",
         "inputs": [
@@ -362,7 +382,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "l1Middleware",
+                "name": "middleware",
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
@@ -443,15 +463,15 @@ export default [
     },
     {
         "type": "error",
-        "name": "L1Registry__NotMiddlewareOwner",
+        "name": "L1Registry__NoFeesToWithdraw",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__NotFeeCollector",
         "inputs": [
             {
                 "name": "caller",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "expectedOwner",
                 "type": "address",
                 "internalType": "address"
             }
@@ -472,6 +492,22 @@ export default [
                 "internalType": "address"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__RefundFailed",
+        "inputs": [
+            {
+                "name": "refundAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "L1Registry__UnexpectedEther",
+        "inputs": []
     },
     {
         "type": "error",

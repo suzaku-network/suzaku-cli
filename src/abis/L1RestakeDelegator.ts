@@ -301,7 +301,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -325,7 +325,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -383,7 +383,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -421,7 +421,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -450,7 +450,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -538,7 +538,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -561,7 +561,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -584,7 +584,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -612,7 +612,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -641,7 +641,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -699,7 +699,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -723,7 +723,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -784,7 +784,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "indexed": true,
                 "internalType": "uint96"
@@ -909,7 +909,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "indexed": true,
                 "internalType": "uint96"
@@ -934,7 +934,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "indexed": true,
                 "internalType": "uint96"
@@ -959,7 +959,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "indexed": true,
                 "internalType": "uint96"
@@ -1079,11 +1079,6 @@ export default [
     {
         "type": "error",
         "name": "L1RestakeDelegator__ZeroAddressRoleHolder",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MathOverflowedMulDiv",
         "inputs": []
     },
     {
