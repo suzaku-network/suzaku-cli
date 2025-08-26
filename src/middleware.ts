@@ -425,11 +425,11 @@ export async function middlewareGetOperatorNodesLength(
 export async function middlewareGetNodeStakeCache(
   middleware: SafeSuzakuContract['L1Middleware'],
   epoch: number,
-  validatorId: Hex
+  validationId: Hex
 ) {
   console.log("Reading node stake cache...");
 
-    const val = await middleware.read.nodeStakeCache([epoch, validatorId]);
+  const val = await middleware.read.nodeStakeCache([epoch, validationId]);
     console.log(val);
 
 }

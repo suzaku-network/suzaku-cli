@@ -880,7 +880,7 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance))));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance))*1e9));
 
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
@@ -1150,15 +1150,17 @@ async function main() {
         .description("Get node stake cache for a specific epoch and validator")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .addArgument(ArgHex("validatorId", "Validator ID"))
-        .action(async (middlewareAddress, epoch, validatorId) => {
+        .addArgument(ArgNodeID())
+        .action(async (middlewareAddress, epoch, nodeId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
+            const balancerSvc = config.contracts.BalancerValidatorManager(balancerAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
                 epoch,
-                validatorId
+                await balancerSvc.read.registeredValidators([parseNodeID(nodeId)])
             );
         });
 
