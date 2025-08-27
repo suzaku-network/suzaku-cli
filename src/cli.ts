@@ -813,7 +813,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNodeID())
         .addArgument(ArgHex("blsKey", "BLS public key"))
-        .addOption(new Option("--initial-stake <initialStake>", "Initial stake amount (default: 0)").default(0n).argParser(ParserAVAX))
+        .addOption(new Option("--initial-stake <initialStake>", "Initial stake amount (default: 0)").default('0'))
         .addOption(new Option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)"))
         .addOption(new Option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
@@ -843,6 +843,11 @@ async function main() {
                 disableOwnerAddress
             ];
 
+            const primaryCollateralAddress = await middlewareSvc.read.PRIMARY_ASSET();
+            const primaryCollateral = config.contracts.DefaultCollateral(primaryCollateralAddress);
+            const initialStakeWei = parseUnits(options.initialStake.toString(), await primaryCollateral.read.decimals());
+
+
             // Call middlewareAddNode
             await middlewareAddNode(
                 middlewareSvc,
@@ -851,7 +856,7 @@ async function main() {
                 registrationExpiry,
                 remainingBalanceOwner,
                 disableOwner,
-                options.initialStake,
+                initialStakeWei,
                 client.account!
             );
         });
