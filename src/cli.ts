@@ -957,16 +957,20 @@ async function main() {
         .description("Initialize validator stake update and lock")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNodeID())
-        .addArgument(ArgBigInt("newStake", "New stake amount"))
+        .argument("newStake", "New stake amount")
         .action(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
+            const collateral = config.contracts.DefaultCollateral(primaryCollateral);
+            const decimals = await collateral.read.decimals();
+            const newStakeWei = parseUnits(newStake, decimals);
             await middlewareInitStakeUpdate(
                 middlewareSvc,
                 nodeId,
-                newStake,
+                newStakeWei,
                 client.account!
             );
         });
