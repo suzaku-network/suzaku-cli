@@ -58,7 +58,8 @@ import {
     getCollateralClassIds,
     getActiveCollateralClasses,
     middlewareGetNodeLogs,
-    middlewareManualProcessNodeStakeCache
+    middlewareManualProcessNodeStakeCache,
+    middlewareLastValidationId
 } from "./middleware";
 
 import {
@@ -1155,17 +1156,15 @@ async function main() {
         .description("Get node stake cache for a specific epoch and validator")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .addArgument(ArgNodeID())
-        .action(async (middlewareAddress, epoch, nodeId) => {
+        .addArgument(ArgHex("validationId", "Validator validation ID"))
+        .action(async (middlewareAddress, epoch, validationId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
-            const balancerSvc = config.contracts.BalancerValidatorManager(balancerAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
                 epoch,
-                await balancerSvc.read.registeredValidators([parseNodeID(nodeId)])
+                validationId
             );
         });
 
@@ -1278,23 +1277,45 @@ async function main() {
     program
         .command("middleware-node-logs")
         .description("Get middleware node logs")
-        .addArgument(ArgHex("middlewareTxHash", "Middleware transaction hash"))
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
         .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
-        .action(async (middlewareTxHash, options) => {
+        .action(async (middlewareAddress, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client, opts.wait);
             console.log(`nodeId: ${options.nodeId}`);
+            const middleware = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeLogs(
                 client,
-                middlewareTxHash,
+                middleware,
                 config,
                 options.nodeId,
                 options.snowscanApiKey
             );
         });
 
+    program
+        .command("middleware-get-last-node-validation-id")
+        .description("Set middleware log level")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgNodeID())
+        .action(async (middlewareAddress, nodeId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
+            const balancerSvc = config.contracts.BalancerValidatorManager(balancerAddress);
+            console.log(`Fetching last validation ID`);
+            const validationId = await middlewareLastValidationId(
+                client,
+                middlewareSvc,
+                balancerSvc,
+                nodeId
+            )
+            console.log(`Last validationID: ${validationId}`);
+        })
 
     /**
      * --------------------------------------------------

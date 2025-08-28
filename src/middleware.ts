@@ -2,12 +2,12 @@ import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, H
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { utils } from '@avalabs/avalanchejs';
 import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
-import { ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config, pChainChainID } from './config';
 import { NodeId, parseNodeID } from './lib/utils';
-import { DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
 
@@ -526,19 +526,16 @@ export async function getActiveCollateralClasses(
 
 export async function middlewareGetNodeLogs(
   client: ExtendedPublicClient,
-  middlewareTxHash: Hex,
+  middleware: SafeSuzakuContract['L1Middleware'],
   config: Config,
   nodeId?: NodeId,
   snowscanApiKey?: string,
 ) {
   console.log("Reading logs from middleware and balancer...");
 
-  const receipt = await client.getTransactionReceipt({ hash: middlewareTxHash });
-  const middlewareAddress = receipt.to ? receipt.to as Hex : receipt.contractAddress as Hex;
-  const from = receipt.blockNumber
   const to = await client.getBlockNumber();
 
-  const middleware = config.contracts.L1Middleware(middlewareAddress);
+  const from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
 
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   bar && bar.start(0, 0);
@@ -547,7 +544,7 @@ export async function middlewareGetNodeLogs(
 
   logsProm.push(GetContractEvents(
     client,
-    middlewareAddress,
+    middleware.address,
     Number(from),
     Number(to),
     config.abis.L1Middleware,
@@ -586,7 +583,7 @@ export async function middlewareGetNodeLogs(
 
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
-    log.address = log.address.toLowerCase() === middlewareAddress.toLowerCase() ? "Middleware" : "ValidatorManager";
+    log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
     return log;
   }))
 
@@ -667,4 +664,28 @@ export async function middlewareManualProcessNodeStakeCache(
       { chain: null, account }
     );
     console.log("manualProcessNodeStakeCache done, tx hash:", hash);
+}
+
+export async function middlewareLastValidationId(
+  client: ExtendedClient,
+  middleware: SafeSuzakuContract['L1Middleware'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  nodeId: NodeId,
+): Promise<Hex> {
+  const nodeIdHex = parseNodeID(nodeId)
+  //  If already registered
+  const validationId = await balancer.read.registeredValidators([nodeIdHex]);
+
+  if (parseInt(validationId, 16) === 0) {
+    const toBlock = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()))
+    const fromBlock = await client.getBlockNumber();
+    const event = await collectEventsInRange(fromBlock, toBlock, 1, (opts) => middleware.getEvents.NodeAdded({ nodeId: nodeIdHex }, opts));
+    if (event.length === 0) {
+      throw new Error(`Node ID ${nodeId} never registered in the middleware`);
+    } else {
+      return event[0].args.validationID!;
+    }
+  } else {
+    return validationId;
+  }
 }

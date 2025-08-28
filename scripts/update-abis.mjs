@@ -10,13 +10,16 @@ const __dirname = path.dirname(__filename);
 // Define the mapping between contract names and their output files
 const contractMappings = {
   'AvalancheL1Middleware': 'AvalancheL1Middleware.ts',
-  'VaultTokenized': 'VaultTokenized.ts', 
+  'VaultTokenized': 'VaultTokenized.ts',
+  'DefaultCollateral': 'DefaultCollateral.ts',
+  'TestERC20': 'ERC20.ts',
   'L1Registry': 'L1Registry.ts',
   'L1RestakeDelegator': 'L1RestakeDelegator.ts',
   'MiddlewareVaultManager': 'MiddlewareVaultManager.ts',
   'OperatorL1OptInService': 'OperatorL1OptInService.ts',
   'OperatorRegistry': 'OperatorRegistry.ts',
   'OperatorVaultOptInService': 'OperatorVaultOptInService.ts',
+  'PoASecurityModule': 'PoASecurityModule.ts',
   'Rewards': 'Rewards.ts',
   'UptimeTracker': 'UptimeTracker.ts',
   'VaultFactory': 'VaultFactory.ts',
@@ -25,7 +28,10 @@ const contractMappings = {
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)
 // The 'conflict-core2' directory name is the local checkout of suzaku-core
-const sourceDir = path.resolve(__dirname, '../../conflict-core2/out');
+const sourceDir = path.resolve(
+  __dirname,
+  "../../old/suzaku-deployments/suzaku-protocol/out"
+);
 const targetDir = path.resolve(__dirname, '../src/abis');
 
 console.log('🔄 Updating ABI files...');
