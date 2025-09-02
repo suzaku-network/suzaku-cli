@@ -306,11 +306,6 @@ export default [
                 "internalType": "bytes"
             },
             {
-                "name": "registrationExpiry",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
                 "name": "remainingBalanceOwner",
                 "type": "tuple",
                 "internalType": "struct PChainOwner",
@@ -361,7 +356,7 @@ export default [
             {
                 "name": "",
                 "type": "address",
-                "internalType": "contract BalancerValidatorManager"
+                "internalType": "contract IBalancerValidatorManager"
             }
         ],
         "stateMutability": "view"
@@ -1752,6 +1747,17 @@ export default [
                 "name": "minStake",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__UnexpectedWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },

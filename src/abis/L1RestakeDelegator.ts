@@ -1083,11 +1083,6 @@ export default [
     },
     {
         "type": "error",
-        "name": "MathOverflowedMulDiv",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "NotInitializing",
         "inputs": []
     },

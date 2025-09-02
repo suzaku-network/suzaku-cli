@@ -60,7 +60,6 @@ export async function middlewareAddNode(
   middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
   blsKey: Hex,
-  registrationExpiry: bigint,
   remainingBalanceOwner: [number, `0x${string}`[]],
   disableOwner: [number, `0x${string}`[]],
   initialStake: bigint,
@@ -72,7 +71,7 @@ export async function middlewareAddNode(
     const nodeIdHex32 = parseNodeID(nodeId)
 
     const hash = await middleware.safeWrite.addNode(
-      [nodeIdHex32, blsKey, registrationExpiry, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake],
+      [nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake],
       { chain: null, account }
     );
     console.log("addNode executed successfully, tx hash:", hash);
@@ -97,7 +96,7 @@ export async function middlewareCompleteValidatorRegistration(
     const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
     // Check if the node is still registered as a validator on the P-Chain
-    const L1Id = await middlewareGetL1Id(middleware, balancer, client);
+  const L1Id = await balancer.read.subnetID();
     const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeId);
     if (isValidator) {
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
@@ -184,7 +183,7 @@ export async function middlewareCompleteValidatorRemoval(
     const validationID = receipt.logs[2].topics[1] ?? '';
 
     // Check if the node is still registered as a validator on the P-Chain
-    const L1Id = await middlewareGetL1Id(middleware, balancerValidatorManager, client);
+  const L1Id = await balancerValidatorManager.read.subnetID();
     const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
@@ -633,25 +632,6 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
   }, {} as Record<string, { source: string; event: string; hash: string; executionTime: string;/*args: string*/ }[]>);
 }
 
-export async function middlewareGetL1Id(
-  middleware: SafeSuzakuContract['L1Middleware'],
-  balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
-  client: ExtendedWalletClient,
-): Promise<string> {
-  console.log("Reading L1 ID from Validator Manager...");
-  let L1Id
-    const l1ValidatorManagerAddress = await middleware.read.L1_VALIDATOR_MANAGER();
-
-    const VALIDATOR_MANAGER_STORAGE_LOCATION = await balancerValidatorManager.read.VALIDATOR_MANAGER_STORAGE_LOCATION();
-
-    L1Id = await client.getStorageAt({
-      address: l1ValidatorManagerAddress as Hex,
-      slot: VALIDATOR_MANAGER_STORAGE_LOCATION as Hex
-    })
-
-  return utils.base58check.encode(hexToUint8Array(L1Id as Hex))
-}
-
 export async function middlewareManualProcessNodeStakeCache(
   middleware: SafeSuzakuContract['L1Middleware'],
   numEpochsToProcess: number,
@@ -674,7 +654,7 @@ export async function middlewareLastValidationId(
 ): Promise<Hex> {
   const nodeIdHex = parseNodeID(nodeId)
   //  If already registered
-  const validationId = await balancer.read.registeredValidators([nodeIdHex]);
+  const validationId = await balancer.read.getNodeValidationID([nodeIdHex]);
 
   if (parseInt(validationId, 16) === 0) {
     const toBlock = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()))

@@ -305,6 +305,27 @@ export default [
     },
     {
         "type": "error",
+        "name": "UptimeBeforeStart",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "startEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "currentEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "UptimeTracker__NoValidators",
         "inputs": [
             {

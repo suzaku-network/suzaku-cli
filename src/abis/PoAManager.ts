@@ -3,30 +3,17 @@ export default [
         "type": "constructor",
         "inputs": [
             {
-                "name": "balancerValidatorManagerAddress",
+                "name": "owner",
                 "type": "address",
                 "internalType": "address"
             },
             {
-                "name": "initialOwner",
+                "name": "validatorManager",
                 "type": "address",
-                "internalType": "address"
+                "internalType": "contract IValidatorManagerExternalOwnable"
             }
         ],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "balancerValidatorManager",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "contract IBalancerValidatorManager"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -38,7 +25,13 @@ export default [
                 "internalType": "uint32"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -51,7 +44,13 @@ export default [
                 "internalType": "uint32"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -66,73 +65,16 @@ export default [
         ],
         "outputs": [
             {
-                "name": "validationID",
+                "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
             },
             {
-                "name": "nonce",
+                "name": "",
                 "type": "uint64",
                 "internalType": "uint64"
             }
         ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeValidatorSet",
-        "inputs": [
-            {
-                "name": "conversionData",
-                "type": "tuple",
-                "internalType": "struct ConversionData",
-                "components": [
-                    {
-                        "name": "subnetID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerBlockchainID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "initialValidators",
-                        "type": "tuple[]",
-                        "internalType": "struct InitialValidator[]",
-                        "components": [
-                            {
-                                "name": "nodeID",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "blsPublicKey",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "weight",
-                                "type": "uint64",
-                                "internalType": "uint64"
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
         "stateMutability": "nonpayable"
     },
     {
@@ -191,7 +133,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "validationID",
+                "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }
@@ -228,12 +170,12 @@ export default [
         ],
         "outputs": [
             {
-                "name": "nonce",
+                "name": "",
                 "type": "uint64",
                 "internalType": "uint64"
             },
             {
-                "name": "messageID",
+                "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }
@@ -262,46 +204,20 @@ export default [
     },
     {
         "type": "function",
-        "name": "resendRegisterValidatorMessage",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendValidatorRemovalMessage",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "transferOwnership",
+        "inputs": [
+            {
+                "name": "newOwner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "transferValidatorManagerOwnership",
         "inputs": [
             {
                 "name": "newOwner",
@@ -352,10 +268,5 @@ export default [
                 "internalType": "address"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "ZeroAddress",
-        "inputs": []
     }
 ] as const;

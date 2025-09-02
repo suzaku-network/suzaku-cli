@@ -144,7 +144,7 @@ interface ConversionDataResponse {
     result: TransactionResult;
 }
 
-type InitializeValidatorSetArgs = [{ l1ID: `0x${string}`; validatorManagerBlockchainID: `0x${string}`; validatorManagerAddress: `0x${string}`; initialValidators: readonly { nodeID: `0x${string}`; blsPublicKey: `0x${string}`; weight: bigint; }[]; }, number]
+type InitializeValidatorSetArgs = [{ subnetID: `0x${string}`; validatorManagerBlockchainID: `0x${string}`; validatorManagerAddress: `0x${string}`; initialValidators: readonly { nodeID: `0x${string}`; blsPublicKey: `0x${string}`; weight: bigint; }[]; }, number]
 
 export function add0x(hex: string) {
     return /^0x/i.test(hex) ? hex : `0x${hex}`;
@@ -660,7 +660,7 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     // Prepare transaction arguments
     return [
         {
-            l1ID: cb58ToHex(subnetId) as Hex,
+            subnetID: cb58ToHex(subnetId) as Hex,
             validatorManagerBlockchainID: cb58ToHex(chainId) as Hex,
             validatorManagerAddress: managerAddress as Hex,
             initialValidators: validators

@@ -23,14 +23,15 @@ const contractMappings = {
   'Rewards': 'Rewards.ts',
   'UptimeTracker': 'UptimeTracker.ts',
   'VaultFactory': 'VaultFactory.ts',
-  'BalancerValidatorManager': 'BalancerValidatorManager.ts'
+  'BalancerValidatorManager': 'BalancerValidatorManager.ts',
+  'PoAManager': 'PoAManager.ts'
 };
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)
 // The 'conflict-core2' directory name is the local checkout of suzaku-core
 const sourceDir = path.resolve(
   __dirname,
-  "../../old/suzaku-deployments/suzaku-protocol/out"
+  "../../suzaku-deployments/suzaku-protocol/out"
 );
 const targetDir = path.resolve(__dirname, '../src/abis');
 

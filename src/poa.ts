@@ -25,7 +25,7 @@ export async function completValidatorRemoval(params: {
   const receipt = await client.waitForTransactionReceipt({ hash: removeNodeTxHash })
   const loggedValidationID = receipt.logs[2].topics[1] ?? '';
   const nodeIdHex = parseNodeID(nodeId, false);
-  const validationID = await balancerSvc.read.registeredValidators([nodeIdHex]);
+  const validationID = await balancerSvc.read.getNodeValidationID([nodeIdHex]);
 
   if (Number(validationID) > 0 && loggedValidationID === validationID) {// if the node is registered as a validator
     console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
@@ -66,7 +66,7 @@ export async function completValidatorRemoval(params: {
   const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
   const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
-  const txHash = await poaSecurityModule.safeWrite.completeEndValidation([0], {
+  const txHash = await poaSecurityModule.safeWrite.completeValidatorRemoval([0], {
     chain: null,
     account: client.account!,
     accessList

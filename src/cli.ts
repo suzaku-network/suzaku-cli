@@ -854,7 +854,6 @@ async function main() {
                 middlewareSvc,
                 nodeId,
                 blsKey,
-                registrationExpiry,
                 remainingBalanceOwner,
                 disableOwner,
                 initialStakeWei,
@@ -1504,8 +1503,8 @@ async function main() {
             // Convert nodeID to Hex if necessary
             const nodeIdHex = parseNodeID(nodeID, false);
             console.log(nodeIdHex)
-            const validationId = await balancer.read.registeredValidators([nodeIdHex]);
-            const txHash = await poaSecurityModule.safeWrite.initializeEndValidation([validationId], {
+            const validationId = await balancer.read.getNodeValidationID([nodeIdHex]);
+            const txHash = await poaSecurityModule.safeWrite.initiateValidatorRemoval([validationId], {
                 chain: null,
                 account: client.account!,
             })
