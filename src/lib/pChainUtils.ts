@@ -1,4 +1,4 @@
-import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, Common, networkIDs } from "@avalabs/avalanchejs";
+import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, networkIDs } from "@avalabs/avalanchejs";
 import { cb58ToBytes, cb58ToHex, getAddresses, NodeId, nToAVAX } from "./utils";
 import { ExtendedClient, ExtendedWalletClient, generateClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
@@ -249,6 +249,65 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     return response.txID;
 }
 
+// export async function convertToL1(params: ConvertToL1Params): Promise<string> {
+//     if (!params.privateKeyHex) {
+//         throw new Error("Private key required");
+//     }
+//     const rpcUrl = getRPCEndpoint(params.client);
+//     const pvmApi = new pvm.PVMApi(rpcUrl);
+//     const feeState = await pvmApi.getFeeState();
+//     const context = await Context.getContextFromURI(rpcUrl);
+
+//     const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+//     const addressBytes = utils.bech32ToBytes(pAddress);
+
+//     const { utxos } = await pvmApi.getUTXOs({
+//         addresses: [pAddress]
+//     });
+
+//     const pChainOwner = PChainOwner.fromNative([addressBytes], 1);
+
+//     // Create L1Validator instances for each validator
+//     const validators = params.validators.map(v => {
+//         const nodeID = v.nodeID;
+//         const publicKey = utils.hexToBuffer(v.blsPublicKey);
+//         const signature = utils.hexToBuffer(v.blsProofOfPossession);
+
+//         return L1Validator.fromNative(
+//             nodeID,
+//             BigInt(v.weight), // weight
+//             BigInt(v.balance), // balance
+//             new pvmSerial.ProofOfPossession(publicKey, signature),
+//             pChainOwner,
+//             pChainOwner
+//         );
+//     });
+
+//     const managerAddressBytes = utils.hexToBuffer(params.managerAddress.slice(2));
+
+//     const tx = pvm.e.newConvertSubnetToL1Tx(
+//         {
+//             feeState,
+//             fromAddressesBytes: [addressBytes],
+//             subnetId: params.subnetId,
+//             utxos,
+//             chainId: params.chainId,
+//             validators,
+//             subnetAuth: [0],
+//             address: managerAddressBytes,
+//         },
+//         context,
+//     );
+
+//     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+//     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+
+//     // Sleep for 3 seconds
+//     await waitPChainTx(response.txID, pvmApi);
+
+//     return response.txID;
+// }
+
 export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
@@ -267,34 +326,25 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
 
     const pChainOwner = PChainOwner.fromNative([addressBytes], 1);
 
-    // Create L1Validator instances for each validator
-    const validators = params.validators.map(v => {
-        const nodeID = v.nodeID;
-        const publicKey = utils.hexToBuffer(v.blsPublicKey);
-        const signature = utils.hexToBuffer(v.blsProofOfPossession);
-
-        return L1Validator.fromNative(
-            nodeID,
-            BigInt(v.weight), // weight
-            BigInt(v.balance), // balance
-            new pvmSerial.ProofOfPossession(publicKey, signature),
-            pChainOwner,
-            pChainOwner
-        );
-    });
-
-    const managerAddressBytes = utils.hexToBuffer(params.managerAddress.slice(2));
+    const validators: L1Validator[] = params.validators.map(validator => L1Validator.fromNative(
+        validator.nodeID,
+        BigInt(validator.weight),
+        BigInt(validator.balance),
+        new pvmSerial.ProofOfPossession(utils.hexToBuffer(validator.blsPublicKey), utils.hexToBuffer(validator.blsProofOfPossession)),
+        pChainOwner,
+        pChainOwner
+    ));
 
     const tx = pvm.e.newConvertSubnetToL1Tx(
         {
             feeState,
-            fromAddressesBytes: [addressBytes],
+            fromAddressesBytes: [utils.bech32ToBytes(pAddress)],
             subnetId: params.subnetId,
             utxos,
             chainId: params.chainId,
             validators,
             subnetAuth: [0],
-            address: managerAddressBytes,
+            address: utils.hexToBuffer(params.managerAddress.replace('0x', '')),
         },
         context,
     );
