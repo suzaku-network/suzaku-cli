@@ -6,7 +6,7 @@ import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './cl
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config, pChainChainID } from './config';
-import { NodeId, parseNodeID } from './lib/utils';
+import { bytesToCB58, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
@@ -82,7 +82,6 @@ export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
-  operator: Hex,
   nodeId: NodeId,
   pChainTxPrivateKey: string,
   blsProofOfPossession: string,
@@ -93,11 +92,11 @@ export async function middlewareCompleteValidatorRegistration(
 
     // Wait for transaction receipt to extract warp message and validation ID
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
-    const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
+  const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
-    // Check if the node is still registered as a validator on the P-Chain
+  // Check if the node is still registered as a validator on the P-Chain
   const L1Id = await balancer.read.subnetID();
-    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeId);
+  const isValidator = (await getCurrentValidators(client, bytesToCB58(hexToBytes(L1Id)))).some((v) => v.nodeID === nodeId);
     if (isValidator) {
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
     } else {
@@ -137,12 +136,9 @@ export async function middlewareCompleteValidatorRegistration(
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
-    // Parse NodeID to bytes32 format
-    const nodeIdHex32 = parseNodeID(nodeId)
-
     console.log("\nCalling function completeValidatorRegistration...");
     const hash = await middleware.safeWrite.completeValidatorRegistration(
-      [operator, nodeIdHex32, 0],
+      [0],
       { chain: null, account: client.account!, accessList }
     );
     console.log("completeValidatorRegistration executed successfully, tx hash:", hash);
@@ -259,10 +255,8 @@ export async function middlewareInitStakeUpdate(
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
-  nodeId: NodeId,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
-  pChainTxAddress: string,
   account: Account
 ) {
   console.log("Completing node stake update...");
@@ -318,11 +312,8 @@ export async function middlewareCompleteStakeUpdate(
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
-    // Parse NodeID to bytes32 format
-    const nodeIdHex32 = parseNodeID(nodeId)
-
     const hash = await middleware.safeWrite.completeStakeUpdate(
-      [nodeIdHex32, 0],
+      [0],
       { chain: null, account, accessList }
     );
     console.log("completeStakeUpdate done, tx hash:", hash);
@@ -553,7 +544,7 @@ export async function middlewareGetNodeLogs(
     bar
   ));
 
-  const l1ValidatorManagerAddressProm = middleware.read.L1_VALIDATOR_MANAGER();
+  const l1ValidatorManagerAddressProm = middleware.read.BALANCER();
   // 
   const balancerAddressProm = middleware.read.balancerValidatorManager();
 

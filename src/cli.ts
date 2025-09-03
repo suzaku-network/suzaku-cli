@@ -179,10 +179,10 @@ async function main() {
    * -------------------------------------------------- */
     program
         .command("register-l1")
-        .addArgument(ArgAddress("validatorManager", "Validator manager contract address"))
+        .addArgument(ArgAddress("balancerAddress", "Balancer address"))
         .addArgument(ArgAddress("l1Middleware", "L1 middleware contract address"))
         .addArgument(ArgURI("metadataUrl", "Metadata URL for the L1"))
-        .action(async (validatorManager, l1Middleware, metadataUrl) => {
+        .action(async (balancerAddress, l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
@@ -191,7 +191,7 @@ async function main() {
             const l1Registry = config.contracts.L1Registry(config.l1Registry);
             await registerL1(
                 l1Registry,
-                validatorManager,
+                balancerAddress,
                 l1Middleware,
                 metadataUrl,
                 client.account!
@@ -865,13 +865,12 @@ async function main() {
     program
         .command("middleware-complete-validator-registration")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgAddress("operator", "Operator address"))
         .addArgument(ArgNodeID())
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(0n).argParser(ParserAVAX))
-        .action(async (middlewareAddress, operator, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
+        .action(async (middlewareAddress, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -892,7 +891,6 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
-                operator,
                 nodeId,
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
@@ -979,10 +977,9 @@ async function main() {
         .command("middleware-complete-stake-update")
         .description("Complete validator stake update")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (middlewareAddress, nodeId, validatorStakeUpdateTxHash, options) => {
+        .action(async (middlewareAddress, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -1004,10 +1001,8 @@ async function main() {
             await middlewareCompleteStakeUpdate(
                 client,
                 middlewareSvc,
-                nodeId,
                 validatorStakeUpdateTxHash,
                 options.pchainTxPrivateKey,
-                pchainTxAddress,
                 client.account!
             );
         });

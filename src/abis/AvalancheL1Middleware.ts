@@ -8,7 +8,7 @@ export default [
                 "internalType": "struct AvalancheL1MiddlewareSettings",
                 "components": [
                     {
-                        "name": "l1ValidatorManager",
+                        "name": "balancer",
                         "type": "address",
                         "internalType": "address"
                     },
@@ -78,6 +78,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "BALANCER",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "EPOCH_DURATION",
         "inputs": [],
         "outputs": [
@@ -85,19 +98,6 @@ export default [
                 "name": "",
                 "type": "uint48",
                 "internalType": "uint48"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "L1_VALIDATOR_MANAGER",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "stateMutability": "view"

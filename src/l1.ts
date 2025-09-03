@@ -3,7 +3,7 @@ import type { Hex, Account } from "viem";
 
 export async function registerL1(
     l1Registry: SafeSuzakuContract['L1Registry'],
-    validatorManager: Hex,
+    balancerAddress: Hex,
     l1Middleware: Hex,
     metadataUrl: string,
     account: Account
@@ -11,7 +11,7 @@ export async function registerL1(
     console.log("Registering L1...");
 
         const hash = await l1Registry.safeWrite.registerL1(
-            [validatorManager, l1Middleware, metadataUrl],
+            [balancerAddress, l1Middleware, metadataUrl],
             { value: BigInt(10000000000000000), chain: null, account }
         );
 
