@@ -397,11 +397,6 @@ export default [
         "name": "completeStakeUpdate",
         "inputs": [
             {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
                 "name": "messageIndex",
                 "type": "uint32",
                 "internalType": "uint32"
@@ -414,16 +409,6 @@ export default [
         "type": "function",
         "name": "completeValidatorRegistration",
         "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
             {
                 "name": "messageIndex",
                 "type": "uint32",
