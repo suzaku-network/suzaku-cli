@@ -10,6 +10,7 @@ import { bytesToCB58, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
+import { base58 } from '@scure/base';
 
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -95,8 +96,8 @@ export async function middlewareCompleteValidatorRegistration(
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
   // Check if the node is still registered as a validator on the P-Chain
-  const L1Id = await balancer.read.subnetID();
-  const isValidator = (await getCurrentValidators(client, bytesToCB58(hexToBytes(L1Id)))).some((v) => v.nodeID === nodeId);
+  const subnetIDHex = await balancer.read.subnetID();
+  const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
     if (isValidator) {
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
     } else {
@@ -179,8 +180,8 @@ export async function middlewareCompleteValidatorRemoval(
     const validationID = receipt.logs[2].topics[1] ?? '';
 
     // Check if the node is still registered as a validator on the P-Chain
-  const L1Id = await balancerValidatorManager.read.subnetID();
-    const isValidator = (await getCurrentValidators(client, L1Id)).some((v) => v.nodeID === nodeID);
+  const subnetIDHex = await balancerValidatorManager.read.subnetID();
+  const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
     } else {
