@@ -1,6 +1,6 @@
 import { fromBytes, hexToBytes, Hex } from 'viem';
 import { sha256 } from '@noble/hashes/sha256';
-import { cb58ToBytes, bytesToCB58, interruptiblePause } from './utils';
+import { cb58ToBytes, bytesToCB58, interruptiblePause, retryWhileError } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
 import { cb58ToHex } from './utils';
@@ -248,15 +248,12 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         }))
     }, 5, pChainChainID);
 
-    // Add 30 second pause
-    await interruptiblePause(30);
-
-    console.log("Message:", fromBytes(message, 'hex'));
-    console.log("Justification:", fromBytes(justification, 'hex'));
+    // console.log("Message:", fromBytes(message, 'hex'));
+    // console.log("Justification:", fromBytes(justification, 'hex'));
 
     // Use the signature aggregation API from Glacier
     const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
-    const signResponse = await fetch(baseURL, {
+    const signResponse = await await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
@@ -266,7 +263,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
             "message": fromBytes(message, 'hex'),
             "justification": fromBytes(justification, 'hex')
         })
-    });
+    }), 2000, 30000);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();
@@ -278,8 +275,6 @@ export async function collectSignaturesInitializeValidatorSet(params: {
 }
 
 export async function collectSignatures(network: Network, message: string, justification?: string): Promise<string> {
-    // Add 30 second pause
-    await interruptiblePause(30);
 
     // Use the signature aggregation API from Glacier
     const body: { message: string; justification?: string; signingSubnetId?: string } = { message };
@@ -288,17 +283,16 @@ export async function collectSignatures(network: Network, message: string, justi
         // body.signingSubnetId = pChainChainID;
     }
 
-    // console.log("message", message);
-    // console.log("justification", justification);
+    // Test every 2 seconds, timeout after 30 seconds
     const baseURL = network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
-    const signResponse = await fetch(baseURL, {
+    const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(body)
-    });
+    }), 2000, 30000);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();

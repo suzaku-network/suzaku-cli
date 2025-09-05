@@ -153,3 +153,30 @@ export function nToAVAX(value: bigint): string {
     const decimalString = decimalValue.toString().padStart(9, '0');
     return `${avaxValue}.${decimalString}`;
 }
+
+export async function retryWhileError<T>(
+    fetcher: () => Promise<T>,
+    intervalMs: number,
+    timeoutMs: number
+): Promise<T> {
+    const start = Date.now();
+    let lastErr: unknown;
+
+    while (true) {
+        try {
+            return await fetcher();
+        } catch (e) {
+            lastErr = e;
+            const elapsed = Date.now() - start;
+            const remaining = timeoutMs - elapsed;
+            if (remaining <= 0) break;
+            await new Promise(res => setTimeout(res, Math.min(intervalMs, remaining)));
+        }
+    }
+
+    const err = new Error(
+        `retryWhileError: timed out after ${timeoutMs}ms`
+    );
+    (err as any).cause = lastErr;
+    throw err;
+  }
