@@ -176,7 +176,8 @@ export async function middlewareCompleteValidatorRemoval(
   console.log("Completing validator removal...");
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
-    const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash })
+  const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash })
+  if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
   const validationID = await balancerValidatorManager.read.getNodeValidationID([parseNodeID(nodeID, false)]);
 
     // Check if the node is still registered as a validator on the P-Chain

@@ -69,7 +69,8 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
       return async (...args: any[]) => {
         try {
           const hash = await fn(...args)
-          await client.waitForTransactionReceipt({ hash, confirmations })
+          const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
+          if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction`);
           return hash
         } catch (error: any) {
           console.log(error.message)
