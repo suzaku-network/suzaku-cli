@@ -16,6 +16,11 @@ export default [
                 "name": "middlewareAddress",
                 "type": "address",
                 "internalType": "address"
+            },
+            {
+                "name": "vaultRemovalEpochDelay_",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ],
         "stateMutability": "nonpayable"
@@ -35,19 +40,13 @@ export default [
     },
     {
         "type": "function",
-        "name": "getVaultAssetClass",
-        "inputs": [
-            {
-                "name": "vault",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
+        "name": "VAULT_REMOVAL_EPOCH_DELAY",
+        "inputs": [],
         "outputs": [
             {
                 "name": "",
-                "type": "uint96",
-                "internalType": "uint96"
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ],
         "stateMutability": "view"
@@ -83,6 +82,25 @@ export default [
     },
     {
         "type": "function",
+        "name": "getVaultCollateralClass",
+        "inputs": [
+            {
+                "name": "vault",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint96",
+                "internalType": "uint96"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "getVaultCount",
         "inputs": [],
         "outputs": [
@@ -90,6 +108,25 @@ export default [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getVaults",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[]",
+                "internalType": "address[]"
             }
         ],
         "stateMutability": "view"
@@ -130,7 +167,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -193,7 +230,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -208,7 +245,7 @@ export default [
     },
     {
         "type": "function",
-        "name": "vaultToAssetClass",
+        "name": "vaultToCollateralClass",
         "inputs": [
             {
                 "name": "",
@@ -246,10 +283,10 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__AssetClassNotActive",
+        "name": "AvalancheL1Middleware__CollateralClassNotActive",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -257,7 +294,7 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__CollateralNotInAssetClass",
+        "name": "AvalancheL1Middleware__CollateralNotInCollateralClass",
         "inputs": [
             {
                 "name": "collateral",
@@ -265,68 +302,11 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NotVault",
-        "inputs": [
-            {
-                "name": "vault",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__SlasherNotImplemented",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__VaultAlreadyRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__VaultEpochTooShort",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__VaultGracePeriodNotPassed",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__VaultNotDisabled",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__WrongVaultAssetClass",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__ZeroAddress",
-        "inputs": [
-            {
-                "name": "name",
-                "type": "string",
-                "internalType": "string"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__ZeroVaultMaxL1Limit",
-        "inputs": []
     },
     {
         "type": "error",
@@ -357,6 +337,63 @@ export default [
     {
         "type": "error",
         "name": "MapWithTimeData__NotEnabled",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__NotVault",
+        "inputs": [
+            {
+                "name": "vault",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__SlasherNotImplemented",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__VaultAlreadyRegistered",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__VaultEpochTooShort",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__VaultGracePeriodNotPassed",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__VaultNotDisabled",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__WrongVaultCollateralClass",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__ZeroAddress",
+        "inputs": [
+            {
+                "name": "name",
+                "type": "string",
+                "internalType": "string"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "MiddlewareVaultManager__ZeroVaultMaxL1Limit",
         "inputs": []
     },
     {

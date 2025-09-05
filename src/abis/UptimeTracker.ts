@@ -3,12 +3,12 @@ export default [
         "type": "constructor",
         "inputs": [
             {
-                "name": "l1Middleware_",
+                "name": "middleware_",
                 "type": "address",
                 "internalType": "address payable"
             },
             {
-                "name": "l1ChainID_",
+                "name": "uptimeBlockchainID_",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }
@@ -300,6 +300,27 @@ export default [
                 "name": "sourceChainID",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UptimeBeforeStart",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "startEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "currentEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
             }
         ]
     },

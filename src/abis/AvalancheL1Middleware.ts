@@ -8,7 +8,7 @@ export default [
                 "internalType": "struct AvalancheL1MiddlewareSettings",
                 "components": [
                     {
-                        "name": "l1ValidatorManager",
+                        "name": "balancer",
                         "type": "address",
                         "internalType": "address"
                     },
@@ -50,22 +50,22 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "primaryAsset",
+                "name": "primaryCollateral",
                 "type": "address",
                 "internalType": "address"
             },
             {
-                "name": "primaryAssetMaxStake",
+                "name": "primaryCollateralMaxStake",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetMinStake",
+                "name": "primaryCollateralMinStake",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "primaryAssetWeightScaleFactor",
+                "name": "primaryCollateralWeightScaleFactor",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -78,6 +78,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "BALANCER",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "EPOCH_DURATION",
         "inputs": [],
         "outputs": [
@@ -85,19 +98,6 @@ export default [
                 "name": "",
                 "type": "uint48",
                 "internalType": "uint48"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "L1_VALIDATOR_MANAGER",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "stateMutability": "view"
@@ -169,6 +169,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "REMOVAL_DELAY_EPOCHS",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "SLASHING_WINDOW",
         "inputs": [],
         "outputs": [
@@ -221,10 +234,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "activateSecondaryAssetClass",
+        "name": "activateSecondaryCollateralClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -234,10 +247,28 @@ export default [
     },
     {
         "type": "function",
-        "name": "addAssetClass",
+        "name": "addAssetToClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "asset",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "addCollateralClass",
+        "inputs": [
+            {
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             },
@@ -262,24 +293,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "addAssetToClass",
-        "inputs": [
-            {
-                "name": "assetClassId",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "asset",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "addNode",
         "inputs": [
             {
@@ -291,11 +304,6 @@ export default [
                 "name": "blsKey",
                 "type": "bytes",
                 "internalType": "bytes"
-            },
-            {
-                "name": "registrationExpiry",
-                "type": "uint64",
-                "internalType": "uint64"
             },
             {
                 "name": "remainingBalanceOwner",
@@ -348,7 +356,7 @@ export default [
             {
                 "name": "",
                 "type": "address",
-                "internalType": "contract BalancerValidatorManager"
+                "internalType": "contract IBalancerValidatorManager"
             }
         ],
         "stateMutability": "view"
@@ -370,7 +378,7 @@ export default [
                 "internalType": "uint48"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -389,11 +397,6 @@ export default [
         "name": "completeStakeUpdate",
         "inputs": [
             {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
                 "name": "messageIndex",
                 "type": "uint32",
                 "internalType": "uint32"
@@ -406,16 +409,6 @@ export default [
         "type": "function",
         "name": "completeValidatorRegistration",
         "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
             {
                 "name": "messageIndex",
                 "type": "uint32",
@@ -440,10 +433,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "deactivateSecondaryAssetClass",
+        "name": "deactivateSecondaryCollateralClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -497,7 +490,7 @@ export default [
     },
     {
         "type": "function",
-        "name": "getActiveAssetClasses",
+        "name": "getActiveCollateralClasses",
         "inputs": [],
         "outputs": [
             {
@@ -552,23 +545,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "getAssetClassIds",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint96[]",
-                "internalType": "uint96[]"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "getClassAssets",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -587,7 +567,7 @@ export default [
         "name": "getClassStakingRequirements",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -602,6 +582,19 @@ export default [
                 "name": "maxStake",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getCollateralClassIds",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint96[]",
+                "internalType": "uint96[]"
             }
         ],
         "stateMutability": "view"
@@ -734,7 +727,7 @@ export default [
                 "internalType": "uint48"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -782,7 +775,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -806,7 +799,7 @@ export default [
                 "internalType": "uint48"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -853,10 +846,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "isActiveAssetClass",
+        "name": "isActiveCollateralClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -875,7 +868,7 @@ export default [
         "name": "isAssetInClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             },
@@ -923,25 +916,6 @@ export default [
     {
         "type": "function",
         "name": "nodePendingRemoval",
-        "inputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "nodePendingUpdate",
         "inputs": [
             {
                 "name": "",
@@ -1027,35 +1001,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "operatorStakeCache",
-        "inputs": [
-            {
-                "name": "",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "",
-                "type": "uint96",
-                "internalType": "uint96"
-            },
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "owner",
         "inputs": [],
         "outputs": [
@@ -1106,23 +1051,10 @@ export default [
     },
     {
         "type": "function",
-        "name": "removeAssetClass",
-        "inputs": [
-            {
-                "name": "assetClassId",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "removeAssetFromClass",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             },
@@ -1130,6 +1062,19 @@ export default [
                 "name": "asset",
                 "type": "address",
                 "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "removeCollateralClass",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "outputs": [],
@@ -1201,7 +1146,7 @@ export default [
                 "internalType": "uint256"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -1294,7 +1239,7 @@ export default [
         "name": "AssetAdded",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "indexed": true,
                 "internalType": "uint256"
@@ -1304,44 +1249,6 @@ export default [
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "AssetClassAdded",
-        "inputs": [
-            {
-                "name": "assetClassId",
-                "type": "uint256",
-                "indexed": true,
-                "internalType": "uint256"
-            },
-            {
-                "name": "primaryAssetMinStake",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "primaryAssetMaxStake",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "AssetClassRemoved",
-        "inputs": [
-            {
-                "name": "assetClassId",
-                "type": "uint256",
-                "indexed": true,
-                "internalType": "uint256"
             }
         ],
         "anonymous": false
@@ -1351,7 +1258,7 @@ export default [
         "name": "AssetRemoved",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "indexed": true,
                 "internalType": "uint256"
@@ -1361,6 +1268,44 @@ export default [
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CollateralClassAdded",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
+            },
+            {
+                "name": "primaryCollateralMinStake",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "primaryCollateralMaxStake",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CollateralClassRemoved",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
             }
         ],
         "anonymous": false
@@ -1530,83 +1475,10 @@ export default [
     },
     {
         "type": "error",
-        "name": "AssetClassRegistry__AssetAlreadyRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__AssetClassAlreadyExists",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__AssetClassNotFound",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__AssetIsPrimaryAssetClass",
+        "name": "AvalancheL1Middleware__ActiveSecondaryCollateralClass",
         "inputs": [
             {
-                "name": "assetClassId",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__AssetNotFound",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__AssetsStillExist",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__InvalidAsset",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AssetClassRegistry__InvalidStakingRequirements",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__ActiveSecondaryAssetCLass",
-        "inputs": [
-            {
-                "name": "assetClassId",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__AlreadyRebalanced",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__AssetClassNotActive",
-        "inputs": [
-            {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1617,7 +1489,7 @@ export default [
         "name": "AvalancheL1Middleware__AssetStillInUse",
         "inputs": [
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1625,7 +1497,29 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__CollateralNotInAssetClass",
+        "name": "AvalancheL1Middleware__CannotCacheFutureEpoch",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__CollateralClassNotActive",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__CollateralNotInCollateralClass",
         "inputs": [
             {
                 "name": "collateral",
@@ -1633,7 +1527,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClassId",
+                "name": "collateralClassId",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -1652,7 +1546,17 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__InvalidScaleFactor",
+        "name": "AvalancheL1Middleware__InsufficientStake",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__InvalidStakeAmount",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__InvalidWindow",
         "inputs": []
     },
     {
@@ -1663,32 +1567,28 @@ export default [
                 "name": "epochsPending",
                 "type": "uint48",
                 "internalType": "uint48"
-            },
-            {
-                "name": "maxAutoUpdates",
-                "type": "uint48",
-                "internalType": "uint48"
             }
         ]
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__MaxL1LimitZero",
-        "inputs": []
+        "name": "AvalancheL1Middleware__MessageNotForThisModule",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "ownerModule",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
     },
     {
         "type": "error",
         "name": "AvalancheL1Middleware__NoEpochsToProcess",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NoSlasher",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NodeNotActive",
         "inputs": []
     },
     {
@@ -1704,25 +1604,8 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__NodePendingRemoval",
-        "inputs": [
-            {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NodePendingUpdate",
-        "inputs": [
-            {
-                "name": "nodeId",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
+        "name": "AvalancheL1Middleware__NodePending",
+        "inputs": []
     },
     {
         "type": "error",
@@ -1734,22 +1617,6 @@ export default [
                 "internalType": "bytes32"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NotEnoughFreeStake",
-        "inputs": [
-            {
-                "name": "newStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__NotEnoughFreeStakeSecondaryAssetClasses",
-        "inputs": []
     },
     {
         "type": "error",
@@ -1801,6 +1668,22 @@ export default [
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__OperatorHasActiveNodes",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "nodeCount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__OperatorNotOptedIn",
         "inputs": [
             {
@@ -1828,6 +1711,32 @@ export default [
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__RebalanceNotRequired",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AvalancheL1Middleware__ScaleFactorOutOfBounds",
+        "inputs": [
+            {
+                "name": "supplied",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "minAllowed",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "maxAllowed",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__SecurityModuleCapacityNotEnough",
         "inputs": [
             {
@@ -1844,70 +1753,23 @@ export default [
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__SlashingWindowTooShort",
+        "name": "AvalancheL1Middleware__UnexpectedWeightUpdate",
         "inputs": [
             {
-                "name": "slashingWindow",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "epochDuration",
-                "type": "uint48",
-                "internalType": "uint48"
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
     {
         "type": "error",
-        "name": "AvalancheL1Middleware__StakeTooHigh",
+        "name": "AvalancheL1Middleware__VaultManagerAlreadySet",
         "inputs": [
             {
-                "name": "newStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "maxStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__StakeTooLow",
-        "inputs": [
-            {
-                "name": "newStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "minStake",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__TooBigSlashAmount",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AvalancheL1Middleware__TooManyEpochsRequested",
-        "inputs": [
-            {
-                "name": "requested",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "pending",
-                "type": "uint48",
-                "internalType": "uint48"
+                "name": "vaultManager",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
@@ -1936,13 +1798,69 @@ export default [
     {
         "type": "error",
         "name": "AvalancheL1Middleware__ZeroAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetAlreadyRegistered",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetDecimalsMismatch",
         "inputs": [
             {
-                "name": "name",
-                "type": "string",
-                "internalType": "string"
+                "name": "expected",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "actual",
+                "type": "uint8",
+                "internalType": "uint8"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetIsPrimaryCollateralClass",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetNotFound",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetsStillExist",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__CollateralClassAlreadyExists",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__CollateralClassNotFound",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__InvalidAsset",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__InvalidStakingRequirements",
+        "inputs": []
     },
     {
         "type": "error",

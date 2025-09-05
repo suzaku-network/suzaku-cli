@@ -10,6 +10,10 @@ import OperatorVaultOptInService from './OperatorVaultOptInService';
 import OperatorL1OptInService from './OperatorL1OptInService';
 import UptimeTracker from './UptimeTracker';
 import Rewards from './Rewards';
+import PoASecurityModule from './PoASecurityModule';
+import DefaultCollateral from './DefaultCollateral';
+import ERC20 from './ERC20';
+import PoAManager from './PoAManager';
 
 export const SuzakuABI = {
   L1Registry,
@@ -23,5 +27,9 @@ export const SuzakuABI = {
   OperatorVaultOptInService,
   OperatorL1OptInService,
   UptimeTracker,
-  Rewards
+  Rewards,
+  PoASecurityModule,
+  DefaultCollateral,
+  ERC20,
+  PoAManager
 };

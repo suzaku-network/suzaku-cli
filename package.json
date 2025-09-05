@@ -1,13 +1,17 @@
 {
   "name": "suzaku-cli",
   "version": "0.1.0",
-  "description": "",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "setup": "pnpm i && pnpm tsc",
     "build": "tsc",
     "suzaku-cli": "node dist/cli.js",
-    "cli": "ts-node src/cli.ts"
+    "cli": "ts-node src/cli.ts",
+    "prepare": "tsc"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +20,7 @@
     "@noble/hashes": "^1.7.2",
     "@scure/base": "^1.2.4",
     "@types/cli-progress": "^3.11.6",
+    "@commander-js/extra-typings": "^14.0.0",
     "cli-progress": "^3.12.0",
     "commander": "^14.0.0",
     "console-log-colors": "^0.5.0",
@@ -24,8 +29,9 @@
     "viem": "^2.24.2"
   },
   "devDependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
+    "@types/node": "^24.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  }
+  },
+  "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad"
 }

@@ -46,10 +46,10 @@ export async function getValidationUptimeMessage(
 
 export async function computeValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  account: Account | undefined,
+  account: Account,
   signedUptimeHex: Hex
 ) {
-  if (!account) throw new Error('Client account is required');
+
   // 2) Convert aggregator signature => bytes => accessList
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
@@ -73,7 +73,7 @@ export async function reportAndSubmitValidatorUptime(
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  account: Account | undefined
+  account: Account
 ) {
   console.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   console.log(`Target UptimeTracker: ${uptimeTracker.address}`);
@@ -132,9 +132,9 @@ export async function computeOperatorUptimeAtEpoch(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number,
-  account: Account | undefined
+  account: Account
 ) {
-  if (!account) throw new Error('Client account is required');
+
 
   const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt(
     [operator, epoch],
@@ -153,10 +153,10 @@ export async function computeOperatorUptimeForEpochs(
   operator: Hex,
   startEpoch: number,
   endEpoch: number,
-  account: Account | undefined,
+  account: Account,
   initialNonce?: number
 ) {
-  if (!account) throw new Error('Client account is required');
+
   let currentNonce = initialNonce ?? 0;
 
   for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {

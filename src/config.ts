@@ -1,5 +1,5 @@
 import { SuzakuABI } from './abis';
-import { Network } from './client';
+import { ExtendedClient, Network } from './client';
 import { Hex, PublicClient, WalletClient } from 'viem';
 import { curriedContract, CurriedSuzakuContractMap, SuzakuABINames, TSuzakuABI } from './lib/viemUtils';
 import dotenv from 'dotenv';
@@ -20,16 +20,13 @@ interface Config {
   contracts: CurriedSuzakuContractMap;
 }
 
-// Overloaded function to get the configuration based on the network and client type
-function getConfig(network: Network, client: PublicClient): Config
-function getConfig(network: Network, client: WalletClient): Config
-function getConfig(network: Network, client: PublicClient | WalletClient): Config {
+function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0): Config {
 
   // Dynamically build the contracts map using the curriedContract function
   const contracts = Object.fromEntries(
     (Object.keys(SuzakuABI) as SuzakuABINames[]).map((name) => [
       name,
-      curriedContract(name, client),
+      curriedContract(name, client, waitForTxCount),
     ]),
   ) as CurriedSuzakuContractMap;
 

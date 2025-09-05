@@ -125,13 +125,12 @@ export async function interruptiblePause(seconds: number): Promise<void> {
 
 export type NodeId = `NodeID-${string}`;
 
-export const parseNodeID = (nodeID: NodeId): Hex => {
+export const parseNodeID = (nodeID: NodeId, padding = true): Hex => {
     const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
-    return padded as Hex
+    return padding ? pad(nodeIDHexTrimmed as Hex, { size: 32 }) as Hex : nodeIDHexTrimmed as Hex;
 }
 
 export function prompt(question: string): Promise<string> {
@@ -154,3 +153,30 @@ export function nToAVAX(value: bigint): string {
     const decimalString = decimalValue.toString().padStart(9, '0');
     return `${avaxValue}.${decimalString}`;
 }
+
+export async function retryWhileError<T>(
+    fetcher: () => Promise<T>,
+    intervalMs: number,
+    timeoutMs: number
+): Promise<T> {
+    const start = Date.now();
+    let lastErr: unknown;
+
+    while (true) {
+        try {
+            return await fetcher();
+        } catch (e) {
+            lastErr = e;
+            const elapsed = Date.now() - start;
+            const remaining = timeoutMs - elapsed;
+            if (remaining <= 0) break;
+            await new Promise(res => setTimeout(res, Math.min(intervalMs, remaining)));
+        }
+    }
+
+    const err = new Error(
+        `retryWhileError: timed out after ${timeoutMs}ms`
+    );
+    (err as any).cause = lastErr;
+    throw err;
+  }
