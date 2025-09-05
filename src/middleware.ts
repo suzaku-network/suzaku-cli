@@ -275,7 +275,7 @@ export async function middlewareCompleteStakeUpdate(
 
     // Decode the weight from the log data using the event ABI
     const validatorWeightUpdateEventAbi = parseAbiItem(
-      'event ValidatorWeightUpdate(bytes32 indexed validationID, uint64 indexed nonce, uint64 weight, bytes32 setWeightMessageID)'
+      'event InitiatedValidatorWeightUpdate(bytes32 indexed validationID, uint64 nonce, bytes32 weightUpdateMessageID, uint64 weight)'
     );
     const log = receipt.logs[1];
     const decoded = decodeEventLog({
