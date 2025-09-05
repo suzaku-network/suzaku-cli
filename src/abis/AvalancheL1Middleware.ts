@@ -1572,6 +1572,22 @@ export default [
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__MessageNotForThisModule",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "ownerModule",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__NoEpochsToProcess",
         "inputs": []
     },
@@ -1788,6 +1804,22 @@ export default [
         "type": "error",
         "name": "CollateralClassRegistry__AssetAlreadyRegistered",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassRegistry__AssetDecimalsMismatch",
+        "inputs": [
+            {
+                "name": "expected",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "actual",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ]
     },
     {
         "type": "error",
