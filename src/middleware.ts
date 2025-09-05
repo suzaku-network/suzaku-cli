@@ -168,7 +168,7 @@ export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
-  nodeID: string,
+  nodeID: NodeId,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
@@ -177,7 +177,7 @@ export async function middlewareCompleteValidatorRemoval(
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
     const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash })
-    const validationID = receipt.logs[2].topics[1] ?? '';
+  const validationID = await balancerValidatorManager.read.getNodeValidationID([parseNodeID(nodeID, false)]);
 
     // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancerValidatorManager.read.subnetID();
