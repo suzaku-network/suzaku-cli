@@ -505,21 +505,32 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     });
 
     // Create a new set validator weight transaction
-    const tx = pvm.e.newSetL1ValidatorWeightTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            message: new Uint8Array(Buffer.from(params.message, 'hex')),
-            utxos,
-        },
-        context,
-    );
+    console.log("Setting validator weight with message:", params.message);
+
+        const tx = pvm.e.newSetL1ValidatorWeightTx(
+            {
+                feeState,
+                fromAddressesBytes: [addressBytes],
+                message: new Uint8Array(Buffer.from(params.message, 'hex')),
+                utxos,
+            },
+            context,
+        );
 
     // Sign the transaction
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    let response;
+    try {
+        response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    } catch (e) {
+        // console.error("Error issuing SetL1ValidatorWeightTx");
+        if ((e as Error).stack?.includes('could not load L1 validator'))
+            throw Error("failed execution: could not load L1 validator: not found")
+        else
+            throw e;
+    }
     console.log("\nSetL1ValidatorWeightTx submitted to P-Chain:", response.txID);
 
     // Wait for transaction to be confirmed
