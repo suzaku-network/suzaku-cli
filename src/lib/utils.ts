@@ -157,14 +157,16 @@ export function nToAVAX(value: bigint): string {
 export async function retryWhileError<T>(
     fetcher: () => Promise<T>,
     intervalMs: number,
-    timeoutMs: number
+    timeoutMs: number,
+    accept: (result: T) => boolean = () => true
 ): Promise<T> {
     const start = Date.now();
     let lastErr: unknown;
 
     while (true) {
         try {
-            return await fetcher();
+            const result = await fetcher();
+            if (accept(result)) return result;
         } catch (e) {
             lastErr = e;
             const elapsed = Date.now() - start;
