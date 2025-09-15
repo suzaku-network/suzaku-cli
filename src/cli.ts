@@ -920,10 +920,9 @@ async function main() {
     program
         .command("middleware-complete-validator-removal")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
         .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (middlewareAddress, nodeId, removeNodeTxHash, options) => {
+        .action(async (middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = generateClient(opts.network, opts.privateKey!);
@@ -941,7 +940,6 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
-                nodeId,
                 removeNodeTxHash,
                 options.pchainTxPrivateKey,
                 pchainTxAddress

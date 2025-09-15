@@ -168,7 +168,6 @@ export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
-  nodeID: NodeId,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
@@ -176,9 +175,11 @@ export async function middlewareCompleteValidatorRemoval(
   console.log("Completing validator removal...");
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
-  const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash })
+  const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash, confirmations: 1 });
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
-  const validationID = await balancerValidatorManager.read.getNodeValidationID([parseNodeID(nodeID, false)]);
+  const validationID = receipt.logs[1].topics[1]!;
+  const nodeIDHex = receipt.logs[3].topics[2]!;
+  const nodeID = `NodeID-${utils.base58check.encode(hexToBytes(nodeIDHex).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
 
     // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancerValidatorManager.read.subnetID();
@@ -207,6 +208,9 @@ export async function middlewareCompleteValidatorRemoval(
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
     const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client);
+    if (!justification) {
+      throw new Error("Justification not found for validator removal");
+    }
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationID as Hex);
