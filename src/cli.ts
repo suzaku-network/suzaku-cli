@@ -158,7 +158,7 @@ async function main() {
         .description("Top up L1 validator balance on the P-Chain")
         .addArgument(ArgCB58("validationId", "Validation ID for the node on its subnet"))
         .addArgument(ArgNumber("amount", "Amount to top up in AVAX"))
-        .action(async (validatorId, amount) => {
+        .action(async (validationId, amount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
 
@@ -166,7 +166,7 @@ async function main() {
                 client,
                 opts.privateKey!,
                 amount,
-                validatorId
+                validationId
             );
             console.log(`Top-up transaction hash: ${txHash}`);
         });
@@ -1152,7 +1152,7 @@ async function main() {
         .description("Get node stake cache for a specific epoch and validator")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .addArgument(ArgHex("validationId", "Validator validation ID"))
+        .addArgument(ArgHex("validationId", "Validation ID"))
         .action(async (middlewareAddress, epoch, validationId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
@@ -1185,14 +1185,14 @@ async function main() {
         .command("middleware-node-pending-removal")
         .description("Check if node is pending removal")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgHex("validatorId", "Validator ID"))
-        .action(async (middlewareAddress, validatorId) => {
+        .addArgument(ArgHex("validationId", "Validation ID"))
+        .action(async (middlewareAddress, validationId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
-                validatorId
+                validationId
             );
         });
 
@@ -1201,14 +1201,14 @@ async function main() {
         .command("middleware-node-pending-update")
         .description("Check if node is pending stake update")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgHex("validatorId", "Validator ID"))
-        .action(async (middlewareAddress, validatorId) => {
+        .addArgument(ArgHex("validationId", "Validation ID"))
+        .action(async (middlewareAddress, validationId) => {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingUpdate(
                 middlewareSvc,
-                validatorId
+                validationId
             );
         });
 

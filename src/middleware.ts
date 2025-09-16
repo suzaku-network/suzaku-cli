@@ -6,7 +6,7 @@ import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './cl
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config, pChainChainID } from './config';
-import { bytesToCB58, NodeId, parseNodeID } from './lib/utils';
+import { bytesToCB58, NodeId, parseNodeID, retryWhileError } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
@@ -118,6 +118,8 @@ export async function middlewareCompleteValidatorRegistration(
         signedMessage,
         initialBalance: initialBalance
       });
+      // Wait until the validator is visible on the P-Chain
+      retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId), 5000, 60000, (res) => res === true);
       console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
     }
 
