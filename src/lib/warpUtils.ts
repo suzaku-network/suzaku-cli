@@ -1,4 +1,4 @@
-import { fromBytes, hexToBytes, Hex } from 'viem';
+import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log } from 'viem';
 import { sha256 } from '@noble/hashes/sha256';
 import { cb58ToBytes, bytesToCB58, interruptiblePause, retryWhileError } from './utils';
 import { PChainOwner } from './justification';
@@ -576,4 +576,13 @@ export function packValidationUptimeMessage(validationId: string, uptimeSeconds:
 
     // Create unsigned message
     return newUnsignedMessage(networkID, sourceChainID, addressedCall);
+}
+
+export function decodeWarpMessage(log: Log) {
+    const abi = parseAbiItem('event SendWarpMessage(address indexed sender, bytes32 indexed messageID, bytes message)')
+    return decodeEventLog({
+        abi: [abi],
+          data: log.data,
+          topics: log.topics,
+        });
 }

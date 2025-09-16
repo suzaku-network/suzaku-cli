@@ -200,12 +200,12 @@ export async function createSubnet(params: PChainBaseParams): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    const txID = await sendSignedTx(pvmApi, tx);
 
     // Sleep for 3 seconds
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
 
-    return response.txID;
+    return txID;
 }
 
 export async function createChain(params: CreateChainParams): Promise<string> {
@@ -240,13 +240,13 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    const txID = await sendSignedTx(pvmApi, tx);
 
     // Sleep for 3 seconds
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
 
-    console.log('Created chain: ', response.txID);
-    return response.txID;
+    console.log('Created chain: ', txID);
+    return txID;
 }
 
 // export async function convertToL1(params: ConvertToL1Params): Promise<string> {
@@ -300,12 +300,12 @@ export async function createChain(params: CreateChainParams): Promise<string> {
 //     );
 
 //     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-//     const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+//     const txID = await sendSignedTx(pvmApi, tx);
 
 //     // Sleep for 3 seconds
-//     await waitPChainTx(response.txID, pvmApi);
+//     await waitPChainTx(txID, pvmApi);
 
-//     return response.txID;
+//     return txID;
 // }
 
 export async function convertToL1(params: ConvertToL1Params): Promise<string> {
@@ -350,12 +350,12 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    const txID = await sendSignedTx(pvmApi, tx);
 
     // Sleep for 3 seconds
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
 
-    return response.txID;
+    return txID;
 }
 
 export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<string> {
@@ -388,15 +388,15 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
-    // console.log("\nRegisterL1ValidatorTx submitted to P-Chain:", response.txID);
+    const txID = await sendSignedTx(pvmApi, tx);
+    // console.log("\nRegisterL1ValidatorTx submitted to P-Chain:", txID);
 
     // Wait for transaction to be confirmed
     // console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
     // console.log("P-Chain transaction confirmed");
 
-    return response.txID;
+    return txID;
 }
 
 export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<string> {
@@ -431,15 +431,15 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
-    console.log("\nDisableL1ValidatorTx submitted to P-Chain:", response.txID);
+    const txID = await sendSignedTx(pvmApi, tx);
+    console.log("\nDisableL1ValidatorTx submitted to P-Chain:", txID);
 
     // Wait for transaction to be confirmed
     console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
     console.log("P-Chain transaction confirmed");
 
-    return response.txID;
+    return txID;
 }
 
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string) {
@@ -521,24 +521,15 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    let response;
-    try {
-        response = await pvmApi.issueSignedTx(tx.getSignedTx());
-    } catch (e) {
-        // console.error("Error issuing SetL1ValidatorWeightTx");
-        if ((e as Error).stack?.includes('could not load L1 validator'))
-            throw Error("failed execution: could not load L1 validator: not found")
-        else
-            throw e;
-    }
-    console.log("\nSetL1ValidatorWeightTx submitted to P-Chain:", response.txID);
+    const txID = await sendSignedTx(pvmApi, tx);
+    console.log("\nSetL1ValidatorWeightTx submitted to P-Chain:", txID);
 
     // Wait for transaction to be confirmed
     console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
     console.log("P-Chain transaction confirmed");
 
-    return response.txID;
+    return txID;
 }
 
 export async function increasePChainValidatorBalance(
@@ -581,12 +572,12 @@ export async function increasePChainValidatorBalance(
     await addSigToAllCreds(tx, utils.hexToBuffer(privateKeyHex));
 
     // Issue the signed transaction
-    const response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    const txID = await sendSignedTx(pvmApi, tx);
 
     // Wait for transaction to be confirmed
-    await waitPChainTx(response.txID, pvmApi);
+    await waitPChainTx(txID, pvmApi);
 
-    return response.txID;
+    return txID;
 }
 
 // Wait p chain tx until it is confirmed with a timeout
@@ -746,4 +737,15 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
         },
         0 // messageIndex parameter
     ];
+}
+
+export async function sendSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<string> {
+    let response;
+    try {
+        response = await pvmApi.issueSignedTx(tx.getSignedTx());
+    } catch (e: any) {
+        const err = e as Error;
+        throw new Error(`Error issuing Signed Tx: ${err.message}`);
+    }
+    return response.txID
 }
