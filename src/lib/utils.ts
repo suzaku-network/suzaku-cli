@@ -177,9 +177,6 @@ export async function retryWhileError<T>(
         }
     }
 
-    const err = new Error(
-        `retryWhileError: timed out after ${timeoutMs}ms`
-    );
-    (err as any).cause = lastErr;
-    throw err;
+    console.error("retryWhileError: Timeout reached, last error:\n", lastErr);
+    process.exit(1);
   }
