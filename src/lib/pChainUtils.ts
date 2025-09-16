@@ -5,6 +5,7 @@ import { requirePChainBallance } from "./transferUtils";
 import { bytesToHex, Hex, hexToBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
+import { color } from "console-log-colors";
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
 
@@ -745,7 +746,8 @@ export async function sendSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<
         response = await pvmApi.issueSignedTx(tx.getSignedTx());
     } catch (e: any) {
         const err = e as Error;
-        throw new Error(`(issuing P-Chain Signed Tx)\n${err.message}`);
+        console.error("\n"+color.red(`Error issuing P-Chain Signed Tx:`)+`\n${err.message}`);
+        process.exit(1);
     }
     return response.txID
 }

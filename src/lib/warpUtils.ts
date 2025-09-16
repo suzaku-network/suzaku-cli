@@ -253,7 +253,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
 
     // Use the signature aggregation API from Glacier
     const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
-    const signResponse = await await retryWhileError(() => fetch(baseURL, {
+    const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
@@ -263,7 +263,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
             "message": fromBytes(message, 'hex'),
             "justification": fromBytes(justification, 'hex')
         })
-    }), 2000, 30000, (result) => result.ok);
+    }), 2000, 30000, (result) => result.status !== 500);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();
@@ -292,7 +292,7 @@ export async function collectSignatures(network: Network, message: string, justi
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(body)
-    }), 2000, 30000, (result) => result.ok);
+    }), 2000, 30000, (result) => result.status !== 500);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();

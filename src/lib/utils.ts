@@ -167,7 +167,7 @@ export async function retryWhileError<T>(
         try {
             const result = await fetcher();
             if (accept(result)) return result;
-            else throw new Error("retryWhileError Result not accepted");
+            else throw new Error("retryWhileError Result not accepted by:\n" + accept.toString());
         } catch (e) {
             lastErr = e;
             const elapsed = Date.now() - start;
