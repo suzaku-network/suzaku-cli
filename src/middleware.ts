@@ -102,7 +102,7 @@ export async function middlewareCompleteValidatorRegistration(
     data: log.data,
     topics: log.topics,
   });
-  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(decoded.args.nodeID).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
+  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(decoded.args.nodeID))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
   // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancer.read.subnetID();
   const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
