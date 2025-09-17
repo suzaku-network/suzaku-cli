@@ -869,6 +869,7 @@ async function main() {
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(0n).argParser(ParserAVAX))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
@@ -893,7 +894,8 @@ async function main() {
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
-                Number(options.initialBalance)
+                Number(options.initialBalance),
+                !options.skipWaitApi
             );
         });
 
@@ -920,6 +922,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(async (middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -940,7 +943,8 @@ async function main() {
                 balancerSvc,
                 removeNodeTxHash,
                 options.pchainTxPrivateKey,
-                pchainTxAddress
+                pchainTxAddress,
+                !options.skipWaitApi
             );
         });
 
