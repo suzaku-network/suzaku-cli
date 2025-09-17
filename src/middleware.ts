@@ -214,6 +214,8 @@ export async function middlewareCompleteValidatorRemoval(
         validationID: validationID,
         message: signedL1ValidatorWeightMessage
       });
+      console.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
+      await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
       console.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
     }
 

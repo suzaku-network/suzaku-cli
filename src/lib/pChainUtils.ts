@@ -451,7 +451,6 @@ export async function getCurrentValidators(client: ExtendedClient, subnetId: str
     const response = await pvmApi.getCurrentValidators({
         subnetID: subnetId
     });
-    console.log("Current validators on subnet", subnetId, ":", response.validators);
     return response.validators;
 }
 
