@@ -865,12 +865,11 @@ async function main() {
     program
         .command("middleware-complete-validator-registration")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(0n).argParser(ParserAVAX))
-        .action(async (middlewareAddress, nodeId, addNodeTxHash, blsProofOfPossession, options) => {
+        .action(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -891,7 +890,6 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
-                nodeId,
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,

@@ -83,7 +83,6 @@ export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
-  nodeId: NodeId,
   pChainTxPrivateKey: string,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
@@ -94,7 +93,16 @@ export async function middlewareCompleteValidatorRegistration(
     // Wait for transaction receipt to extract warp message and validation ID
     // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
-
+  const validatorRegistrationEventAbi = parseAbiItem(
+    'event InitiatedValidatorRegistration(bytes32 indexed validationID,bytes20 indexed nodeID,bytes32 registrationMessageID,uint64 registrationExpiry,uint64 weight)'
+  );
+  const log = receipt.logs[1];
+  const decoded = decodeEventLog({
+    abi: [validatorRegistrationEventAbi],
+    data: log.data,
+    topics: log.topics,
+  });
+  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(decoded.args.nodeID).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
   // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancer.read.subnetID();
   const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
@@ -119,7 +127,8 @@ export async function middlewareCompleteValidatorRegistration(
         initialBalance: initialBalance
       });
       // Wait until the validator is visible on the P-Chain
-      retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId), 5000, 60000, (res) => res === true);
+      console.log("Waiting for the validator to be visible on the P-Chain (may take a while)...");
+      await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId), 5000, 180000, (res) => res === true);
       console.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId);
     }
 

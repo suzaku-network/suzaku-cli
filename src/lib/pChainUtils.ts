@@ -746,7 +746,7 @@ export async function sendSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<
         response = await pvmApi.issueSignedTx(tx.getSignedTx());
     } catch (e: any) {
         const err = e as Error;
-        console.error("\n"+color.red(`Error issuing P-Chain Signed Tx:`)+`\n${err.message}`);
+        console.error("\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`);
         process.exit(1);
     }
     return response.txID
