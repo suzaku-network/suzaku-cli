@@ -619,7 +619,7 @@ async function main() {
         .addArgument(ArgAddress("delegatorAddress", "Delegator contract address"))
         .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
         .addArgument(ArgAddress("operatorAddress", "Operator address"))
-        .addArgument(ArgBigInt("shares", "Shares amount"))
+        .argument("shares", "Shares amount")
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(async (delegatorAddress, l1Address, operatorAddress, shares, collateralClass) => {
             const opts = program.opts();
@@ -627,12 +627,15 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
             // instantiate L1RestakeDelegator contract
             const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const vaultAddress = await delegator.read.vault();
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const sharesWei = parseUnits(shares, await vault.read.decimals())
             await setOperatorL1Shares(
                 delegator,
                 l1Address,
                 collateralClass,
                 operatorAddress,
-                shares,
+                sharesWei,
                 client.account!
             );
         });
