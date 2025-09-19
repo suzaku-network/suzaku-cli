@@ -1232,6 +1232,20 @@ async function main() {
                 operator
             );
         });
+    
+    // getOperatorAvailableStake (read)
+    program
+        .command("middleware-get-operator-available-stake")
+        .description("Get operator available stake")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .action(async (middlewareAddress, operator) => {
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
+            console.log(`Operator ${operator} available stake:\n${availableStake}`);
+        });
 
     // getAllOperators (read)
     program
