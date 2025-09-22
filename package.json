@@ -10,8 +10,14 @@
     "setup": "pnpm i && pnpm tsc",
     "build": "tsc",
     "suzaku-cli": "node dist/cli.js",
+    "link-cli": "pnpm link --global",
+    "unlink-cli": "pnpm unlink --global",
     "cli": "ts-node src/cli.ts",
-    "prepare": "tsc"
+    "prepare": "tsc",
+    "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli",
+  },
+  "bin": {
+    "suzaku-cli": "dist/cli.js"
   },
   "keywords": [],
   "author": "",
