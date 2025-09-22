@@ -872,7 +872,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(BigInt(0.1)).argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default(BigInt(1e8)).argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
@@ -1331,6 +1331,40 @@ async function main() {
                 nodeId
             )
             console.log(`Last validationID: ${validationId}`);
+        })
+    
+    program
+        .command("middleware-to-vault-epoch")
+        .description("convert middleware epoch to a vault epoch")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault address"))
+        .addArgument(ArgNumber("middlewareEpoch", "Middleware epoch number"))
+        .action(async (middlewareAddress, vaultAddress, middlewareEpoch) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
+            const middlewareEpochTs = await middlewareSvc.read.getEpochStartTs([middlewareEpoch]);
+            const vaultEpoch = await vaultSvc.read.epochAt([middlewareEpochTs]);
+            console.log(`Vault epoch at middleware epoch ${middlewareEpoch} (timestamp: ${middlewareEpochTs}) is ${vaultEpoch}`);
+        })
+    
+    program
+        .command("vault-to-middleware-epoch")
+        .description("convert vault epoch to a middleware epoch")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("vaultAddress", "Vault address"))
+        .addArgument(ArgNumber("vaultEpoch", "Vault epoch number"))
+        .action(async (middlewareAddress, vaultAddress, vaultEpoch) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
+            const vaultEpochStartTs = await vaultSvc.read.epochDuration() * vaultEpoch + await vaultSvc.read.epochDurationInit();
+            const middlewareEpoch = await middlewareSvc.read.getEpochAtTs([vaultEpochStartTs]);
+            console.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
         })
 
     /**

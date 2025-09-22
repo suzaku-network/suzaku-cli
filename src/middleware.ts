@@ -195,7 +195,7 @@ export async function middlewareCompleteValidatorRemoval(
   const validationID = receipt.logs[1].topics[1]!;
   const nodeIDHex = receipt.logs[3].topics[2]!;
   const nodeID = `NodeID-${utils.base58check.encode(hexToBytes(nodeIDHex).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
-
+  console.log(nodeID)
     // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancerValidatorManager.read.subnetID();
   const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID);

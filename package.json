@@ -14,7 +14,7 @@
     "unlink-cli": "pnpm unlink --global",
     "cli": "ts-node src/cli.ts",
     "prepare": "tsc",
-    "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli",
+    "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli"
   },
   "bin": {
     "suzaku-cli": "dist/cli.js"
