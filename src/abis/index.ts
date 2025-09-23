@@ -14,6 +14,7 @@ import PoASecurityModule from './PoASecurityModule';
 import DefaultCollateral from './DefaultCollateral';
 import ERC20 from './ERC20';
 import PoAManager from './PoAManager';
+import IWarpMessenger from './IWarpMessenger';
 
 export const SuzakuABI = {
   L1Registry,
@@ -31,5 +32,6 @@ export const SuzakuABI = {
   PoASecurityModule,
   DefaultCollateral,
   ERC20,
-  PoAManager
+  PoAManager,
+  IWarpMessenger
 };

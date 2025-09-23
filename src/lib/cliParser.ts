@@ -5,8 +5,8 @@ import { NodeId } from './utils';
 import { Pass } from "./pass";
 import { passPath } from "../keyStore";
 
-export function collectMultiple(value: string, previous: Hex[]): Hex[] {
-  return previous.concat([ParserAddress(value)]);
+export function collectMultiple<T>(parser: (value: string) => T) {
+  return (value: string, previous: T[]): T[] => previous.concat([parser(value)]);
 }
 
 // Base validators

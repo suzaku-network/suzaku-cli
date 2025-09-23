@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command, Option } from '@commander-js/extra-typings';
-import { Hex, parseUnits } from "viem";
+import { Hex, parseEventLogs, parseUnits } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -122,12 +122,13 @@ import {
     getLastEpochClaimedProtocol
 } from "./rewards";
 import { requirePChainBallance } from "./lib/transferUtils";
-import { getAddresses, parseNodeID } from "./lib/utils";
+import { bigintReplacer, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits } from "./lib/cliParser";
 import { increasePChainValidatorBalance } from './lib/pChainUtils';
 import { completValidatorRemoval } from './poa';
+import { color } from 'console-log-colors';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -822,8 +823,8 @@ async function main() {
         .addOption(new Option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)"))
         .addOption(new Option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
-        .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple))
-        .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple))
+        .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
+        .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .action(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
@@ -895,6 +896,7 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
+                config,
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
@@ -927,6 +929,7 @@ async function main() {
         .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
+        .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .action(async (middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -945,10 +948,12 @@ async function main() {
                 client,
                 middlewareSvc,
                 balancerSvc,
+                config,
                 removeNodeTxHash,
                 options.pchainTxPrivateKey,
                 pchainTxAddress,
-                !options.skipWaitApi
+                !options.skipWaitApi,
+                options.nodeId.length > 0 ? options.nodeId : undefined,
             );
         });
 
@@ -983,6 +988,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .action(async (middlewareAddress, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
 
@@ -1005,9 +1011,11 @@ async function main() {
             await middlewareCompleteStakeUpdate(
                 client,
                 middlewareSvc,
+                config,
                 validatorStakeUpdateTxHash,
                 options.pchainTxPrivateKey,
-                client.account!
+                client.account!,
+                options.nodeId.length > 0 ? options.nodeId : undefined,
             );
         });
 
@@ -1069,7 +1077,7 @@ async function main() {
                 middlewareSvc,
                 operator,
                 options.limitStake,
-                client.account!
+                client
             );
         });
 

@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Account, Abi } from 'viem';
+import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Account, Abi, parseEventLogs } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { utils } from '@avalabs/avalanchejs';
 import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
@@ -6,7 +6,7 @@ import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './cl
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config, pChainChainID } from './config';
-import { bytesToCB58, NodeId, parseNodeID, retryWhileError } from './lib/utils';
+import { bigintReplacer, bytesToCB58, NodeId, parseNodeID, retryWhileError } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
@@ -83,6 +83,7 @@ export async function middlewareCompleteValidatorRegistration(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  config: Config,
   pChainTxPrivateKey: string,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
@@ -92,18 +93,25 @@ export async function middlewareCompleteValidatorRegistration(
   console.log("Completing validator registration...");
 
     // Wait for transaction receipt to extract warp message and validation ID
-    // TODO: find a better wat to get the addNode tx hash, probably by parsing the middlewareAddress events?
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
-  const validatorRegistrationEventAbi = parseAbiItem(
-    'event InitiatedValidatorRegistration(bytes32 indexed validationID,bytes20 indexed nodeID,bytes32 registrationMessageID,uint64 registrationExpiry,uint64 weight)'
-  );
-  const log = receipt.logs[1];
-  const decoded = decodeEventLog({
-    abi: [validatorRegistrationEventAbi],
-    data: log.data,
-    topics: log.topics,
-  });
-  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(decoded.args.nodeID))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
+
+  const InitiatedValidatorRegistration = parseEventLogs({
+    abi: balancer.abi,
+    logs: receipt.logs,
+    eventName: 'InitiatedValidatorRegistration'
+  })[0]
+
+  if (!InitiatedValidatorRegistration) {
+    console.error(color.red("No InitiatedValidatorRegistration event found in the transaction logs, verify the transaction hash."));
+    process.exit(1);
+  }
+
+  const warpLogs = parseEventLogs({
+    abi: config.abis.IWarpMessenger,
+    logs: receipt.logs,
+  })[0]
+
+  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(InitiatedValidatorRegistration.args.nodeID))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
   // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancer.read.subnetID();
   const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
@@ -111,7 +119,7 @@ export async function middlewareCompleteValidatorRegistration(
       console.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
     } else {
       // Get the unsigned warp message from the receipt
-      const RegisterL1ValidatorUnsignedWarpMsg = receipt.logs[0].data ?? '';
+      const RegisterL1ValidatorUnsignedWarpMsg = warpLogs.args.message;
 
       // Collect signatures for the warp message
       console.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
@@ -136,7 +144,7 @@ export async function middlewareCompleteValidatorRegistration(
     }
 
     // Get the validation ID from the receipt logs
-    const validationIDHex = receipt.logs[1].topics[1] ?? '';
+  const validationIDHex = InitiatedValidatorRegistration.args.validationID;
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
     const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
@@ -182,28 +190,55 @@ export async function middlewareCompleteValidatorRemoval(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
+  config: Config,
   initializeEndValidationTxHash: Hex,
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
-  waitValidatorVisible: boolean
+  waitValidatorVisible: boolean,
+  nodeIDs?: NodeId[]
 ) {
   console.log("Completing validator removal...");
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
   const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash, confirmations: 1 });
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
-  const validationID = receipt.logs[1].topics[1]!;
-  const nodeIDHex = receipt.logs[3].topics[2]!;
-  const nodeID = `NodeID-${utils.base58check.encode(hexToBytes(nodeIDHex).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
-  console.log(nodeID)
+  // Select the NodeRemoved events from the receipt, filter by nodeIDs if provided
+  const nodeRemoved = parseEventLogs({
+    abi: middleware.abi,
+    logs: receipt.logs,
+    eventName: 'NodeRemoved'
+  }).filter((e) => nodeIDs ? nodeIDs.includes(`NodeID-${utils.base58check.encode(hexToBytes(e.args.nodeId).slice(12))}`) : true)
+
+  if (nodeRemoved.length === 0) {
+    console.error(color.red("No matching NodeRemoved event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
+    process.exit(1);
+  }
+
+  const initiatedValidatorRemovals = parseEventLogs({
+    abi: balancerValidatorManager.abi,
+    logs: receipt.logs,
+    eventName: 'InitiatedValidatorRemoval'
+  })
+  const warpLogs = parseEventLogs({
+    abi: config.abis.IWarpMessenger,
+    logs: receipt.logs,
+  })
+  for (const event of nodeRemoved) {
+    const initiatedValidatorRemoval = initiatedValidatorRemovals.find((e) => e.args.validationID === event.args.validationID)!;
+    const warpLog = warpLogs.find((w) => w.args.messageID === initiatedValidatorRemoval.args.validatorWeightMessageID)!;
+
+    const validationID = event.args.validationID;
+    const nodeIDHex = event.args.nodeId;
+    const nodeID = `NodeID-${utils.base58check.encode(hexToBytes(nodeIDHex).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
+    console.log(nodeID)
     // Check if the node is still registered as a validator on the P-Chain
-  const subnetIDHex = await balancerValidatorManager.read.subnetID();
-  const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID);
+    const subnetIDHex = await balancerValidatorManager.read.subnetID();
+    const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID);
     if (!isValidator) {
-      console.log(color.yellow("Node is not registered as a validator on the P-Chain, skipping setValidatorWeight call."));
+      console.log(color.yellow("Node is not registered as a validator on the P-Chain."));
     } else {
       // Get the unsigned L1ValidatorWeightMessage with weight=0 generated by the ValidatorManager from the receipt
-      const unsignedL1ValidatorWeightMessage = receipt.logs[0].data ?? '';
+      const unsignedL1ValidatorWeightMessage = warpLog.args.message;
       console.log("Initialize End Validation Warp Msg: ", unsignedL1ValidatorWeightMessage)
 
       // Aggregate signatures from validators
@@ -255,6 +290,7 @@ export async function middlewareCompleteValidatorRemoval(
       });
 
     console.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
+  }
 }
 
 // initializeValidatorWeightUpdate
@@ -280,32 +316,46 @@ export async function middlewareInitStakeUpdate(
 export async function middlewareCompleteStakeUpdate(
   client: ExtendedWalletClient,
   middleware: SafeSuzakuContract['L1Middleware'],
+  config: Config,
   validatorStakeUpdateTxHash: Hex,
   pChainTxPrivateKey: string,
-  account: Account
+  account: Account,
+  nodeIDs?: NodeId[]
 ) {
   console.log("Completing node stake update...");
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
     const receipt = await client.waitForTransactionReceipt({ hash: validatorStakeUpdateTxHash })
 
-    // Get the unsigned L1ValidatorWeightMessage with new weight generated by the ValidatorManager from the receipt
-  const warpLog = decodeWarpMessage(receipt.logs[0])
+  const nodeStakeUpdated = parseEventLogs({
+    abi: middleware.abi,
+    logs: receipt.logs,
+    eventName: 'NodeStakeUpdated'
+  }).filter((e) => nodeIDs ? nodeIDs.includes(`NodeID-${utils.base58check.encode(hexToBytes(e.args.nodeId).slice(12))}`) : true)
 
-    // Decode the weight from the log data using the event ABI
-    const validatorWeightUpdateEventAbi = parseAbiItem(
-      'event InitiatedValidatorWeightUpdate(bytes32 indexed validationID, uint64 nonce, bytes32 weightUpdateMessageID, uint64 weight)'
-    );
-    const log = receipt.logs[1];
-    const decoded = decodeEventLog({
-      abi: [validatorWeightUpdateEventAbi],
-      data: log.data,
-      topics: log.topics,
-    });
-    const weight = decoded.args.weight;
-  const nonce = decoded.args.nonce;
-  const validationIDHex = decoded.args.validationID
-  const unsignedL1ValidatorWeightMessage = warpLog.args.message
+  if (nodeStakeUpdated.length === 0) {
+    console.error(color.red("No matching NodeStakeUpdated event found for the provided NodeIDs. Verify the transaction hash and NodeIDs."));
+    process.exit(1);
+  }
+
+  const InitiatedValidatorWeightUpdates = parseEventLogs({
+    abi: config.abis.BalancerValidatorManager,
+    logs: receipt.logs,
+    eventName: 'InitiatedValidatorWeightUpdate'
+  })
+  const warpLogs = parseEventLogs({
+    abi: config.abis.IWarpMessenger,
+    logs: receipt.logs,
+  })
+
+  for (const event of nodeStakeUpdated) {
+    const InitiatedValidatorWeightUpdate = InitiatedValidatorWeightUpdates.find((e) => e.args.validationID === event.args.validationID)!;
+    const warpLog = warpLogs.find((w) => w.args.messageID === InitiatedValidatorWeightUpdate.args.weightUpdateMessageID)!;
+
+    const weight = InitiatedValidatorWeightUpdate.args.weight;
+    const nonce = InitiatedValidatorWeightUpdate.args.nonce;
+    const validationIDHex = InitiatedValidatorWeightUpdate.args.validationID
+    const unsignedL1ValidatorWeightMessage = warpLog.args.message
     // Aggregate signatures from validators
     // console.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
     const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
@@ -339,6 +389,7 @@ export async function middlewareCompleteStakeUpdate(
       { chain: null, account, accessList }
     );
     console.log("completeStakeUpdate done, tx hash:", hash);
+  }
 }
 
 // calcAndCacheNodeStakeForAllOperators
@@ -359,15 +410,25 @@ export async function middlewareForceUpdateNodes(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
   limitStake: bigint,
-  account: Account
+  client: ExtendedClient
 ) {
   console.log("Calling forceUpdateNodes...");
 
     const hash = await middleware.safeWrite.forceUpdateNodes(
       [operator, limitStake],
-      { chain: null, account }
+      { chain: null, account: client.account! }
     );
-    console.log("forceUpdateNodes executed successfully, tx hash:", hash);
+  const receipt = await client.waitForTransactionReceipt({ hash });
+  const logs = parseEventLogs({
+    abi: middleware.abi,
+    logs: receipt.logs
+  })
+  console.log("forceUpdateNodes executed successfully");
+  console.log("Logs:")
+  console.log(logs.map((log) => {
+    return `${color.magenta(log.eventName)}(${JSON.stringify(log.args, bigintReplacer, 1)})`;
+  }).join('\n'));
+  console.log("tx hash:", hash);
 }
 
 // getOperatorStake

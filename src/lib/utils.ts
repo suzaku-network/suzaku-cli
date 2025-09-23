@@ -180,3 +180,10 @@ export async function retryWhileError<T>(
     console.error("Timeout reached !\n", lastErr);
     process.exit(1);
   }
+
+export function bigintReplacer(_key: string, value: any) {
+    if (typeof value === "bigint") {
+        return Number(value);
+    }
+    return value;
+  }

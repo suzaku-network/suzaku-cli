@@ -24,7 +24,8 @@ const contractMappings = {
   'UptimeTracker': 'UptimeTracker.ts',
   'VaultFactory': 'VaultFactory.ts',
   'BalancerValidatorManager': 'BalancerValidatorManager.ts',
-  'PoAManager': 'PoAManager.ts'
+  'PoAManager': 'PoAManager.ts',
+  'IWarpMessenger': 'IWarpMessenger.ts',
 };
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)
