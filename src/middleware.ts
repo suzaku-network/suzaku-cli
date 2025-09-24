@@ -11,6 +11,7 @@ import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId,
 import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
 import { base58 } from '@scure/base';
+import { Address } from 'micro-eth-signer';
 
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -325,30 +326,44 @@ export async function middlewareCompleteStakeUpdate(
   console.log("Completing node stake update...");
 
     // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
-    const receipt = await client.waitForTransactionReceipt({ hash: validatorStakeUpdateTxHash })
+  const receipt = await client.waitForTransactionReceipt({ hash: validatorStakeUpdateTxHash })
 
-  const nodeStakeUpdated = parseEventLogs({
-    abi: middleware.abi,
-    logs: receipt.logs,
-    eventName: 'NodeStakeUpdated'
-  }).filter((e) => nodeIDs ? nodeIDs.includes(`NodeID-${utils.base58check.encode(hexToBytes(e.args.nodeId).slice(12))}`) : true)
-
-  if (nodeStakeUpdated.length === 0) {
-    console.error(color.red("No matching NodeStakeUpdated event found for the provided NodeIDs. Verify the transaction hash and NodeIDs."));
-    process.exit(1);
-  }
+  // Convert nodeIDs to validationIDs
+  let validationIds;
+  if (nodeIDs) {
+    const balancerAddress = await middleware.read.balancerValidatorManager();
+    const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+    validationIds = (await client.multicall({
+      contracts: nodeIDs.map((id) => {
+        return {
+          ...balancer,
+          functionName: 'getNodeValidationID',
+          args: [parseNodeID(id)]
+        }
+      })
+    })).reduce((acc, res) => {
+      res.result ? acc.push(res.result as Hex) : console.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[acc.length]}`));
+      return acc;
+    }, [] as Hex[]);
+  } else validationIds = undefined;
 
   const InitiatedValidatorWeightUpdates = parseEventLogs({
     abi: config.abis.BalancerValidatorManager,
     logs: receipt.logs,
     eventName: 'InitiatedValidatorWeightUpdate'
-  })
+  }).filter((e) => validationIds ? validationIds.includes(e.args.validationID) : true)
+
+  if (InitiatedValidatorWeightUpdates.length === 0) {
+    console.error(color.red("No matching NodeStakeUpdated event found for the provided NodeIDs. Verify the transaction hash and NodeIDs."));
+    process.exit(1);
+  }
+
   const warpLogs = parseEventLogs({
     abi: config.abis.IWarpMessenger,
     logs: receipt.logs,
   })
 
-  for (const event of nodeStakeUpdated) {
+  for (const event of InitiatedValidatorWeightUpdates) {
     const InitiatedValidatorWeightUpdate = InitiatedValidatorWeightUpdates.find((e) => e.args.validationID === event.args.validationID)!;
     const warpLog = warpLogs.find((w) => w.args.messageID === InitiatedValidatorWeightUpdate.args.weightUpdateMessageID)!;
 
