@@ -5,6 +5,7 @@ import { utils } from '@avalabs/avalanchejs';
 import { sha256 } from '@noble/hashes/sha256';
 import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from './warpUtils';
 import { ExtendedPublicClient } from '../client';
+import { logger } from './logger';
 
 const codecVersion = 0;
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1;
@@ -50,32 +51,32 @@ interface L1ValidatorRegistrationJustification {
  */
 function extractAddressedCall(messageBytes: Uint8Array): Uint8Array {
     try {
-        // console.log(`Parsing UnsignedMessage of length: ${messageBytes.length} bytes`);
+        // logger.log(`Parsing UnsignedMessage of length: ${messageBytes.length} bytes`);
 
         if (messageBytes.length < 42) { // 2 + 4 + 32 + 4 = minimum 42 bytes
-            // console.log('UnsignedMessage too short');
+            // logger.log('UnsignedMessage too short');
             return new Uint8Array();
         }
 
         // const codecVersion = (messageBytes[0] << 8) | messageBytes[1];
-        // console.log(`Raw codecVersion bytes: 0x${Buffer.from([messageBytes[0], messageBytes[1]]).toString('hex')}`);
+        // logger.log(`Raw codecVersion bytes: 0x${Buffer.from([messageBytes[0], messageBytes[1]]).toString('hex')}`);
 
         // const networkIDBytes = messageBytes.slice(2, 6);
-        // console.log(`Raw networkID bytes: 0x${Buffer.from(networkIDBytes).toString('hex')}`);
+        // logger.log(`Raw networkID bytes: 0x${Buffer.from(networkIDBytes).toString('hex')}`);
         // const networkID = (messageBytes[2] << 24) |
         //     (messageBytes[3] << 16) |
         //     (messageBytes[4] << 8) |
         //     messageBytes[5];
 
-        // console.log(`UnsignedMessage -> codecVersion: ${codecVersion}, NetworkID: ${networkID}`);
+        // logger.log(`UnsignedMessage -> codecVersion: ${codecVersion}, NetworkID: ${networkID}`);
 
         // const sourceChainIDBytes = messageBytes.slice(6, 38);
-        // console.log(`Raw sourceChainID bytes: 0x${Buffer.from(sourceChainIDBytes).toString('hex')}`);
+        // logger.log(`Raw sourceChainID bytes: 0x${Buffer.from(sourceChainIDBytes).toString('hex')}`);
         // try {
         //     let sourceChainIDStr = utils.base58check.encode(Buffer.from(sourceChainIDBytes));
-        //     console.log(`UnsignedMessage -> SourceChainID: ${sourceChainIDStr}`);
+        //     logger.log(`UnsignedMessage -> SourceChainID: ${sourceChainIDStr}`);
         // } catch (e) {
-        //     console.log('Could not encode sourceChainID from UnsignedMessage');
+        //     logger.log('Could not encode sourceChainID from UnsignedMessage');
         // }
 
         const messageLength = (messageBytes[38] << 24) |
@@ -83,19 +84,19 @@ function extractAddressedCall(messageBytes: Uint8Array): Uint8Array {
             (messageBytes[40] << 8) |
             messageBytes[41];
 
-        // console.log(`UnsignedMessage -> AddressedCall length: ${messageLength} bytes`);
+        // logger.log(`UnsignedMessage -> AddressedCall length: ${messageLength} bytes`);
 
         if (messageLength <= 0 || 42 + messageLength > messageBytes.length) {
-            // console.log('Invalid message length or message extends beyond UnsignedMessage data bounds');
+            // logger.log('Invalid message length or message extends beyond UnsignedMessage data bounds');
             return new Uint8Array();
         }
 
         const addressedCall = messageBytes.slice(42, 42 + messageLength);
-        // console.log(`Extracted AddressedCall of length ${addressedCall.length} bytes`);
+        // logger.log(`Extracted AddressedCall of length ${addressedCall.length} bytes`);
 
         return addressedCall;
     } catch (error) {
-        console.error('Error extracting addressedCall from UnsignedMessage:', error);
+        logger.error('Error extracting addressedCall from UnsignedMessage:', error);
         return new Uint8Array();
     }
 }
@@ -108,13 +109,13 @@ function extractAddressedCall(messageBytes: Uint8Array): Uint8Array {
  */
 function decodeID(idString: string): Uint8Array | null {
     if (!idString) {
-        console.error("Invalid ID format: empty string");
+        logger.error("Invalid ID format: empty string");
         return null;
     }
     try {
         return utils.base58check.decode(idString);
     } catch (e) {
-        console.error("Error decoding ID:", idString, e);
+        logger.error("Error decoding ID:", idString, e);
         return null;
     }
 }
@@ -127,14 +128,14 @@ function decodeID(idString: string): Uint8Array | null {
  */
 function decodeNodeID(nodeIDString: string): Uint8Array | null {
     if (!nodeIDString || !nodeIDString.startsWith("NodeID-")) {
-        console.error("Invalid NodeID format:", nodeIDString);
+        logger.error("Invalid NodeID format:", nodeIDString);
         return null;
     }
     try {
         // Remove "NodeID-" prefix before decoding
         return utils.base58check.decode(nodeIDString.substring(7));
     } catch (e) {
-        console.error("Error decoding NodeID:", nodeIDString, e);
+        logger.error("Error decoding NodeID:", nodeIDString, e);
         return null;
     }
 }
@@ -262,14 +263,14 @@ export function extractPayloadFromAddressedCall(addressedCall: Uint8Array): Uint
     try {
         // Need at least 10 bytes for TypeID and Source Address Length.
         if (addressedCall.length < 10) {
-            //   console.warn('AddressedCall too short to contain Source Address Length');
+            //   logger.warn('AddressedCall too short to contain Source Address Length');
             return null;
         }
 
         // Source Address Length starts at index 6
         const sourceAddrLen = (addressedCall[6] << 24) | (addressedCall[7] << 16) | (addressedCall[8] << 8) | addressedCall[9];
         if (sourceAddrLen < 0) { // Should not happen with unsigned bytes, but good practice
-            // console.warn('Invalid Source Address Length (<0)');
+            // logger.warn('Invalid Source Address Length (<0)');
             return null;
         }
 
@@ -278,7 +279,7 @@ export function extractPayloadFromAddressedCall(addressedCall: Uint8Array): Uint
 
         // Check if we have enough bytes to read Payload Length
         if (payloadLenPos + 4 > addressedCall.length) {
-            //   console.warn('AddressedCall too short to contain Payload Length');
+            //   logger.warn('AddressedCall too short to contain Payload Length');
             return null;
         }
 
@@ -290,7 +291,7 @@ export function extractPayloadFromAddressedCall(addressedCall: Uint8Array): Uint
 
         // Check if payload length is valid
         if (payloadLen <= 0) {
-            // console.warn('Invalid Payload Length (<=0)');
+            // logger.warn('Invalid Payload Length (<=0)');
             return null;
         }
 
@@ -299,7 +300,7 @@ export function extractPayloadFromAddressedCall(addressedCall: Uint8Array): Uint
 
         // Check if payload extends beyond data bounds
         if (payloadEndPos > addressedCall.length) {
-            // console.warn('Payload extends beyond AddressedCall data bounds');
+            // logger.warn('Payload extends beyond AddressedCall data bounds');
             return null;
         }
 
@@ -308,7 +309,7 @@ export function extractPayloadFromAddressedCall(addressedCall: Uint8Array): Uint
         return payloadBytes;
 
     } catch (error) {
-        console.error('Error extracting payload from AddressedCall:', error);
+        logger.error('Error extracting payload from AddressedCall:', error);
         return null;
     }
 }
@@ -356,7 +357,7 @@ export async function GetRegistrationJustification(
             throw new Error(`Decoded validationID must be 32 bytes, got ${targetValidationIDBytes.length}`);
         }
     } catch (e: any) {
-        console.error(`Failed to decode provided validationIDHex '${validationIDHex}': ${e.message}`);
+        logger.error(`Failed to decode provided validationIDHex '${validationIDHex}': ${e.message}`);
         return null;
     }
 
@@ -364,11 +365,11 @@ export async function GetRegistrationJustification(
     const targetNodeIDBytes = decodeNodeID(nodeID); // Decode for log confirmation
 
     if (!subnetIDBytes) {
-        console.error(`Failed to decode provided SubnetID: ${subnetIDStr}`);
+        logger.error(`Failed to decode provided SubnetID: ${subnetIDStr}`);
         return null;
     }
     if (!targetNodeIDBytes) {
-        console.warn(`Failed to decode provided NodeID for confirmation: ${nodeID}`);
+        logger.warn(`Failed to decode provided NodeID for confirmation: ${nodeID}`);
         // Allow continuing without targetNodeIDBytes for confirmation
     }
 
@@ -381,13 +382,13 @@ export async function GetRegistrationJustification(
 
         // Compare the derived hash with the target validation ID
         if (compareBytes(bootstrapValidationIDHash, targetValidationIDBytes)) {
-            console.log(`ValidationID ${validationIDHex} matches HASH of bootstrap validator derived ID (subnet ${subnetIDStr}, index ${index})`);
+            logger.log(`ValidationID ${validationIDHex} matches HASH of bootstrap validator derived ID (subnet ${subnetIDStr}, index ${index})`);
             // Marshal justification using the *original* subnetID and index
             const justificationBytes = marshalConvertSubnetToL1TxDataJustification(subnetIDBytes, index);
             return justificationBytes;
         }
     }
-    console.log(`ValidationID ${validationIDHex} not found within the HASHES of the first ${NUM_BOOTSTRAP_VALIDATORS_TO_SEARCH} bootstrap validator indices for subnet ${subnetIDStr}. Checking Warp logs...`);
+    logger.log(`ValidationID ${validationIDHex} not found within the HASHES of the first ${NUM_BOOTSTRAP_VALIDATORS_TO_SEARCH} bootstrap validator indices for subnet ${subnetIDStr}. Checking Warp logs...`);
 
 
     // 2. If not a bootstrap validator, search Warp logs
@@ -399,13 +400,13 @@ export async function GetRegistrationJustification(
         let toBlock = BigInt(latestBlock);
         let justification = null;
 
-        console.log(`Starting search from latest block ${latestBlock} in batches of ${BATCH_SIZE} blocks...`);
+        logger.log(`Starting search from latest block ${latestBlock} in batches of ${BATCH_SIZE} blocks...`);
 
         while (fromBlock > 0 && !justification) {
             // Calculate batch range
             fromBlock = BigInt(Math.max(0, Number(toBlock) - BATCH_SIZE + 1));
 
-            console.log(`Searching for Warp logs in block range: ${fromBlock} to ${toBlock}...`);
+            logger.log(`Searching for Warp logs in block range: ${fromBlock} to ${toBlock}...`);
 
             const warpLogs = await ExtendedPublicClient.getLogs({
                 address: WARP_ADDRESS,
@@ -415,7 +416,7 @@ export async function GetRegistrationJustification(
             });
 
             if (warpLogs.length > 0) {
-                console.log(`Found ${warpLogs.length} Warp logs in block range ${fromBlock}-${toBlock}. Searching for justification matching ValidationID ${validationIDHex}...`);
+                logger.log(`Found ${warpLogs.length} Warp logs in block range ${fromBlock}-${toBlock}. Searching for justification matching ValidationID ${validationIDHex}...`);
 
                 for (const log of warpLogs) {
                     try {
@@ -447,7 +448,7 @@ export async function GetRegistrationJustification(
                             // Compare the calculated hash with the target validation ID
                             if (compareBytes(logValidationIDBytes, targetValidationIDBytes)) {
                                 if (targetNodeIDBytes && !compareBytes(parsedPayload.nodeID, targetNodeIDBytes)) {
-                                    console.warn(`ValidationID match found (${validationIDHex}) in log ${log.transactionHash}, but NodeID in message (${utils.base58check.encode(Buffer.from(parsedPayload.nodeID))}) does not match expected NodeID ${nodeID}. Skipping.`);
+                                    logger.warn(`ValidationID match found (${validationIDHex}) in log ${log.transactionHash}, but NodeID in message (${utils.base58check.encode(Buffer.from(parsedPayload.nodeID))}) does not match expected NodeID ${nodeID}. Skipping.`);
                                     continue;
                                 }
 
@@ -458,19 +459,19 @@ export async function GetRegistrationJustification(
                                 marshalledJustification.set(lengthVarint, tag.length);
                                 marshalledJustification.set(payloadBytes, tag.length + lengthVarint.length);
 
-                                console.log(`Found matching ValidationID ${validationIDHex} (NodeID ${nodeID}) in Warp log (Tx: ${log.transactionHash}, Block: ${log.blockNumber}). Marshalled justification.`);
+                                logger.log(`Found matching ValidationID ${validationIDHex} (NodeID ${nodeID}) in Warp log (Tx: ${log.transactionHash}, Block: ${log.blockNumber}). Marshalled justification.`);
                                 justification = marshalledJustification;
                                 break; // Exit the loop once found
                             }
                         } catch (parseOrHashError) {
-                            // console.warn(`Error parsing/hashing RegisterL1ValidatorMessage payload from Tx ${log.transactionHash}:`, parseOrHashError);
+                            // logger.warn(`Error parsing/hashing RegisterL1ValidatorMessage payload from Tx ${log.transactionHash}:`, parseOrHashError);
                         }
                     } catch (logProcessingError) {
-                        console.error(`Error processing log entry for tx ${log.transactionHash}:`, logProcessingError);
+                        logger.error(`Error processing log entry for tx ${log.transactionHash}:`, logProcessingError);
                     }
                 }
             } else {
-                console.log(`No Warp logs found in block range ${fromBlock}-${toBlock}.`);
+                logger.log(`No Warp logs found in block range ${fromBlock}-${toBlock}.`);
             }
 
             // If justification was found, break out of the while loop
@@ -484,13 +485,13 @@ export async function GetRegistrationJustification(
         }
 
         if (!justification) {
-            console.log(`No matching registration log found for ValidationID ${validationIDHex} in any Warp logs.`);
+            logger.log(`No matching registration log found for ValidationID ${validationIDHex} in any Warp logs.`);
         }
 
         return justification;
 
     } catch (fetchLogError) {
-        console.error(`Error fetching or decoding logs for ValidationID ${validationIDHex}:`, fetchLogError);
+        logger.error(`Error fetching or decoding logs for ValidationID ${validationIDHex}:`, fetchLogError);
         return null;
     }
 }
@@ -530,7 +531,7 @@ export async function getRegistrationMessage(
     // SubnetEVM Warp contract address
     const subnetEvmWarpAddress = "0x0200000000000000000000000000000000000005"; // Replace with actual address
 
-    console.log(`Looking for validationID in topics: ${validationID}`);
+    logger.log(`Looking for validationID in topics: ${validationID}`);
 
     // Search from most recent to oldest in batches
     for (let blockNumber = endBlock; blockNumber >= startBlock; blockNumber -= BatchSize) {
@@ -541,7 +542,7 @@ export async function getRegistrationMessage(
             batchStart = startBlock;
         }
 
-        console.log(`Searching blocks ${batchStart} to ${batchEnd} for validation ID ${validationID}`);
+        logger.log(`Searching blocks ${batchStart} to ${batchEnd} for validation ID ${validationID}`);
 
         try {
             // Query logs for all blocks in the batch using Viem
@@ -551,16 +552,16 @@ export async function getRegistrationMessage(
                 toBlock: BigInt(batchEnd),
             });
 
-            console.log(`Found ${logs.length} logs in blocks ${batchStart} to ${batchEnd}`);
+            logger.log(`Found ${logs.length} logs in blocks ${batchStart} to ${batchEnd}`);
 
             // Process logs for this batch - simply check if topics[2] matches validationID
             for (const log of logs) {
                 if (log.topics.length >= 3) {
-                    console.log(`Comparing log topic: ${log.topics[2]} with validationID: ${validationID}`);
+                    logger.log(`Comparing log topic: ${log.topics[2]} with validationID: ${validationID}`);
 
                     // Check if the third topic matches our validationID
                     if (log.topics[2] === validationID) {
-                        console.log("Found matching log:", log);
+                        logger.log("Found matching log:", log);
 
                         // Cache the result before returning
                         registrationMessageCache[validationID] = hexToUint8Array(log.data);
@@ -570,7 +571,7 @@ export async function getRegistrationMessage(
                 }
             }
         } catch (error) {
-            console.error(`Error fetching logs for blocks ${batchStart}-${batchEnd}:`, error);
+            logger.error(`Error fetching logs for blocks ${batchStart}-${batchEnd}:`, error);
         }
 
         // Rate limit delay between batches

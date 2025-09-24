@@ -2,6 +2,7 @@ import cliProgress from 'cli-progress';
 import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
 import { ExtendedClient, ExtendedPublicClient } from '../client';
 import { SafeSuzakuContract } from './viemUtils';
+import { logger } from './logger';
 
 type CommonEvent = {
   address: string;
@@ -90,9 +91,9 @@ export async function GetContractEvents(
       if (bar.getProgress() === 1) bar.stop();
     }
   } catch (error) {
-    console.error("Read contract failed:", error);
+    logger.error("Read contract failed:", error);
     if (error instanceof Error) {
-      console.error(error.message);
+      logger.error(error.message);
     }
   }
 

@@ -6,6 +6,8 @@ import { bytesToHex, Hex, hexToBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
 import { color } from "console-log-colors";
+import { pipe, R, Result } from "@mobily/ts-belt";
+import { logger } from './logger';
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
 
@@ -174,7 +176,7 @@ async function addSigToAllCreds(
     }
 }
 
-export async function createSubnet(params: PChainBaseParams): Promise<string> {
+export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -201,15 +203,12 @@ export async function createSubnet(params: PChainBaseParams): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const txID = await sendSignedTx(pvmApi, tx);
-
-    // Sleep for 3 seconds
-    await waitPChainTx(txID, pvmApi);
+    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
 
     return txID;
 }
 
-export async function createChain(params: CreateChainParams): Promise<string> {
+export async function createChain(params: CreateChainParams): Promise<Hex> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -224,7 +223,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pAddress]
     });
-    console.log(`Using default EVM VM ID: ${params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN"}`);
+    logger.log(`Using default EVM VM ID: ${params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN"}`);
     const tx = pvm.e.newCreateChainTx(
         {
             feeState,
@@ -241,12 +240,9 @@ export async function createChain(params: CreateChainParams): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const txID = await sendSignedTx(pvmApi, tx);
+    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
 
-    // Sleep for 3 seconds
-    await waitPChainTx(txID, pvmApi);
-
-    console.log('Created chain: ', txID);
+    logger.log('Created chain: ', txID);
     return txID;
 }
 
@@ -309,7 +305,7 @@ export async function createChain(params: CreateChainParams): Promise<string> {
 //     return txID;
 // }
 
-export async function convertToL1(params: ConvertToL1Params): Promise<string> {
+export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -351,15 +347,12 @@ export async function convertToL1(params: ConvertToL1Params): Promise<string> {
     );
 
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const txID = await sendSignedTx(pvmApi, tx);
-
-    // Sleep for 3 seconds
-    await waitPChainTx(txID, pvmApi);
+    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
 
     return txID;
 }
 
-export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<string> {
+export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<Result<Hex, string>> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -389,18 +382,12 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const txID = await sendSignedTx(pvmApi, tx);
-    // console.log("\nRegisterL1ValidatorTx submitted to P-Chain:", txID);
-
-    // Wait for transaction to be confirmed
-    // console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(txID, pvmApi);
-    // console.log("P-Chain transaction confirmed");
+    const txID = issueSignedTx(pvmApi, tx);
 
     return txID;
 }
 
-export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<string> {
+export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<Result<string, string>> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -432,13 +419,7 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const txID = await sendSignedTx(pvmApi, tx);
-    console.log("\nDisableL1ValidatorTx submitted to P-Chain:", txID);
-
-    // Wait for transaction to be confirmed
-    console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(txID, pvmApi);
-    console.log("P-Chain transaction confirmed");
+    const txID = issueSignedTx(pvmApi, tx);
 
     return txID;
 }
@@ -458,7 +439,7 @@ export async function getValidatorsAt(client: ExtendedClient, subnetId: string):
     const rpcUrl = getRPCEndpoint(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const currentHeight = await pvmApi.getHeight();
-    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
+    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,
@@ -476,7 +457,7 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
     const rpcUrl = getRPCEndpoint(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const currentHeight = await pvmApi.getHeight();
-    console.log("L1: ", subnetId, " at height: ", currentHeight.height);
+    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.validates({
         subnetID: subnetId,
@@ -489,7 +470,7 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
     return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
 }
 
-export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<string> {
+export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<Result<string, string>> {
     if (!params.privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -505,29 +486,23 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     });
 
     // Create a new set validator weight transaction
-    console.log("Setting validator weight with message:", params.message);
+    logger.log("Setting validator weight with message:", params.message);
 
-        const tx = pvm.e.newSetL1ValidatorWeightTx(
-            {
-                feeState,
-                fromAddressesBytes: [addressBytes],
-                message: new Uint8Array(Buffer.from(params.message, 'hex')),
-                utxos,
-            },
-            context,
-        );
+    const tx = pvm.e.newSetL1ValidatorWeightTx(
+        {
+            feeState,
+            fromAddressesBytes: [addressBytes],
+            message: new Uint8Array(Buffer.from(params.message, 'hex')),
+            utxos,
+        },
+        context,
+    );
 
     // Sign the transaction
     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
 
     // Issue the signed transaction
-    const txID = await sendSignedTx(pvmApi, tx);
-    console.log("\nSetL1ValidatorWeightTx submitted to P-Chain:", txID);
-
-    // Wait for transaction to be confirmed
-    console.log("Waiting for P-Chain confirmation...");
-    await waitPChainTx(txID, pvmApi);
-    console.log("P-Chain transaction confirmed");
+    const txID = issueSignedTx(pvmApi, tx);
 
     return txID;
 }
@@ -537,7 +512,7 @@ export async function increasePChainValidatorBalance(
     privateKeyHex: string,
     amount: number,
     validationId: string
-): Promise<string> {
+): Promise<Result<Hex, string>> {
     if (!privateKeyHex) {
         throw new Error("Private key required");
     }
@@ -572,10 +547,7 @@ export async function increasePChainValidatorBalance(
     await addSigToAllCreds(tx, utils.hexToBuffer(privateKeyHex));
 
     // Issue the signed transaction
-    const txID = await sendSignedTx(pvmApi, tx);
-
-    // Wait for transaction to be confirmed
-    await waitPChainTx(txID, pvmApi);
+    const txID = issueSignedTx(pvmApi, tx);
 
     return txID;
 }
@@ -618,8 +590,8 @@ export async function extractWarpMessageFromPChainTx(subnetId: string, txId: str
     const data = await response.json() as ConversionDataResponse
 
     if (!data?.result?.tx?.unsignedTx?.subnetID || !data?.result?.tx?.unsignedTx?.chainID || !data?.result?.tx?.unsignedTx?.address || !data?.result?.tx?.unsignedTx?.validators) {
-        console.log('txId', txId)
-        console.log('data', data)
+        logger.log('txId', txId)
+        logger.log('data', data)
         throw new Error("Invalid transaction data, are you sure this is a conversion transaction?");
     }
 
@@ -739,14 +711,11 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     ];
 }
 
-export async function sendSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<string> {
-    let response;
-    try {
-        response = await pvmApi.issueSignedTx(tx.getSignedTx());
-    } catch (e: any) {
-        const err = e as Error;
-        console.error("\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`);
-        process.exit(1);
-    }
-    return response.txID
+export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<Result<Hex, string>> {
+    const result = pipe(await R.fromPromise(pvmApi.issueSignedTx(tx.getSignedTx())),
+        R.map(res => res.txID as Hex),
+        R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`)
+    )
+    R.isOk(result) && await waitPChainTx( result._0, pvmApi)
+    return result;
 }

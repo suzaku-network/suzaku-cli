@@ -1,5 +1,6 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { logger } from './lib/logger';
 
 /**
  * Distributes rewards for a specific epoch
@@ -272,9 +273,9 @@ export async function getRewardsAmountPerTokenFromEpoch(
     [epoch]
   ) as [string[], bigint[]];
 
-  console.log(`Rewards amount per token for epoch ${epoch}:`);
+  logger.log(`Rewards amount per token for epoch ${epoch}:`);
   for (let i = 0; i < result[0].length; i++) {
-    console.log(`  Token: ${result[0][i]}, Amount: ${result[1][i].toString()}`);
+    logger.log(`  Token: ${result[0][i]}, Amount: ${result[1][i].toString()}`);
   }
 
   return result;
@@ -292,7 +293,7 @@ export async function getRewardsAmountForTokenFromEpoch(
     [epoch, token]
   ) as bigint;
 
-  console.log(`Rewards amount for token ${token} at epoch ${epoch}: ${amount.toString()}`);
+  logger.log(`Rewards amount for token ${token} at epoch ${epoch}: ${amount.toString()}`);
   return amount;
 }
 
@@ -308,7 +309,7 @@ export async function getOperatorShares(
     [epoch, operator]
   ) as bigint;
 
-  console.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -324,7 +325,7 @@ export async function getVaultShares(
     [epoch, vault]
   ) as bigint;
 
-  console.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -340,7 +341,7 @@ export async function getCuratorShares(
     [epoch, curator]
   ) as bigint;
 
-  console.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -355,7 +356,7 @@ export async function getProtocolRewards(
     [token]
   ) as bigint;
 
-  console.log(`Protocol rewards for token ${token}: ${rewardsAmount.toString()}`);
+  logger.log(`Protocol rewards for token ${token}: ${rewardsAmount.toString()}`);
   return rewardsAmount;
 }
 
@@ -370,12 +371,12 @@ export async function getDistributionBatch(
     [epoch]
   ) as [bigint, boolean];
 
-  console.log(`Distribution batch for epoch ${epoch}:`);
+  logger.log(`Distribution batch for epoch ${epoch}:`);
   const lastProcessedOperator = result[0];
   const isComplete = result[1];
 
-  console.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
-  console.log(`  Is complete: ${isComplete}`);
+  logger.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
+  logger.log(`  Is complete: ${isComplete}`);
 
   return { lastProcessedOperator, isComplete };
 }
@@ -390,10 +391,10 @@ export async function getFeesConfiguration(
   const operatorFee = await rewards.read.operatorFee();
   const curatorFee = await rewards.read.curatorFee();
 
-  console.log("Fees configuration:");
-  console.log(`  Protocol fee: ${protocolFee}`);
-  console.log(`  Operator fee: ${operatorFee}`);
-  console.log(`  Curator fee: ${curatorFee}`);
+  logger.log("Fees configuration:");
+  logger.log(`  Protocol fee: ${protocolFee}`);
+  logger.log(`  Operator fee: ${operatorFee}`);
+  logger.log(`  Curator fee: ${curatorFee}`);
 
   return { protocolFee, operatorFee, curatorFee };
 }
@@ -409,7 +410,7 @@ export async function getRewardsShareForCollateralClass(
     [collateralClass]
   );
 
-  console.log(`Rewards share for collateral class ${collateralClass}: ${share}`);
+  logger.log(`Rewards share for collateral class ${collateralClass}: ${share}`);
   return share;
 }
 
@@ -421,7 +422,7 @@ export async function getMinRequiredUptime(
 ) {
   const minUptime = await rewards.read.minRequiredUptime();
 
-  console.log(`Minimum required uptime: ${minUptime.toString()}`);
+  logger.log(`Minimum required uptime: ${minUptime.toString()}`);
   return minUptime;
 }
 
@@ -435,7 +436,7 @@ export async function getLastEpochClaimedStaker(
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker, rewardToken]);
 
-  console.log(`Last epoch claimed by staker ${staker} for token ${rewardToken}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by staker ${staker} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -449,7 +450,7 @@ export async function getLastEpochClaimedOperator(
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator, rewardToken]);
 
-  console.log(`Last epoch claimed by operator ${operator} for token ${rewardToken}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by operator ${operator} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -463,7 +464,7 @@ export async function getLastEpochClaimedCurator(
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator, rewardToken]);
 
-  console.log(`Last epoch claimed by curator ${curator} for token ${rewardToken}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by curator ${curator} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -477,6 +478,6 @@ export async function getLastEpochClaimedProtocol(
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedProtocol([protocolOwner, rewardToken]);
 
-  console.log(`Last epoch claimed by protocol owner ${protocolOwner} for token ${rewardToken}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by protocol owner ${protocolOwner} for token ${rewardToken}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }

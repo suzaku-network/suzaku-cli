@@ -2,6 +2,7 @@ import { getContract, PublicClient, GetContractReturnType, Address, WalletClient
 import { SuzakuABI } from '../abis';
 import { exit } from 'process';
 import { ExtendedClient } from '../client';
+import { logger } from './logger';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
@@ -35,13 +36,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
         try {
           const simulateFn = (contract as any).simulate?.[prop]
           if (typeof simulateFn === 'function') {
-            // console.log(`Simulating ${String(prop)}`);
+            // logger.log(`Simulating ${String(prop)}`);
             await simulateFn(...args)
           }
-          // console.log(`Executing ${String(prop)}`);
+          // logger.log(`Executing ${String(prop)}`);
           return fn(...args)
         } catch (error: any) {
-          console.error(error.message)
+          logger.error(error.message)
           exit(1)
         }
       }
@@ -73,7 +74,7 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
           if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction`);
           return hash
         } catch (error: any) {
-          console.error(error.message)
+          logger.error(error.message)
           exit(1)
         }
       }
@@ -86,8 +87,7 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
 }
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0): CurriedContractFn<T> =>
-  (address: Address) =>
-  {
+  (address: Address) => {
     let contract = getContract({
       abi: SuzakuABI[abi],
       address,

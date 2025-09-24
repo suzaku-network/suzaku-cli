@@ -1,5 +1,6 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { logger } from './lib/logger';
 
 export async function setUpSecurityModule(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
@@ -7,32 +8,32 @@ export async function setUpSecurityModule(
   maxWeight: bigint,
   account: Account
 ) {
-  console.log("Setting up security module...");
+  logger.log("Setting up security module...");
 
-    const hash = await balancer.safeWrite.setUpSecurityModule(
-      [securityModule, maxWeight],
-      { chain: null, account }
-    );
-    console.log("Security module updated, tx hash:", hash);
+  const hash = await balancer.safeWrite.setUpSecurityModule(
+    [securityModule, maxWeight],
+    { chain: null, account }
+  );
+  logger.log("Security module updated, tx hash:", hash);
 }
 
 export async function getSecurityModules(
   balancer: SafeSuzakuContract['BalancerValidatorManager']
 ) {
-  console.log("Getting security modules...");
+  logger.log("Getting security modules...");
 
-    const modules = await balancer.read.getSecurityModules();
-    console.log(modules);
+  const modules = await balancer.read.getSecurityModules();
+  logger.log(modules);
 }
 
 export async function getSecurityModuleWeights(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
-  console.log("Getting security module weights...");
+  logger.log("Getting security module weights...");
 
-    const val = await balancer.read.getSecurityModuleWeights(
-      [securityModule]
-    );
-    console.log(val);
+  const val = await balancer.read.getSecurityModuleWeights(
+    [securityModule]
+  );
+  logger.log(val);
 }

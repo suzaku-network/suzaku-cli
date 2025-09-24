@@ -5,6 +5,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
 import * as readline from 'readline';
 import { fromBytes, Hex, pad } from "viem";
+import { logger } from './logger';
 
 const CHECKSUM_LENGTH = 4;
 
@@ -89,7 +90,7 @@ export function bytesToCB58(bytes: Uint8Array): string {
 }
 
 export async function interruptiblePause(seconds: number): Promise<void> {
-    console.log(`\nWaiting ${seconds} seconds before aggregating signatures...`);
+    logger.log(`\nWaiting ${seconds} seconds before aggregating signatures...`);
 
     return new Promise((resolve) => {
         const rl = readline.createInterface({
@@ -177,13 +178,13 @@ export async function retryWhileError<T>(
         }
     }
 
-    console.error("Timeout reached !\n", lastErr);
+    logger.error("Timeout reached !\n", lastErr);
     process.exit(1);
-  }
+}
 
 export function bigintReplacer(_key: string, value: any) {
     if (typeof value === "bigint") {
         return Number(value);
     }
     return value;
-  }
+}

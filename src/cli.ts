@@ -5,6 +5,7 @@ import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient } from "./client";
+import { logger } from './lib/logger';
 import {
     registerVaultL1,
     updateVaultMaxL1Limit,
@@ -129,6 +130,7 @@ import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, A
 import { increasePChainValidatorBalance } from './lib/pChainUtils';
 import { completValidatorRemoval } from './poa';
 import { color } from 'console-log-colors';
+import { pipe, R } from '@mobily/ts-belt';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -151,7 +153,7 @@ async function main() {
             .default(0)
             .argParser(ParserNumber))
         .version('0.1.0');
-    
+
     /* --------------------------------------------------
     * Generic L1 Commands
     * -------------------------------------------------- */
@@ -164,13 +166,14 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
 
-            const txHash = await increasePChainValidatorBalance(
+            pipe(await increasePChainValidatorBalance(
                 client,
                 opts.privateKey!,
                 amount,
                 validationId
-            );
-            console.log(`Top-up transaction hash: ${txHash}`);
+            ),
+                R.tap(txHash => logger.log(`Top-up transaction hash: ${txHash}`)),
+                R.tapError(err => { logger.error(err); process.exit(1) }),)
         });
     // convertSubnetToL1
     program
@@ -439,7 +442,7 @@ async function main() {
                 client.account!
             );
         });
-    
+
     program
         .command("vault-grant-staker-role")
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
@@ -454,9 +457,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 })
-            console.log(`Granted staker role to ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
+            logger.log(`Granted staker role to ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
         });
-    
+
     program
         .command("vault-revoke-staker-role")
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
@@ -471,9 +474,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 })
-            console.log(`Revoked staker role from ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
+            logger.log(`Revoked staker role from ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
         });
-    
+
     program
         .command("collateral-deposit")
         .addArgument(ArgAddress("collateralAddress", "Collateral contract address"))
@@ -516,7 +519,7 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
             const vault = config.contracts.VaultTokenized(vaultAddress);
             const delegator = await getVaultDelegator(vault);
-            console.log("Vault delegator:", delegator);
+            logger.log("Vault delegator:", delegator);
         });
 
     program
@@ -668,9 +671,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 });
-            console.log(`Added collateral class ${collateralClassId} with min stake ${minValidatorStake} and max stake ${maxValidatorStake} using collateral at ${initialCollateral}`);
+            logger.log(`Added collateral class ${collateralClassId} with min stake ${minValidatorStake} and max stake ${maxValidatorStake} using collateral at ${initialCollateral}`);
         });
-    
+
     // Add collateral to class
     program
         .command("middleware-add-collateral-to-class")
@@ -687,9 +690,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 });
-            console.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
+            logger.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
         });
-    
+
     // activateSecondaryCollateralClass
     program
         .command("middleware-activate-collateral-class")
@@ -705,9 +708,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 });
-            console.log(`Activated collateral class ${collateralClassId}`);
+            logger.log(`Activated collateral class ${collateralClassId}`);
         });
-    
+
     // deactivateSecondaryCollateralClass
     program
         .command("middleware-deactivate-collateral-class")
@@ -723,9 +726,9 @@ async function main() {
                     chain: null,
                     account: client.account!,
                 });
-            console.log(`Deactivated collateral class ${collateralClassId}`);
+            logger.log(`Deactivated collateral class ${collateralClassId}`);
         });
-    
+
     // Register operator
     program
         .command("middleware-register-operator")
@@ -790,27 +793,27 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            
+
             const epochsPerCall = options.epochs || await middlewareSvc.read.getCurrentEpoch() - await middlewareSvc.read.lastGlobalNodeStakeUpdateEpoch() + 1;
             const loopCount = options.loopEpochs || 1;
-            
-            console.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
-            
+
+            logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
+
             for (let i = 0; i < loopCount; i++) {
-                console.log(`\nIteration ${i + 1}/${loopCount}`);
+                logger.log(`\nIteration ${i + 1}/${loopCount}`);
                 await middlewareManualProcessNodeStakeCache(
                     middlewareSvc,
                     epochsPerCall,
                     client.account!
                 );
-                
+
                 if (i < loopCount - 1 && options.delay > 0) {
-                    console.log(`Waiting ${options.delay}ms before next iteration...`);
+                    logger.log(`Waiting ${options.delay}ms before next iteration...`);
                     await new Promise(resolve => setTimeout(resolve, options.delay));
                 }
             }
-            
-            console.log(`\nCompleted processing ${loopCount * epochsPerCall} total epochs`);
+
+            logger.log(`\nCompleted processing ${loopCount * epochsPerCall} total epochs`);
         });
 
     // Add node
@@ -889,7 +892,7 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance))*1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance)) * 1e9));
 
             // Call middlewareCompleteValidatorRegistration
             await middlewareCompleteValidatorRegistration(
@@ -1030,18 +1033,18 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
-            console.log("Calculating and caching stakes...");
+            logger.log("Calculating and caching stakes...");
 
-                if (!client.account) {
-                    throw new Error('Client account is required');
-                }
-                const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-                const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, collateralClass],
-                    {
-                        chain: null,
-                        account: client.account,
-                    });
-                console.log("calcAndCacheStakes done, tx hash:", hash);
+            if (!client.account) {
+                throw new Error('Client account is required');
+            }
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, collateralClass],
+                {
+                    chain: null,
+                    account: client.account,
+                });
+            logger.log("calcAndCacheStakes done, tx hash:", hash);
 
         });
 
@@ -1241,7 +1244,7 @@ async function main() {
                 operator
             );
         });
-    
+
     // getOperatorAvailableStake (read)
     program
         .command("middleware-get-operator-available-stake")
@@ -1253,7 +1256,7 @@ async function main() {
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
-            console.log(`Operator ${operator} available stake:\n${availableStake}`);
+            logger.log(`Operator ${operator} available stake:\n${availableStake}`);
         });
 
     // getAllOperators (read)
@@ -1308,7 +1311,7 @@ async function main() {
             const opts = program.opts();
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client, opts.wait);
-            console.log(`nodeId: ${options.nodeId}`);
+            logger.log(`nodeId: ${options.nodeId}`);
             const middleware = config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeLogs(
                 client,
@@ -1331,16 +1334,16 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
             const balancerSvc = config.contracts.BalancerValidatorManager(balancerAddress);
-            console.log(`Fetching last validation ID`);
+            logger.log(`Fetching last validation ID`);
             const validationId = await middlewareLastValidationId(
                 client,
                 middlewareSvc,
                 balancerSvc,
                 nodeId
             )
-            console.log(`Last validationID: ${validationId}`);
+            logger.log(`Last validationID: ${validationId}`);
         })
-    
+
     program
         .command("middleware-to-vault-epoch")
         .description("convert middleware epoch to a vault epoch")
@@ -1355,9 +1358,9 @@ async function main() {
             const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
             const middlewareEpochTs = await middlewareSvc.read.getEpochStartTs([middlewareEpoch]);
             const vaultEpoch = await vaultSvc.read.epochAt([middlewareEpochTs]);
-            console.log(`Vault epoch at middleware epoch ${middlewareEpoch} (timestamp: ${middlewareEpochTs}) is ${vaultEpoch}`);
+            logger.log(`Vault epoch at middleware epoch ${middlewareEpoch} (timestamp: ${middlewareEpochTs}) is ${vaultEpoch}`);
         })
-    
+
     program
         .command("vault-to-middleware-epoch")
         .description("convert vault epoch to a middleware epoch")
@@ -1372,7 +1375,7 @@ async function main() {
             const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
             const vaultEpochStartTs = await vaultSvc.read.epochDuration() * vaultEpoch + await vaultSvc.read.epochDurationInit();
             const middlewareEpoch = await middlewareSvc.read.getEpochAtTs([vaultEpochStartTs]);
-            console.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
+            logger.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
         })
 
     /**
@@ -1557,14 +1560,14 @@ async function main() {
             const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             // Convert nodeID to Hex if necessary
             const nodeIdHex = parseNodeID(nodeID, false);
-            console.log(nodeIdHex)
+            logger.log(nodeIdHex)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex]);
             const txHash = await poaSecurityModule.safeWrite.initiateValidatorRemoval([validationId], {
                 chain: null,
                 account: client.account!,
             })
-            console.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
-            
+            logger.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
+
         });
 
     program
@@ -1591,8 +1594,8 @@ async function main() {
                 nodeId,
                 pchainTxPrivateKey: options.pchainTxPrivateKey
             });
-            
-            console.log(`End validation initialized for node . Transaction hash: ${txHash}`);
+
+            logger.log(`End validation initialized for node . Transaction hash: ${txHash}`);
         });
 
     /**
@@ -1611,13 +1614,13 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
 
             const operator = operatorAddress;
-            console.log(`Operator: ${operator}`);
+            logger.log(`Operator: ${operator}`);
 
             // 1) Read total vaults from VaultManager
             const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
             const vaultCount = await vaultManager.read.getVaultCount()
 
-            console.log(`Found ${vaultCount} vault(s).`);
+            logger.log(`Found ${vaultCount} vault(s).`);
 
             // This map accumulates the total stake for each collateral
             const totalStakesByCollateral: Record<string, bigint> = {};
@@ -1639,7 +1642,7 @@ async function main() {
             for (let i = 0n; i < vaultCount; i++) {
                 const [vaultAddress] = await vaultManager.read.getVaultAtWithTimes([i]);
 
-                console.log(`\nVault #${i}: ${vaultAddress}`);
+                logger.log(`\nVault #${i}: ${vaultAddress}`);
 
                 // read the collateralClass
                 const collateralClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
@@ -1649,7 +1652,7 @@ async function main() {
                 const delegator = await vaultTokenized.read.delegator();
 
                 if (delegator === '0x0000000000000000000000000000000000000000') {
-                    console.log("    (No delegator set, skipping)");
+                    logger.log("    (No delegator set, skipping)");
                     continue;
                 }
                 const l1RestakeDelegator = config.contracts.L1RestakeDelegator(delegator);
@@ -1666,7 +1669,7 @@ async function main() {
                         const stakeValue = await l1RestakeDelegator.read.stake([l1Address, collateralClass, operator])
 
                         if (stakeValue > 0n) {
-                            console.log(
+                            logger.log(
                                 `    L1: ${l1Address} => stake = ${stakeValue.toString()} (vault=${vaultAddress})`
                             );
 
@@ -1679,15 +1682,15 @@ async function main() {
             }
 
             // 5) Finally, print aggregated totals
-            console.log("\nAggregated stakes by collateral:");
+            logger.log("\nAggregated stakes by collateral:");
             if (Object.keys(totalStakesByCollateral).length === 0) {
-                console.log("   No stakes found or operator not opted into any L1s this way.");
+                logger.log("   No stakes found or operator not opted into any L1s this way.");
             } else {
                 for (const [collateralAddr, totalWei] of Object.entries(totalStakesByCollateral)) {
                     // optional: look up decimals for that collateral if you want a float
                     const decimals = 18; // or read from chain
                     const floatAmount = Number(totalWei) / 10 ** decimals;
-                    console.log(`   Collateral=${collateralAddr} totalStakeWei=${totalWei} => ${floatAmount}`);
+                    logger.log(`   Collateral=${collateralAddr} totalStakeWei=${totalWei} => ${floatAmount}`);
                 }
             }
         });
@@ -1710,7 +1713,7 @@ async function main() {
             if (cmd) {
                 const sub = program.commands.find(c => c.name() === cmd);
                 if (!sub) {
-                    console.error(`Unknown command: ${cmd}`);
+                    logger.error(`Unknown command: ${cmd}`);
                     program.outputHelp();
                     process.exit(1);
                 }
@@ -1761,7 +1764,7 @@ async function main() {
         .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
-                console.error("Error: Private key is required. Use -k or set PK environment variable.");
+                logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
 
@@ -1788,7 +1791,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
-                console.error("Error: Private key is required. Use -k or set PK environment variable.");
+                logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
             const client = generateClient(opts.network, opts.privateKey!);
@@ -1812,7 +1815,7 @@ async function main() {
         .action(async (uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
-                console.error("Error: Private key is required. Use -k or set PK environment variable.");
+                logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
             const client = generateClient(opts.network, opts.privateKey!);
@@ -1844,7 +1847,7 @@ async function main() {
                 validationID,
                 epoch
             );
-            console.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+            logger.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
 
     program
@@ -1863,7 +1866,7 @@ async function main() {
                 validationID,
                 epoch
             );
-            console.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+            logger.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
         });
 
     program
@@ -1882,7 +1885,7 @@ async function main() {
                 operator,
                 epoch
             );
-            console.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+            logger.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
         });
 
     program
@@ -1901,7 +1904,7 @@ async function main() {
                 operator,
                 epoch
             );
-            console.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+            logger.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
         });
 
     /* --------------------------------------------------
@@ -2436,14 +2439,14 @@ async function main() {
     )
 
     program.hook("preAction", (thisCommand, actionCommand) => {
-        
-        // console.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
-        // console.log(`Executing action: ${actionCommand}`);
-        // console.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
+
+        // logger.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
+        // logger.log(`Executing action: ${actionCommand}`);
+        // logger.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
         const opts = program.opts();
         // Block manually private key on mainnet
         if (opts.privateKey! && opts.network === "mainnet") {
-            console.error("Using private key on mainnet is not allowed. Use the secret keystore instead.");
+            logger.error("Using private key on mainnet is not allowed. Use the secret keystore instead.");
             process.exit(1);
         }
         // Ensure privateKey is set if opts.secret is provided
@@ -2456,9 +2459,13 @@ async function main() {
 // handle waggmi gigantic errors
 main().catch((error) => {
     if (error instanceof Error && error.message.includes("contractAddress")) {
-        console.error(error.message);
+        logger.error(error.message);
     } else {
-        console.error(error);
+        logger.error(error);
     }
+    logger.printJson()
     process.exit(1);
+})
+.finally(() => {
+    logger.printJson();
 });

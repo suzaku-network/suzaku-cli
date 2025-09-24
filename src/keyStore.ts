@@ -1,6 +1,7 @@
 import { Command } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import { confPath } from './config';
+import { logger } from './lib/logger';
 
 export const passPath = confPath + '/.password-store'
 
@@ -8,7 +9,7 @@ export function buildCommands(program: Command) {
   program
     .command("list-gpg-ids")
     .description("List available gpg key ids installed on the system")
-    .action(async () => console.log(Pass.listGPGIds()))
+    .action(async () => logger.log(Pass.listGPGIds()))
 
   program
     .command("init")
@@ -16,7 +17,7 @@ export function buildCommands(program: Command) {
     .argument("<gpgKeyIds...>", "desired gpg key ids used to encrypt/decrypt the key store")
     .action(async (gpgKeyIds: string[]) => {
       const pass = new Pass(passPath, gpgKeyIds)
-      console.log(`Key store initialized with GPG keys: ${gpgKeyIds.join(' ')}`);
+      logger.log(`Key store initialized with GPG keys: ${gpgKeyIds.join(' ')}`);
     })
 
   program
@@ -27,7 +28,7 @@ export function buildCommands(program: Command) {
     .action(async (name: string, value: string) => {
       const pass = new Pass(passPath)
       pass.insert(name, value)
-      console.log(`Secret '${name}' created successfully.`);
+      logger.log(`Secret '${name}' created successfully.`);
     })
 
   program
@@ -37,7 +38,7 @@ export function buildCommands(program: Command) {
     .action(async (name: string) => {
       const pass = new Pass(passPath)
       pass.rm(name)
-      console.log(`Secret '${name}' removed successfully.`);
+      logger.log(`Secret '${name}' removed successfully.`);
     })
 
   program
@@ -45,7 +46,7 @@ export function buildCommands(program: Command) {
     .description("List all encrypted secrets")
     .action(async () => {
       const pass = new Pass(passPath)
-      console.log("Available secrets:");
-      console.log(pass)
+      logger.log("Available secrets:");
+      logger.log(pass)
     });
 }

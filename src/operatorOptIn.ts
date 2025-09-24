@@ -1,7 +1,7 @@
-import { ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { Hex } from 'viem';
 import type { Account } from 'viem';
+import { logger } from './lib/logger';
 
 // L1 opt-in functionality
 export async function optInL1(
@@ -9,11 +9,11 @@ export async function optInL1(
   l1Address: Hex,
   account: Account
 ) {
-    const hash = await optInService.safeWrite.optIn(
-      [l1Address],
-      { chain: null, account }
-    );
-    console.log("L1 opt-in successful, tx hash:", hash);
+  const hash = await optInService.safeWrite.optIn(
+    [l1Address],
+    { chain: null, account }
+  );
+  logger.log("L1 opt-in successful, tx hash:", hash);
 }
 
 export async function optOutL1(
@@ -22,11 +22,11 @@ export async function optOutL1(
   account: Account
 ) {
 
-    const hash = await optInService.safeWrite.optOut(
-      [l1Address],
-      { chain: null, account }
-    );
-    console.log("L1 opt-out successful, tx hash:", hash);
+  const hash = await optInService.safeWrite.optOut(
+    [l1Address],
+    { chain: null, account }
+  );
+  logger.log("L1 opt-out successful, tx hash:", hash);
 }
 
 export async function checkOptInL1(
@@ -34,11 +34,11 @@ export async function checkOptInL1(
   operator: Hex,
   l1Address: Hex
 ) {
-    const result = await optInService.read.isOptedIn(
-      [operator, l1Address]
-    );
-    console.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
-    return result;
+  const result = await optInService.read.isOptedIn(
+    [operator, l1Address]
+  );
+  logger.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
+  return result;
 }
 
 // Vault opt-in functionality
@@ -47,11 +47,11 @@ export async function optInVault(
   vaultAddress: Hex,
   account: Account
 ) {
-    const hash = await optInService.safeWrite.optIn(
-      [vaultAddress],
-      { chain: null, account }
-    );
-    console.log("Vault opt-in successful, tx hash:", hash);
+  const hash = await optInService.safeWrite.optIn(
+    [vaultAddress],
+    { chain: null, account }
+  );
+  logger.log("Vault opt-in successful, tx hash:", hash);
 }
 
 export async function optOutVault(
@@ -65,7 +65,7 @@ export async function optOutVault(
     [vaultAddress],
     { chain: null, account }
   );
-  console.log("Vault opt-out successful, tx hash:", hash);
+  logger.log("Vault opt-out successful, tx hash:", hash);
 }
 
 export async function checkOptInVault(
@@ -73,9 +73,9 @@ export async function checkOptInVault(
   operator: Hex,
   vaultAddress: Hex
 ) {
-    const result = await optInService.read.isOptedIn(
-      [operator, vaultAddress]
-    );
-    console.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
-    return result;
+  const result = await optInService.read.isOptedIn(
+    [operator, vaultAddress]
+  );
+  logger.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
+  return result;
 }

@@ -1,5 +1,6 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { logger } from './lib/logger';
 
 export async function setL1Limit(
   delegator: SafeSuzakuContract['L1RestakeDelegator'],
@@ -8,12 +9,12 @@ export async function setL1Limit(
   limit: bigint,
   account: Account
 ) {
-  console.log("Setting L1 limit...");
-    const hash = await delegator.safeWrite.setL1Limit(
-      [l1Address, collateralClass, limit],
-      { chain: null, account }
-    );
-    console.log("setL1Limit done, tx hash:", hash);
+  logger.log("Setting L1 limit...");
+  const hash = await delegator.safeWrite.setL1Limit(
+    [l1Address, collateralClass, limit],
+    { chain: null, account }
+  );
+  logger.log("setL1Limit done, tx hash:", hash);
 }
 
 export async function setOperatorL1Shares(
@@ -24,11 +25,11 @@ export async function setOperatorL1Shares(
   shares: bigint,
   account: Account
 ) {
-  console.log("Setting operator L1 shares...");
+  logger.log("Setting operator L1 shares...");
 
-    const hash = await delegator.safeWrite.setOperatorL1Shares(
-      [l1Address, collateralClass, operatorAddress, shares],
-      { chain: null, account }
-    );
-    console.log("setOperatorL1Shares done, tx hash:", hash);
+  const hash = await delegator.safeWrite.setOperatorL1Shares(
+    [l1Address, collateralClass, operatorAddress, shares],
+    { chain: null, account }
+  );
+  logger.log("setOperatorL1Shares done, tx hash:", hash);
 }

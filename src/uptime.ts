@@ -5,6 +5,7 @@ import { packWarpIntoAccessList } from './lib/warpUtils';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
 import { Network } from "./client";
+import { logger } from './lib/logger';
 
 export async function getValidationUptimeMessage(
   network: Network,
@@ -35,10 +36,10 @@ export async function getValidationUptimeMessage(
 
   const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
-  console.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
+  logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
   const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
-  console.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
+  logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
 }
@@ -59,7 +60,7 @@ export async function computeValidatorUptime(
     { chain: null, account, accessList }
   );
 
-  console.log("computeValidatorUptime done, tx hash:", txHash);
+  logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;
 }
 
@@ -75,8 +76,8 @@ export async function reportAndSubmitValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   account: Account
 ) {
-  console.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
-  console.log(`Target UptimeTracker: ${uptimeTracker.address}`);
+  logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
+  logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
   const warpNetworkID = network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
 
@@ -89,7 +90,7 @@ export async function reportAndSubmitValidatorUptime(
     sourceChainID
   );
 
-  console.log(`Raw Signed Uptime Message from getValidationUptimeMessage: ${signedUptimeHex}`); // Log raw value for debugging
+  logger.log(`Raw Signed Uptime Message from getValidationUptimeMessage: ${signedUptimeHex}`); // Log raw value for debugging
 
   // Ensure signedUptimeHex is a string and normalize it to have "0x" prefix
   if (typeof signedUptimeHex === 'string') {
@@ -98,7 +99,7 @@ export async function reportAndSubmitValidatorUptime(
     }
   } else {
     // If it's not a string at all (e.g., undefined, null from a failed collectSignatures)
-    console.error("getValidationUptimeMessage did not return a string for the signed message.");
+    logger.error("getValidationUptimeMessage did not return a string for the signed message.");
     throw new Error("Failed to obtain a valid signed uptime hex message (not a string).");
   }
 
@@ -106,22 +107,22 @@ export async function reportAndSubmitValidatorUptime(
   if (!signedUptimeHex || typeof signedUptimeHex !== 'string' || !signedUptimeHex.startsWith('0x') || signedUptimeHex.length <= 2) { // Added length check
     // This error should ideally not be hit if the above normalization works
     // and if getValidationUptimeMessage returns a non-empty hex string.
-    console.error(`Problematic signedUptimeHex after normalization: '${signedUptimeHex}'`);
+    logger.error(`Problematic signedUptimeHex after normalization: '${signedUptimeHex}'`);
     throw new Error("Failed to obtain a valid signed uptime hex message (post-normalization check failed).");
   }
 
-  console.log(`\nStep 1 complete. Normalized Signed Uptime Hex: ${signedUptimeHex}`);
+  logger.log(`\nStep 1 complete. Normalized Signed Uptime Hex: ${signedUptimeHex}`);
 
   // Step 2: Submit this message to the UptimeTracker contract
-  console.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
+  logger.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
   const txHash = await computeValidatorUptime(
     uptimeTracker,
     account,
     signedUptimeHex as Hex
   );
 
-  console.log("\nValidator uptime report and submission complete.");
-  console.log("Final Transaction Hash:", txHash);
+  logger.log("\nValidator uptime report and submission complete.");
+  logger.log("Final Transaction Hash:", txHash);
   return txHash;
 }
 
@@ -141,7 +142,7 @@ export async function computeOperatorUptimeAtEpoch(
     { chain: null, account }
   );
 
-  console.log(`computeOperatorUptimeAt for epoch ${epoch} done, tx hash: ${txHash}`);
+  logger.log(`computeOperatorUptimeAt for epoch ${epoch} done, tx hash: ${txHash}`);
   return txHash;
 }
 

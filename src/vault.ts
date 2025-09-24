@@ -2,6 +2,7 @@ import { ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account, parseUnits } from 'viem';
+import { logger } from './lib/logger';
 
 // deposit
 export async function depositVault(
@@ -12,55 +13,55 @@ export async function depositVault(
   amount: string,
   account: Account
 ) {
-  console.log("Depositing...");
+  logger.log("Depositing...");
 
-    // Get the collateral token address
-    const vault = config.contracts.VaultTokenized(vaultAddress);
-    const collateralAddress = await vault.read.collateral();
-    const collateral = config.contracts.DefaultCollateral(collateralAddress);
-    const decimals = await collateral.read.decimals();
-    // Calculate human-readable amount
-    const amountWei = parseUnits(amount, decimals)
-    console.log("\n=== Deposit Details ===");
-    console.log("Amount:", amount, "tokens");
-    console.log("Amount in wei:", amountWei.toString());
-    console.log("Decimals used:", decimals);
+  // Get the collateral token address
+  const vault = config.contracts.VaultTokenized(vaultAddress);
+  const collateralAddress = await vault.read.collateral();
+  const collateral = config.contracts.DefaultCollateral(collateralAddress);
+  const decimals = await collateral.read.decimals();
+  // Calculate human-readable amount
+  const amountWei = parseUnits(amount, decimals)
+  logger.log("\n=== Deposit Details ===");
+  logger.log("Amount:", amount, "tokens");
+  logger.log("Amount in wei:", amountWei.toString());
+  logger.log("Decimals used:", decimals);
 
-    console.log("Collateral address:", collateralAddress);
-    console.log("Vault address:", vault.address);
+  logger.log("Collateral address:", collateralAddress);
+  logger.log("Vault address:", vault.address);
 
-    // Approve the vault to spend collateral tokens
-    console.log("\n=== Collateral Approval ===");
-    console.log("Approving:", amount, "tokens");
-    console.log("Approval amount in wei:", amountWei.toString());
-    console.log("Spender (vault):", vault.address);
-    const approveTx = await collateral.safeWrite.approve(
-      [vault.address, amountWei],
-      { chain: null, account }
-    );
-    console.log("Approval tx hash:", approveTx);
+  // Approve the vault to spend collateral tokens
+  logger.log("\n=== Collateral Approval ===");
+  logger.log("Approving:", amount, "tokens");
+  logger.log("Approval amount in wei:", amountWei.toString());
+  logger.log("Spender (vault):", vault.address);
+  const approveTx = await collateral.safeWrite.approve(
+    [vault.address, amountWei],
+    { chain: null, account }
+  );
+  logger.log("Approval tx hash:", approveTx);
 
-    // Wait for the approval transaction to be mined
-    console.log("Waiting for approval confirmation...");
-    const approvalReceipt = await client.waitForTransactionReceipt({ hash: approveTx });
-    console.log("Approval confirmed in block:", approvalReceipt.blockNumber);
+  // Wait for the approval transaction to be mined
+  logger.log("Waiting for approval confirmation...");
+  const approvalReceipt = await client.waitForTransactionReceipt({ hash: approveTx });
+  logger.log("Approval confirmed in block:", approvalReceipt.blockNumber);
 
-    // === Existing deposit code (unchanged) ===
-    console.log("\n=== Executing Deposit ===");
-    console.log("Depositing:", amount, "tokens");
-    console.log("Deposit amount in wei:", amountWei.toString());
-    console.log("On behalf of:", onBehalfOf);
-    const hash = await vault.safeWrite.deposit(
-      [onBehalfOf, amountWei],
-      { chain: null, account }
-    );
-    console.log("Deposit tx hash:", hash);
+  // === Existing deposit code (unchanged) ===
+  logger.log("\n=== Executing Deposit ===");
+  logger.log("Depositing:", amount, "tokens");
+  logger.log("Deposit amount in wei:", amountWei.toString());
+  logger.log("On behalf of:", onBehalfOf);
+  const hash = await vault.safeWrite.deposit(
+    [onBehalfOf, amountWei],
+    { chain: null, account }
+  );
+  logger.log("Deposit tx hash:", hash);
 
-    // Wait for deposit confirmation
-    console.log("Waiting for deposit confirmation...");
-    const depositReceipt = await client.waitForTransactionReceipt({ hash: hash });
-    console.log("Deposit confirmed in block:", depositReceipt.blockNumber);
-    console.log("✅ Deposit completed successfully!");
+  // Wait for deposit confirmation
+  logger.log("Waiting for deposit confirmation...");
+  const depositReceipt = await client.waitForTransactionReceipt({ hash: hash });
+  logger.log("Deposit confirmed in block:", depositReceipt.blockNumber);
+  logger.log("✅ Deposit completed successfully!");
 
 }
 
@@ -70,14 +71,14 @@ export async function withdrawVault(
   amountWei: bigint,
   account: Account
 ) {
-  console.log("Withdrawing...");
+  logger.log("Withdrawing...");
 
-    const hash = await vault.safeWrite.withdraw(
-      [claimer, amountWei],
-      { chain: null, account }
-    );
-    console.log("Withdraw done, tx hash:", hash);
-    console.log("✅ Withdrawal completed successfully!");
+  const hash = await vault.safeWrite.withdraw(
+    [claimer, amountWei],
+    { chain: null, account }
+  );
+  logger.log("Withdraw done, tx hash:", hash);
+  logger.log("✅ Withdrawal completed successfully!");
 }
 
 // claim
@@ -87,14 +88,14 @@ export async function claimVault(
   epoch: bigint,
   account: Account
 ) {
-  console.log("Claiming...");
+  logger.log("Claiming...");
 
-    const hash = await vault.safeWrite.claim(
-      [recipient, epoch],
-      { chain: null, account }
-    );
-    console.log("Claim done, tx hash:", hash);
-    console.log("✅ Claim completed successfully!");
+  const hash = await vault.safeWrite.claim(
+    [recipient, epoch],
+    { chain: null, account }
+  );
+  logger.log("Claim done, tx hash:", hash);
+  logger.log("✅ Claim completed successfully!");
 }
 
 export async function getVaultDelegator(
@@ -118,11 +119,11 @@ export async function getStake(
 export async function getVaultCollateral(
   vault: SafeSuzakuContract['VaultTokenized']
 ) {
-  console.log("Reading vault collateral...");
+  logger.log("Reading vault collateral...");
 
-    const collateral = await vault.read.collateral();
-    console.log("Collateral token:", collateral);
-    return collateral;
+  const collateral = await vault.read.collateral();
+  logger.log("Collateral token:", collateral);
+  return collateral;
 
 }
 
@@ -130,32 +131,32 @@ export async function getVaultBalanceOf(
   vault: SafeSuzakuContract['VaultTokenized'],
   account: Hex
 ) {
-  console.log(`Reading vault balance for ${account}...`);
+  logger.log(`Reading vault balance for ${account}...`);
 
-    const balance = await vault.read.balanceOf([account]);
-    console.log("Vault token balance:", balance.toString());
-    return balance;
+  const balance = await vault.read.balanceOf([account]);
+  logger.log("Vault token balance:", balance.toString());
+  return balance;
 }
 
 export async function getVaultActiveBalanceOf(
   vault: SafeSuzakuContract['VaultTokenized'],
   account: Hex
 ) {
-  console.log(`Reading active vault balance for ${account}...`);
+  logger.log(`Reading active vault balance for ${account}...`);
 
-    const activeBalance = await vault.read.activeBalanceOf([account]);
-    console.log("Active vault balance:", activeBalance.toString());
-    return activeBalance;
+  const activeBalance = await vault.read.activeBalanceOf([account]);
+  logger.log("Active vault balance:", activeBalance.toString());
+  return activeBalance;
 }
 
 export async function getVaultTotalSupply(
   vault: SafeSuzakuContract['VaultTokenized']
 ) {
-  console.log("Reading vault total supply...");
+  logger.log("Reading vault total supply...");
 
-    const totalSupply = await vault.read.totalSupply();
-    console.log("Total supply:", totalSupply.toString());
-    return totalSupply;
+  const totalSupply = await vault.read.totalSupply();
+  logger.log("Total supply:", totalSupply.toString());
+  return totalSupply;
 }
 
 export async function getVaultWithdrawalSharesOf(
@@ -163,11 +164,11 @@ export async function getVaultWithdrawalSharesOf(
   epoch: bigint,
   account: Hex
 ) {
-  console.log(`Reading withdrawal shares for ${account} at epoch ${epoch}...`);
+  logger.log(`Reading withdrawal shares for ${account} at epoch ${epoch}...`);
 
-    const shares = await vault.read.withdrawalSharesOf([epoch, account]);
-    console.log("Withdrawal shares:", shares.toString());
-    return shares;
+  const shares = await vault.read.withdrawalSharesOf([epoch, account]);
+  logger.log("Withdrawal shares:", shares.toString());
+  return shares;
 }
 
 export async function getVaultWithdrawalsOf(
@@ -175,11 +176,11 @@ export async function getVaultWithdrawalsOf(
   epoch: bigint,
   account: Hex
 ) {
-  console.log(`Reading withdrawals for ${account} at epoch ${epoch}...`);
+  logger.log(`Reading withdrawals for ${account} at epoch ${epoch}...`);
 
-    const withdrawalAmount = await vault.read.withdrawalsOf([epoch, account]);
-    console.log("Withdrawal amount:", withdrawalAmount.toString());
-    return withdrawalAmount;
+  const withdrawalAmount = await vault.read.withdrawalsOf([epoch, account]);
+  logger.log("Withdrawal amount:", withdrawalAmount.toString());
+  return withdrawalAmount;
 }
 
 // Staker approve collateral and deposit tokens to collateral contract
@@ -189,21 +190,21 @@ export async function approveAndDepositCollateral(
   collateralAddress: Hex,
   amount: string,
 ) {
-  console.log("Approving collateral...");
+  logger.log("Approving collateral...");
   const account = client.account!
 
-    const collateral = config.contracts.DefaultCollateral(collateralAddress);
-    const rewardTokenAddress = await collateral.read.asset();
-    const rewardToken = config.contracts.ERC20(rewardTokenAddress);
-    const decimals = await collateral.read.decimals();
-    const amountWei = parseUnits(amount, decimals)
-    const hash = await rewardToken.safeWrite.approve(
-      [collateralAddress, amountWei],
-      { chain: null, account }
-    );
-    await client.waitForTransactionReceipt({ hash })
-    console.log("Approval done, tx hash:", hash);
-    const depositTx = await collateral.write.deposit([account.address, amountWei], { chain: null, account });
-    await client.waitForTransactionReceipt({ hash: depositTx })
-    console.log("Deposit to collateral done, tx hash:", depositTx);
+  const collateral = config.contracts.DefaultCollateral(collateralAddress);
+  const rewardTokenAddress = await collateral.read.asset();
+  const rewardToken = config.contracts.ERC20(rewardTokenAddress);
+  const decimals = await collateral.read.decimals();
+  const amountWei = parseUnits(amount, decimals)
+  const hash = await rewardToken.safeWrite.approve(
+    [collateralAddress, amountWei],
+    { chain: null, account }
+  );
+  await client.waitForTransactionReceipt({ hash })
+  logger.log("Approval done, tx hash:", hash);
+  const depositTx = await collateral.write.deposit([account.address, amountWei], { chain: null, account });
+  await client.waitForTransactionReceipt({ hash: depositTx })
+  logger.log("Deposit to collateral done, tx hash:", depositTx);
 }

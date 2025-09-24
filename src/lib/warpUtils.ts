@@ -6,6 +6,7 @@ import { utils } from '@avalabs/avalanchejs';
 import { cb58ToHex } from './utils';
 import { Network } from '../client';
 import { pChainChainID } from '../config';
+import { logger } from './logger';
 
 export interface PackL1ConversionMessageArgs {
     subnetId: string;
@@ -22,7 +23,7 @@ export interface SubnetToL1ConversionValidatorData {
         proofOfPossession: string;
     };
     weight: number; // Note: Solidity uses uint64 (bigint)
-  }
+}
 
 // Helper functions for packing messages
 const codecVersion = 0;
@@ -73,13 +74,13 @@ export function packL1ConversionMessage(args: PackL1ConversionMessageArgs, netwo
     // Uses newUnsignedMessage (which packs codec, network, sourceChain, message)
     const unsignedMessage = newUnsignedMessage(networkID, sourceChainID, subnetConversionAddressedCall);
     return [unsignedMessage, utils.base58check.decode(args.subnetId)];
-  }
+}
 
 export function subnetToL1ConversionID(args: PackL1ConversionMessageArgs): Uint8Array {
     const data = marshalSubnetToL1ConversionData(args);
     return sha256(data);
 }
-  
+
 export function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArgs): Uint8Array {
     const parts: Uint8Array[] = [];
 
@@ -94,7 +95,7 @@ export function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArg
     try {
         sortedValidators = [...args.validators].sort((a, b) => compareNodeIDs(a.nodeID, b.nodeID));
     } catch (error: any) {
-        console.warn("Error sorting validators, using original order:", error);
+        logger.warn("Error sorting validators, using original order:", error);
         sortedValidators = args.validators;
     }
 
@@ -117,7 +118,7 @@ export function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArg
         // Assuming nodePOP.publicKey is the BLS key here based on context.
         const blsPublicKeyBytes = utils.hexToBuffer(validator.nodePOP.publicKey);
         if (blsPublicKeyBytes.length !== 48) {
-            console.warn(`Expected BLS public key (nodePOP.publicKey) to be 48 bytes, got ${blsPublicKeyBytes.length}`);
+            logger.warn(`Expected BLS public key (nodePOP.publicKey) to be 48 bytes, got ${blsPublicKeyBytes.length}`);
             // Decide whether to throw or allow based on requirements
             // throw new Error(`Invalid BLS public key length from nodePOP.publicKey: ${blsPublicKeyBytes.length}`);
         }
@@ -131,9 +132,9 @@ export function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArg
     const result = concatenateUint8Arrays(...parts);
     return result;
 }
-  
+
 export const compareNodeIDs = (a: string, b: string) => {
-    // console.log(a, b); // Removed console log
+    // logger.log(a, b); // Removed console log
     let aNodeID: Uint8Array;
     let bNodeID: Uint8Array;
 
@@ -143,7 +144,7 @@ export const compareNodeIDs = (a: string, b: string) => {
         bNodeID = b.startsWith("NodeID-") ? utils.base58check.decode(b.split("-")[1]) : utils.hexToBuffer(b);
     } catch (error: any) {
         // Fallback to string comparison if parsing fails (e.g., invalid format)
-        console.warn(`Failed to parse NodeIDs for comparison ('${a}', '${b}'), falling back to string compare: ${error.message}`);
+        logger.warn(`Failed to parse NodeIDs for comparison ('${a}', '${b}'), falling back to string compare: ${error.message}`);
         return a.localeCompare(b);
     }
 
@@ -156,7 +157,7 @@ export const compareNodeIDs = (a: string, b: string) => {
     }
     // If one is a prefix of the other, the shorter one comes first
     return aNodeID.length - bNodeID.length;
-  }
+}
 
 function newAddressedCall(sourceAddress: Uint8Array, payload: Uint8Array): Uint8Array {
     return concatenateUint8Arrays(
@@ -220,7 +221,7 @@ interface SignatureResponse {
 }
 
 export async function collectSignaturesInitializeValidatorSet(params: {
-    network: Network, 
+    network: Network,
     subnetId: string;
     validatorManagerBlockchainID: string;
     managerAddress: Hex;
@@ -248,8 +249,8 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         }))
     }, 5, pChainChainID);
 
-    // console.log("Message:", fromBytes(message, 'hex'));
-    // console.log("Justification:", fromBytes(justification, 'hex'));
+    // logger.log("Message:", fromBytes(message, 'hex'));
+    // logger.log("Justification:", fromBytes(justification, 'hex'));
 
     // Use the signature aggregation API from Glacier
     const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
@@ -582,7 +583,7 @@ export function decodeWarpMessage(log: Log) {
     const abi = parseAbiItem('event SendWarpMessage(address indexed sender, bytes32 indexed messageID, bytes message)')
     return decodeEventLog({
         abi: [abi],
-          data: log.data,
-          topics: log.topics,
-        });
+        data: log.data,
+        topics: log.topics,
+    });
 }
