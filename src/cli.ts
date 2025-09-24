@@ -152,6 +152,7 @@ async function main() {
         .addOption(new Option('-w, --wait <confirmations>', 'Number of confirmations to wait after a write transaction')
             .default(0)
             .argParser(ParserNumber))
+        .addOption(new Option("--json", "Output logs in JSON format"))
         .version('0.1.0');
 
     /* --------------------------------------------------
@@ -2451,6 +2452,9 @@ async function main() {
         }
         // Ensure privateKey is set if opts.secret is provided
         opts.privateKey! = opts.privateKey! || opts.secretName;
+
+        // Activate json output if --json is provided
+        logger.setJsonMode(opts.json);
     });
 
     program.parse(process.argv);

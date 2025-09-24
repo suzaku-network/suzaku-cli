@@ -10,12 +10,6 @@ class Logger {
   private config: LoggerConfig = { silent: false, jsonMode: false };
   private data: LogData = {};
 
-  private constructor() {
-    // Check for --json flag or JSON_MODE env var
-    this.config.jsonMode = process.argv.includes('--json') || process.env.JSON_MODE === 'true';
-    this.config.silent = this.config.jsonMode; // Silent by default in JSON mode
-  }
-
   public static getInstance(): Logger {
     if (!Logger.instance) {
       Logger.instance = new Logger();
@@ -28,9 +22,9 @@ class Logger {
     this.config.silent = silent;
   }
 
-  public setJsonMode(jsonMode: boolean) {
-    this.config.jsonMode = jsonMode;
-    this.config.silent = jsonMode; // Auto-set silent when in JSON mode
+  public setJsonMode(jsonMode?: boolean) {
+    this.config.jsonMode = Boolean(jsonMode);
+    this.config.silent = Boolean(jsonMode); // Auto-set silent when in JSON mode
   }
 
   // Console methods
