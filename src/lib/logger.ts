@@ -5,6 +5,7 @@ export function wrapAsyncAction(actionFn: (...args: any[]) => Promise<void>) {
       await actionFn(...args);
     } catch (error) {
       logger.error(error);
+      process.exitCode = 1;
     } finally {
       await logger.printJson();
     }
@@ -65,6 +66,8 @@ class Logger {
     ).join(' ');
 
     if (this.data['error'] !== errorMessage) this.addData('error', errorMessage);
+
+    process.exitCode = 1;
   }
 
   public table(data: any) {
