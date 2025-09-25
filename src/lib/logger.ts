@@ -76,7 +76,15 @@ class Logger {
   // Data management methods
   public addData<K extends string>(key: K, value: any) {
     if (this.config.jsonMode) {
-      this.data[key] = this.data[key] !== undefined ? this.data[key] + "\n" + value : value
+      if (this.data[key] === undefined) {
+        this.data[key] = value;
+      } else {
+        if (Array.isArray(this.data[key])) {
+          this.data[key].push(value);
+        } else {
+          this.data[key] = [this.data[key], value];
+        }
+      }
     };
   }
 
