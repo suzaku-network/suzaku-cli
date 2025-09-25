@@ -1,3 +1,16 @@
+
+export function wrapAsyncAction(actionFn: (...args: any[]) => Promise<void>) {
+  return async (...args: any[]) => {
+    try {
+      await actionFn(...args);
+    } catch (error) {
+      logger.error(error);
+    } finally {
+      await logger.printJson();
+    }
+  };
+}
+
 type LogData = Record<string, any>;
 
 interface LoggerConfig {
@@ -45,11 +58,13 @@ class Logger {
       console.error(...args);
     }
     // Side effect: add error to data structure
-    const errorMessage = args.map(arg =>
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    const errorMessage = args.map(arg => {
+      if (arg instanceof Error) return String(arg)
+      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    }
     ).join(' ');
 
-    this.addData('error', errorMessage);
+    if (this.data['error'] !== errorMessage) this.addData('error', errorMessage);
   }
 
   public table(data: any) {
@@ -60,7 +75,9 @@ class Logger {
 
   // Data management methods
   public addData<K extends string>(key: K, value: any) {
-    if (this.config.jsonMode) this.data[key] = value;
+    if (this.config.jsonMode) {
+      this.data[key] = this.data[key] !== undefined ? this.data[key] + "\n" + value : value
+    };
   }
 
   public getData(): LogData {

@@ -42,8 +42,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
           // logger.log(`Executing ${String(prop)}`);
           return fn(...args)
         } catch (error: any) {
-          logger.error(error.message)
-          exit(1)
+          throw Error(error.message)
         }
       }
     },
@@ -71,11 +70,10 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
         try {
           const hash = await fn(...args)
           const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
-          if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction`);
+          if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + receipt.logs);
           return hash
         } catch (error: any) {
-          logger.error(error.message)
-          exit(1)
+          throw Error(error.message)
         }
       }
     },
