@@ -656,7 +656,7 @@ async function main() {
             const client = generateClient(opts.network);
             const config = getConfig(opts.network, client, opts.wait);
             const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
-            const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId)]);
+            const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
                 logger.log("Validator status: NotRegistered");
                 return;
@@ -1244,10 +1244,7 @@ async function main() {
             const client = generateClient(program.opts().network);
             const config = getConfig(program.opts().network, client, program.opts().wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            await middlewareNodePendingUpdate(
-                middlewareSvc,
-                validationId
-            );
+            // const isPending = await middlewareSvc.read.pe
         }));
 
     // getOperatorUsedStakeCached (read)
