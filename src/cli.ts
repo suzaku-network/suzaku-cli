@@ -77,7 +77,8 @@ import {
     setUpSecurityModule,
     getSecurityModules,
     getSecurityModuleWeights,
-    ValidatorStatusNames
+    ValidatorStatusNames,
+    ValidatorStatus
 } from "./balancer";
 import {
     getValidationUptimeMessage,
@@ -661,8 +662,9 @@ async function main() {
                 logger.log("Validator status: NotRegistered");
                 return;
             }
-            const validator = await balancer.read.getValidator([validationId]);
-            const status = validator.status;
+            const [validator, PendingWeightUpdate] = await Promise.all([balancer.read.getValidator([validationId]), balancer.read.isValidatorPendingWeightUpdate([validationId])]);
+
+            const status = validator.status == ValidatorStatus.Active && PendingWeightUpdate ? ValidatorStatus.PendingStakeUpdated : validator.status;
             logger.log("Validator status:", ValidatorStatusNames[status]);
         }));
 

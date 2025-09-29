@@ -8,7 +8,8 @@ export enum ValidatorStatus {
   Active,
   PendingRemoved,
   Completed,
-  Invalidated
+  Invalidated,
+  PendingStakeUpdated
 }
 
 export const ValidatorStatusNames = [
@@ -17,7 +18,8 @@ export const ValidatorStatusNames = [
   "Active",
   "PendingRemoved",
   "Completed",
-  "Invalidated"
+  "Invalidated",
+  "PendingStakeUpdated"
 ];
 
 export async function setUpSecurityModule(
