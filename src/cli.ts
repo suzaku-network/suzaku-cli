@@ -1381,6 +1381,20 @@ async function main() {
             const vaultEpoch = await vaultSvc.read.epochAt([middlewareEpochTs]);
             logger.log(`Vault epoch at middleware epoch ${middlewareEpoch} (timestamp: ${middlewareEpochTs}) is ${vaultEpoch}`);
         }))
+    
+    program
+        .command("middleware-update-window-ends-ts")
+        .description("Get the end timestamp of the last completed middleware epoch window")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .action(wrapAsyncAction(async (middlewareAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const [currentEpoch, updateWindow] = await Promise.all([middlewareSvc.read.getCurrentEpoch(), middlewareSvc.read.UPDATE_WINDOW()]);
+            const lastEpochStartTs = await middlewareSvc.read.getEpochStartTs([currentEpoch])
+            logger.log(`Window ends at: ${lastEpochStartTs + updateWindow}`);
+        }))
 
     program
         .command("vault-to-middleware-epoch")
