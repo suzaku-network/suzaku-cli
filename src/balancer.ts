@@ -2,6 +2,24 @@ import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 
+export enum ValidatorStatus {
+  Unknown,
+  PendingAdded,
+  Active,
+  PendingRemoved,
+  Completed,
+  Invalidated
+}
+
+export const ValidatorStatusNames = [
+  "Unknown",
+  "PendingAdded",
+  "Active",
+  "PendingRemoved",
+  "Completed",
+  "Invalidated"
+];
+
 export async function setUpSecurityModule(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex,

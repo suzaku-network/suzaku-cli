@@ -76,7 +76,8 @@ import {
 import {
     setUpSecurityModule,
     getSecurityModules,
-    getSecurityModuleWeights
+    getSecurityModuleWeights,
+    ValidatorStatusNames
 } from "./balancer";
 import {
     getValidationUptimeMessage,
@@ -644,6 +645,25 @@ async function main() {
                 sharesWei,
                 client.account!
             );
+        }));
+
+    program
+        .command("get-validator-status")
+        .addArgument(ArgAddress("balancerAddress", "Balancer contract address"))
+        .addArgument(ArgNodeID("nodeId", "Node ID"))
+        .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client, opts.wait);
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId)]);
+            if (Number(validationId) === 0) {
+                logger.log("Validator status: NotRegistered");
+                return;
+            }
+            const validator = await balancer.read.getValidator([validationId]);
+            const status = validator.status;
+            logger.log("Validator status:", ValidatorStatusNames[status]);
         }));
 
     /* --------------------------------------------------
@@ -2435,7 +2455,7 @@ async function main() {
 
     buildKeyStoreCmds(
         program
-            .command("secret")
+            .command("key")
             .description("Manage the cli keystore (advanced users can use pass directly)")
     )
 
