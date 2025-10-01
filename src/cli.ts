@@ -1144,7 +1144,7 @@ async function main() {
 
     // getOperatorStake (read)
     middlewareCmd
-        .command("get-stake")
+        .command("get-operator-stake")
         .description("Get operator stake for a specific epoch and collateral class")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
@@ -1246,7 +1246,7 @@ async function main() {
 
     // getOperatorLockedStake (read)
     middlewareCmd
-        .command("get-locked-stake")
+        .command("get-operator-locked-stake")
         .description("Get operator locked stake")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
@@ -1291,7 +1291,7 @@ async function main() {
 
     // getOperatorUsedStakeCached (read)
     middlewareCmd
-        .command("get-used-stake")
+        .command("get-operator-used-stake")
         .description("Get operator used stake from cache")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
@@ -1307,7 +1307,7 @@ async function main() {
 
     // getOperatorAvailableStake (read)
     middlewareCmd
-        .command("get-available-stake")
+        .command("get-operator-available-stake")
         .description("Get operator available stake")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
