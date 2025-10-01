@@ -1212,7 +1212,7 @@ async function main() {
 
     // getOperatorNodesLength (read)
     middlewareCmd
-        .command("get-nodes-length")
+        .command("get-operator-nodes-length")
         .description("Get current number of nodes for an operator")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgAddress("operator", "Operator address"))
