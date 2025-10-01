@@ -1082,7 +1082,7 @@ async function main() {
 
     // Operator cache / calcAndCacheStakes
     middlewareCmd
-        .command("calc-cache")
+        .command("calc-operator-cache")
         .description("Calculate and cache stakes for operators")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
