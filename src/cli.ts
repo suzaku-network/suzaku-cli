@@ -1176,9 +1176,7 @@ async function main() {
             const usedStake = await middlewareSvc.read.getOperatorUsedStakeCachedPerEpoch(
                 [epoch, operator, collateralClass]
             );
-            const collateral = await middlewareSvc.read.getClassAssets([collateralClass])
-            const vault = config.contracts.VaultTokenized(collateral[0]);
-            logger.log(`Used stake for operator ${operator} in epoch ${epoch} for collateral class ${collateralClass}: ${formatUnits(usedStake, await vault.read.decimals())}`);
+            logger.log(`Used stake for operator ${operator} in epoch ${epoch} for collateral class ${collateralClass}: ${usedStake}`);
             logger.addData('used_stake', Number(usedStake));
         }));
 
