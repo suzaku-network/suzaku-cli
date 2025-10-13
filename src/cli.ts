@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Hex, parseEventLogs, parseUnits } from "viem";
+import { formatUnits, Hex, parseEventLogs, parseUnits } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -1160,6 +1160,26 @@ async function main() {
                 epoch,
                 collateralClass
             );
+        }));
+    
+    middlewareCmd
+        .command("get-operator-used-stake-cached-per-epoch")
+        .description("Get operator stake cached per epoch for a specific collateral class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNumber("epoch", "Epoch number"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(wrapAsyncAction(async (middlewareAddress, epoch, operator, collateralClass) => {
+            const client = generateClient(program.opts().network);
+            const config = getConfig(program.opts().network, client, program.opts().wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const usedStake = await middlewareSvc.read.getOperatorUsedStakeCachedPerEpoch(
+                [epoch, operator, collateralClass]
+            );
+            const collateral = await middlewareSvc.read.getClassAssets([collateralClass])
+            const vault = config.contracts.VaultTokenized(collateral[0]);
+            logger.log(`Used stake for operator ${operator} in epoch ${epoch} for collateral class ${collateralClass}: ${formatUnits(usedStake, await vault.read.decimals())}`);
+            logger.addData('used_stake', Number(usedStake));
         }));
 
     // getCurrentEpoch (read)
