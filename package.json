@@ -26,6 +26,7 @@
     "@commander-js/extra-typings": "^14.0.0",
     "@mobily/ts-belt": "^3.13.1",
     "@noble/hashes": "^1.7.2",
+    "@safe-global/sdk-starter-kit": "^3.0.1",
     "@scure/base": "^1.2.4",
     "@types/cli-progress": "^3.11.6",
     "cli-progress": "^3.12.0",
