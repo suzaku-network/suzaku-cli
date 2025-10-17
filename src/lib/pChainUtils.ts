@@ -633,12 +633,12 @@ export async function convertSubnetToL1(params:
     {
         subnetId: string;
         chainId: string;
-        balancer: SafeSuzakuContract['BalancerValidatorManager'];
+        poASecurityModule: SafeSuzakuContract['PoASecurityModule'];
         client: ExtendedWalletClient;
         privateKeyHex: string;
         validators: NodeConfig[];
     }) {
-    const managerAddress = params.balancer.address;
+    const managerAddress = params.poASecurityModule.address;
     const { client, privateKeyHex, validators } = params;
     // 1) convert to L1
     const convertTx = await convertToL1({
@@ -664,18 +664,18 @@ export async function convertSubnetToL1(params:
 
     // 4) call initializeValidatorSet
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
-    const initHash = await params.balancer.safeWrite.initializeValidatorSet(args, {
-        account: client.account!,
-        chain: null,
-        accessList
-    });
+    // const initHash = await params.balancer.safeWrite.initializeValidatorSet(args, {
+    //     account: client.account!,
+    //     chain: null,
+    //     accessList
+    // });
 
-    await client.waitForTransactionReceipt({
-        hash: initHash as Hex,
-        confirmations: 2
-    })
+    // await client.waitForTransactionReceipt({
+    //     hash: initHash as Hex,
+    //     confirmations: 2
+    // })
 
-    return { txHash: convertTx, initHash };
+    return { txHash: convertTx };
 
 }
 

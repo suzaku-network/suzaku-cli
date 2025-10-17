@@ -2079,7 +2079,7 @@ async function main() {
     uptimeCmd
         .command("report-uptime-validator")
         .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
-        .addArgument(ArgURI("rpcUrl", "RPC URL of the L1/Subnet"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
         .addArgument(ArgCB58("sourceChainId", "The Chain ID for which the uptime is being reported"))
         .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
         .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract on the C-Chain"))
@@ -2092,6 +2092,7 @@ async function main() {
 
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig(opts.network, client, opts.wait);
+            rpcUrl = rpcUrl + "/ext/bc/" + sourceChainId;
 
             await reportAndSubmitValidatorUptime(
                 opts.network,
