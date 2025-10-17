@@ -104,7 +104,7 @@ export const ArgCB58 = (name?: string, description?: string) => new Argument(
   `${description ? description : "CB58 string (e.g., 3J4k5L6m7N8o9P0Q1R2S3T4U5V6W7X8Y9Z0A1B2C)"}`
 ).argParser((value) => {
   if (!isValidCB58(value)) {
-    throw new Error('Invalid CB58 string');
+    throw new Error('Invalid CB58 string: ' + value);
   }
   return value;
 });
@@ -115,7 +115,7 @@ export const ArgURI = (name?: string, description?: string) => new Argument(
   `${description ? description : "URI (e.g., https://example.com or wss://example.com)"}`
 ).argParser((value) => {
   if (!/^(https?|wss?):\/\/[^\s/$.?#].[^\s]*$/.test(value)) {
-    throw new Error('Invalid URI');
+    throw new Error('Invalid URI: ' + value);
   }
   return value;
 });
@@ -126,7 +126,7 @@ export const ArgPath = (name?: string, description?: string) => new Argument(
   `${description ? description : "Path (e.g., /path/to/resource)"}`
 ).argParser((value) => {
   if (!/^\/[a-zA-Z0-9_\-\/]*$/.test(value)) {
-    throw new Error('Invalid Path');
+    throw new Error('Invalid Path: ' + value);
   }
   return value;
 });
