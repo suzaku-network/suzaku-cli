@@ -1661,6 +1661,65 @@ async function main() {
             logger.addData("nodeId", nodeId);
         }));
 
+    balancerCmd
+        .command("resend-validator-registration")
+        .description("Resend validator registration transaction")
+        .addArgument(ArgAddress("balancerAddress", "Balancer contract address"))
+        .addArgument(ArgNodeID("nodeId", "Node ID"))
+        .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const nodeIdHex32 = parseNodeID(nodeId, false)
+            const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
+            const hash = await balancer.safeWrite.resendRegisterValidatorMessage(
+                [validationId],
+                { chain: null, account: client.account! },
+            );
+            logger.log("resendValidatorRegistration executed successfully, tx hash:", hash);
+        }
+        ));
+
+    balancerCmd
+        .command("resend-weight-update")
+        .description("Resend validator weight update transaction")
+        .addArgument(ArgAddress("balancerAddress", "Balancer contract address"))
+        .addArgument(ArgNodeID("nodeId", "Node ID"))
+        .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const nodeIdHex32 = parseNodeID(nodeId, false)
+            const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
+            const hash = await balancer.safeWrite.resendValidatorWeightUpdate(
+                [validationId],
+                { chain: null, account: client.account! },
+            );
+            logger.log("resendWeightUpdate executed successfully, tx hash:", hash);
+        }
+        ));
+
+    balancerCmd
+        .command("resend-validator-removal")
+        .description("Resend validator removal transaction")
+        .addArgument(ArgAddress("balancerAddress", "Balancer contract address"))
+        .addArgument(ArgNodeID("nodeId", "Node ID"))
+        .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const nodeIdHex32 = parseNodeID(nodeId, false)
+            const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
+            const hash = await balancer.safeWrite.resendValidatorRemovalMessage(
+                [validationId],
+                { chain: null, account: client.account! },
+            );
+            logger.log("resendValidatorRemoval executed successfully, tx hash:", hash);
+        }
+        ));
     /**
      * --------------------------------------------------
      * POA-Security-Module

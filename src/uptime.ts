@@ -30,9 +30,13 @@ export async function getValidationUptimeMessage(
     }),
   });
   const data = await response.json();
-
-  const validationID = data.result.validators[0].validationID;
-  const uptimeSeconds = data.result.validators[0].uptimeSeconds;
+  const validator = data.result.validators.find((v: any) => v.nodeID === nodeId);
+  if (!validator) {
+    throw new Error(`Validator with NodeID ${nodeId} not found`);
+  }
+  const validationID = validator.validationID;
+  const uptimeSeconds = validator.uptimeSeconds;
+  console.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
 
   const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
