@@ -26,6 +26,7 @@ const contractMappings = {
   'BalancerValidatorManager': 'BalancerValidatorManager.ts',
   'PoAManager': 'PoAManager.ts',
   'IWarpMessenger': 'IWarpMessenger.ts',
+  'ValidatorManager': 'ValidatorManager.ts',
 };
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)
