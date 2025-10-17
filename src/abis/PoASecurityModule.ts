@@ -38,7 +38,13 @@ export default [
                 "internalType": "uint32"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -51,7 +57,13 @@ export default [
                 "internalType": "uint32"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -76,63 +88,6 @@ export default [
                 "internalType": "uint64"
             }
         ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeValidatorSet",
-        "inputs": [
-            {
-                "name": "conversionData",
-                "type": "tuple",
-                "internalType": "struct ConversionData",
-                "components": [
-                    {
-                        "name": "subnetID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerBlockchainID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "initialValidators",
-                        "type": "tuple[]",
-                        "internalType": "struct InitialValidator[]",
-                        "components": [
-                            {
-                                "name": "nodeID",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "blsPublicKey",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "weight",
-                                "type": "uint64",
-                                "internalType": "uint64"
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
         "stateMutability": "nonpayable"
     },
     {
@@ -262,42 +217,22 @@ export default [
     },
     {
         "type": "function",
-        "name": "resendRegisterValidatorMessage",
+        "name": "supportsInterface",
         "inputs": [
             {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
+                "name": "interfaceId",
+                "type": "bytes4",
+                "internalType": "bytes4"
             }
         ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendValidatorRemovalMessage",
-        "inputs": [
+        "outputs": [
             {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
+        "stateMutability": "view"
     },
     {
         "type": "function",

@@ -39,11 +39,8 @@ import {
     middlewareDisableOperator,
     middlewareRemoveOperator,
     middlewareAddNode,
-    middlewareCompleteValidatorRegistration,
     middlewareRemoveNode,
-    middlewareCompleteValidatorRemoval,
     middlewareInitStakeUpdate,
-    middlewareCompleteStakeUpdate,
     middlewareCalcNodeStakes,
     middlewareForceUpdateNodes,
     middlewareGetOperatorStake,
@@ -130,9 +127,9 @@ import { bigintReplacer, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits } from "./lib/cliParser";
 import { increasePChainValidatorBalance } from './lib/pChainUtils';
-import { completValidatorRemoval } from './poa';
 import { color } from 'console-log-colors';
 import { pipe, R } from '@mobily/ts-belt';
+import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -948,10 +945,10 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt((0.1 + Number(options.initialBalance)) * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)));
 
             // Call middlewareCompleteValidatorRegistration
-            await middlewareCompleteValidatorRegistration(
+            await completeValidatorRegistration(
                 client,
                 middlewareSvc,
                 balancerSvc,
@@ -1005,7 +1002,7 @@ async function main() {
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
 
-            await middlewareCompleteValidatorRemoval(
+            await completeValidatorRemoval(
                 client,
                 middlewareSvc,
                 balancerSvc,
@@ -1045,7 +1042,7 @@ async function main() {
     // Complete stake update
     middlewareCmd
         .command("complete-stake-update")
-        .description("Complete validator stake update")
+        .description("Complete validator stake update of all or specified node IDs")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
@@ -1062,14 +1059,10 @@ async function main() {
             const config = getConfig(opts.network, client, opts.wait);
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
-
             // Check if P-Chain address have 0.01 AVAX for tx fees
             await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9));
 
-            // Derive pchainTxAddress from the private key
-            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
-
-            await middlewareCompleteStakeUpdate(
+            await completeWeightUpdate(
                 client,
                 middlewareSvc,
                 config,
@@ -1679,6 +1672,89 @@ async function main() {
     const poaCmd = program
         .command("poa")
         .description("Commands to interact with POA Security Module contracts");
+    
+    poaCmd
+        .command("add-node")
+        .description("Add a new node to an L1")
+        .addArgument(ArgAddress("poaSecurityModule", "PoA Security Module contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("blsKey", "BLS public key"))
+        .addArgument(ArgNumber("initialWeight", "Initial weight of the validator"))
+        .addOption(new Option("--registration-expiry <expiry>", "Expiry timestamp (default: now + 12 hours)"))
+        .addOption(new Option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
+        .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
+        .action(wrapAsyncAction(async (poaSecurityModule, nodeId, blsKey, initialWeight, options) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const poaSM = config.contracts.PoASecurityModule(poaSecurityModule);
+
+            // Default registration expiry to now + 12 hours if not provided
+            const registrationExpiry = options.registrationExpiry
+                ? BigInt(options.registrationExpiry)
+                : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
+
+            // Build remainingBalanceOwner and disableOwner PChainOwner structs
+            // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
+            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
+            const remainingBalanceOwner: [number, Hex[]] = [
+                Number(options.pchainRemainingBalanceOwnerThreshold),
+                remainingBalanceOwnerAddress
+            ];
+            const disableOwner: [number, Hex[]] = [
+                Number(options.pchainDisableOwnerThreshold),
+                disableOwnerAddress
+            ];
+
+            const nodeIdHex32 = parseNodeID(nodeId, false)
+            const hash = await poaSM.safeWrite.initiateValidatorRegistration(
+                [nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialWeight],
+                { chain: null, account: client.account! },
+            );
+            logger.log("addNode executed successfully, tx hash:", hash);
+        }));
+    
+    poaCmd
+        .command("complete-validator-registration")
+        .description("Complete validator registration on the P-Chain and on the middleware after adding a node")
+        .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
+        .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
+        .addArgument(ArgBLSPOP())
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.0001').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
+        .action(wrapAsyncAction(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
+            const opts = program.opts();
+
+            // If pchainTxPrivateKey is not provided, use the private key
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey!;
+            }
+
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
+
+            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9));
+
+            // Call middlewareCompleteValidatorRegistration
+            await completeValidatorRegistration(
+                client,
+                poaSecurityModule,
+                balancerSvc,
+                config,
+                options.pchainTxPrivateKey,
+                blsProofOfPossession,
+                addNodeTxHash,
+                Number(options.initialBalance),
+                !options.skipWaitApi
+            );
+        }));
 
     poaCmd
         .command("remove-node")
@@ -1721,16 +1797,74 @@ async function main() {
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
 
-            const txHash = await completValidatorRemoval({
+            // Derive pchainTxAddress from the private key
+            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
+
+            const txHash = await completeValidatorRemoval(
                 client,
                 poaSecurityModule,
                 balancerSvc,
+                config,
                 removeNodeTxHash,
-                nodeId,
-                pchainTxPrivateKey: options.pchainTxPrivateKey
-            });
+                options.pchainTxPrivateKey,
+                pchainTxAddress,
+                !options.skipWaitApi,
+                options.nodeId.length > 0 ? options.nodeId : undefined,
+            );
 
             logger.log(`End validation initialized for node . Transaction hash: ${txHash}`);
+        }));
+
+    poaCmd
+        .command("init-weight-update")
+        .description("Update validator weight")
+        .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgNumber("newWeight", "New weight"))
+        .action(wrapAsyncAction(async (poaSecurityModuleAddress, nodeId, newWeight) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            logger.log("Calling function initializeValidatorStakeUpdate...");
+
+            // Parse NodeID to bytes32 format
+            const nodeIdHex32 = parseNodeID(nodeId)
+
+            const hash = await poaSecurityModule.safeWrite.initiateValidatorWeightUpdate(
+                [nodeIdHex32, newWeight],
+                { chain: null, account: client.account! }
+            );
+            logger.log("initiateValidatorWeightUpdate executed successfully, tx hash:", hash);
+        }));
+
+    poaCmd
+        .command("complete-weight-update")
+        .description("Complete validator weight update of all or specified node IDs")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
+        .action(wrapAsyncAction(async (poaSecurityModuleAddress, nodeId, weightUpdateTxHash, options) => {
+            const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+
+            const txHash = await completeWeightUpdate(
+                client,
+                poaSecurityModule,
+                config,
+                weightUpdateTxHash,
+                options.pchainTxPrivateKey,
+                client.account!,
+                options.nodeId.length > 0 ? options.nodeId : undefined,
+            );
+
+            logger.log(`Weight update completed for node . Transaction hash: ${txHash}`);
         }));
 
     /**
@@ -1853,16 +1987,18 @@ async function main() {
     uptimeCmd
         .command("get-validation-uptime-message")
         .description("Get the validation uptime message for a given validator in the given L1 RPC")
-        .addArgument(ArgURI("rpcUrl", "RPC URL"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
         .addArgument(ArgCB58("chainId", "Chain ID"))
         .addArgument(ArgNodeID())
         .action(wrapAsyncAction(async (rpcUrl, chainId, nodeId) => {
+            rpcUrl = rpcUrl + "/ext/bc/" + chainId;
             const opts = program.opts();
-            if (opts.network === "fuji") {
-                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 5, chainId);
-            } else {
-                await getValidationUptimeMessage(opts.network, rpcUrl, nodeId, 1, chainId);
-            }
+            await getValidationUptimeMessage(
+                opts.network,
+                rpcUrl,
+                nodeId,
+                opts.network === "fuji" ? 5 : 1,
+                chainId);
         }));
 
     uptimeCmd

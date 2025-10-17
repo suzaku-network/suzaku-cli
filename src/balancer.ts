@@ -1,5 +1,5 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import { type Hex, type Account } from 'viem';
 import { logger } from './lib/logger';
 
 export enum ValidatorStatus {
