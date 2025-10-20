@@ -253,7 +253,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     // logger.log("Justification:", fromBytes(justification, 'hex'));
 
     // Use the signature aggregation API from Glacier
-    const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
@@ -285,7 +285,7 @@ export async function collectSignatures(network: Network, message: string, justi
     }
 
     // Test every 2 seconds, timeout after 30 seconds
-    const baseURL = network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {

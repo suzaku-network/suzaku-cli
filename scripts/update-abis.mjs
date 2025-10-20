@@ -24,7 +24,6 @@ const contractMappings = {
   'UptimeTracker': 'UptimeTracker.ts',
   'VaultFactory': 'VaultFactory.ts',
   'BalancerValidatorManager': 'BalancerValidatorManager.ts',
-  'PoAManager': 'PoAManager.ts',
   'IWarpMessenger': 'IWarpMessenger.ts',
   'ValidatorManager': 'ValidatorManager.ts',
 };
