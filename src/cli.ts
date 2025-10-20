@@ -679,6 +679,44 @@ async function main() {
             );
         }));
 
+    vaultCmd
+        .command("get-l1-limit")
+        .description("Get L1 limit for a vault's delegator")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .action(wrapAsyncAction(async (vaultAddress, l1Address, collateralClass) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client, opts.wait);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const delegatorAddress = await vault.read.delegator();
+
+            // instantiate L1RestakeDelegator contract
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const limit = await delegator.read.l1Limit([l1Address, collateralClass]);
+            logger.log(`L1 limit for vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(limit, await vault.read.decimals())}`);
+        }));
+
+    vaultCmd
+        .command("get-operator-l1-shares")
+        .description("Get L1 shares for an operator in a vault's delegator")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .addArgument(ArgAddress("l1Address", "L1 validator manager contract address"))
+        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .addArgument(ArgAddress("operatorAddress", "Operator address"))
+        .action(wrapAsyncAction(async (vaultAddress, l1Address, collateralClass, operatorAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig(opts.network, client, opts.wait);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const delegatorAddress = await vault.read.delegator();
+
+            // instantiate L1RestakeDelegator contract
+            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const shares = await delegator.read.operatorL1Shares([l1Address, collateralClass, operatorAddress]);
+            logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(shares, await vault.read.decimals())}`);
+        }));
     /* --------------------------------------------------
     * MIDDLEWARE
     * -------------------------------------------------- */
