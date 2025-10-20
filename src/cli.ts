@@ -299,7 +299,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager address"))
         .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .argument("maxLimit", "Maximum limit")
+        .argument("maxLimit", "Maximum limit (in decimal format)")
         .action(wrapAsyncAction(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
