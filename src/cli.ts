@@ -967,7 +967,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.0001').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
