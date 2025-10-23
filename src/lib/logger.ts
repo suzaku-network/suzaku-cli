@@ -1,3 +1,5 @@
+import { bigintReplacer } from "./utils";
+import * as readline from 'readline';
 
 export function wrapAsyncAction(actionFn: (...args: any[]) => Promise<void>) {
   return async (...args: any[]) => {
@@ -91,6 +93,22 @@ class Logger {
     };
   }
 
+  public prompt(question: string): Promise<string> {
+    if (this.config.jsonMode) {
+      return Promise.resolve('y');
+    }
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    return new Promise(resolve => {
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer.trim());
+      });
+    });
+  }
+
   public getData(): LogData {
     return { ...this.data };
   }
@@ -101,7 +119,7 @@ class Logger {
 
   // JSON output method
   public printJson(): void {
-    if (this.config.jsonMode) console.log(JSON.stringify(this.data, null, 2));
+    if (this.config.jsonMode) console.log(JSON.stringify(this.data, bigintReplacer, 2));
   }
 
   // Utility method to get current config

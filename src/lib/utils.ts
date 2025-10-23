@@ -3,9 +3,9 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import * as readline from 'readline';
 import { fromBytes, Hex, pad } from "viem";
 import { logger } from './logger';
+import { hexToUint8Array } from "./justification";
 
 const CHECKSUM_LENGTH = 4;
 
@@ -89,41 +89,6 @@ export function bytesToCB58(bytes: Uint8Array): string {
     return base58.encode(withChecksum);
 }
 
-export async function interruptiblePause(seconds: number): Promise<void> {
-    logger.log(`\nWaiting ${seconds} seconds before aggregating signatures...`);
-
-    return new Promise((resolve) => {
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
-        });
-
-        // Set raw mode to detect space key
-        process.stdin.setRawMode?.(true);
-
-        const timer = setTimeout(() => {
-            cleanup();
-            resolve();
-        }, seconds * 1000);
-
-        function cleanup() {
-            rl.close();
-            process.stdin.setRawMode?.(false);
-            process.stdin.removeListener('keypress', handleKeypress);
-        }
-
-        function handleKeypress(key: string) {
-            if (key === '\r' || key === ' ') {
-                clearTimeout(timer);
-                cleanup();
-                resolve();
-            }
-        }
-
-        process.stdin.on('keypress', handleKeypress);
-    });
-}
-
 export type NodeId = `NodeID-${string}`;
 
 export const parseNodeID = (nodeID: NodeId, padding = true): Hex => {
@@ -134,18 +99,11 @@ export const parseNodeID = (nodeID: NodeId, padding = true): Hex => {
     return padding ? pad(nodeIDHexTrimmed as Hex, { size: 32 }) as Hex : nodeIDHexTrimmed as Hex;
 }
 
-export function prompt(question: string): Promise<string> {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    return new Promise(resolve => {
-        rl.question(question, (answer) => {
-            rl.close();
-            resolve(answer.trim());
-        });
-    });
+export const encodeNodeID = (nodeIDBytes: Hex): NodeId => {
+    let nodeU8Array = hexToUint8Array(nodeIDBytes)
+    nodeU8Array = nodeU8Array.length === 32 ? nodeU8Array.slice(12) : nodeU8Array;// Remove the first 12 bytes if it's a full bytes32
+    const nodeId = `NodeID-${utils.base58check.encode(nodeU8Array)}`;
+    return nodeId as NodeId;
 }
 
 export function nToAVAX(value: bigint): string {

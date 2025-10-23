@@ -2,7 +2,7 @@ import { Account, bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "./client";
 import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
-import { getAddresses, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
+import { encodeNodeID, getAddresses, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
@@ -43,7 +43,7 @@ export async function completeValidatorRegistration(
     logs: receipt.logs,
   })[0]
 
-  const nodeId = `NodeID-${utils.base58check.encode(hexToBytes(InitiatedValidatorRegistration.args.nodeID))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
+  const nodeId = encodeNodeID(InitiatedValidatorRegistration.args.nodeID); // Convert bytes32 to NodeID format by removing the first 12 bytes
   // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancer.read.subnetID();
   const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
@@ -125,7 +125,7 @@ export async function completeValidatorRemoval(
     abi: securityModule.abi,
     logs: receipt.logs,
     eventName: 'NodeRemoved'
-  }).filter((e) => nodeIDs ? nodeIDs.includes(`NodeID-${utils.base58check.encode(hexToBytes(e.args.nodeId).slice(12))}`) : true)
+  }).filter((e) => nodeIDs ? nodeIDs.includes(encodeNodeID(e.args.nodeId)) : true)
 
   if (nodeRemoved.length === 0) {
     logger.error(color.red("No matching NodeRemoved event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
@@ -146,8 +146,7 @@ export async function completeValidatorRemoval(
     const warpLog = warpLogs.find((w) => w.args.messageID === initiatedValidatorRemoval.args.validatorWeightMessageID)!;
 
     const validationID = event.args.validationID;
-    const nodeIDHex = event.args.nodeId;
-    const nodeID = `NodeID-${utils.base58check.encode(hexToBytes(nodeIDHex).slice(12))}`; // Convert bytes32 to NodeID format by removing the first 12 bytes
+    const nodeID = encodeNodeID(event.args.nodeId); // Convert bytes32 to NodeID format by removing the first 12 bytes
     logger.log(nodeID)
     // Check if the node is still registered as a validator on the P-Chain
     const subnetIDHex = await balancerValidatorManager.read.subnetID();

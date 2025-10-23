@@ -6,7 +6,7 @@ import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './cl
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config, pChainChainID } from './config';
-import { bigintReplacer, bytesToCB58, NodeId, parseNodeID, retryWhileError } from './lib/utils';
+import { bigintReplacer, bytesToCB58, encodeNodeID, NodeId, parseNodeID, retryWhileError } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
@@ -142,16 +142,7 @@ export async function middlewareForceUpdateNodes(
     [operator, limitStake],
     { chain: null, account: client.account! }
   );
-  const receipt = await client.waitForTransactionReceipt({ hash });
-  const logs = parseEventLogs({
-    abi: middleware.abi,
-    logs: receipt.logs
-  })
   logger.log("forceUpdateNodes executed successfully");
-  logger.log("Logs:")
-  logger.log(logs.map((log) => {
-    return `${color.magenta(log.eventName)}(${JSON.stringify(log.args, bigintReplacer, 1)})`;
-  }).join('\n'));
   logger.log("tx hash:", hash);
 }
 
@@ -390,9 +381,7 @@ export async function middlewareGetNodeLogs(
     logger.table(logOfInterest[nodeIdHex32] || []);
   } else {
     for (const [key, value] of Object.entries(logOfInterest)) {
-      let hexArray = hexToUint8Array(key as Hex)
-      hexArray = hexArray.length === 32 ? hexArray.slice(12) : hexArray;// Remove the first 12 bytes if it's a full bytes32
-      const nodeId = `NodeID-${utils.base58check.encode(hexArray)}`;
+      const nodeId = encodeNodeID(key as Hex);
       logger.log('\t\t\t\t\t\t' + color.blue(nodeId));
       logger.table(value);
     }

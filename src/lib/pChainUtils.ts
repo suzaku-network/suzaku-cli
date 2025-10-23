@@ -424,10 +424,11 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     return txID;
 }
 
-export async function getCurrentValidators(client: ExtendedClient, subnetId: string) {
+type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
+
+export async function getCurrentValidators(client: ExtendedClient, subnetId: string): Promise<ValidatorsResponsePatched> {
     const rpcUrl = getRPCEndpoint(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getCurrentValidators({
         subnetID: subnetId
@@ -511,7 +512,8 @@ export async function increasePChainValidatorBalance(
     client: ExtendedWalletClient,
     privateKeyHex: string,
     amount: number,
-    validationId: string
+    validationId: string,
+    check: boolean = true
 ): Promise<Result<Hex, string>> {
     if (!privateKeyHex) {
         throw new Error("Private key required");
@@ -525,7 +527,7 @@ export async function increasePChainValidatorBalance(
     const addressBytes = utils.bech32ToBytes(pChainAddress);
     const nAVAX = BigInt(amount * 1e9); // Convert AVAX to nAVAX
     // Ensure the P-Chain address has enough balance
-    await requirePChainBallance(privateKeyHex, client, nAVAX);
+    check && await requirePChainBallance(privateKeyHex, client, nAVAX);
 
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pChainAddress]

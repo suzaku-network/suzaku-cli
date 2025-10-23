@@ -122,14 +122,16 @@ import {
     getLastEpochClaimedProtocol
 } from "./rewards";
 import { requirePChainBallance } from "./lib/transferUtils";
-import { bigintReplacer, getAddresses, NodeId, parseNodeID } from "./lib/utils";
+import { bigintReplacer, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits } from "./lib/cliParser";
-import { increasePChainValidatorBalance } from './lib/pChainUtils';
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, ParserHex } from "./lib/cliParser";
+import { getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { color } from 'console-log-colors';
-import { pipe, R } from '@mobily/ts-belt';
+import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
+import { utils } from '@avalabs/avalanchejs';
+import { hexToUint8Array } from './lib/justification';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -157,23 +159,67 @@ async function main() {
     /* --------------------------------------------------
     * Generic L1 Commands
     * -------------------------------------------------- */
+    // topUpAllOperatorNodes
     program
-        .command("l1-validator-balance-top-up")
-        .description("Top up L1 validator balance on the P-Chain")
-        .addArgument(ArgCB58("validationId", "Validation ID for the node on its subnet"))
-        .addArgument(ArgNumber("amount", "Amount to top up in AVAX"))
-        .action(wrapAsyncAction(async (validationId, amount) => {
+        .command("top-up-l1-validators")
+        .description("Top up all/selected l1 validators to meet a target continuous fee balance")
+        .addArgument(ArgCB58("subnetID", "Subnet ID of the L1"))
+        .argument("targetBalance", "Target continuous fee balance per validator (in AVAX)")
+        .addOption(new Option("--node-id <nodeId>", "Add a validator to be topped up").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
+        .action(wrapAsyncAction(async (subnetID, targetBalance, options) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
+            const targetBalanceWei = parseUnits(targetBalance, 9); // AVAX has 9 decimals
+            if (targetBalanceWei <= BigInt(1e7)) { // 0.01 AVAX min
+                throw new Error("Target balance must be greater than 0.01 AVAX");
+            }
+            const validators = await getCurrentValidators(client, subnetID)
 
-            pipe(await increasePChainValidatorBalance(
-                client,
-                opts.privateKey!,
-                amount,
-                validationId
-            ),
-                R.tap(txHash => logger.log(`Top-up transaction hash: ${txHash}`)),
-                R.tapError(err => { logger.error(err); process.exit(1) }),)
+            const validatorsToTopUp = validators.reduce((acc, validator) => {
+                if (options.nodeId && options.nodeId.length > 0 && !options.nodeId.includes(validator.nodeID)) {
+                    return acc;
+                }
+                if (validator.balance! < Number(targetBalanceWei) - 1e7) {// 0.01 AVAX min diff
+                    acc.push({
+                        validationId: validator.validationID! as Hex,
+                        topup: targetBalanceWei - BigInt(validator.balance!),
+                    });
+                }
+                return acc
+            }, [] as { validationId: Hex; topup: bigint }[])
+
+            const totalTopUp = validatorsToTopUp.reduce((acc, v) => acc + v.topup, 0n);
+
+            if (validatorsToTopUp.length === 0) {
+                logger.log("All l1 validators have sufficient balance. No top-up needed.");
+                logger.addData('total_amount', 0)
+                logger.addData('validators', [])
+                return;
+            }
+
+            logger.log(`${validatorsToTopUp.length} validators to top-up:`);
+            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length)); // extra 20000 for fees
+            const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+            if (response.toLowerCase() !== 'y') {
+                logger.log("Operation cancelled by user.");
+                process.exit(0);
+            }
+
+            for (const { validationId, topup } of validatorsToTopUp) {
+                logger.log(`\nTopping up validator ${validationId}`);
+                const amount = Number(topup) / 1e9
+                pipe(await increasePChainValidatorBalance(
+                    client,
+                    opts.privateKey!,
+                    amount,
+                    validationId,
+                    false
+                ),
+                    R.tapError(err => { logger.error(err); process.exit(1) }),)
+            }
+            logger.log("\nCompleted top-up of validators.");
+            logger.addData('total_amount', totalTopUp)
+            logger.addData('validators', validatorsToTopUp)
         }));
 
     /* --------------------------------------------------
@@ -883,7 +929,7 @@ async function main() {
                 loopCount = options.loopEpochs || 1;
             } else {
                 epochsPerCall = await middlewareSvc.read.getCurrentEpoch() - await middlewareSvc.read.lastGlobalNodeStakeUpdateEpoch();
-                loopCount = epochsPerCall > 300 ? Math.ceil(epochsPerCall / 300) : 1; // Limit number of epochs processed in a single call to avoid gas issues
+                loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
             }
 
             logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
@@ -1171,6 +1217,76 @@ async function main() {
                 options.limitStake,
                 client
             );
+        }));
+
+    // topUpAllOperatorNodes
+    middlewareCmd
+        .command("top-up-operator-validators")
+        .description("Top up all operator validators to meet a target continuous fee balance")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .argument("targetBalance", "Target continuous fee balance per validator (in AVAX)")
+        .action(wrapAsyncAction(async (middlewareAddress, operator, targetBalance) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(opts.network, client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const targetBalanceWei = parseUnits(targetBalance, 9); // AVAX has 9 decimals
+            if (targetBalanceWei <= BigInt(1e7)) { // 0.01 AVAX min
+                throw new Error("Target balance must be greater than 0.01 AVAX");
+            }
+            const balancerAddress = await middlewareSvc.read.BALANCER()
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const [nodeCount, subnetID] = await Promise.all([middlewareSvc.read.getOperatorNodesLength([operator]), balancer.read.subnetID()]);
+            const validators = await getCurrentValidators(client, utils.base58check.encode(hexToUint8Array(subnetID)))
+
+            const validatorsToCheck = await Promise.all(
+                A.range(0, Number(nodeCount)-1)
+                    .map(async (index) => {
+                        const nodeIdHex = await middlewareSvc.read.operatorNodesArray([operator, BigInt(index)]);
+                        return validators.find(v => v.nodeID === encodeNodeID(nodeIdHex));
+            }))
+
+            const validatorsToTopUp = validatorsToCheck.reduce((acc, validator) => {
+                if (validator && validator.balance! < targetBalanceWei - BigInt(1e7)) {// 0.01 AVAX min diff
+                    acc.push({
+                        validationId: validator.validationID! as Hex,
+                        topup: targetBalanceWei - BigInt(validator.balance!),
+                    });
+                }
+                return acc
+            }, [] as { validationId: Hex; topup: bigint }[])
+
+            const totalTopUp = validatorsToTopUp.reduce((acc, v) => acc + v.topup, 0n);
+
+            if (validatorsToTopUp.length === 0) {
+                logger.log("All operator validators have sufficient balance. No top-up needed.");
+                return;
+            }
+
+            logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
+            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * nodeCount); // extra 20000 for fees
+            const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+            if (response.toLowerCase() !== 'y') {
+                logger.log("Operation cancelled by user.");
+                process.exit(0);
+            }
+
+            for (const { validationId, topup } of validatorsToTopUp) {
+                logger.log(`\nTopping up validator ${validationId}`);
+                const amount = Number(topup)/1e9
+                pipe(await increasePChainValidatorBalance(
+                    client,
+                    opts.privateKey!,
+                    amount,
+                    validationId,
+                    false
+                ),
+                    R.tapError(err => { logger.error(err); process.exit(1) }),)
+            }
+            logger.log("\nCompleted top-up of operator validators.");
+            logger.addData('total_amount', totalTopUp)
+            logger.addData('validators', validatorsToTopUp)
         }));
 
     // getOperatorStake (read)

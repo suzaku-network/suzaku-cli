@@ -2,7 +2,6 @@ import { pvm, evm, addTxSignatures, Context, utils, avaxSerial, EVMUnsignedTx } 
 import { getAddresses, nToAVAX } from "./utils";
 import { ExtendedWalletClient } from "../client";
 import { getRPCEndpoint, waitPChainTx } from "./pChainUtils";
-import { prompt } from "./utils";
 import { logger } from './logger';
 
 // Wait c chain tx until it is confirmed with a timeout
@@ -118,7 +117,7 @@ export async function requirePChainBallance(privateKeyHex: string, client: Exten
     // Ask user to transfer AVAX to its C-Chain address if not enough found
     const cBalance = await requireCChainBallance(privateKeyHex, client, neededOnCchain, undefined, checkRetry);
 
-    switch (await prompt(`C-Chain address ${cAddress} have enough founds to transfer ${nToAVAX(neededOnCchain)} to the P-Chain address ${nToAVAX(neededOnCchain)}.. Do you want to transfer it automatically (y/n)`)) {
+    switch (await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${nToAVAX(neededOnCchain)} to the P-Chain address ${nToAVAX(neededOnCchain)}.. Do you want to transfer it automatically (y/n)`)) {
       case 'y':
         logger.log(`Exporting AVAX from C-Chain...`);
         const cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
@@ -131,7 +130,7 @@ export async function requirePChainBallance(privateKeyHex: string, client: Exten
         // Call the transfer function here
         break;
       case 'n':
-        await prompt(`Please transfer ${nToAVAX(neededOnCchain)} AVAX to the P-Chain address (${pAddress}) manually and press enter to continue...`);
+        await logger.prompt(`Please transfer ${nToAVAX(neededOnCchain)} AVAX to the P-Chain address (${pAddress}) manually and press enter to continue...`);
         break;
       default:
         throw new Error(`Canceled by the user`);
@@ -154,7 +153,7 @@ export async function requireCChainBallance(privateKeyHex: string, client: Exten
   for (let cTry = 0; remainingCBalance < BigInt(0) && cTry < checkRetry; cTry++) {
     if (cTry === checkRetry) throw new Error(`You don't have enough AVAX in your C-Chain address`);
     logger.log(`You have only ${nToAVAX(cBalance)}/${nToAVAX(amount)} AVAX in your C-Chain address ${cAddress}`);
-    await prompt(`Please transfer ${nToAVAX(amount)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
+    await logger.prompt(`Please transfer ${nToAVAX(amount)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
     cBalance = await client.getBalance({ address: cAddress }) / BigInt(1e9);// ETH to AVAX decimals
     remainingCBalance = cBalance - amount;
   }

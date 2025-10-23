@@ -1,8 +1,10 @@
-import { getContract, PublicClient, GetContractReturnType, Address, WalletClient } from 'viem';
+import { getContract, PublicClient, GetContractReturnType, Address, WalletClient, parseEventLogs } from 'viem';
 import { SuzakuABI } from '../abis';
 import { exit } from 'process';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
+import { bigintReplacer } from './utils';
+import { color } from 'console-log-colors';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
@@ -57,6 +59,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 export function withWaitForReceipt<T extends SuzakuABINames>(
   contract: SuzakuContracts[T],
   client: ExtendedClient,
+  abi: T,
   confirmations = 1
 ): SuzakuContracts[T] {
   if (!('write' in contract)) {
@@ -71,6 +74,16 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
           const hash = await fn(...args)
           const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
           if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + receipt.logs);
+
+          const logs = parseEventLogs({
+            abi: SuzakuABI[abi],
+            logs: receipt.logs,
+          });
+          logger.log("Logs:")
+            logger.log(logs.map((log) => {
+              return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
+            }).join('\n'));
+          logger.addData('receipt', receipt);
           return hash
         } catch (error: any) {
           throw Error(error.message)
@@ -95,6 +108,7 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
       contract = withWaitForReceipt(
         contract,
         client,
+        abi,
         wait
       )
     }
