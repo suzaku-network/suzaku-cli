@@ -102,11 +102,12 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
             logs: receipt.logs,
           });
           if (logs.length > 0) {
-            logger.log("============= Logs emitted during the transaction =============");
+            const spacies = process.stdout.columns/2 - 31
+            logger.log((" ".repeat(spacies)) + "============= Logs emitted during the transaction =============");
             logger.log(logs.map((log) => {
               return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
             }).join('\n'));
-            logger.log("===============================================================");
+            logger.log(" ".repeat(spacies) + "===============================================================");
             logger.addData('receipt', receipt);
           }
           return hash
