@@ -132,6 +132,7 @@ import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
+import { installCompletion } from './lib/autoCompletion';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -2966,6 +2967,30 @@ async function main() {
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);
     });
+
+    program
+        .command("completion install")
+        .description("Installe autocomplétion Bash/Zsh")
+        .action(() => installCompletion(program));
+
+    program
+        .command("__complete")
+        .description("internal completion helper")
+        .option("--line <line>")
+        .action(({ line }) => {
+            line = line || "";
+            const parts = line.trim().split(/\s+/).slice(1);
+
+            let node: Command = program;
+            for (const part of parts) {
+                const found = node.commands.find(c => c.name() === part);
+                if (!found) break;
+                node = found as any;
+            }
+
+            const suggestions = node.commands.map(c => c.name());
+            console.log(suggestions.join(" "));
+        });
 
     program.parse(process.argv);
 }
