@@ -924,12 +924,13 @@ async function main() {
 
             let epochsPerCall;
             let loopCount;
-            if (options.epochs || options.loopEpochs) {
+            if (options.epochs || options.loopEpochs) { // Fully specified by user
                 epochsPerCall = options.epochs || 1;
                 loopCount = options.loopEpochs || 1;
-            } else {
+            } else { // Automatic calculation
                 epochsPerCall = await middlewareSvc.read.getCurrentEpoch() - await middlewareSvc.read.lastGlobalNodeStakeUpdateEpoch();
                 loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
+                epochsPerCall = Math.ceil(epochsPerCall / loopCount);
             }
 
             logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);

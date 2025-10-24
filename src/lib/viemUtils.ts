@@ -102,10 +102,11 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
             logs: receipt.logs,
           });
           if (logs.length > 0) {
-            logger.log("Logs:")
+            logger.log("============= Logs emitted during the transaction =============");
             logger.log(logs.map((log) => {
               return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
             }).join('\n'));
+            logger.log("===============================================================");
             logger.addData('receipt', receipt);
           }
           return hash
