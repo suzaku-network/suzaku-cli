@@ -1,6 +1,6 @@
 import { SuzakuABI } from './abis';
-import { ExtendedClient, Network } from './client';
-import { Hex, PublicClient, WalletClient } from 'viem';
+import { ExtendedClient } from './client';
+import { Hex } from 'viem';
 import { curriedContract, CurriedSuzakuContractMap, SuzakuABINames, TSuzakuABI } from './lib/viemUtils';
 import dotenv from 'dotenv';
 import * as os from 'os';
@@ -20,7 +20,7 @@ interface Config {
   contracts: CurriedSuzakuContractMap;
 }
 
-function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0): Config {
+function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
 
   // Dynamically build the contracts map using the curriedContract function
   const contracts = Object.fromEntries(
@@ -30,7 +30,7 @@ function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0)
     ]),
   ) as CurriedSuzakuContractMap;
 
-  if (network === 'fuji') {
+  if (client.network === 'fuji') {
     return {
       l1Registry: (process.env.L1_REGISTRY_FUJI as Hex) || '0xB9826Bbf0deB10cC3924449B93F418db6b16be36',
       operatorRegistry: (process.env.OPERATOR_REGISTRY_FUJI as Hex) || '0x46D45D6be6214F6bd8124187caD1a5302755d7A2',
@@ -39,7 +39,7 @@ function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0)
       abis: SuzakuABI,
       contracts,
     };
-  } else if (network === 'anvil') {
+  } else if (client.network === 'anvil') {
     return {
       l1Registry: (process.env.L1_REGISTRY as Hex) || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
       operatorRegistry: (process.env.OPERATOR_REGISTRY as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
@@ -48,7 +48,7 @@ function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0)
       abis: SuzakuABI,
       contracts,
     };
-  } else if (network === 'mainnet') {
+  } else if (client.network === 'mainnet') {
     return {
       l1Registry: (process.env.L1_REGISTRY_MAINNET as Hex) || '0x3fDaC1aD6D0E1E7E9A3D3cC6e8B8Dc5D3bF2E1A0',
       operatorRegistry: (process.env.OPERATOR_REGISTRY_MAINNET as Hex) || '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4',
@@ -58,7 +58,7 @@ function getConfig(network: Network, client: ExtendedClient, waitForTxCount = 0)
       contracts,
     };
   } else {
-    throw new Error(`Unsupported network: ${network}`);
+    throw new Error(`Unsupported network: ${client.network}`);
   }
 }
 

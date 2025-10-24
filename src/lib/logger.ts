@@ -72,6 +72,12 @@ class Logger {
     process.exitCode = 1;
   }
 
+  public exitError(args: any[], stackPop: number = 0) {
+    const err = new Error();
+    this.error(...args, "\nCLI Stack trace:\n" + err.stack?.split("\n").slice(2 + stackPop).join("\n"));
+    process.exit(1);
+  }
+
   public table(data: any) {
     if (!this.config.silent) {
       console.table(data);

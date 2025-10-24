@@ -25,7 +25,8 @@ export type CurriedSuzakuContractMap = { [key in SuzakuABINames]: CurriedContrac
 
 // Map a proxy handler on safeWrite methods of the contract to simulate the write operation before executing it
 export function withSafeWrite<T extends SuzakuABINames>(
-  contract: SuzakuContracts[T]
+  contract: SuzakuContracts[T],
+  abi: T
 ): SafeSuzakuContract[T] {
   if (!('write' in contract)) {
     throw new Error('Contract does not have a write property');
@@ -38,19 +39,40 @@ export function withSafeWrite<T extends SuzakuABINames>(
         try {
           const simulateFn = (contract as any).simulate?.[prop]
           if (typeof simulateFn === 'function') {
-            // logger.log(`Simulating ${String(prop)}`);
             await simulateFn(...args)
           }
-          // logger.log(`Executing ${String(prop)}`);
-          return fn(...args)
+          return await fn(...args)
         } catch (error: any) {
-          throw Error(error.message)
+          const msg = (error.message as string)
+          const eraseToIndex = msg.indexOf("Docs:")
+          logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
         }
       }
     },
   };
 
   (contract as any).safeWrite = new Proxy(contract.write as Record<string, any>, handler);
+
+  if (!('read' in contract)) {
+    throw new Error('Contract does not have a read property');
+  }
+  const readHandler: ProxyHandler<Record<string, any>> = {
+    get(target, prop, _recv) {
+      const fn = (target as any)[prop]
+      if (typeof fn !== 'function') return fn
+      return async (...args: any[]) => {
+        try {
+          return await fn(...args)
+        } catch (error: any) {
+          const msg = (error.message as string)
+          const eraseToIndex = msg.indexOf("Docs:")
+          logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
+        }
+      }
+    },
+  };
+
+  (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
 
   return contract as unknown as SafeSuzakuContract[T];
 }
@@ -79,14 +101,18 @@ export function withWaitForReceipt<T extends SuzakuABINames>(
             abi: SuzakuABI[abi],
             logs: receipt.logs,
           });
-          logger.log("Logs:")
+          if (logs.length > 0) {
+            logger.log("Logs:")
             logger.log(logs.map((log) => {
               return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
             }).join('\n'));
-          logger.addData('receipt', receipt);
+            logger.addData('receipt', receipt);
+          }
           return hash
         } catch (error: any) {
-          throw Error(error.message)
+          const msg = (error.message as string)
+          const eraseToIndex = msg.indexOf("Docs:")
+          logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex-1)}`], 2)
         }
       }
     },
@@ -113,6 +139,7 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
       )
     }
     return withSafeWrite(
-      contract
+      contract,
+      abi
     )
   };

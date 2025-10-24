@@ -30,10 +30,8 @@ export async function getValidationUptimeMessage(
     }),
   });
   const data = await response.json();
-  const validator = data.result.validators.find((v: any) => v.nodeID === nodeId);
-  if (!validator) {
-    throw new Error(`Validator with NodeID ${nodeId} not found`);
-  }
+  if (data.error) logger.exitError(["Error from validators.getCurrentValidators:", data.error])
+  const validator = data.result.validators[0];
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;
   console.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);

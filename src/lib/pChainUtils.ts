@@ -525,7 +525,7 @@ export async function increasePChainValidatorBalance(
 
     const { P: pChainAddress } = getAddresses(privateKeyHex, client.network!);
     const addressBytes = utils.bech32ToBytes(pChainAddress);
-    const nAVAX = BigInt(amount * 1e9); // Convert AVAX to nAVAX
+    const nAVAX = BigInt(Math.floor(amount * 1e9)); // Convert AVAX to nAVAX
     // Ensure the P-Chain address has enough balance
     check && await requirePChainBallance(privateKeyHex, client, nAVAX);
 
