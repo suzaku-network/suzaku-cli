@@ -39,6 +39,15 @@ export async function installCompletion(program: Command) {
 
   fs.writeFileSync(file, generateCompletion(program), "utf8");
 
+  const rcFile = path.join(os.homedir(), `.${shell}rc`);
+  if (fs.existsSync(rcFile)) {
+    const bashrcContent = fs.readFileSync(rcFile, "utf8");
+    const sourceLine = `source ${file}`;
+    if (!bashrcContent.includes(sourceLine)) {
+      fs.appendFileSync(rcFile, `\n# Suzaku CLI completion\n${sourceLine}\n`, "utf8");
+    }
+  }
+
   console.log(`✅ Auto-completion ${shell} installed : ${file}`);
   console.log("⚠️ Restart your terminal or :");
   console.log(shell === "zsh"
