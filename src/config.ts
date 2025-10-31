@@ -18,6 +18,7 @@ interface Config {
   opVaultOptIn: Hex;
   abis: TSuzakuABI;
   contracts: CurriedSuzakuContractMap;
+  client: ExtendedClient;
 }
 
 function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
@@ -38,6 +39,7 @@ function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
       opVaultOptIn: (process.env.OP_VAULT_OPT_IN_FUJI as Hex) || '0xC30c9f7482B2ED82d0532812285295f8b7453941',
       abis: SuzakuABI,
       contracts,
+      client,
     };
   } else if (client.network === 'anvil') {
     return {
@@ -47,6 +49,7 @@ function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
       opVaultOptIn: (process.env.OP_VAULT_OPT_IN as Hex) || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
       abis: SuzakuABI,
       contracts,
+      client,
     };
   } else if (client.network === 'mainnet') {
     return {
@@ -56,6 +59,7 @@ function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
       opVaultOptIn: (process.env.OP_VAULT_OPT_IN_MAINNET as Hex) || '0x4B20993Bc481177ec7E8f571ceCaE8E9e22C02db',
       abis: SuzakuABI,
       contracts,
+      client,
     };
   } else {
     throw new Error(`Unsupported network: ${client.network}`);

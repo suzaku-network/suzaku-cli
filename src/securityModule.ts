@@ -51,11 +51,12 @@ export async function completeValidatorRegistration(
     logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
   } else {
     // Get the unsigned warp message from the receipt
+    logger.log(warpLogs)
     const RegisterL1ValidatorUnsignedWarpMsg = warpLogs.args.message;
 
     // Collect signatures for the warp message
     logger.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
-    const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
+    const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg, RegisterL1ValidatorUnsignedWarpMsg);
     logger.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
     // Register validator on P-Chain

@@ -119,7 +119,7 @@ import {
     getLastEpochClaimedStaker,
     getLastEpochClaimedOperator,
     getLastEpochClaimedCurator,
-    getLastEpochClaimedProtocol
+    getLastEpochClaimedProtocol,
 } from "./rewards";
 import { requirePChainBallance } from "./lib/transferUtils";
 import { bigintReplacer, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
@@ -817,6 +817,46 @@ async function main() {
             logger.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
         }));
 
+    // removeAssetFromClass
+    middlewareCmd
+        .command("remove-collateral-from-class")
+        .description("Remove a collateral address from an existing collateral class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .addArgument(ArgAddress("collateralAddress", "Collateral address to remove"))
+        .action(wrapAsyncAction(async (middlewareAddress, collateralClassId, collateralAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig( client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const tx = await middlewareSvc.safeWrite.removeAssetFromClass([collateralClassId, collateralAddress],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            logger.log(`Removed collateral ${collateralAddress} from class ${collateralClassId}`);
+            logger.log("tx hash:", tx);
+        }));
+
+    // removeCollateralClass
+    middlewareCmd
+        .command("remove-collateral-class")
+        .description("Remove an existing secondary collateral class")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
+        .action(wrapAsyncAction(async (middlewareAddress, collateralClassId) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig( client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.removeCollateralClass([collateralClassId],
+                {
+                    chain: null,
+                    account: client.account!,
+                });
+            logger.log(`Removed collateral class ${collateralClassId}`);
+        }));
+
     // activateSecondaryCollateralClass
     middlewareCmd
         .command("activate-collateral-class")
@@ -1047,6 +1087,68 @@ async function main() {
             );
         }));
 
+    // fully node registration
+    middlewareCmd
+        .command("full-validator-registration")
+        .description("Fully register a validator node on the middleware and the P-Chain")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("blsKey", "BLS public key"))
+        .addArgument(ArgBLSPOP())
+        .addOption(new Option("--initial-stake <initialStake>", "Initial stake amount (default: 0)").default('0'))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
+        .action(wrapAsyncAction(async (middlewareAddress, nodeId, blsKey, blsProofOfPossession, options) => {
+            const opts = program.opts();
+
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey!;
+            }
+
+            const client = generateClient(opts.network, options.pchainTxPrivateKey);
+            const config = getConfig( client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
+
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)));
+
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
+            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
+            const remainingBalanceOwner: [number, Hex[]] = [
+                Number(options.pchainRemainingBalanceOwnerThreshold),
+                remainingBalanceOwnerAddress
+            ];
+            const disableOwner: [number, Hex[]] = [
+                Number(options.pchainDisableOwnerThreshold),
+                disableOwnerAddress
+            ];
+
+            const primaryCollateralAddress = await middlewareSvc.read.PRIMARY_ASSET();
+            const primaryCollateral = config.contracts.DefaultCollateral(primaryCollateralAddress);
+            const initialStakeWei = parseUnits(options.initialStake.toString(), await primaryCollateral.read.decimals());
+            const addNodeTxHash = await middlewareAddNode(
+                middlewareSvc,
+                nodeId,
+                blsKey,
+                remainingBalanceOwner,
+                disableOwner,
+                initialStakeWei,
+                client.account!
+            );
+            await completeValidatorRegistration(
+                client,
+                middlewareSvc,
+                balancerSvc,
+                config,
+                options.pchainTxPrivateKey,
+                blsProofOfPossession,
+                addNodeTxHash,
+                Number(options.initialBalance),
+                !options.skipWaitApi
+            );
+        }));
+
     // Remove node
     middlewareCmd
         .command("remove-node")
@@ -1098,6 +1200,45 @@ async function main() {
                 pchainTxAddress,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
+            );
+        }));
+
+    // full-validator-removal
+    middlewareCmd
+        .command("full-validator-removal")
+        .description("Fully remove a validator node from the middleware and the P-Chain")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
+        .action(wrapAsyncAction(async (middlewareAddress, nodeId, options) => {
+            const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = generateClient(opts.network, options.pchainTxPrivateKey);
+            const config = getConfig( client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
+            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+
+            // Derive pchainTxAddress from the private key
+            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
+
+            const removeNodeTxHash = await middlewareRemoveNode(
+                middlewareSvc,
+                nodeId,
+                client.account!
+            );
+            await completeValidatorRemoval(
+                client,
+                middlewareSvc,
+                balancerSvc,
+                config,
+                removeNodeTxHash,
+                options.pchainTxPrivateKey,
+                pchainTxAddress,
+                !options.skipWaitApi,
+                [nodeId],
             );
         }));
 
@@ -1156,6 +1297,52 @@ async function main() {
                 options.pchainTxPrivateKey,
                 client.account!,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
+            );
+        }));
+
+    // full-stake-update
+    middlewareCmd
+        .command("full-stake-update")
+        .description("Fully update validator stake on the middleware and the P-Chain")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(ArgNodeID())
+        .argument("newStake", "New stake amount")
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .action(wrapAsyncAction(async (middlewareAddress, nodeId, newStake, options) => {
+            const opts = program.opts();
+
+            // If pchainTxPrivateKey is not provided, use the private key
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey!;
+            }
+
+            const client = generateClient(opts.network, options.pchainTxPrivateKey);
+            const config = getConfig( client, opts.wait);
+            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+
+            // Check if P-Chain address have 0.01 AVAX for tx fees
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+
+            const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
+            const collateral = config.contracts.DefaultCollateral(primaryCollateral);
+            const decimals = await collateral.read.decimals();
+            const newStakeWei = parseUnits(newStake, decimals);
+
+            const validatorStakeUpdateTxHash = await middlewareInitStakeUpdate(
+                middlewareSvc,
+                nodeId,
+                newStakeWei,
+                client.account!
+            );
+
+            await completeWeightUpdate(
+                client,
+                middlewareSvc,
+                config,
+                validatorStakeUpdateTxHash,
+                options.pchainTxPrivateKey,
+                client.account!,
+                [nodeId],
             );
         }));
 
@@ -2404,12 +2591,13 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await distributeRewards(
+            const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
                 batchSize,
                 client.account!
             );
+            console.log(`Rewards distributed for epoch ${epoch}. tx hash: ${txHash}`);
         }));
 
     rewardsCmd
@@ -2527,7 +2715,7 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setRewardsAmountForEpochs(
+            const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
                 startEpoch,
                 numberOfEpochs,
@@ -2535,6 +2723,7 @@ async function main() {
                 rewardsAmount,
                 client.account!
             );
+            console.log(`setRewardsAmountForEpochs tx hash: ${txHash}`);
         }));
 
     rewardsCmd

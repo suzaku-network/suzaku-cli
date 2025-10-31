@@ -12,6 +12,7 @@ import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, pack
 import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
 import { logger } from './lib/logger';
 import { pipe, R } from '@mobily/ts-belt';
+import { getLogs } from 'viem/actions';
 
 // @ts-ignore - Wrapping in try/catch for minimal changes
 
@@ -77,6 +78,7 @@ export async function middlewareAddNode(
     { chain: null, account }
   );
   logger.log("addNode executed successfully, tx hash:", hash);
+  return hash;
 }
 
 // removeNode
@@ -95,6 +97,7 @@ export async function middlewareRemoveNode(
     { chain: null, account }
   );
   logger.log("removeNode executed successfully, tx hash:", hash);
+  return hash;
 }
 
 // initializeValidatorWeightUpdate
@@ -114,6 +117,7 @@ export async function middlewareInitStakeUpdate(
     { chain: null, account }
   );
   logger.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
+  return hash;
 }
 
 // calcAndCacheNodeStakeForAllOperators
@@ -191,10 +195,11 @@ export async function middlewareGetActiveNodesForEpoch(
 ) {
   logger.log("Reading active nodes for epoch...");
 
-  const nodeIds = await middleware.read.getActiveNodesForEpoch(
+  const nodeIds = (await middleware.read.getActiveNodesForEpoch(
     [operator, epoch]
-  ) as Hex[];
-  logger.log(nodeIds.map((b: Hex) => b));
+  ) as Hex[]).map((b: Hex) => encodeNodeID(b));
+  logger.log(nodeIds);
+  logger.addData('nodeIds', nodeIds);
 }
 
 // getOperatorNodesLength
