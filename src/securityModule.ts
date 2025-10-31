@@ -161,7 +161,7 @@ export async function completeValidatorRemoval(
 
       // Aggregate signatures from validators
       // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage, unsignedL1ValidatorWeightMessage);
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -273,7 +273,7 @@ export async function completeWeightUpdate(
     const unsignedL1ValidatorWeightMessage = warpLog.args.message
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage, unsignedL1ValidatorWeightMessage);
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage

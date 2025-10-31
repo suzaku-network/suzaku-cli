@@ -40,7 +40,7 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
+  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex, unsignedValidationUptimeMessageHex);
   logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
