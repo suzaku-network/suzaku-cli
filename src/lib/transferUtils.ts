@@ -3,6 +3,8 @@ import { getAddresses, nToAVAX } from "./utils";
 import { ExtendedWalletClient } from "../client";
 import { getRPCEndpoint, waitPChainTx } from "./pChainUtils";
 import { logger } from './logger';
+import { parseEventLogs } from "viem";
+import { Config } from "../config";
 
 // Wait c chain tx until it is confirmed with a timeout
 export async function waitCChainTx(txID: string, evmApi: evm.EVMApi, pollingInterval: number = 6, retryCount: number = 10) {
@@ -159,5 +161,13 @@ export async function requireCChainBallance(privateKeyHex: string, client: Exten
   }
   logger.log(`Sufficient found on the C-Chain address ${cAddress} (${nToAVAX(cBalance)}/${nToAVAX(amount)} AVAX)`)
   return cBalance;
+}
 
+export async function getERC20Events(hash: `0x${string}`, config: Config) {
+  const receipt = await config.client.getTransactionReceipt({ hash });
+  const logs = parseEventLogs({
+    abi: config.abis.ERC20,
+    logs: receipt.logs,
+  });
+  return logs;
 }

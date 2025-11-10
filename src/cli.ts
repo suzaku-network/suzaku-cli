@@ -121,7 +121,7 @@ import {
     getLastEpochClaimedCurator,
     getLastEpochClaimedProtocol,
 } from "./rewards";
-import { requirePChainBallance } from "./lib/transferUtils";
+import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { bigintReplacer, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
@@ -2612,12 +2612,19 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            await claimRewards(
+            const hash = await claimRewards(
                 rewardsContract,
                 rewardsToken,
                 recipient,
                 client.account!
             );
+            const logs = await getERC20Events(hash, config)
+            logs.forEach((log) => {
+                if (log.eventName === "Transfer") {
+                    const { from, to, value } = log.args;
+                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                }
+            });
         }));
 
     rewardsCmd
@@ -2632,12 +2639,21 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            await claimOperatorFee(
+            const hash = await claimOperatorFee(
                 rewardsContract,
                 rewardsToken,
                 recipient,
                 client.account!
             );
+
+            const logs = await getERC20Events(hash, config)
+            logs.forEach((log) => {
+                if (log.eventName === "Transfer") {
+                    const { from, to, value } = log.args;
+                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                }
+            });
+
         }));
 
     rewardsCmd
@@ -2652,12 +2668,19 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            await claimCuratorFee(
+            const hash = await claimCuratorFee(
                 rewardsContract,
                 rewardsToken,
                 recipient,
                 client.account!
             );
+            const logs = await getERC20Events(hash, config)
+            logs.forEach((log) => {
+                if (log.eventName === "Transfer") {
+                    const { from, to, value } = log.args;
+                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                }
+            });
         }));
 
     rewardsCmd
@@ -2672,12 +2695,19 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            await claimProtocolFee(
+            const hash = await claimProtocolFee(
                 rewardsContract,
                 rewardsToken,
                 recipient,
                 client.account!
             );
+            const logs = await getERC20Events(hash, config)
+            logs.forEach((log) => {
+                if (log.eventName === "Transfer") {
+                    const { from, to, value } = log.args;
+                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                }
+            });
         }));
 
     rewardsCmd
@@ -2693,13 +2723,20 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            await claimUndistributedRewards(
+            const hash = await claimUndistributedRewards(
                 rewardsContract,
                 epoch,
                 rewardsToken,
                 recipient,
                 client.account!
             );
+            const logs = await getERC20Events(hash, config)
+            logs.forEach((log) => {
+                if (log.eventName === "Transfer") {
+                    const { from, to, value } = log.args;
+                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                }
+            });
         }));
 
     rewardsCmd
@@ -2709,18 +2746,21 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
-        .addArgument(ArgBigInt("rewardsAmount", "Amount of rewards in wei"))
+        .addArgument(ArgBigInt("rewardsAmount", "Amount of rewards in decimal format"))
         .action(wrapAsyncAction(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const token = config.contracts.ERC20(rewardsToken);
+            const decimals = await token.read.decimals();
+            const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
                 startEpoch,
                 numberOfEpochs,
                 rewardsToken,
-                rewardsAmount,
+                rewardsAmountWei,
                 client.account!
             );
             console.log(`setRewardsAmountForEpochs tx hash: ${txHash}`);
@@ -2737,12 +2777,13 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setRewardsShareForCollateralClass(
+            const hash = await setRewardsShareForCollateralClass(
                 rewardsContract,
                 collateralClass,
                 share,
                 client.account!
             );
+            console.log(`setRewardsShareForCollateralClass tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2755,11 +2796,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setMinRequiredUptime(
+            const hash = await setMinRequiredUptime(
                 rewardsContract,
                 minUptime,
                 client.account!
             );
+            console.log(`setMinRequiredUptime tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2772,11 +2814,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setAdminRole(
+            const hash = await setAdminRole(
                 rewardsContract,
                 newAdmin,
                 client.account!
             );
+            console.log(`setAdminRole tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2789,11 +2832,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await setProtocolOwner(
+            const hash = await setProtocolOwner(
                 rewardsContract,
                 newOwner,
                 client.account!
             );
+            console.log(`setProtocolOwner tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2806,11 +2850,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await updateProtocolFee(
+            const hash = await updateProtocolFee(
                 rewardsContract,
                 newFee,
                 client.account!
             );
+            console.log(`updateProtocolFee tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2823,11 +2868,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await updateOperatorFee(
+            const hash = await updateOperatorFee(
                 rewardsContract,
                 newFee,
                 client.account!
             );
+            console.log(`updateOperatorFee tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2840,11 +2886,12 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await updateCuratorFee(
+            const hash = await updateCuratorFee(
                 rewardsContract,
                 newFee,
                 client.account!
             );
+            console.log(`updateCuratorFee tx hash: ${hash}`);
         }));
 
     rewardsCmd
@@ -2859,13 +2906,14 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            await updateAllFees(
+            const hash = await updateAllFees(
                 rewardsContract,
                 protocolFee,
                 operatorFee,
                 curatorFee,
                 client.account!
             );
+            console.log(`updateAllFees tx hash: ${hash}`);
         }));
 
     rewardsCmd

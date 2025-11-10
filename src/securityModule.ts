@@ -56,7 +56,7 @@ export async function completeValidatorRegistration(
 
     // Collect signatures for the warp message
     logger.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
-    const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg, RegisterL1ValidatorUnsignedWarpMsg);
+    const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
     logger.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
     // Register validator on P-Chain
@@ -81,7 +81,7 @@ export async function completeValidatorRegistration(
 
   // Aggregate signatures from validators
   logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-  const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+  const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
   logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
   // Convert the signed warp message to bytes and pack into access list
@@ -161,7 +161,7 @@ export async function completeValidatorRemoval(
 
       // Aggregate signatures from validators
       // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage, unsignedL1ValidatorWeightMessage);
+      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -273,7 +273,7 @@ export async function completeWeightUpdate(
     const unsignedL1ValidatorWeightMessage = warpLog.args.message
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage, unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -299,7 +299,7 @@ export async function completeWeightUpdate(
 
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
