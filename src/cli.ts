@@ -2746,7 +2746,7 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
-        .addArgument(ArgBigInt("rewardsAmount", "Amount of rewards in decimal format"))
+        .argument("rewardsAmount", "Amount of rewards in decimal format")
         .action(wrapAsyncAction(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
             const client = generateClient(opts.network, opts.privateKey!);
