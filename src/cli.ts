@@ -155,6 +155,7 @@ async function main() {
             .default(0)
             .argParser(ParserNumber))
         .addOption(new Option("--json", "Output logs in JSON format"))
+        .addOption(new Option('-y, --yes', 'Automatic yes to prompts'))
         .version('0.1.0');
 
     /* --------------------------------------------------
@@ -199,11 +200,13 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up:`);
-            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length)); // extra 20000 for fees
-            const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
-            if (response.toLowerCase() !== 'y') {
-                logger.log("Operation cancelled by user.");
-                process.exit(0);
+            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
+            if (!opts.yes) {
+                const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+                if (response.toLowerCase() !== 'y') {
+                    logger.log("Operation cancelled by user.");
+                    process.exit(0);
+                }
             }
 
             for (const { validationId, topup } of validatorsToTopUp) {
@@ -1071,7 +1074,7 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
@@ -1111,7 +1114,7 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)), opts.yes);
 
             const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
             const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
@@ -1185,7 +1188,7 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -1219,7 +1222,7 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -1287,7 +1290,7 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
             // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9), opts.yes);
 
             await completeWeightUpdate(
                 client,
@@ -1321,7 +1324,7 @@ async function main() {
             const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
 
             // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
             const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
             const collateral = config.contracts.DefaultCollateral(primaryCollateral);
@@ -1454,11 +1457,13 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
-            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * nodeCount); // extra 20000 for fees
-            const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
-            if (response.toLowerCase() !== 'y') {
-                logger.log("Operation cancelled by user.");
-                process.exit(0);
+            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * nodeCount, opts.yes); // extra 20000 for fees
+            if (!opts.yes) {
+                const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+                if (response.toLowerCase() !== 'y') {
+                    logger.log("Operation cancelled by user.");
+                    process.exit(0);
+                }
             }
 
             for (const { validationId, topup } of validatorsToTopUp) {
@@ -2142,7 +2147,7 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
@@ -2197,7 +2202,7 @@ async function main() {
             const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -2254,7 +2259,7 @@ async function main() {
             const config = getConfig( client, opts.wait);
             const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9));
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
             const txHash = await completeWeightUpdate(
                 client,

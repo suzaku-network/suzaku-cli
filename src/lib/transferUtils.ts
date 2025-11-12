@@ -98,7 +98,7 @@ export async function pChainImport(client: ExtendedWalletClient, privateKeyHex: 
 // @param checkRetry - The number of times to check for the amount (default: 3)
 // @returns - A promise that resolves when the user has enough AVAX in the P-Chain address
 // @throws - An error if the user doesn't have enough AVAX in the P-Chain address
-export async function requirePChainBallance(privateKeyHex: string, client: ExtendedWalletClient, amount: bigint = BigInt(0), signedTx?: avaxSerial.SignedTx, checkRetry: number = 3) {
+export async function requirePChainBallance(privateKeyHex: string, client: ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, signedTx?: avaxSerial.SignedTx, checkRetry: number = 3) {
 
   const rpcUrl = getRPCEndpoint(client);
   const pvmApi = new pvm.PVMApi(rpcUrl);
@@ -117,9 +117,9 @@ export async function requirePChainBallance(privateKeyHex: string, client: Exten
     const neededOnCchain = transferFees - remainingPBalance// Turn remainingPBalance positive and add fees to get the needed amount on the C-Chain
 
     // Ask user to transfer AVAX to its C-Chain address if not enough found
-    const cBalance = await requireCChainBallance(privateKeyHex, client, neededOnCchain, undefined, checkRetry);
+    const cBalance = await requireCChainBallance(privateKeyHex, client, neededOnCchain, promptUser, undefined, checkRetry);
 
-    switch (await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${nToAVAX(neededOnCchain)} to the P-Chain address ${nToAVAX(neededOnCchain)}.. Do you want to transfer it automatically (y/n)`)) {
+    switch (promptUser ? await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${nToAVAX(neededOnCchain)} to the P-Chain address ${nToAVAX(neededOnCchain)}.. Do you want to transfer it automatically (y/n)`) : 'y') {
       case 'y':
         logger.log(`Exporting AVAX from C-Chain...`);
         const cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
@@ -146,7 +146,7 @@ export async function requirePChainBallance(privateKeyHex: string, client: Exten
 
 }
 
-export async function requireCChainBallance(privateKeyHex: string, client: ExtendedWalletClient | ExtendedWalletClient, amount: bigint = BigInt(0), signedTx?: EVMUnsignedTx, checkRetry: number = 3) {
+export async function requireCChainBallance(privateKeyHex: string, client: ExtendedWalletClient | ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, signedTx?: EVMUnsignedTx, checkRetry: number = 3) {
 
   const { C: cAddress } = getAddresses(privateKeyHex, client.network!);
   let cBalance = await client.getBalance({ address: cAddress }) / BigInt(1e9);// ETH to AVAX decimals
@@ -155,6 +155,9 @@ export async function requireCChainBallance(privateKeyHex: string, client: Exten
   for (let cTry = 0; remainingCBalance < BigInt(0) && cTry < checkRetry; cTry++) {
     if (cTry === checkRetry) throw new Error(`You don't have enough AVAX in your C-Chain address`);
     logger.log(`You have only ${nToAVAX(cBalance)}/${nToAVAX(amount)} AVAX in your C-Chain address ${cAddress}`);
+    if (!promptUser) {
+      throw new Error(`You don't have enough AVAX in your C-Chain address ${cAddress}`);
+    }
     await logger.prompt(`Please transfer ${nToAVAX(amount)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
     cBalance = await client.getBalance({ address: cAddress }) / BigInt(1e9);// ETH to AVAX decimals
     remainingCBalance = cBalance - amount;
