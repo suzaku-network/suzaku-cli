@@ -1,5 +1,10 @@
 export default [
     {
+        "type": "constructor",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
         "type": "function",
         "name": "BASIS_POINTS_DENOMINATOR",
         "inputs": [],
@@ -121,11 +126,6 @@ export default [
         "name": "claimCuratorFee",
         "inputs": [
             {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
                 "name": "recipient",
                 "type": "address",
                 "internalType": "address"
@@ -138,11 +138,6 @@ export default [
         "type": "function",
         "name": "claimOperatorFee",
         "inputs": [
-            {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
-            },
             {
                 "name": "recipient",
                 "type": "address",
@@ -157,11 +152,6 @@ export default [
         "name": "claimProtocolFee",
         "inputs": [
             {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
                 "name": "recipient",
                 "type": "address",
                 "internalType": "address"
@@ -174,11 +164,6 @@ export default [
         "type": "function",
         "name": "claimRewards",
         "inputs": [
-            {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
-            },
             {
                 "name": "recipient",
                 "type": "address",
@@ -196,11 +181,6 @@ export default [
                 "name": "epoch",
                 "type": "uint48",
                 "internalType": "uint48"
-            },
-            {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
             },
             {
                 "name": "recipient",
@@ -305,6 +285,25 @@ export default [
     },
     {
         "type": "function",
+        "name": "epochRewards",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "epochStatus",
         "inputs": [
             {
@@ -329,17 +328,12 @@ export default [
     },
     {
         "type": "function",
-        "name": "getRewardsAmountPerTokenFromEpoch",
+        "name": "getEpochRewards",
         "inputs": [
             {
                 "name": "epoch",
                 "type": "uint48",
                 "internalType": "uint48"
-            },
-            {
-                "name": "token",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "outputs": [
@@ -347,30 +341,6 @@ export default [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getRewardsAmountPerTokenFromEpoch",
-        "inputs": [
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "tokens",
-                "type": "address[]",
-                "internalType": "address[]"
-            },
-            {
-                "name": "amounts",
-                "type": "uint256[]",
-                "internalType": "uint256[]"
             }
         ],
         "stateMutability": "view"
@@ -492,11 +462,6 @@ export default [
                 "name": "curator",
                 "type": "address",
                 "internalType": "address"
-            },
-            {
-                "name": "rewardToken",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "outputs": [
@@ -516,35 +481,6 @@ export default [
                 "name": "operator",
                 "type": "address",
                 "internalType": "address"
-            },
-            {
-                "name": "rewardToken",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "lastEpochClaimedProtocol",
-        "inputs": [
-            {
-                "name": "protocolOwner",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "rewardToken",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "outputs": [
@@ -562,11 +498,6 @@ export default [
         "inputs": [
             {
                 "name": "staker",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "rewardToken",
                 "type": "address",
                 "internalType": "address"
             }
@@ -701,16 +632,10 @@ export default [
     {
         "type": "function",
         "name": "protocolRewards",
-        "inputs": [
-            {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
+        "inputs": [],
         "outputs": [
             {
-                "name": "rewardsAmount",
+                "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -774,10 +699,23 @@ export default [
     },
     {
         "type": "function",
+        "name": "rewardsToken",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "setMinRequiredUptime",
         "inputs": [
             {
-                "name": "newMinUptime",
+                "name": "uptime",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -811,11 +749,6 @@ export default [
                 "name": "numberOfEpochs",
                 "type": "uint48",
                 "internalType": "uint48"
-            },
-            {
-                "name": "rewardsToken",
-                "type": "address",
-                "internalType": "address"
             },
             {
                 "name": "rewardsAmount",
@@ -1481,17 +1414,6 @@ export default [
                 "name": "epoch",
                 "type": "uint48",
                 "internalType": "uint48"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "EnumerableMapNonexistentKey",
-        "inputs": [
-            {
-                "name": "key",
-                "type": "bytes32",
-                "internalType": "bytes32"
             }
         ]
     },

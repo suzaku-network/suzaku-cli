@@ -26,6 +26,10 @@ const contractMappings = {
   'BalancerValidatorManager': 'BalancerValidatorManager.ts',
   'IWarpMessenger': 'IWarpMessenger.ts',
   'ValidatorManager': 'ValidatorManager.ts',
+  'AccessControl': 'AccessControl.ts',
+  'RewardsNativeToken': 'RewardsNativeToken.ts',
+  'Ownable': 'Ownable.ts',
+  'ERC165': 'ERC165.ts'
 };
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)

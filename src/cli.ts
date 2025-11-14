@@ -2068,6 +2068,48 @@ async function main() {
             logger.log("resendValidatorRemoval executed successfully, tx hash:", hash);
         }
         ));
+
+    balancerCmd
+        .command("transfer-l1-ownership")
+        .description("Transfer Validator manager, balancer and its security modules ownership to a new owner")
+        .addArgument(ArgAddress("balancerAddress", "Balancer contract address"))
+        .addArgument(ArgAddress("newOwner", "New owner address"))
+        .action(wrapAsyncAction(async (balancerAddress, newOwner) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(client, opts.wait);
+            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const VMTx = await balancer.safeWrite.transferValidatorManagerOwnership(
+                [newOwner],
+                { chain: null, account: client.account! },
+            );
+            logger.log("transferValidatorManagerOwnership executed successfully, tx hash:", VMTx);
+            const BTx = await balancer.safeWrite.transferOwnership(
+                [newOwner],
+                { chain: null, account: client.account! },
+            );
+            logger.log("transferOwnership of balancer executed successfully, tx hash:", BTx);
+            const securityModules = await balancer.read.getSecurityModules();
+            for (const smAddress of securityModules) {
+                const smOwnable = config.contracts.Ownable(smAddress);
+
+                const SMTx = await smOwnable.safeWrite.transferOwnership(
+                    [newOwner],
+                    { chain: null, account: client.account! },
+                )
+                logger.log(`transferOwnership of security module ${smAddress} executed successfully, tx hash:`, SMTx);
+                const smAccessControl = config.contracts.AccessControl(smAddress);
+                const isAccessControl = await smAccessControl.read.supportsInterface(["0x7965db0b"])
+                if (isAccessControl) {
+                    const ROLETX = await smAccessControl.safeWrite.grantRole(
+                        [await smAccessControl.read.DEFAULT_ADMIN_ROLE(), newOwner],
+                        { chain: null, account: client.account! },
+                    )
+                    logger.log(`grantRole DEFAULT_ADMIN_ROLE to ${newOwner} on security module ${smAddress} executed successfully, tx hash:`, ROLETX);
+                }
+
+            }
+        }));
     /**
      * --------------------------------------------------
      * POA-Security-Module

@@ -3,9 +3,12 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import { fromBytes, Hex, pad } from "viem";
+import { Abi, fromBytes, Hex, pad } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
+import { toEventSelector, toFunctionSelector } from "viem/utils";
+
+
 
 const CHECKSUM_LENGTH = 4;
 

@@ -15,6 +15,9 @@ import DefaultCollateral from './DefaultCollateral';
 import ERC20 from './ERC20';
 import IWarpMessenger from './IWarpMessenger';
 import ValidatorManager from './ValidatorManager';
+import AccessControl from './AccessControl';
+import RewardsNativeToken from './RewardsNativeToken';
+import Ownable from './Ownable';
 
 export const SuzakuABI = {
   L1Registry,
@@ -33,5 +36,8 @@ export const SuzakuABI = {
   DefaultCollateral,
   ERC20,
   IWarpMessenger,
-  ValidatorManager
+  ValidatorManager,
+  AccessControl,
+  RewardsNativeToken,
+  Ownable
 };
