@@ -574,6 +574,36 @@ async function main() {
 
         }))
 
+    // setIsDepositLimit
+    vaultCmd
+        .command("set-deposit-limit")
+        .description("Set deposit limit for a vault (0 will disable the limit)")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .argument("limit", "Deposit limit amount")
+        .action(wrapAsyncAction(async (vaultAddress, limit) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig( client, opts.wait);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const limitWei = parseUnits(limit, await vault.read.decimals())
+            const isLimitShouldBeEnabled = limitWei > 0n;
+            const isLimitEnabled = await vault.read.isDepositLimit();
+            if (isLimitShouldBeEnabled !== isLimitEnabled) {
+                await vault.safeWrite.setIsDepositLimit([isLimitShouldBeEnabled],
+                    {
+                        chain: null,
+                        account: client.account!,
+                    })
+                logger.log(`Set deposit limit enabled to ${isLimitShouldBeEnabled} for vault (${await vault.read.name()}) ${vaultAddress}`);
+            }
+            await vault.safeWrite.setDepositLimit([limitWei],
+                {
+                    chain: null,
+                    account: client.account!,
+                })
+            logger.log(`Set deposit limit to ${limit} for vault (${await vault.read.name()}) ${vaultAddress}`);
+        }));
+
     /* --------------------------------------------------
     * VAULT READ COMMANDS
     * -------------------------------------------------- */
