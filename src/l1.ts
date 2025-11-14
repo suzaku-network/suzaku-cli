@@ -13,7 +13,7 @@ export async function registerL1(
 
     const hash = await l1Registry.safeWrite.registerL1(
         [balancerAddress, l1Middleware, metadataUrl],
-        { value: BigInt(10000000000000000), chain: null, account }
+        { value: BigInt(1000000000000000000), chain: null, account }
     );
 
     logger.log("Registered L1 successfully, Transaction hash:", hash);
