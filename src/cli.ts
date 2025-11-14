@@ -702,6 +702,21 @@ async function main() {
             await getVaultWithdrawalsOf(vault, epoch, account);
         }));
 
+    // Get deposit limit
+    vaultCmd
+        .command("get-deposit-limit")
+        .description("Get deposit limit for a vault")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .action(wrapAsyncAction(async (vaultAddress) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig( client, opts.wait);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const limit = await vault.read.depositLimit();
+            const isLimitEnabled = await vault.read.isDepositLimit();
+            logger.log(`Deposit limit for vault ${vaultAddress}: ${formatUnits(limit, await vault.read.decimals())} (enabled: ${isLimitEnabled})`);
+        }));
+
     /* --------------------------------------------------
     * L1RestakeDelegator (set-l1-limit / set-operator-l1-shares)
     * -------------------------------------------------- */
