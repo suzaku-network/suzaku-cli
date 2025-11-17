@@ -7,6 +7,7 @@ import { Abi, fromBytes, Hex, pad } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
 import { toEventSelector, toFunctionSelector } from "viem/utils";
+import { spawnSync } from "child_process";
 
 
 
@@ -148,4 +149,37 @@ export function bigintReplacer(_key: string, value: any) {
         return Number(value);
     }
     return value;
+}
+
+export function getClipboardValue(): string {
+    let result: string;
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+        // Windows
+        result = spawnSync('powershell', ['-command', 'Get-Clipboard'], { encoding: 'utf-8' }).stdout;
+    } else if (platform === 'darwin') {
+        // macOS
+        result = spawnSync('pbpaste', [], { encoding: 'utf-8' }).stdout;
+    } else {
+        // Linux and others
+        result = spawnSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8' }).stdout;
+    }
+
+    return result.trim();
+}
+
+export function setClipboardValue(value: string): void {
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+        // Windows
+        spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8' });
+    } else if (platform === 'darwin') {
+        // macOS
+        const proc = spawnSync('pbcopy', [], { input: value, encoding: 'utf-8' });
+    } else {
+        // Linux and others
+        spawnSync('xclip', ['-selection', 'clipboard'], { input: value, encoding: 'utf-8' });
+    }
 }

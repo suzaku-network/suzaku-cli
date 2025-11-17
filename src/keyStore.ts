@@ -1,7 +1,8 @@
-import { Command } from '@commander-js/extra-typings';
+import { Command, Option } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import { confPath } from './config';
 import { logger, wrapAsyncAction } from './lib/logger';
+import { getClipboardValue } from './lib/utils';
 
 export const passPath = confPath + '/.password-store'
 
@@ -24,8 +25,17 @@ export function buildCommands(program: Command) {
     .command("create")
     .description("create a new encrypted secret")
     .argument("<name>", "Name of the secret to create")
-    .argument("<value>", "Value of the secret to create")
-    .action(wrapAsyncAction(async (name: string, value: string) => {
+    .addOption(new Option('-c, --clip', 'Extract the value of the secret to create from the clipboard'))
+    .addOption(new Option('-v, --value', 'Value of the secret to create').conflicts('clip'))
+    .action(wrapAsyncAction(async (name: string, options) => {
+      let value: string;
+      if (options.clip) {
+        value = getClipboardValue();
+      } else if (options.value) {
+        value = options.value;
+      } else {
+        throw new Error("Either --clip or --value must be provided to create a secret.");
+      }
       const pass = new Pass(passPath)
       pass.insert(name, value)
       logger.log(`Secret '${name}' created successfully.`);
