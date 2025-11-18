@@ -133,6 +133,7 @@ import { completeValidatorRegistration, completeValidatorRemoval, completeWeight
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
+import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = generateClient(opts.network, opts.privateKey!);
@@ -3291,6 +3292,98 @@ async function main() {
         if (!hasSubCmds || hasSubCmds && !newLineToLog) newLineToLog = true;
         return newLineToLog
     }
+
+    const accessControlCmd = program
+        .command("access-control")
+        .description("Commands for managing access control");
+
+    accessControlCmd
+        .command("grant-role")
+        .description("Grant a role to an account")
+        .addArgument(ArgAddress("contractAddress", "Address of the contract"))
+        .argument("role", "Role hash or name case unsensitive")
+        .addArgument(ArgAddress("account", "Account address to grant the role to"))
+        .action(wrapAsyncAction(async (contractAddress, role, account) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig( client, opts.wait);
+            const accessControl = config.contracts.AccessControl(contractAddress);
+            if (!isAccessControl(accessControl)) {
+                throw new Error("Contract does not implement AccessControl interface");
+            }
+            const txHash = await grantRole(
+                accessControl,
+                role,
+                account,
+                client.account!
+            );
+            console.log(`Role granted. tx hash: ${txHash}`);
+        }));
+
+    accessControlCmd
+        .command("revoke-role")
+        .description("Revoke a role from an account")
+        .addArgument(ArgAddress("contractAddress", "Address of the contract"))
+        .argument("role", "Role hash or name case unsensitive")
+        .addArgument(ArgAddress("account", "Account address to revoke the role from"))
+        .action(wrapAsyncAction(async (contractAddress, role, account) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig( client, opts.wait);
+            const accessControl = config.contracts.AccessControl(contractAddress);
+            if (!isAccessControl(accessControl)) {
+                throw new Error("Contract does not implement AccessControl interface");
+            }
+            const txHash = await revokeRole(
+                accessControl,
+                role,
+                account,
+                client.account!
+            );
+            console.log(`Role revoked. tx hash: ${txHash}`);
+        }));
+
+    accessControlCmd
+        .command("has-role")
+        .description("Check if an account has a specific role")
+        .addArgument(ArgAddress("contractAddress", "Address of the contract"))
+        .argument("role", "Role hash or name case unsensitive")
+        .addArgument(ArgAddress("account", "Account address to check"))
+        .action(wrapAsyncAction(async (contractAddress, role, account) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig( client, opts.wait);
+            const accessControl = config.contracts.AccessControl(contractAddress);
+            if (!isAccessControl(accessControl)) {
+                throw new Error("Contract does not implement AccessControl interface");
+            }
+            const hasRoleResult = await hasRole(
+                accessControl,
+                role,
+                account
+            );
+            console.log(`Account ${account} has role ${role}: ${hasRoleResult}`);
+        }));
+
+    accessControlCmd
+        .command("get-role-admin")
+        .description("Get the admin role that controls a specific role")
+        .addArgument(ArgAddress("contractAddress", "Address of the contract"))
+        .argument("role", "Role hash or name case unsensitive")
+        .action(wrapAsyncAction(async (contractAddress, role) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network);
+            const config = getConfig( client, opts.wait);
+            const accessControl = config.contracts.AccessControl(contractAddress);
+            if (!isAccessControl(accessControl)) {
+                throw new Error("Contract does not implement AccessControl interface");
+            }
+            const adminRole = await getRoleAdmin(
+                accessControl,
+                role
+            );
+            console.log(`Admin role for role ${role} is: ${adminRole}`);
+        }));
 
     program
         .command("help-all")
