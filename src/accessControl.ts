@@ -46,8 +46,12 @@ export async function getRoleAdmin(
 
 export async function isAccessControl(
   accessControl: SafeSuzakuContract['AccessControl']
-) {
-  return await accessControl.read.supportsInterface(["0x7965db0b"]);
+): Promise<boolean> {
+  try {
+    return await accessControl.read.supportsInterface(["0x7965db0b"]);
+  } catch (e) {
+    return false;
+  }
 }
 
 export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : keccak256(toBytes(role.toUpperCase()));

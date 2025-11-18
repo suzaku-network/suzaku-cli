@@ -3308,7 +3308,7 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const accessControl = config.contracts.AccessControl(contractAddress);
-            if (!isAccessControl(accessControl)) {
+            if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
             const txHash = await grantRole(
@@ -3331,7 +3331,7 @@ async function main() {
             const client = generateClient(opts.network, opts.privateKey!);
             const config = getConfig( client, opts.wait);
             const accessControl = config.contracts.AccessControl(contractAddress);
-            if (!isAccessControl(accessControl)) {
+            if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
             const txHash = await revokeRole(
@@ -3354,7 +3354,7 @@ async function main() {
             const client = generateClient(opts.network);
             const config = getConfig( client, opts.wait);
             const accessControl = config.contracts.AccessControl(contractAddress);
-            if (!isAccessControl(accessControl)) {
+            if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
             const hasRoleResult = await hasRole(
@@ -3375,7 +3375,7 @@ async function main() {
             const client = generateClient(opts.network);
             const config = getConfig( client, opts.wait);
             const accessControl = config.contracts.AccessControl(contractAddress);
-            if (!isAccessControl(accessControl)) {
+            if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
             const adminRole = await getRoleAdmin(
