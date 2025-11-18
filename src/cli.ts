@@ -604,6 +604,29 @@ async function main() {
             logger.log(`Set deposit limit to ${limit} for vault (${await vault.read.name()}) ${vaultAddress}`);
         }));
 
+    // increaseLimit of the collateral
+    vaultCmd
+        .command("collateral-increase-limit")
+        .description("Set deposit limit for a collateral")
+        .addArgument(ArgAddress("vaultAddress", "Vault contract address"))
+        .argument("limit", "Deposit limit amount")
+        .action(wrapAsyncAction(async (vaultAddress, limit) => {
+            const opts = program.opts();
+            const client = generateClient(opts.network, opts.privateKey!);
+            const config = getConfig(client, opts.wait);
+            const vault = config.contracts.VaultTokenized(vaultAddress);
+
+            const collateralAddress = await vault.read.collateral();
+            const collateral = config.contracts.DefaultCollateral(collateralAddress);
+            const limitWei = parseUnits(limit, await collateral.read.decimals())
+            await collateral.safeWrite.increaseLimit([limitWei],
+                {
+                    chain: null,
+                    account: client.account!,
+                })
+            logger.log(`Collateral (${collateralAddress}) limit increased to ${limit} (${await collateral.read.name()})`);
+        }));
+
     /* --------------------------------------------------
     * VAULT READ COMMANDS
     * -------------------------------------------------- */

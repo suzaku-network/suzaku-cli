@@ -3,6 +3,8 @@ import { Pass } from "./lib/pass";
 import { confPath } from './config';
 import { logger, wrapAsyncAction } from './lib/logger';
 import { getClipboardValue } from './lib/utils';
+import { getAddresses } from './lib/utils';
+import { ParserAddress } from './lib/cliParser';
 
 export const passPath = confPath + '/.password-store'
 
@@ -58,5 +60,18 @@ export function buildCommands(program: Command) {
       const pass = new Pass(passPath)
       logger.log("Available secrets:");
       logger.log(pass)
+    }));
+  
+  program
+    .command("addresses")
+    .description("Show the address of an encrypted private key")
+    .argument("<name>", "Name of the secret to show the address for")
+    .action(wrapAsyncAction(async (name: string) => {
+      const opts = program.opts();
+      const pass = new Pass(passPath)
+      const privateKey = pass.show(name);
+      const address = getAddresses(privateKey as string, (opts as { network: string }).network);
+      ParserAddress(address.C); // Validate address
+      logger.log(`Address for secret '${name}':\n  C-Chain: ${address.C}\n  P-Chain: ${address.P}`);
     }));
 }
