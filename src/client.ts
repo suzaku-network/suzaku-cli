@@ -2,6 +2,7 @@ import { avalancheFuji, avalanche, anvil } from 'viem/chains'
 import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions, Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { PublicActions } from 'viem'
+import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
@@ -12,22 +13,28 @@ const chains = {
 };
 
 // Create extended client type that includes public actions and network type
-export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network };
+export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, safe?: SafeClient };
 export type ExtendedPublicClient = PublicClient & { network: Network };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
-export function generateClient(network: Network, privateKey: Hex): ExtendedWalletClient;
-export function generateClient(network: Network, privateKey?: undefined): ExtendedPublicClient;
-export function generateClient(network: Network): ExtendedPublicClient;
-export function generateClient(network: Network, privateKey?: Hex): ExtendedWalletClient | ExtendedPublicClient {
+export async function generateClient(network: Network, privateKey: Hex, safe?: Hex): Promise<ExtendedWalletClient>;
+export async function generateClient(network: Network, privateKey?: undefined): Promise<ExtendedPublicClient>;
+export async function generateClient(network: Network): Promise<ExtendedPublicClient>;
+export async function generateClient(network: Network, privateKey?: Hex, safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
     return privateKey ? {
         ...createWalletClient({
             account: privateKeyToAccount(privateKey),
             chain: chains[network],
             transport: http()
         }).extend(publicActions),
-        network
+        network,
+        safe: safe ? await createSafeClient({
+            provider: chains[network].rpcUrls.default.http[0],
+            signer: privateKey,
+            safeAddress: safe,
+            txServiceUrl: 'https://wallet-transaction-fuji.ash.center'
+        }) : undefined
     } :
         {
             ...createPublicClient({

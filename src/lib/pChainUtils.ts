@@ -637,7 +637,7 @@ export async function convertSubnetToL1(params:
         chainId: string;
         validatorManager: SafeSuzakuContract['ValidatorManager'];
         client: ExtendedWalletClient;
-        privateKeyHex: string;
+        privateKeyHex: Hex;
         validators: NodeConfig[];
     }) {
     const managerAddress = params.validatorManager.address;
