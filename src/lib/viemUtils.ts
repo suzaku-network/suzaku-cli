@@ -1,9 +1,10 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, decodeFunctionData } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
 import { bigintReplacer } from './utils';
 import { color } from 'console-log-colors';
+import { handleTransactionStrategy } from './safeUtils';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
@@ -42,7 +43,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
           let hash: Hex;
           // If a safe smart account is connected, use it to send the transaction
           if ("safe" in client && client.safe != undefined) {
-            const transactions = [{
+            const transaction = {
               to: contract.address,
               data: encodeFunctionData({
                 abi: SuzakuABI[abi] as Abi,
@@ -51,8 +52,16 @@ export function withSafeWrite<T extends SuzakuABINames>(
               }),
               ...options,
               value: options?.value ? options.value : '0',
-            }]
-            return (await client.safe.send({ transactions })).transactions?.ethereumTxHash as Hex;
+            }
+            const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
+            switch (selection.action) {
+              case 'new':
+                return (await client.safe.send({ transactions: [transaction] })).transactions?.ethereumTxHash as Hex;
+              case 'confirm':
+                return (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
+              default:// same as skip
+                return undefined
+            }
           } else {
             hash = await fn(args, options)
           }
@@ -79,7 +88,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
         } catch (error: any) {
           const msg = (error.message as string)
           const eraseToIndex = msg.indexOf("Docs:")
-          logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
+          logger.exitError([`${abi}:\n\n${eraseToIndex === -1 ? (error as Error) : msg.slice(0, eraseToIndex - 1)}`], 2)
         }
       }
     },

@@ -33,7 +33,8 @@ export async function generateClient(network: Network, privateKey?: Hex, safe?: 
             provider: chains[network].rpcUrls.default.http[0],
             signer: privateKey,
             safeAddress: safe,
-            txServiceUrl: 'https://wallet-transaction-fuji.ash.center'
+            txServiceUrl: 'https://api.safe.global/tx-service/avax/api',
+            apiKey: process.env.SAFE_API_KEY
         }) : undefined
     } :
         {
