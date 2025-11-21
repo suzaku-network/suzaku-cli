@@ -17,6 +17,17 @@ interface TransactionStrategyResponse {
   action: 'confirm' | 'reject' | 'skip' | 'new';
 }
 
+/**
+ * Safe transaction management strategy:
+ * 1. Search for similar pending transactions in the Safe.
+ * 2. Exact match:
+ *    - If already signed by the user: Ignore the transaction (Skip).
+ *    - If not signed: Automatically confirm the existing transaction.
+ * 3. Partial match (same function, different arguments):
+ *    - Display an interactive menu.
+ *    - Options: Confirm an existing transaction, Create a new one, or Skip all.
+ * 4. No match: Create a new transaction.
+ */
 export async function handleTransactionStrategy(
   transaction: { to: Hex, data: Hex, value: string | number },
   client: SafeClient,
