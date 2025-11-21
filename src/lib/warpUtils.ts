@@ -247,7 +247,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
             },
             weight: v.weight
         }))
-    }, 5, pChainChainID);
+    }, params.network === 'fuji' ? 5 : 1, pChainChainID);
 
     // logger.log("Message:", fromBytes(message, 'hex'));
     // logger.log("Justification:", fromBytes(justification, 'hex'));
@@ -283,7 +283,6 @@ export async function collectSignatures(network: Network, message: string, justi
         body.justification = justification;
         // body.signingSubnetId = pChainChainID;
     }
-    logger.log(body)
     // Test every 2 seconds, timeout after 30 seconds
     const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {

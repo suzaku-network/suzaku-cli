@@ -19,7 +19,7 @@ export async function completeValidatorRegistration(
   pChainTxPrivateKey: string,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
-  initialBalance: number,
+  initialBalance: bigint,
   waitValidatorVisible: boolean
 ) {
   logger.log("Completing validator registration...");
@@ -51,13 +51,11 @@ export async function completeValidatorRegistration(
     logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
   } else {
     // Get the unsigned warp message from the receipt
-    logger.log(warpLogs)
     const RegisterL1ValidatorUnsignedWarpMsg = warpLogs.args.message;
 
     // Collect signatures for the warp message
-    logger.log("\nAggregating signatures for the RegisterL1ValidatorMessage from the Validator Manager chain...");
+    logger.log("\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...");
     const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
-    logger.log("Aggregated signatures for the RegisterL1ValidatorMessage from the Validator Manager chain");
 
     // Register validator on P-Chain
     logger.log("\nRegistering validator on P-Chain...");
@@ -76,13 +74,12 @@ export async function completeValidatorRegistration(
   const validationIDHex = InitiatedValidatorRegistration.args.validationID;
   // Pack and sign the P-Chain warp message
   const validationIDBytes = hexToBytes(validationIDHex as Hex);
-  const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, 5, pChainChainID);
+  const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, client.network === 'fuji' ? 5 : 1, pChainChainID);
   const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
   // Aggregate signatures from validators
   logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
   const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
-  logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
   // Convert the signed warp message to bytes and pack into access list
   const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
@@ -182,7 +179,7 @@ export async function completeValidatorRemoval(
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationID as Hex);
-    const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, 5, pChainChainID);
+    const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, client.network === 'fuji' ? 5 : 1, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
     // Aggregate signatures from validators
@@ -294,7 +291,7 @@ export async function completeWeightUpdate(
 
     // Pack and sign the P-Chain warp message
     const validationIDBytes = hexToBytes(validationIDHex as Hex);
-    const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), 5, pChainChainID);
+    const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
     const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
     // Aggregate signatures from validators

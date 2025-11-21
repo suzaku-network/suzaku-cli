@@ -39,7 +39,7 @@ export interface ConvertToL1Params extends PChainBaseParams {
 export interface RegisterL1ValidatorParams extends PChainBaseParams {
     blsProofOfPossession: string;
     signedMessage: string;
-    initialBalance: number;
+    initialBalance: bigint;
 }
 
 export interface RemoveL1ValidatorParams extends PChainBaseParams {
@@ -370,7 +370,7 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
 
     // Create a new register validator transaction
     const tx = pvm.e.newRegisterL1ValidatorTx({
-        balance: BigInt(params.initialBalance * 1e9), // e.g.: 0.1 * 1e9 = 0.1 AVAX
+        balance: params.initialBalance,
         blsSignature: new Uint8Array(Buffer.from(params.blsProofOfPossession.slice(2), 'hex')),
         message: new Uint8Array(Buffer.from(params.signedMessage, 'hex')),
         feeState,

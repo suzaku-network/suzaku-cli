@@ -1128,7 +1128,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))// In decimals
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
@@ -1144,7 +1144,7 @@ async function main() {
             const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)), opts.yes);
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((100000000 + Number(options.initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
@@ -1155,69 +1155,7 @@ async function main() {
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
-                Number(options.initialBalance),
-                !options.skipWaitApi
-            );
-        }));
-
-    // fully node registration
-    middlewareCmd
-        .command("full-validator-registration")
-        .description("Fully register a validator node on the middleware and the P-Chain")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
-        .addArgument(ArgHex("blsKey", "BLS public key"))
-        .addArgument(ArgBLSPOP())
-        .addOption(new Option("--initial-stake <initialStake>", "Initial stake amount (default: 0)").default('0'))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
-        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(wrapAsyncAction(async (middlewareAddress, nodeId, blsKey, blsProofOfPossession, options) => {
-            const opts = program.opts();
-
-            if (!options.pchainTxPrivateKey) {
-                options.pchainTxPrivateKey = opts.privateKey!;
-            }
-
-            const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
-
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((0.1 + Number(options.initialBalance)) * 1e9)), opts.yes);
-
-            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
-            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
-            const remainingBalanceOwner: [number, Hex[]] = [
-                Number(options.pchainRemainingBalanceOwnerThreshold),
-                remainingBalanceOwnerAddress
-            ];
-            const disableOwner: [number, Hex[]] = [
-                Number(options.pchainDisableOwnerThreshold),
-                disableOwnerAddress
-            ];
-
-            const primaryCollateralAddress = await middlewareSvc.read.PRIMARY_ASSET();
-            const primaryCollateral = config.contracts.DefaultCollateral(primaryCollateralAddress);
-            const initialStakeWei = parseUnits(options.initialStake.toString(), await primaryCollateral.read.decimals());
-            const addNodeTxHash = await middlewareAddNode(
-                middlewareSvc,
-                nodeId,
-                blsKey,
-                remainingBalanceOwner,
-                disableOwner,
-                initialStakeWei,
-                client.account!
-            );
-            await completeValidatorRegistration(
-                client,
-                middlewareSvc,
-                balancerSvc,
-                config,
-                options.pchainTxPrivateKey,
-                blsProofOfPossession,
-                addNodeTxHash,
-                Number(options.initialBalance),
+                options.initialBalance,
                 !options.skipWaitApi
             );
         }));
@@ -1276,45 +1214,6 @@ async function main() {
             );
         }));
 
-    // full-validator-removal
-    middlewareCmd
-        .command("full-validator-removal")
-        .description("Fully remove a validator node from the middleware and the P-Chain")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
-        .action(wrapAsyncAction(async (middlewareAddress, nodeId, options) => {
-            const opts = program.opts();
-            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
-            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
-
-            // Derive pchainTxAddress from the private key
-            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
-
-            const removeNodeTxHash = await middlewareRemoveNode(
-                middlewareSvc,
-                nodeId,
-                client.account!
-            );
-            await completeValidatorRemoval(
-                client,
-                middlewareSvc,
-                balancerSvc,
-                config,
-                removeNodeTxHash,
-                options.pchainTxPrivateKey,
-                pchainTxAddress,
-                !options.skipWaitApi,
-                [nodeId],
-            );
-        }));
-
     // Init stake update
     middlewareCmd
         .command("init-stake-update")
@@ -1370,52 +1269,6 @@ async function main() {
                 options.pchainTxPrivateKey,
                 client.account!,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
-            );
-        }));
-
-    // full-stake-update
-    middlewareCmd
-        .command("full-stake-update")
-        .description("Fully update validator stake on the middleware and the P-Chain")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNodeID())
-        .argument("newStake", "New stake amount")
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(wrapAsyncAction(async (middlewareAddress, nodeId, newStake, options) => {
-            const opts = program.opts();
-
-            // If pchainTxPrivateKey is not provided, use the private key
-            if (!options.pchainTxPrivateKey) {
-                options.pchainTxPrivateKey = opts.privateKey!;
-            }
-
-            const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-
-            // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
-
-            const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
-            const collateral = config.contracts.DefaultCollateral(primaryCollateral);
-            const decimals = await collateral.read.decimals();
-            const newStakeWei = parseUnits(newStake, decimals);
-
-            const validatorStakeUpdateTxHash = await middlewareInitStakeUpdate(
-                middlewareSvc,
-                nodeId,
-                newStakeWei,
-                client.account!
-            );
-
-            await completeWeightUpdate(
-                client,
-                middlewareSvc,
-                config,
-                validatorStakeUpdateTxHash,
-                options.pchainTxPrivateKey,
-                client.account!,
-                [nodeId],
             );
         }));
 
@@ -2243,7 +2096,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.0001').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.1').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
@@ -2270,7 +2123,7 @@ async function main() {
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
-                Number(options.initialBalance),
+                options.initialBalance,
                 !options.skipWaitApi
             );
         }));
