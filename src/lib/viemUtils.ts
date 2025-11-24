@@ -11,7 +11,7 @@ export type SuzakuABINames = keyof typeof SuzakuABI;
 export type TSuzakuABI = { [K in SuzakuABINames]: typeof SuzakuABI[K] };
 
 // Define the type for the contract instances
-export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typeof SuzakuABI[K], ExtendedClient> & { address: Hex } };
+export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typeof SuzakuABI[K], ExtendedClient> & { address: Hex, name: string } };
 
 // Define the type to use the same signature write methods of each contract
 export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] extends { write: infer W } ? W : never };
@@ -30,10 +30,15 @@ export function withSafeWrite<T extends SuzakuABINames>(
   client: ExtendedClient,
   confirmations = 1
 ): SafeSuzakuContract[T] {
+
+  // Introspection
+  contract.name = abi;
+
   if (!('write' in contract)) {
     throw new Error('Contract does not have a write property');
   }
 
+  // Proxy handler for write methods to add Safe transaction handling and wait for confirmations
   const writeHandler: ProxyHandler<Record<string, any>> = {
     get(target, prop, _recv) {
       const fn = (target as any)[prop]
@@ -56,15 +61,21 @@ export function withSafeWrite<T extends SuzakuABINames>(
             const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
             switch (selection.action) {
               case 'new':
-                return (await client.safe.send({ transactions: [transaction] })).transactions?.ethereumTxHash as Hex;
+                hash = (await client.safe.send({ transactions: [transaction] })).transactions?.ethereumTxHash as Hex;
+                break;
               case 'confirm':
-                return (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
+                hash = (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
+                break;
               default:// same as skip
-                return undefined
+                hash = selection.hash!;
             }
           } else {
             hash = await fn(args, options)
           }
+
+          logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join(', ')})`, hash, options });
+
+          if (!hash) return undefined; // when skipping a transaction
 
           // If no confirmations required, return the hash directly
           if (confirmations === 0) return hash
@@ -96,7 +107,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
   (contract as any).write = new Proxy(contract.write as Record<string, any>, writeHandler);
 
-
+  // Proxy handler for safeWrite methods to simulate the write operation before executing it
   const safeWriteHandler: ProxyHandler<Record<string, any>> = {
     get(target, prop, _recv) {
       const fn = (target as any)[prop]
@@ -123,6 +134,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
   if (!('read' in contract)) {
     throw new Error('Contract does not have a read property');
   }
+  // Proxy handler for read methods to catch and format errors
   const readHandler: ProxyHandler<Record<string, any>> = {
     get(target, prop, _recv) {
       const fn = (target as any)[prop]

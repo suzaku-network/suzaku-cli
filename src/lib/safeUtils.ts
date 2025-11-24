@@ -66,7 +66,7 @@ export async function handleTransactionStrategy(
   if (exactMatch) {
     if (exactMatch.signed) {
       logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly and is already confirmed. Skipping.`);
-      return { action: 'skip' };
+      return { action: 'skip',  hash: exactMatch.safeTxHash};
     }
     logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly. Confirming.`);
     return { hash: exactMatch.safeTxHash, action: 'confirm' };
