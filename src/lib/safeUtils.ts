@@ -14,7 +14,7 @@ interface SelectedTx {
 interface TransactionStrategyResponse {
   hash?: Hex;
   nonce?: number;
-  action: 'confirm' | 'reject' | 'skip' | 'new';
+  action: 'confirm' | 'skip' | 'new';
 }
 
 /**

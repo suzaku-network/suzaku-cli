@@ -100,7 +100,6 @@ import {
     setRewardsAmountForEpochs,
     setRewardsShareForCollateralClass,
     setMinRequiredUptime,
-    setAdminRole,
     setProtocolOwner,
     updateProtocolFee,
     updateOperatorFee,
@@ -2584,9 +2583,9 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimRewards(
                 rewardsContract,
-                rewardsToken,
+                client.account!,
                 recipient,
-                client.account!
+                rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2611,9 +2610,9 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimOperatorFee(
                 rewardsContract,
-                rewardsToken,
+                client.account!,
                 recipient,
-                client.account!
+                rewardsToken
             );
 
             const logs = await getERC20Events(hash, config)
@@ -2640,9 +2639,9 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimCuratorFee(
                 rewardsContract,
-                rewardsToken,
+                client.account!,
                 recipient,
-                client.account!
+                rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2667,9 +2666,9 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimProtocolFee(
                 rewardsContract,
-                rewardsToken,
+                client.account!,
                 recipient,
-                client.account!
+                rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2695,10 +2694,10 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimUndistributedRewards(
                 rewardsContract,
+                client.account!,
                 epoch,
-                rewardsToken,
                 recipient,
-                client.account!
+                rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2727,11 +2726,11 @@ async function main() {
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
+                client.account!,
                 startEpoch,
                 numberOfEpochs,
-                rewardsToken,
                 rewardsAmountWei,
-                client.account!
+                rewardsToken
             );
             console.log(`setRewardsAmountForEpochs tx hash: ${txHash}`);
         }));
@@ -2772,24 +2771,6 @@ async function main() {
                 client.account!
             );
             console.log(`setMinRequiredUptime tx hash: ${hash}`);
-        }));
-
-    rewardsCmd
-        .command("set-admin")
-        .description("Set admin role (DEFAULT_ADMIN_ROLE only)")
-        .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgAddress("newAdmin", "New admin address"))
-        .action(wrapAsyncAction(async (rewardsAddress, newAdmin) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            const hash = await setAdminRole(
-                rewardsContract,
-                newAdmin,
-                client.account!
-            );
-            console.log(`setAdminRole tx hash: ${hash}`);
         }));
 
     rewardsCmd
