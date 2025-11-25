@@ -3,33 +3,33 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { toFunctionSelector, toEventSelector } from 'viem';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Define the mapping between contract names and their output files
 const contractMappings = {
-  'AvalancheL1Middleware': 'AvalancheL1Middleware.ts',
-  'VaultTokenized': 'VaultTokenized.ts',
-  'DefaultCollateral': 'DefaultCollateral.ts',
-  'TestERC20': 'ERC20.ts',
-  'L1Registry': 'L1Registry.ts',
-  'L1RestakeDelegator': 'L1RestakeDelegator.ts',
-  'MiddlewareVaultManager': 'MiddlewareVaultManager.ts',
-  'OperatorL1OptInService': 'OperatorL1OptInService.ts',
-  'OperatorRegistry': 'OperatorRegistry.ts',
-  'OperatorVaultOptInService': 'OperatorVaultOptInService.ts',
-  'PoASecurityModule': 'PoASecurityModule.ts',
-  'Rewards': 'Rewards.ts',
-  'UptimeTracker': 'UptimeTracker.ts',
-  'VaultFactory': 'VaultFactory.ts',
-  'BalancerValidatorManager': 'BalancerValidatorManager.ts',
-  'IWarpMessenger': 'IWarpMessenger.ts',
-  'ValidatorManager': 'ValidatorManager.ts',
-  'AccessControl': 'AccessControl.ts',
-  'RewardsNativeToken': 'RewardsNativeToken.ts',
-  'Ownable': 'Ownable.ts',
-  'ERC165': 'ERC165.ts'
+  AvalancheL1Middleware: "L1Middleware.ts",
+  VaultTokenized: "VaultTokenized.ts",
+  DefaultCollateral: "DefaultCollateral.ts",
+  TestERC20: "ERC20.ts",
+  L1Registry: "L1Registry.ts",
+  L1RestakeDelegator: "L1RestakeDelegator.ts",
+  MiddlewareVaultManager: "VaultManager.ts",
+  OperatorL1OptInService: "OperatorL1OptInService.ts",
+  OperatorRegistry: "OperatorRegistry.ts",
+  OperatorVaultOptInService: "OperatorVaultOptInService.ts",
+  PoASecurityModule: "PoASecurityModule.ts",
+  Rewards: "Rewards.ts",
+  UptimeTracker: "UptimeTracker.ts",
+  VaultFactory: "VaultFactory.ts",
+  BalancerValidatorManager: "BalancerValidatorManager.ts",
+  IWarpMessenger: "IWarpMessenger.ts",
+  ValidatorManager: "ValidatorManager.ts",
+  AccessControl: "AccessControl.ts",
+  RewardsNativeToken: "RewardsNativeToken.ts",
+  Ownable: "Ownable.ts"
 };
 
 // Source directory points to local suzaku-core repository (on size-middleware branch)
@@ -52,6 +52,8 @@ function convertAbiToTypeScript(contractName, abi) {
 function updateAbiFile(contractName, outputFileName) {
   const jsonPath = path.join(sourceDir, `${contractName}.sol`, `${contractName}.json`);
   const tsPath = path.join(targetDir, outputFileName);
+
+  let selectors = [];
   
   try {
     // Check if the source JSON file exists
@@ -71,11 +73,21 @@ function updateAbiFile(contractName, outputFileName) {
 
     // Convert to TypeScript format
     const tsContent = convertAbiToTypeScript(contractName, contractData.abi);
+
+    // process all functions and events selectors (to validate contract ABI on instantiation)
+    selectors = contractData.abi.reduce((acc, item) => {
+      if (item.type === 'function') {
+        acc.push(toFunctionSelector(item).replace('0x', ''));
+      } else if (item.type === 'event') {
+        // acc.push(toEventSelector(item).replace("0x", ""));
+      }
+      return acc;
+    }, []);
     
     // Write the TypeScript file
     fs.writeFileSync(tsPath, tsContent);
     console.log(`✅ Updated: ${outputFileName}`);
-    return true;
+    return new Set(selectors);
     
   } catch (error) {
     console.error(`❌ Error updating ${contractName}:`, error.message);
@@ -86,6 +98,8 @@ function updateAbiFile(contractName, outputFileName) {
 function main() {
   let updatedCount = 0;
   let totalCount = 0;
+
+  let selectors = {};
 
   // Check if source directory exists
   if (!fs.existsSync(sourceDir)) {
@@ -102,10 +116,17 @@ function main() {
   // Update each contract
   for (const [contractName, outputFileName] of Object.entries(contractMappings)) {
     totalCount++;
-    if (updateAbiFile(contractName, outputFileName)) {
+    if (
+      (selectors[outputFileName.replace('.ts', '')] = [...updateAbiFile(contractName, outputFileName)])
+    ) {
       updatedCount++;
     }
   }
+
+  // Write selectors to a JSON file for reference
+  const selectorsPath = path.join(targetDir, 'abi-selectors.json');
+  fs.writeFileSync(selectorsPath, JSON.stringify(selectors, null, 4));
+  console.log(`✅ ABI selectors written to: abi-selectors.json`);
 
   console.log(`\n📊 Summary: ${updatedCount}/${totalCount} ABI files updated successfully`);
   
@@ -116,4 +137,4 @@ function main() {
   }
 }
 
-main(); 
+main();

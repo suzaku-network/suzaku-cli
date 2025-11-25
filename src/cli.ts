@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { formatUnits, getAbiItem, Hex, parseEventLogs, parseUnits } from "viem";
+import { formatUnits, getAbiItem, getFunctionSelector, Hex, parseEventLogs, parseUnits, toFunctionSelector } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -133,6 +133,7 @@ import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
+import { SuzakuABINames } from './lib/viemUtils';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
@@ -158,6 +159,19 @@ async function main() {
         .addOption(new Option('-y, --yes', 'Automatic yes to prompts'))
         .addOption(OptAddress('--safe <address>', 'Use safe smart account for transactions'))
         .version('0.1.0');
+
+    program
+        .command('verify-abi')
+        .description('Verify that a contract at a given address matches the expected Suzaku ABI (5% tolerance)')
+        .addArgument(ArgAddress("address", "Contract address to test"))
+        .argument('abi', 'ABI name to test')
+        .action(wrapAsyncAction(async (address, abi) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait);
+            await config.contracts[abi as SuzakuABINames](address)
+            logger.log(`Verified ABI for contract ${abi} at address ${address} ✅`);
+        }));
 
     /* --------------------------------------------------
     * Generic L1 Commands
@@ -233,7 +247,7 @@ async function main() {
     const l1RegistryCmd = program
         .command("l1-registry")
         .description("Commands to interact with the Suzaku L1 Registry contract");
-    
+
     l1RegistryCmd
         .command("register")
         .description("Register a new L1 in the L1 registry")
@@ -243,10 +257,10 @@ async function main() {
         .action(wrapAsyncAction(async (balancerAddress, l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
 
             // instantiate L1Registry and call
-            const l1Registry = config.contracts.L1Registry(config.l1Registry);
+            const l1Registry = await config.contracts.L1Registry(config.l1Registry);
             await registerL1(
                 l1Registry,
                 balancerAddress,
@@ -262,9 +276,9 @@ async function main() {
         .action(wrapAsyncAction(async () => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             await getL1s(
-                config.contracts.L1Registry(config.l1Registry)
+                await config.contracts.L1Registry(config.l1Registry)
             );
         }));
 
@@ -276,8 +290,8 @@ async function main() {
         .action(wrapAsyncAction(async (l1Address, metadataUrl) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const l1Reg = config.contracts.L1Registry(config.l1Registry);
+            const config = getConfig(client, opts.wait);
+            const l1Reg = await config.contracts.L1Registry(config.l1Registry);
             await setL1MetadataUrl(
                 l1Reg,
                 l1Address,
@@ -294,8 +308,8 @@ async function main() {
         .action(wrapAsyncAction(async (l1Address, l1Middleware) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const l1Reg2 = config.contracts.L1Registry(config.l1Registry);
+            const config = getConfig(client, opts.wait);
+            const l1Reg2 = await config.contracts.L1Registry(config.l1Registry);
             await setL1Middleware(
                 l1Reg2,
                 l1Address,
@@ -309,7 +323,7 @@ async function main() {
     const operatorRegistryCmd = program
         .command("operator-registry")
         .description("Commands to interact with the Suzaku Operator Registry contract");
-    
+
     operatorRegistryCmd
         .command("register")
         .description("Register a new operator in the operator registry")
@@ -317,8 +331,8 @@ async function main() {
         .action(wrapAsyncAction(async (metadataUrl) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const opReg = config.contracts.OperatorRegistry(config.operatorRegistry);
+            const config = getConfig(client, opts.wait);
+            const opReg = await config.contracts.OperatorRegistry(config.operatorRegistry);
             await registerOperator(
                 opReg,
                 metadataUrl,
@@ -332,8 +346,8 @@ async function main() {
         .action(wrapAsyncAction(async () => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const opReg2 = config.contracts.OperatorRegistry(config.operatorRegistry);
+            const config = getConfig(client, opts.wait);
+            const opReg2 = await config.contracts.OperatorRegistry(config.operatorRegistry);
             await listOperators(opReg2);
         }));
 
@@ -343,7 +357,7 @@ async function main() {
     const vaultManagerCmd = program
         .command("vault-manager")
         .description("Commands to interact with the Vault Manager contract of an L1");
-    
+
     vaultManagerCmd
         .command("register-vault-l1")
         .description("Register a vault for L1 staking")
@@ -354,10 +368,10 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             // instantiate VaultManager contract
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManagerAddress);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const maxLimitWei = parseUnits(maxLimit, await vault.read.decimals())
             await registerVaultL1(
                 vaultManager,
@@ -378,9 +392,9 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManagerAddress);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManagerAddress);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const maxLimitWei = parseUnits(maxLimit, await vault.read.decimals())
             await updateVaultMaxL1Limit(
                 vaultManager,
@@ -399,8 +413,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const config = getConfig(client, opts.wait);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await removeVault(
                 vaultManager,
                 vaultAddress,
@@ -415,8 +429,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManager) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const config = getConfig(client, opts.wait);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCount(vaultManager);
         }));
 
@@ -428,8 +442,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManager, index) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const config = getConfig(client, opts.wait);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultAtWithTimes(
                 vaultManager,
                 index
@@ -444,8 +458,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManager, vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const config = getConfig(client, opts.wait);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCollateralClass(
                 vaultManager,
                 vaultAddress
@@ -458,7 +472,7 @@ async function main() {
     const vaultCmd = program
         .command("vault")
         .description("Commands to interact with a Vault and L1 Re-stake Delegator contracts");
-    
+
     vaultCmd
         .command("deposit")
         .description("Deposit tokens into the vault")
@@ -469,7 +483,7 @@ async function main() {
             const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             await depositVault(
                 client,
                 config,
@@ -490,8 +504,8 @@ async function main() {
             const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const amountWei = parseUnits(amount, await vault.read.decimals())
             await withdrawVault(
                 vault,
@@ -511,8 +525,8 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await claimVault(
                 vault,
                 recipient,
@@ -529,8 +543,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, account) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.grantRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
                     chain: null,
@@ -547,8 +561,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, account) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.revokeRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
                     chain: null,
@@ -565,7 +579,7 @@ async function main() {
         .action(wrapAsyncAction(async (collateralAddress, amount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             await approveAndDepositCollateral(
                 client,
                 config,
@@ -584,8 +598,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, limit) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const limitWei = parseUnits(limit, await vault.read.decimals())
             const isLimitShouldBeEnabled = limitWei > 0n;
             const isLimitEnabled = await vault.read.isDepositLimit();
@@ -615,10 +629,10 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
 
             const collateralAddress = await vault.read.collateral();
-            const collateral = config.contracts.DefaultCollateral(collateralAddress);
+            const collateral = await config.contracts.DefaultCollateral(collateralAddress);
             const limitWei = parseUnits(limit, await collateral.read.decimals())
             await collateral.safeWrite.increaseLimit([limitWei],
                 {
@@ -638,8 +652,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultCollateral(vault);
         }));
 
@@ -650,8 +664,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegator = await getVaultDelegator(vault);
             logger.log("Vault delegator:", delegator);
         }));
@@ -665,8 +679,8 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultBalanceOf(vault, account);
         }));
 
@@ -679,8 +693,8 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultActiveBalanceOf(vault, account);
         }));
 
@@ -691,8 +705,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultTotalSupply(vault);
         }));
 
@@ -706,8 +720,8 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalSharesOf(vault, epoch, account);
         }));
 
@@ -721,8 +735,8 @@ async function main() {
             const account = options.account ?? (await getDefaultAccount(program.opts()));
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalsOf(vault, epoch, account);
         }));
 
@@ -734,8 +748,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const limit = await vault.read.depositLimit();
             const isLimitEnabled = await vault.read.isDepositLimit();
             logger.log(`Deposit limit for vault ${vaultAddress}: ${formatUnits(limit, await vault.read.decimals())} (enabled: ${isLimitEnabled})`);
@@ -754,12 +768,12 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, l1Address, limit, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
             // instantiate L1RestakeDelegator contract
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const limitWei = parseUnits(limit, await vault.read.decimals())
             await setL1Limit(
                 delegator,
@@ -781,12 +795,12 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, l1Address, operatorAddress, shares, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             // instantiate L1RestakeDelegator contract
 
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const sharesWei = parseUnits(shares, await vault.read.decimals())
             await setOperatorL1Shares(
                 delegator,
@@ -807,12 +821,12 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, l1Address, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
             // instantiate L1RestakeDelegator contract
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const limit = await delegator.read.l1Limit([l1Address, collateralClass]);
             logger.log(`L1 limit for vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(limit, await vault.read.decimals())}`);
         }));
@@ -827,12 +841,12 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress, l1Address, collateralClass, operatorAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const vault = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
             // instantiate L1RestakeDelegator contract
-            const delegator = config.contracts.L1RestakeDelegator(delegatorAddress);
+            const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const shares = await delegator.read.operatorL1Shares([l1Address, collateralClass, operatorAddress]);
             logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(shares, await vault.read.decimals())}`);
         }));
@@ -855,9 +869,9 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId, minValidatorStake, maxValidatorStake, initialCollateral) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const collateral = config.contracts.DefaultCollateral(initialCollateral);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const collateral = await config.contracts.DefaultCollateral(initialCollateral);
             const decimals = await collateral.read.decimals();
             const minStakeWei = parseUnits(minValidatorStake, decimals);
             const maxStakeWei = parseUnits(maxValidatorStake, decimals);
@@ -879,8 +893,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId, collateralAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.addAssetToClass([collateralClassId, collateralAddress],
                 {
                     chain: null,
@@ -899,8 +913,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId, collateralAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const tx = await middlewareSvc.safeWrite.removeAssetFromClass([collateralClassId, collateralAddress],
                 {
                     chain: null,
@@ -919,8 +933,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.removeCollateralClass([collateralClassId],
                 {
                     chain: null,
@@ -938,8 +952,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.activateSecondaryCollateralClass([collateralClassId],
                 {
                     chain: null,
@@ -957,8 +971,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, collateralClassId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.deactivateSecondaryCollateralClass([collateralClassId],
                 {
                     chain: null,
@@ -976,8 +990,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRegisterOperator(
                 middlewareSvc,
                 operator,
@@ -994,8 +1008,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareDisableOperator(
                 middlewareSvc,
                 operator,
@@ -1012,8 +1026,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveOperator(
                 middlewareSvc,
                 operator,
@@ -1032,8 +1046,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             let epochsPerCall;
             let loopCount;
@@ -1081,8 +1095,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, nodeId, blsKey, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -1103,7 +1117,7 @@ async function main() {
             ];
 
             const primaryCollateralAddress = await middlewareSvc.read.PRIMARY_ASSET();
-            const primaryCollateral = config.contracts.DefaultCollateral(primaryCollateralAddress);
+            const primaryCollateral = await config.contracts.DefaultCollateral(primaryCollateralAddress);
             const initialStakeWei = parseUnits(options.initialStake.toString(), await primaryCollateral.read.decimals());
 
 
@@ -1138,9 +1152,9 @@ async function main() {
             }
 
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((100000000 + Number(options.initialBalance)))), opts.yes);
@@ -1168,8 +1182,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveNode(
                 middlewareSvc,
                 nodeId,
@@ -1191,9 +1205,9 @@ async function main() {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
 
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
@@ -1223,10 +1237,10 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, nodeId, newStake) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
-            const collateral = config.contracts.DefaultCollateral(primaryCollateral);
+            const collateral = await config.contracts.DefaultCollateral(primaryCollateral);
             const decimals = await collateral.read.decimals();
             const newStakeWei = parseUnits(newStake, decimals);
             await middlewareInitStakeUpdate(
@@ -1254,8 +1268,8 @@ async function main() {
             }
 
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             // Check if P-Chain address have 0.01 AVAX for tx fees
             await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9), opts.yes);
@@ -1281,13 +1295,13 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, epoch, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             logger.log("Calculating and caching stakes...");
 
             if (!client.account) {
                 throw new Error('Client account is required');
             }
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, collateralClass],
                 {
                     chain: null,
@@ -1305,8 +1319,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareCalcNodeStakes(
                 middlewareSvc,
                 client.account!
@@ -1323,8 +1337,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, operator, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareForceUpdateNodes(
                 middlewareSvc,
                 operator,
@@ -1343,23 +1357,23 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, operator, targetBalance) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const targetBalanceWei = parseUnits(targetBalance, 9); // AVAX has 9 decimals
             if (targetBalanceWei <= BigInt(1e7)) { // 0.01 AVAX min
                 throw new Error("Target balance must be greater than 0.01 AVAX");
             }
             const balancerAddress = await middlewareSvc.read.BALANCER()
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const [nodeCount, subnetID] = await Promise.all([middlewareSvc.read.getOperatorNodesLength([operator]), balancer.read.subnetID()]);
             const validators = await getCurrentValidators(client, utils.base58check.encode(hexToUint8Array(subnetID)))
 
             const validatorsToCheck = await Promise.all(
-                A.range(0, Number(nodeCount)-1)
+                A.range(0, Number(nodeCount) - 1)
                     .map(async (index) => {
                         const nodeIdHex = await middlewareSvc.read.operatorNodesArray([operator, BigInt(index)]);
                         return validators.find(v => v.nodeID === encodeNodeID(nodeIdHex));
-            }))
+                    }))
 
             const validatorsToTopUp = validatorsToCheck.reduce((acc, validator) => {
                 if (validator && validator.balance! < targetBalanceWei - BigInt(1e7)) {// 0.01 AVAX min diff
@@ -1390,7 +1404,7 @@ async function main() {
 
             for (const { validationId, topup } of validatorsToTopUp) {
                 logger.log(`\nTopping up validator ${validationId}`);
-                const amount = Number(topup)/1e9
+                const amount = Number(topup) / 1e9
                 pipe(await increasePChainValidatorBalance(
                     client,
                     opts.privateKey!,
@@ -1415,8 +1429,8 @@ async function main() {
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(wrapAsyncAction(async (middlewareAddress, operator, epoch, collateralClass) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorStake(
                 middlewareSvc,
                 operator,
@@ -1424,7 +1438,7 @@ async function main() {
                 collateralClass
             );
         }));
-    
+
     middlewareCmd
         .command("get-operator-used-stake-cached-per-epoch")
         .description("Get operator stake cached per epoch for a specific collateral class")
@@ -1434,8 +1448,8 @@ async function main() {
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(wrapAsyncAction(async (middlewareAddress, epoch, operator, collateralClass) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const usedStake = await middlewareSvc.read.getOperatorUsedStakeCachedPerEpoch(
                 [epoch, operator, collateralClass]
             );
@@ -1450,8 +1464,8 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCurrentEpoch(
                 middlewareSvc
             );
@@ -1465,8 +1479,8 @@ async function main() {
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(wrapAsyncAction(async (middlewareAddress, epoch) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetEpochStartTs(
                 middlewareSvc,
                 epoch
@@ -1482,8 +1496,8 @@ async function main() {
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .action(wrapAsyncAction(async (middlewareAddress, operator, epoch) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetActiveNodesForEpoch(
                 middlewareSvc,
                 operator,
@@ -1499,8 +1513,8 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorNodesLength(
                 middlewareSvc,
                 operator
@@ -1516,8 +1530,8 @@ async function main() {
         .addArgument(ArgHex("validationId", "Validation ID"))
         .action(wrapAsyncAction(async (middlewareAddress, epoch, validationId) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
                 epoch,
@@ -1533,8 +1547,8 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorLockedStake(
                 middlewareSvc,
                 operator
@@ -1549,8 +1563,8 @@ async function main() {
         .addArgument(ArgHex("validationId", "Validation ID"))
         .action(wrapAsyncAction(async (middlewareAddress, validationId) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
                 validationId
@@ -1565,8 +1579,8 @@ async function main() {
         .addArgument(ArgHex("validationId", "Validation ID"))
         .action(wrapAsyncAction(async (middlewareAddress, validationId) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             // const isPending = await middlewareSvc.read.pe
         }));
 
@@ -1578,8 +1592,8 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
                 operator
@@ -1594,8 +1608,8 @@ async function main() {
         .addArgument(ArgAddress("operator", "Operator address"))
         .action(wrapAsyncAction(async (middlewareAddress, operator) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
             logger.log(`Operator ${operator} available stake:\n${availableStake}`);
         }));
@@ -1607,8 +1621,8 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetAllOperators(
                 middlewareSvc
             );
@@ -1621,8 +1635,8 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await getCollateralClassIds(
                 middlewareSvc
             );
@@ -1635,8 +1649,8 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const client = await generateClient(program.opts().network);
-            const config = getConfig( client, program.opts().wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, program.opts().wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await getActiveCollateralClasses(
                 middlewareSvc
             );
@@ -1651,9 +1665,9 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             logger.log(`nodeId: ${options.nodeId}`);
-            const middleware = config.contracts.L1Middleware(middlewareAddress);
+            const middleware = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeLogs(
                 client,
                 middleware,
@@ -1671,10 +1685,10 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
-            const balancerSvc = config.contracts.BalancerValidatorManager(balancerAddress);
+            const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
             logger.log(`Fetching last validation ID`);
             const validationId = await middlewareLastValidationId(
                 client,
@@ -1694,14 +1708,14 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, vaultAddress, middlewareEpoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const vaultSvc = await config.contracts.VaultTokenized(vaultAddress);
             const middlewareEpochTs = await middlewareSvc.read.getEpochStartTs([middlewareEpoch]);
             const vaultEpoch = await vaultSvc.read.epochAt([middlewareEpochTs]);
             logger.log(`Vault epoch at middleware epoch ${middlewareEpoch} (timestamp: ${middlewareEpochTs}) is ${vaultEpoch}`);
         }))
-    
+
     middlewareCmd
         .command("update-window-ends-ts")
         .description("Get the end timestamp of the last completed middleware epoch window")
@@ -1709,8 +1723,8 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [currentEpoch, updateWindow] = await Promise.all([middlewareSvc.read.getCurrentEpoch(), middlewareSvc.read.UPDATE_WINDOW()]);
             const lastEpochStartTs = await middlewareSvc.read.getEpochStartTs([currentEpoch])
             logger.log(`Window ends at: ${lastEpochStartTs + updateWindow}`);
@@ -1725,9 +1739,9 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareAddress, vaultAddress, vaultEpoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const middlewareSvc = config.contracts.L1Middleware(middlewareAddress);
-            const vaultSvc = config.contracts.VaultTokenized(vaultAddress);
+            const config = getConfig(client, opts.wait);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const vaultSvc = await config.contracts.VaultTokenized(vaultAddress);
             const vaultEpochStartTs = await vaultSvc.read.epochDuration() * vaultEpoch + await vaultSvc.read.epochDurationInit();
             const middlewareEpoch = await middlewareSvc.read.getEpochAtTs([vaultEpochStartTs]);
             logger.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
@@ -1742,7 +1756,7 @@ async function main() {
     const operatorOptInCmd = program
         .command("opt-in")
         .description("Commands for operator opt-in services");
-    
+
     operatorOptInCmd
         .command("l1-in")
         .description("Operator opts in to a given L1")
@@ -1750,8 +1764,8 @@ async function main() {
         .action(wrapAsyncAction(async (l1Address) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optInL1(
                 service,
                 l1Address,
@@ -1766,8 +1780,8 @@ async function main() {
         .action(wrapAsyncAction(async (l1Address) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optOutL1(
                 service,
                 l1Address,
@@ -1783,8 +1797,8 @@ async function main() {
         .action(wrapAsyncAction(async (operator, l1Address) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await checkOptInL1(
                 service,
                 operator,
@@ -1805,8 +1819,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optInVault(
                 service,
                 vaultAddress,
@@ -1821,8 +1835,8 @@ async function main() {
         .action(wrapAsyncAction(async (vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optOutVault(
                 service,
                 vaultAddress,
@@ -1838,8 +1852,8 @@ async function main() {
         .action(wrapAsyncAction(async (operator, vaultAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const service = config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
+            const config = getConfig(client, opts.wait);
+            const service = await config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await checkOptInVault(
                 service,
                 operator,
@@ -1855,7 +1869,7 @@ async function main() {
     const balancerCmd = program
         .command("balancer")
         .description("Commands to interact with BalancerValidatorManager contracts");
-    
+
     balancerCmd
         .command("set-up-security-module")
         .description("Set up a security module")
@@ -1865,9 +1879,9 @@ async function main() {
         .action(wrapAsyncAction(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             // instantiate BalancerValidatorManager contract
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await setUpSecurityModule(
                 balancer,
                 middlewareAddress,
@@ -1883,8 +1897,8 @@ async function main() {
         .action(wrapAsyncAction(async (balancerValidatorManagerAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModules(
                 balancer
             );
@@ -1898,14 +1912,14 @@ async function main() {
         .action(wrapAsyncAction(async (balancerValidatorManagerAddress, securityModule) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModuleWeights(
                 balancer,
                 securityModule
             );
         }));
-    
+
     balancerCmd
         .command("get-validator-status")
         .description("Get validator status by node ID")
@@ -1914,8 +1928,8 @@ async function main() {
         .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
                 logger.log("Validator status: NotRegistered");
@@ -1939,8 +1953,8 @@ async function main() {
         .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
             const hash = await balancer.safeWrite.resendRegisterValidatorMessage(
@@ -1959,8 +1973,8 @@ async function main() {
         .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
             const hash = await balancer.safeWrite.resendValidatorWeightUpdate(
@@ -1979,8 +1993,8 @@ async function main() {
         .action(wrapAsyncAction(async (balancerAddress, nodeId) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const config = getConfig(client, opts.wait);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
             const hash = await balancer.safeWrite.resendValidatorRemovalMessage(
@@ -2000,7 +2014,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait);
-            const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const VMTx = await balancer.safeWrite.transferValidatorManagerOwnership(
                 [newOwner],
                 { chain: null, account: client.account! },
@@ -2013,14 +2027,14 @@ async function main() {
             logger.log("transferOwnership of balancer executed successfully, tx hash:", BTx);
             const securityModules = await balancer.read.getSecurityModules();
             for (const smAddress of securityModules) {
-                const smOwnable = config.contracts.Ownable(smAddress);
+                const smOwnable = await config.contracts.Ownable(smAddress);
 
                 const SMTx = await smOwnable.safeWrite.transferOwnership(
                     [newOwner],
                     { chain: null, account: client.account! },
                 )
                 logger.log(`transferOwnership of security module ${smAddress} executed successfully, tx hash:`, SMTx);
-                const smAccessControl = config.contracts.AccessControl(smAddress);
+                const smAccessControl = await config.contracts.AccessControl(smAddress);
                 const isAccessControl = await smAccessControl.read.supportsInterface(["0x7965db0b"])
                 if (isAccessControl) {
                     const ROLETX = await smAccessControl.safeWrite.grantRole(
@@ -2043,7 +2057,7 @@ async function main() {
     const poaCmd = program
         .command("poa")
         .description("Commands to interact with POA Security Module contracts");
-    
+
     poaCmd
         .command("add-node")
         .description("Add a new node to an L1")
@@ -2059,8 +2073,8 @@ async function main() {
         .action(wrapAsyncAction(async (poaSecurityModule, nodeId, blsKey, initialWeight, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSM = config.contracts.PoASecurityModule(poaSecurityModule);
+            const config = getConfig(client, opts.wait);
+            const poaSM = await config.contracts.PoASecurityModule(poaSecurityModule);
 
             // Default registration expiry to now + 12 hours if not provided
             const registrationExpiry = options.registrationExpiry
@@ -2087,7 +2101,7 @@ async function main() {
             );
             logger.log("addNode executed successfully, tx hash:", hash);
         }));
-    
+
     poaCmd
         .command("complete-validator-registration")
         .description("Complete validator registration on the P-Chain and on the middleware after adding a node")
@@ -2106,9 +2120,9 @@ async function main() {
             }
 
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
+            const config = getConfig(client, opts.wait);
+            const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9), opts.yes);
@@ -2135,10 +2149,10 @@ async function main() {
         .action(wrapAsyncAction(async (poaSecurityModuleAddress, nodeID) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const config = getConfig(client, opts.wait);
+            const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerValidatorManagerAddress = await poaSecurityModule.read.balancerValidatorManager();
-            const balancer = config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
+            const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             // Convert nodeID to Hex if necessary
             const nodeIdHex = parseNodeID(nodeID, false);
             logger.log(nodeIdHex)
@@ -2162,9 +2176,9 @@ async function main() {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
-            const balancerSvc = config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
+            const config = getConfig(client, opts.wait);
+            const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
@@ -2195,8 +2209,8 @@ async function main() {
         .action(wrapAsyncAction(async (poaSecurityModuleAddress, nodeId, newWeight) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const config = getConfig(client, opts.wait);
+            const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             logger.log("Calling function initializeValidatorStakeUpdate...");
 
             // Parse NodeID to bytes32 format
@@ -2220,8 +2234,8 @@ async function main() {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const poaSecurityModule = config.contracts.PoASecurityModule(poaSecurityModuleAddress);
+            const config = getConfig(client, opts.wait);
+            const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
 
@@ -2252,13 +2266,13 @@ async function main() {
         .action(wrapAsyncAction(async (middlewareVaultManager, operatorAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
 
             const operator = operatorAddress;
             logger.log(`Operator: ${operator}`);
 
             // 1) Read total vaults from VaultManager
-            const vaultManager = config.contracts.VaultManager(middlewareVaultManager);
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             const vaultCount = await vaultManager.read.getVaultCount()
 
             logger.log(`Found ${vaultCount} vault(s).`);
@@ -2267,7 +2281,7 @@ async function main() {
             const totalStakesByCollateral: Record<string, bigint> = {};
 
             // 2) Let's get all L1 addresses from the L1Registry (similar to your Python code)
-            const l1Registry = config.contracts.L1Registry(config.l1Registry)
+            const l1Registry = await config.contracts.L1Registry(config.l1Registry)
             const totalL1s = await l1Registry.read.totalL1s();
 
             // We'll store them in an array
@@ -2289,20 +2303,20 @@ async function main() {
                 const collateralClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
 
                 // read delegator
-                const vaultTokenized = config.contracts.VaultTokenized(vaultAddress);
+                const vaultTokenized = await config.contracts.VaultTokenized(vaultAddress);
                 const delegator = await vaultTokenized.read.delegator();
 
                 if (delegator === '0x0000000000000000000000000000000000000000') {
                     logger.log("    (No delegator set, skipping)");
                     continue;
                 }
-                const l1RestakeDelegator = config.contracts.L1RestakeDelegator(delegator);
+                const l1RestakeDelegator = await config.contracts.L1RestakeDelegator(delegator);
                 // read collateral
                 const collateral = await vaultTokenized.read.collateral();
 
                 // 4) For each L1 in l1Array, check if operator is opted in
                 for (const l1Address of l1Array) {
-                    const operatorL1OptInService = config.contracts.OperatorL1OptInService(config.opL1OptIn);
+                    const operatorL1OptInService = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
                     const isOptedIn = await operatorL1OptInService.read.isOptedIn([operator, l1Address])
 
                     if (isOptedIn) {
@@ -2379,9 +2393,9 @@ async function main() {
         .action(wrapAsyncAction(async (uptimeTrackerAddress, signedUptimeHex) => {
             const { privateKey, network, wait, safe } = program.opts();
             const client = await generateClient(network, privateKey!, safe);
-            const config = getConfig( client, wait);
+            const config = getConfig(client, wait);
             await computeValidatorUptime(
-                config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
+                await config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
                 client.account!,
                 signedUptimeHex as Hex,
             );
@@ -2403,7 +2417,7 @@ async function main() {
             }
 
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
+            const config = getConfig(client, opts.wait);
             rpcUrl = rpcUrl + "/ext/bc/" + sourceChainId;
 
             await reportAndSubmitValidatorUptime(
@@ -2411,7 +2425,7 @@ async function main() {
                 rpcUrl,
                 nodeId,
                 sourceChainId,
-                config.contracts.UptimeTracker(uptimeTrackerAddress),
+                await config.contracts.UptimeTracker(uptimeTrackerAddress),
                 client.account!
             );
         }));
@@ -2430,8 +2444,8 @@ async function main() {
                 process.exit(1);
             }
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeAtEpoch(
                 uptimeTracker,
                 operator,
@@ -2454,8 +2468,8 @@ async function main() {
                 process.exit(1);
             }
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeForEpochs(
                 uptimeTracker,
                 operator,
@@ -2475,8 +2489,8 @@ async function main() {
         .action(wrapAsyncAction(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getValidatorUptimeForEpoch(
                 uptimeTracker,
                 validationID,
@@ -2494,8 +2508,8 @@ async function main() {
         .action(wrapAsyncAction(async (uptimeTrackerAddress, validationID, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isValidatorUptimeSetForEpoch(
                 uptimeTracker,
                 validationID,
@@ -2513,8 +2527,8 @@ async function main() {
         .action(wrapAsyncAction(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getOperatorUptimeForEpoch(
                 uptimeTracker,
                 operator,
@@ -2532,8 +2546,8 @@ async function main() {
         .action(wrapAsyncAction(async (uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const uptimeTracker = config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const config = getConfig(client, opts.wait);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isOperatorUptimeSetForEpoch(
                 uptimeTracker,
                 operator,
@@ -2558,8 +2572,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, batchSize) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
@@ -2578,8 +2592,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimRewards(
                 rewardsContract,
@@ -2605,8 +2619,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimOperatorFee(
                 rewardsContract,
@@ -2634,8 +2648,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimCuratorFee(
                 rewardsContract,
@@ -2661,8 +2675,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimProtocolFee(
                 rewardsContract,
@@ -2689,8 +2703,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimUndistributedRewards(
                 rewardsContract,
@@ -2719,9 +2733,9 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
-            const token = config.contracts.ERC20(rewardsToken);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const token = await config.contracts.ERC20(rewardsToken);
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const txHash = await setRewardsAmountForEpochs(
@@ -2744,8 +2758,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, collateralClass, share) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await setRewardsShareForCollateralClass(
                 rewardsContract,
                 collateralClass,
@@ -2763,8 +2777,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, minUptime) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await setMinRequiredUptime(
                 rewardsContract,
                 minUptime,
@@ -2781,8 +2795,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, newOwner) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await setProtocolOwner(
                 rewardsContract,
                 newOwner,
@@ -2799,8 +2813,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await updateProtocolFee(
                 rewardsContract,
                 newFee,
@@ -2817,8 +2831,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await updateOperatorFee(
                 rewardsContract,
                 newFee,
@@ -2835,8 +2849,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await updateCuratorFee(
                 rewardsContract,
                 newFee,
@@ -2855,8 +2869,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, protocolFee, operatorFee, curatorFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             const hash = await updateAllFees(
                 rewardsContract,
                 protocolFee,
@@ -2875,8 +2889,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountPerTokenFromEpoch(
                 rewardsContract,
                 epoch
@@ -2892,8 +2906,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, token) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getRewardsAmountForTokenFromEpoch(
                 rewardsContract,
                 epoch,
@@ -2910,8 +2924,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getOperatorShares(
                 rewardsContract,
                 epoch,
@@ -2928,8 +2942,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, vault) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getVaultShares(
                 rewardsContract,
                 epoch,
@@ -2946,8 +2960,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch, curator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getCuratorShares(
                 rewardsContract,
                 epoch,
@@ -2963,8 +2977,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, token) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getProtocolRewards(
                 rewardsContract,
                 token
@@ -2979,8 +2993,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getDistributionBatch(
                 rewardsContract,
                 epoch
@@ -2994,8 +3008,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getFeesConfiguration(
                 rewardsContract
             );
@@ -3009,8 +3023,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getRewardsShareForCollateralClass(
                 rewardsContract,
                 collateralClass
@@ -3024,8 +3038,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getMinRequiredUptime(
                 rewardsContract
             );
@@ -3040,8 +3054,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, staker, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
                 staker,
@@ -3058,8 +3072,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, operator, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
                 operator,
@@ -3076,8 +3090,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, curator, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
                 curator,
@@ -3094,8 +3108,8 @@ async function main() {
         .action(wrapAsyncAction(async (rewardsAddress, protocolOwner, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const rewardsContract = config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait);
+            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
             await getLastEpochClaimedProtocol(
                 rewardsContract,
                 protocolOwner,
@@ -3141,8 +3155,8 @@ async function main() {
         .action(wrapAsyncAction(async (contractAddress, role, account) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const accessControl = config.contracts.AccessControl(contractAddress);
+            const config = getConfig(client, opts.wait);
+            const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
@@ -3164,8 +3178,8 @@ async function main() {
         .action(wrapAsyncAction(async (contractAddress, role, account) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig( client, opts.wait);
-            const accessControl = config.contracts.AccessControl(contractAddress);
+            const config = getConfig(client, opts.wait);
+            const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
@@ -3187,8 +3201,8 @@ async function main() {
         .action(wrapAsyncAction(async (contractAddress, role, account) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const accessControl = config.contracts.AccessControl(contractAddress);
+            const config = getConfig(client, opts.wait);
+            const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }
@@ -3208,8 +3222,8 @@ async function main() {
         .action(wrapAsyncAction(async (contractAddress, role) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig( client, opts.wait);
-            const accessControl = config.contracts.AccessControl(contractAddress);
+            const config = getConfig(client, opts.wait);
+            const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
             }

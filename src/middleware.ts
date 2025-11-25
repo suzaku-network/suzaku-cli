@@ -368,7 +368,7 @@ export async function middlewareGetNodeLogs(
       bar
     ));
   }
-  const balancer = config.contracts.BalancerValidatorManager(balancerAddress as Hex);
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress as Hex);
 
   const allLogs = await Promise.all(logsProm);
   let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));

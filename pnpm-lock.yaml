@@ -44,6 +44,9 @@ importers:
       micro-eth-signer:
         specifier: 0.7.2
         version: 0.7.2
+      modern-ahocorasick:
+        specifier: ^2.0.4
+        version: 2.0.4
       permissionless:
         specifier: ^0.3.2
         version: 0.3.2(viem@2.37.2(typescript@5.9.2))
@@ -372,6 +375,9 @@ packages:
   mime-types@2.1.35:
     resolution: {integrity: sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==}
     engines: {node: '>= 0.6'}
+
+  modern-ahocorasick@2.0.4:
+    resolution: {integrity: sha512-EFe312CXjDE8/nXOJk/LpzPUTNXzFTZCWazQ6rntodIByicqKg9wSqjBSQt1alcTdzwEbMyeTPXnvw9BIxyiRg==}
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -848,6 +854,8 @@ snapshots:
   mime-types@2.1.35:
     dependencies:
       mime-db: 1.52.0
+
+  modern-ahocorasick@2.0.4: {}
 
   node-fetch@2.7.0:
     dependencies:

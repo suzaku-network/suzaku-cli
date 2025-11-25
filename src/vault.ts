@@ -16,9 +16,9 @@ export async function depositVault(
   logger.log("Depositing...");
 
   // Get the collateral token address
-  const vault = config.contracts.VaultTokenized(vaultAddress);
+  const vault = await config.contracts.VaultTokenized(vaultAddress);
   const collateralAddress = await vault.read.collateral();
-  const collateral = config.contracts.DefaultCollateral(collateralAddress);
+  const collateral = await config.contracts.DefaultCollateral(collateralAddress);
   const decimals = await collateral.read.decimals();
   // Calculate human-readable amount
   const amountWei = parseUnits(amount, decimals)
@@ -193,9 +193,9 @@ export async function approveAndDepositCollateral(
   logger.log("Approving collateral...");
   const account = client.account!
 
-  const collateral = config.contracts.DefaultCollateral(collateralAddress);
+  const collateral = await config.contracts.DefaultCollateral(collateralAddress);
   const rewardTokenAddress = await collateral.read.asset();
-  const rewardToken = config.contracts.ERC20(rewardTokenAddress);
+  const rewardToken = await config.contracts.ERC20(rewardTokenAddress);
   const decimals = await collateral.read.decimals();
   const amountWei = parseUnits(amount, decimals)
   const hash = await rewardToken.safeWrite.approve(

@@ -3,12 +3,16 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import { Abi, fromBytes, Hex, pad } from "viem";
+import { Abi, fromBytes, Hex, pad, sliceHex, getAddress } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
-import { toEventSelector, toFunctionSelector } from "viem/utils";
 import { spawnSync } from "child_process";
 
+export function bytes32ToAddress(bytes32: `0x${string}`) {
+    // on garde les 20 derniers bytes (40 hex chars)
+    const raw = sliceHex(bytes32, 12, 32); // bytes 12 → 32
+    return getAddress(raw);
+}
 
 
 const CHECKSUM_LENGTH = 4;

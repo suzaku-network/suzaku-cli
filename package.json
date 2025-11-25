@@ -34,6 +34,7 @@
     "console-log-colors": "^0.5.0",
     "dotenv": "^16.4.7",
     "micro-eth-signer": "0.7.2",
+    "modern-ahocorasick": "^2.0.4",
     "permissionless": "^0.3.2",
     "viem": "^2.24.2"
   },

@@ -229,7 +229,7 @@ export async function completeWeightUpdate(
   let validationIds;
   if (nodeIDs) {
     const balancerAddress = await securityModule.read.balancerValidatorManager();
-    const balancer = config.contracts.BalancerValidatorManager(balancerAddress);
+    const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
     validationIds = (await client.multicall({
       contracts: nodeIDs.map((id) => {
         return {
