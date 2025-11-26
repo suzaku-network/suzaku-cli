@@ -73,9 +73,10 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
 
   ```bash
   pnpm link --global
+  chmod +x ./dist/cli.js
   ```
 
-  After ward you can use the cli using `suzaku-cli` command which hit the transpiled build (faster than `suzaku-cli`)
+  After ward you can use the cli using `suzaku-cli` command which hit the transpiled build (faster than `pnpm cli`)
 
 - Enable the auto-completion (only available on bash & zsh).
   This will be installed on the default user shell.
