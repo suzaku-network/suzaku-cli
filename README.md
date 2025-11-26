@@ -1,6 +1,6 @@
 # Suzaku CLI
 
-A simple CLI tool to interact with Suzaku core smart contracts on the Fuji network. The commands let you register L1s, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
+A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The commands let you register L1s, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
 
 > **Note:**
 >
@@ -11,37 +11,40 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
 ## Table of Contents
 
 - [Suzaku CLI](#suzaku-cli)
-- [Table of Contents](#table-of-contents)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Environment Setup](#environment-setup)
-- [Usage on Fuji](#usage-on-fuji)
-  - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
-- [Commands Reference](#commands-reference)
-  - [L1 Registry Commands](#l1-registry-commands)
-  - [Operator Registry Commands](#operator-registry-commands)
-  - [Vault Manager Commands](#vault-manager-commands)
-  - [Vault Deposit/Withdraw/Claim Commands](#vault-depositwithdrawclaim-commands)
-  - [Vault Read Commands](#vault-read-commands)
-  - [L1RestakeDelegator Commands](#l1restakedelegator-commands)
-  - [Middleware Commands](#middleware-commands)
-    - [Operator-Related Actions](#operator-related-actions)
-    - [Node Operations](#node-operations)
-    - [Weight Update & Caching](#weight-update--caching)
-    - [Middleware Read Operations](#middleware-read-operations)
-  - [Operator → L1 Opt-In/Opt-Out Commands](#operator--l1-opt-inopt-out-commands)
-  - [Operator → Vault Opt-In/Opt-Out Commands](#operator--vault-opt-inopt-out-commands)
-  - [Balancer Commands](#balancer-commands)
-  - [Utility Commands](#utility-commands)
-  - [Uptime Tracking Commands](#uptime-tracking-commands)
-  - [Rewards Commands](#rewards-commands)
-  - [Secret Commands](#secret-commands)
+  - [Table of Contents](#table-of-contents)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Environment Setup](#environment-setup)
+    - [User experience](#user-experience)
+    - [Identify the required addresses and credentials](#identify-the-required-addresses-and-credentials)
+    - [Multi-Signature](#multi-signature)
+  - [Token values](#token-values)
+  - [Usage on Fuji](#usage-on-fuji)
+    - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
+    - [Rewards Testing Sequence](#rewards-testing-sequence)
+    - [Key Store Commands](#key-store-commands)
+  - [Commands Reference](#commands-reference)
+    - [Global Options](#global-options)
+    - [L1 Registry Commands (`l1-registry`)](#l1-registry-commands-l1-registry)
+    - [Operator Registry Commands (`operator-registry`)](#operator-registry-commands-operator-registry)
+    - [Vault Manager Commands (`vault-manager`)](#vault-manager-commands-vault-manager)
+    - [Vault Commands (`vault`)](#vault-commands-vault)
+    - [Middleware Commands (`middleware`)](#middleware-commands-middleware)
+    - [Operator Opt-In Commands (`opt-in`)](#operator-opt-in-commands-opt-in)
+    - [Balancer Commands (`balancer`)](#balancer-commands-balancer)
+    - [POA Security Module Commands (`poa`)](#poa-security-module-commands-poa)
+    - [Uptime Commands (`uptime`)](#uptime-commands-uptime)
+    - [Rewards Commands (`rewards`)](#rewards-commands-rewards)
+    - [Key Store Commands (`key`)](#key-store-commands-key)
+    - [Access Control Commands (`access-control`)](#access-control-commands-access-control)
+    - [Other Commands](#other-commands)
 
 ## Requirements
 
 - Node.js (v16+ recommended)
 - pnpm package manager (or npm/yarn)
 - [cast](https://book.getfoundry.sh/reference/cast) for token minting/approval commands (optional)
+- [pass](https://www.passwordstore.org/) to manager private keys securely (mandatory on mainnet)
 
 ---
 
@@ -64,16 +67,92 @@ A simple CLI tool to interact with Suzaku core smart contracts on the Fuji netwo
 
 ## Environment Setup
 
-1. **Identify the required addresses and credentials:**
+### User experience
+
+- Link the cli globally to make it accessible system-wide
+
+  ```bash
+  pnpm link --global
+  ```
+
+  After ward you can use the cli using `suzaku-cli` command which hit the transpiled build (faster than `suzaku-cli`)
+
+- Enable the auto-completion (only available on bash & zsh).
+  This will be installed on the default user shell.
+  ```bash
+  suzaku-cli completion install
+  ```
+
+- Wait confirmation.
+  It's often the case that, on fuji or on the mainnet, we should ensure the transaction haven't reverted waiting some blocks.
+  To wait some blocks to confirm a tx, use the `--wait` parameter followed by the number of block to wait.
+
+### Identify the required addresses and credentials
 
 The specific commands and required information (such as contract addresses and private keys) will vary depending on your role—Operator, Curator, or L1. Ensure you have the relevant contract addresses and credentials prepared before proceeding.
+
+- **Private key security**
+
+  If you plain to use **Avalanche mainnet**, It's mandatory to **use `pass`**. The cli wrap this tool **avoiding** the use of **raw private keys** in the terminal which ends in the history.
+
+  Using this feature implies initializing the password store of the cli located in `~/.suzaku-cli/.password-store`:
+
+  ```bash
+  # Check if you have already setup gpg keys
+  suzaku-cli key list-gpg-ids
+  # initialize the keystore
+  suzaku-cli key init <all-gpg-ids-needed>
+  ```
+
+  To save a new private key, the best way is copying it into the clipboard and use the following command:
+
+  ```bash
+  # Show the address of the imported private key
+  suzaku-cli key create <private-key-role-name> -c
+  ```
+
+  The `-c` use the value in the clip board and erase it if the key format is valid.
+
+  To send tx with a stored key, use the `-s` parameter followed by the name of the secret as in the next command example.
+
+  For private key options, you can directly replace the pk value with its secret name.
+
+### Multi-Signature
+
+**Requirement:** Set the env var `SAFE_API_KEY` after creating the API key on [Safe developer platform](https://developer.safe.global/api-keys)
+
+The cli support [Safe wallet]("https://app.safe.global/") on all transaction.
+To use it, just use the private key of a signer and set the address of the wallet after `--safe` parameter like that:
+
+```bash
+suzaku-cli vault set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 100 1 --network mainnet -s signer1-pk --safe 0x1234567890123456789012345678901234567890
+```
+
+Transaction management strategy:
+
+- Search for similar pending transactions in the Safe.
+- Exact match:
+  - If already signed by the user: Ignore the transaction (Skip).
+  - If not signed: Automatically confirm the existing transaction.
+- Partial match (same function, different arguments):
+  - Display an interactive menu.
+  - Options: Confirm an existing transaction, Create a new one, or Skip.
+- No match: Create a new transaction.
+
+The first signer to reach the safe threshold will execute the tx
+
+## Token values
+
+  It's important to notice that all token values to use as cli input are decimal formatted.
+  
+  It means the given value is multiplied by the onchain decimal number or, for AVAX, by 18 for the C-Chain and 9 for the P-Chain.
 
 ## Usage on Fuji
 
 When deploying on Fuji, run commands using the `fuji` network parameter. For example:
 
 ```bash
-pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com
+suzaku-cli l1-registry register $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com --network fuji --private-key $PK
 ```
 
 ### L1 Setup Sequence on Fuji
@@ -81,38 +160,42 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
 - **L1 & Vault Registration:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER register-l1 $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com
-  pnpm cli --network fuji --private-key $L1_OWNER vault-manager-register-vault-l1 $VAULT_MANAGER $VAULT 1 200000000000000000000000
+  suzaku-cli l1-registry register $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://l1.com --network fuji --private-key $L1_OWNER
+  # Vault max limit for the L1 is 2M token (use decimal format)
+  suzaku-cli vault-manager register-vault-l1 $VAULT_MANAGER $VAULT 1 2000000 --network fuji --private-key $L1_OWNER
   ```
 
 - **(Optional) Modify L1 Middleware:**
 
   ```bash
   # Update the middleware associated with a registered L1
-  pnpm cli --network fuji --private-key $L1_OWNER set-l1-middleware $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE
+  suzaku-cli l1-registry set-middleware $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE --network fuji --private-key $L1_OWNER
   ```
 
 - **Operator Setup & Opt-In:**
 
   ```bash
-  pnpm cli --network fuji --private-key $OPERATOR_OWNER register-operator https://operator1.com
-  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-l1 $BALANCER_VALIDATOR_MANAGER
-  pnpm cli --network fuji check-opt-in-l1 $OPERATOR $BALANCER_VALIDATOR_MANAGER
-  pnpm cli --network fuji --private-key $OPERATOR_OWNER opt-in-vault $VAULT
-  pnpm cli --network fuji check-opt-in-vault $OPERATOR $VAULT
+  suzaku-cli operator-registry register https://operator1.com --network fuji --private-key $OPERATOR_OWNER
+  suzaku-cli opt-in l1-in $BALANCER_VALIDATOR_MANAGER --network fuji --private-key $OPERATOR_OWNER
+  suzaku-cli opt-in check-l1 $OPERATOR $BALANCER_VALIDATOR_MANAGER --network fuji
+  suzaku-cli opt-in vault-in $VAULT --network fuji --private-key $OPERATOR_OWNER
+  suzaku-cli opt-in check-vault $OPERATOR $VAULT --network fuji
   ```
 
 - **Set Limits & Operator Shares:**
 
   ```bash
-  pnpm cli --network fuji --private-key $L1_OWNER set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 100000000000000000000000 1
-  pnpm cli --network fuji --private-key $L1_OWNER set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER $OPERATOR 10 1
+  # Set the limit of the L1 in this vault to 1M tokens (use decimal format)
+  suzaku-cli vault set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 1000000 1 --network fuji --private-key $L1_OWNER
+  # Operator will be able to use 10.5 tokens (use decimal format)
+  suzaku-cli vault set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER $OPERATOR 10.5 1 --network fuji --private-key $L1_OWNER
   ```
 
-- **(Optional) Mint & Approve sAVAX, Then Deposit via `cast`**
-  1.  Mint:
+- **(Optional) Mint & Approve sAVAX, Then Deposit**
+
+  1.  Mint via `cast`:
       ```bash
-      cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 50000000000000000000000 \
+      cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 5000000000000000000000000 \
         --rpc-url $RPC_URL \
         --private-key "$CURATOR_OWNER"
       ```
@@ -121,97 +204,97 @@ pnpm cli --network fuji --private-key $PK register-l1 $BALANCER_VALIDATOR_MANAGE
       cast call "$SAVAX" "allowance(address,address)" "$STAKER" "$PRIMARY_COLLATERAL" \
       --rpc-url $RPC_URL
       ```
-  3.  Approve:
+  3.  Approve and deposit on the collateral (4M tokens):
       ```bash
-      cast send "$SAVAX" "approve(address,uint256)" "$PRIMARY_COLLATERAL" 400000000000000000000 \
-        --rpc-url $RPC_URL \
-        --private-key "$STAKER_OWNER"
+      suzaku-cli vault collateral-deposit $COLLATERAL 4000000 --network fuji --private-key $STAKER_PK
       ```
   4.  Deposit on Vault's `deposit(address,uint256)`:
       ```bash
-      cast send $PRIMARY_COLLATERAL "deposit(address,uint256)" "$STAKER" 400000000000000000000 \
-        --rpc-url $RPC_URL \
-        --private-key "$STAKER_OWNER"
+      suzaku-cli vault deposit $VAULT1 4000000 --private-key $STAKER_PK
       ```
 
 - **Deposits / Withdrawals / Claims:**
 
   ```bash
-  pnpm cli --network fuji --private-key $STAKER_OWNER deposit $VAULT 400
-  pnpm cli --network fuji --private-key $STAKER_OWNER withdraw $VAULT 100
-  pnpm cli --network fuji --private-key $STAKER_OWNER claim $VAULT 100
+  suzaku-cli vault deposit $VAULT 400 --network fuji --private-key $STAKER_OWNER
+  suzaku-cli vault withdraw $VAULT 100 --network fuji --private-key $STAKER_OWNER
+  suzaku-cli vault claim $VAULT 100 --network fuji --private-key $STAKER_OWNER
   ```
 
 - **Check Vault Information**
 
   ```bash
   # Get vault collateral token
-  pnpm cli --network fuji get-vault-collateral $VAULT
+  suzaku-cli vault get-collateral $VAULT --network fuji
 
   # Get vault delegator
-  pnpm cli --network fuji get-vault-delegator $VAULT
+  suzaku-cli vault get-delegator $VAULT --network fuji
 
-  # Check your vault balance
-  pnpm cli --network fuji get-vault-balance $VAULT --account $STAKER_OWNER
+  # Check your vault balance (using --account for an address or a pk instead)
+  suzaku-cli vault get-balance $VAULT --account $STAKER_OWNER --network fuji
 
   # Check total vault supply
-  pnpm cli --network fuji get-vault-total-supply $VAULT
+  suzaku-cli vault get-total-supply $VAULT --network fuji
 
   # Check withdrawal shares for an epoch
-  pnpm cli --network fuji get-vault-withdrawal-shares $VAULT 100 --account $STAKER_OWNER
+  suzaku-cli vault get-withdrawal-shares $VAULT 100 --account $STAKER_OWNER --network fuji
   ```
 
 - **Check Stakes & Epochs**
 
   ```bash
-  pnpm cli --network fuji opstakes $VAULT_MANAGER $OPERATOR
-  pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
-  pnpm cli --network fuji middleware-register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER
-  pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
-  pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <current-epoch> 1
+  suzaku-cli vault-manager opstakes $VAULT_MANAGER $OPERATOR --network fuji
+  suzaku-cli middleware get-current-epoch $MIDDLEWARE --network fuji
+  suzaku-cli middleware register-operator $MIDDLEWARE $OPERATOR --private-key $L1_OWNER --network fuji
+  suzaku-cli middleware calc-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER --network fuji
+  suzaku-cli middleware get-operator-stake $MIDDLEWARE $OPERATOR <current-epoch> 1 --network fuji
   ```
 
 - **Balancer / Security Module Setup**
 
   ```bash
-  pnpm cli --network fuji balancer-set-up-security-module $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER
-  pnpm cli --network fuji balancer-get-security-modules $BALANCER_VALIDATOR_MANAGER
+  suzaku-cli balancer set-up-security-module $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE 200000 --private-key $L1_OWNER --network fuji
+  suzaku-cli balancer get-security-modules $BALANCER_VALIDATOR_MANAGER --network fuji
   ```
 
 - **Check Epoch Information**
 
   ```bash
-  pnpm cli --network fuji middleware-get-current-epoch $MIDDLEWARE
-  pnpm cli --network fuji middleware-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER
-  pnpm cli --network fuji middleware-get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1
+  suzaku-cli middleware get-current-epoch $MIDDLEWARE --network fuji
+  suzaku-cli middleware calc-operator-cache $MIDDLEWARE <current-epoch> 1 --private-key $L1_OWNER --network fuji
+  suzaku-cli middleware get-operator-stake $MIDDLEWARE $OPERATOR <next-epoch> 1 --network fuji
   ```
 
 - **Process Node Stake Cache**
 
   ```bash
-  # Process 1 epoch (default)
-  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --private-key $L1_OWNER
+  # Process all epochs 50 by 50 (default)
+  suzaku-cli middleware process-node-stake-cache $MIDDLEWARE --private-key $L1_OWNER --network fuji
 
   # Process 5 epochs at once
-  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 5 --private-key $L1_OWNER
+  suzaku-cli middleware process-node-stake-cache $MIDDLEWARE --epochs 5 --private-key $L1_OWNER --network fuji
 
   # Process 100 epochs in batches of 10, with 2 second delay between batches
-  pnpm cli --network fuji middleware-process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --delay 2000 --private-key $L1_OWNER
+  suzaku-cli middleware process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --delay 2000 --private-key $L1_OWNER --network fuji
+
+  # Process all epochs in batches of 50, waiting 1 block between batches
+  suzaku-cli middleware process-node-stake-cache $MIDDLEWARE --epochs 10 --loop-epochs 10 --wait 1
+
   ```
 
 - **Initialize and Complete Node Addition**
 
   ```bash
-  pnpm cli --network fuji middleware-add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER
+  suzaku-cli middleware add-node $MIDDLEWARE $NODE_ID $BLS_KEY --private-key $OPERATOR_OWNER --network fuji
 
-  pnpm cli --network fuji middleware-complete-validator-registration \
+  suzaku-cli middleware complete-validator-registration \ --network fuji
     $MIDDLEWARE \
-    $OPERATOR \
-    $NODE_ID \
     $ADD_NODE_TX_HASH \
     $BLS_PROOF_OF_POSSESSION \
     --private-key $OPERATOR_OWNER
   ```
+
+  Use the same commands for the `poa` security module but adding the `initialWeight` parameter.
 
 ### Rewards Testing Sequence
 
@@ -221,19 +304,19 @@ Here's a recommended sequence of commands to test the rewards functionality:
 
    ```bash
    # Check current fees configuration
-   pnpm cli --network fuji rewards-get-fees-config $REWARDS
+   suzaku-cli rewards get-fees-config $REWARDS --network fuji
 
    # Set appropriate fees if needed
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-protocol-fee $REWARDS 1000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-operator-fee $REWARDS 2000
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-update-curator-fee $REWARDS 500
+   suzaku-cli rewards update-protocol-fee $REWARDS 1000 --network fuji --private-key $CURATOR_OWNER
+   suzaku-cli rewards update-operator-fee $REWARDS 2000 --network fuji --private-key $CURATOR_OWNER
+   suzaku-cli rewards update-curator-fee $REWARDS 500 --network fuji --private-key $CURATOR_OWNER
 
    # Configure minimum required uptime
-   pnpm cli --network fuji rewards-get-min-uptime $REWARDS
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-min-uptime $REWARDS 3000
+   suzaku-cli rewards get-min-uptime $REWARDS --network fuji
+   suzaku-cli rewards set-min-uptime $REWARDS 3000 --network fuji --private-key $CURATOR_OWNER
 
    # Set rewards share for collateral classes
-   pnpm cli --network fuji --private-key $CURATOR_OWNER rewards-set-share-collateral-class $REWARDS 1 5000
+   suzaku-cli rewards set-share-collateral-class $REWARDS 1 5000 --network fuji --private-key $CURATOR_OWNER
    ```
 
 1.1. **Mint & Approve Reward Tokens**
@@ -263,78 +346,78 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 2. **Allocate Rewards**
 
    ```bash
-   # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable)
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-set-amount $REWARDS 99 5 $REWARDS_TOKEN 1000000000000000000
+   # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable) (1 token in decimal format)
+   suzaku-cli rewards set-amount $REWARDS 99 5 $REWARDS_TOKEN 1 --network fuji --private-key $L1_OWNER
 
    # Verify rewards allocation
-   pnpm cli --network fuji rewards-get-amounts $REWARDS 99
+   suzaku-cli rewards get-amounts $REWARDS 99 --network fuji
    ```
 
 3. **Distribute Rewards**
 
    ```bash
    # Distribute rewards for epoch 99 with batch size 10
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
+   suzaku-cli rewards distribute $REWARDS 99 10 --network fuji --private-key $L1_OWNER
 
    # Check distribution status
-   pnpm cli --network fuji rewards-get-distribution-batch $REWARDS 99
+   suzaku-cli rewards get-distribution-batch $REWARDS 99 --network fuji
 
    # Continue distribution if not complete
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-distribute $REWARDS 99 10
+   suzaku-cli rewards distribute $REWARDS 99 10 --network fuji --private-key $L1_OWNER
    ```
 
 4. **Verify Shares Calculation**
 
    ```bash
    # Check operator shares
-   pnpm cli --network fuji rewards-get-operator-shares $REWARDS 99 $OPERATOR
+   suzaku-cli rewards get-operator-shares $REWARDS 99 $OPERATOR --network fuji
 
    # Check vault shares
-   pnpm cli --network fuji rewards-get-vault-shares $REWARDS 99 $VAULT
+   suzaku-cli rewards get-vault-shares $REWARDS 99 $VAULT --network fuji
 
    # Check curator shares
-   pnpm cli --network fuji rewards-get-curator-shares $REWARDS 99 $CURATOR
+   suzaku-cli rewards get-curator-shares $REWARDS 99 $CURATOR --network fuji
    ```
 
 5. **Claim Rewards**
 
    ```bash
    # Claim operator fees
-   pnpm cli --network fuji --private-key $OPERATOR_KEY rewards-claim-operator-fee $REWARDS $REWARDS_TOKEN
+   suzaku-cli rewards claim-operator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $OPERATOR_KEY
 
    # Claim staker rewards
-   pnpm cli --network fuji --private-key $STAKER_KEY rewards-claim $REWARDS $REWARDS_TOKEN
+   suzaku-cli rewards claim $REWARDS $REWARDS_TOKEN --network fuji --private-key $STAKER_KEY
 
    # Claim curator fees
-   pnpm cli --network fuji --private-key $CURATOR_KEY rewards-claim-curator-fee $REWARDS $REWARDS_TOKEN
+   suzaku-cli rewards claim-curator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $CURATOR_KEY
 
    # Claim protocol fees
-   pnpm cli --network fuji --private-key $PROTOCOL_OWNER rewards-claim-protocol-fee $REWARDS $REWARDS_TOKEN
+   suzaku-cli rewards claim-protocol-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $PROTOCOL_OWNER
    ```
 
 6. **Verify Claim Status**
 
    ```bash
    # Check last claimed epoch for operator
-   pnpm cli --network fuji rewards-get-last-claimed-operator $REWARDS $OPERATOR
+   suzaku-cli rewards get-last-claimed-operator $REWARDS $OPERATOR $REWARDS_TOKEN --network fuji
 
    # Check last claimed epoch for staker
-   pnpm cli --network fuji rewards-get-last-claimed-staker $REWARDS $STAKER
+   suzaku-cli rewards get-last-claimed-staker $REWARDS $STAKER $REWARDS_TOKEN --network fuji
 
    # Check last claimed epoch for curator
-   pnpm cli --network fuji rewards-get-last-claimed-curator $REWARDS $CURATOR
+   suzaku-cli rewards get-last-claimed-curator $REWARDS $CURATOR $REWARDS_TOKEN --network fuji
 
    # Check last claimed epoch for protocol owner
-   pnpm cli --network fuji rewards-get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER
+   suzaku-cli rewards get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER $REWARDS_TOKEN --network fuji
    ```
 
 7. **Claim Undistributed Rewards (if applicable)**
    ```bash
    # This should be done after epoch 99+2 to ensure all claims are done
-   pnpm cli --network fuji --private-key $L1_OWNER rewards-claim-undistributed $REWARDS 99 $REWARDS_TOKEN
+   suzaku-cli rewards claim-undistributed $REWARDS 99 $REWARDS_TOKEN --network fuji --private-key $L1_OWNER
    ```
 
-### Secret Commands
+### Key Store Commands
 
 The following commands allow you to manage the cli secrets keystore. Under the wood, it uses [pass](https://www.passwordstore.org/), the standard unix password manager.
 It's a mandatory dependency when working on the mainnet with this cli.
@@ -343,23 +426,23 @@ It's a mandatory dependency when working on the mainnet with this cli.
 
    ```bash
    # Acquire available gpg key ids
-   pnpm cli secret list-gpg-ids
+   suzaku-cli key list-gpg-ids
    > [suzabro@domain.com
    > avabro@domain.com]
    # Initialize the keystore using the ids that are supposed to interact with.
-   pnpm cli secret init suzabro@domain.com avabro@domain.com ...
+   suzaku-cli key init suzabro@domain.com avabro@domain.com ...
    ```
 
 2. **Create new secret**
 
    ```bash
-   pnpm cli secret create operator $OPERATOR_PK
+   suzaku-cli key create operator
    ```
 
 3. **Use your secret name instead of raw private key**
 
    ```bash
-   pnpm cli middleware-add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
+   suzaku-cli middleware add-node $L1_MIDDLEWARE $NODE_ID $BLS_KEY -s operator
    ```
 
    You'll be prompted like using [pass](https://www.passwordstore.org/) normally and it will use the underlying private key
@@ -367,7 +450,7 @@ It's a mandatory dependency when working on the mainnet with this cli.
 4. **List all available secrets**
 
    ```bash
-   pnpm cli secret list
+   suzaku-cli key list
    > Available secrets:
    > .password-store
    > └── operator
@@ -375,7 +458,7 @@ It's a mandatory dependency when working on the mainnet with this cli.
 
 5. **Remove a secret**
    ```bash
-   pnpm cli secret rm operator
+   suzaku-cli key rm operator
    ```
 
 For a complete list of commands, see the [Commands Reference](#commands-reference) below.
@@ -387,294 +470,340 @@ For a complete list of commands, see the [Commands Reference](#commands-referenc
 Run the help command for a full listing of available commands and options:
 
 ```bash
-pnpm cli --help
+suzaku-cli --help
 ```
 
-## Command Reference
+### Global Options
 
-Below is a complete list of all commands available in the Suzaku CLI tool. Global options (such as `--private-key` and `--network`) apply to every command. Use `pnpm cli --help` for more details on each command.
+- `-n, --network <network>`: Network to use (fuji, mainnet, anvil). Default: fuji.
+- `-k, --private-key <privateKey>`: Private key for signing transactions.
+- `-s, --secret-name <secretName>`: The keystore secret name containing the private key.
+- `-w, --wait <confirmations>`: Number of confirmations to wait after a write transaction. Default: 0.
+- `--json`: Output logs in JSON format.
+- `-y, --yes`: Automatic yes to prompts.
+- `--safe <address>`: Use safe smart account for transactions.
 
----
+### L1 Registry Commands (`l1-registry`)
 
-### L1 Registry Commands
+- **register `<balancerAddress>` `<l1Middleware>` `<metadataUrl>`**
+  Register a new L1 in the L1 registry.
+- **get-all**
+  List all L1s registered in the L1 registry.
+- **set-metadata-url `<l1Address>` `<metadataUrl>`**
+  Set metadata URL for an L1 in the L1 registry.
+- **set-middleware `<l1Address>` `<l1Middleware>`**
+  Set middleware address for an L1 in the L1 registry.
 
-- **register-l1 `<validatorManager>` `<l1Middleware>` `<metadataUrl>`**  
-  Registers a new L1 by linking a validator manager and L1 middleware and setting a metadata URL.
-- **get-l1s**  
-  Lists all registered L1s.
-- **set-l1-metadata-url `<l1Address>` `<metadataUrl>`**  
-  Updates the metadata URL for a registered L1.
-- **set-l1-middleware `<l1Address>` `<l1Middleware>`**  
-  Updates the middleware associated with a registered L1.
+### Operator Registry Commands (`operator-registry`)
 
----
+- **register `<metadataUrl>`**
+  Register a new operator in the operator registry.
+- **get-all**
+  List all operators registered in the operator registry.
 
-### Operator Registry Commands
+### Vault Manager Commands (`vault-manager`)
 
-- **register-operator `<metadataUrl>`**  
-  Registers an operator using the provided metadata URL.
-- **get-operators**  
-  Lists all registered operators.
+- **register-vault-l1 `<middlewareVaultManagerAddress>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**
+  Register a vault for L1 staking.
+- **update-vault-max-l1-limit `<middlewareVaultManagerAddress>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**
+  Update the maximum L1 limit for a vault.
+- **remove-vault `<middlewareVaultManager>` `<vaultAddress>`**
+  Remove a vault from L1 staking.
+- **get-vault-count `<middlewareVaultManager>`**
+  Get the number of vaults registered for L1 staking.
+- **get-vault-at-with-times `<middlewareVaultManager>` `<index>`**
+  Get the vault address at a specific index along with its registration and removal times.
+- **get-vault-collateral-class `<middlewareVaultManager>` `<vaultAddress>`**
+  Get the collateral class ID associated with a vault.
+- **opstakes `<middlewareVaultManager>` `<operatorAddress>`**
+  Show operator stakes across L1s, enumerating each L1 the operator is opted into.
 
----
+### Vault Commands (`vault`)
 
-### Vault Manager Commands
+- **deposit `<vaultAddress>` `<amount>` [--onBehalfOf `<behalfOf>]**
+  Deposit tokens into the vault.
+- **withdraw `<vaultAddress>` `<amount>` [--claimer `<claimer>]**
+  Withdraw tokens from the vault.
+- **claim `<vaultAddress>` `<epoch>` [--recipient `<recipient>]**
+  Claim withdrawn tokens from the vault for a specific epoch.
+- **grant-staker-role `<vaultAddress>` `<account>`**
+  Grant staker role on a vault to an account.
+- **revoke-staker-role `<vaultAddress>` `<account>`**
+  Revoke staker role on a vault from an account.
+- **collateral-deposit `<collateralAddress>` `<amount>`**
+  Approve and deposit tokens into the collateral contract associated with a vault.
+- **set-deposit-limit `<vaultAddress>` `<limit>`**
+  Set deposit limit for a vault (0 will disable the limit).
+- **collateral-increase-limit `<vaultAddress>` `<limit>`**
+  Set deposit limit for a collateral.
+- **get-collateral `<vaultAddress>`**
+  Get the collateral token address of a vault.
+- **get-delegator `<vaultAddress>`**
+  Get the delegator address of a vault.
+- **get-balance `<vaultAddress>` [--account `<account>]**
+  Get vault token balance for an account.
+- **get-active-balance `<vaultAddress>` [--account `<account>]**
+  Get active vault balance for an account.
+- **get-total-supply `<vaultAddress>`**
+  Get total supply of vault tokens.
+- **get-withdrawal-shares `<vaultAddress>` `<epoch>` [--account `<account>]**
+  Get withdrawal shares for an account at a specific epoch.
+- **get-withdrawals `<vaultAddress>` `<epoch>` [--account `<account>]**
+  Get withdrawal amount for an account at a specific epoch.
+- **get-deposit-limit `<vaultAddress>`**
+  Get deposit limit for a vault.
+- **set-l1-limit `<vaultAddress>` `<l1Address>` `<limit>` `<collateralClass>`**
+  Set the L1 limit for a vault's delegator.
+- **set-operator-l1-shares `<vaultAddress>` `<l1Address>` `<operatorAddress>` `<shares>` `<collateralClass>`**
+  Set the L1 shares for an operator in a delegator.
+- **get-l1-limit `<vaultAddress>` `<l1Address>` `<collateralClass>`**
+  Get L1 limit for a vault's delegator.
+- **get-operator-l1-shares `<vaultAddress>` `<l1Address>` `<collateralClass>` `<operatorAddress>`**
+  Get L1 shares for an operator in a vault's delegator.
 
-- **vault-manager-register-vault-l1 `<middlewareVaultManager>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**  
-  Registers a vault for an L1 with the given parameters.
-- **vault-manager-update-vault-max-l1-limit `<middlewareVaultManager>` `<vaultAddress>` `<collateralClass>` `<maxLimit>`**  
-  Updates the maximum L1 limit of a registered vault.
-- **vault-manager-remove-vault `<middlewareVaultManager>` `<vaultAddress>`**  
-  Removes a registered vault.
-- **get-vault-count `<middlewareVaultManager>`**  
-  Retrieves the total number of registered vaults.
-- **get-vault-at-with-times `<middlewareVaultManager>` `<index>`**  
-  Returns vault details at a specified index, including related timestamps.
-- **get-vault-collateral-class `<middlewareVaultManager>` `<vaultAddress>`**  
-  Returns the collateral class associated with the given vault.
+### Middleware Commands (`middleware`)
 
----
+- **add-collateral-class `<middlewareAddress>` `<collateralClassId>` `<minValidatorStake>` `<maxValidatorStake>` `<initialCollateral>`**
+  Add a new collateral class to the middleware.
+- **add-collateral-to-class `<middlewareAddress>` `<collateralClassId>` `<collateralAddress>`**
+  Add a new collateral address to an existing collateral class.
+- **remove-collateral-from-class `<middlewareAddress>` `<collateralClassId>` `<collateralAddress>`**
+  Remove a collateral address from an existing collateral class.
+- **remove-collateral-class `<middlewareAddress>` `<collateralClassId>`**
+  Remove an existing secondary collateral class.
+- **activate-collateral-class `<middlewareAddress>` `<collateralClassId>`**
+  Activate a secondary collateral class.
+- **deactivate-collateral-class `<middlewareAddress>` `<collateralClassId>`**
+  Deactivate a secondary collateral class.
+- **register-operator `<middlewareAddress>` `<operator>`**
+  Register an operator to operate on this L1.
+- **disable-operator `<middlewareAddress>` `<operator>`**
+  Disable an operator to prevent it from operating on this L1.
+- **remove-operator `<middlewareAddress>` `<operator>`**
+  Remove an operator from this L1.
+- **process-node-stake-cache `<middlewareAddress>` [--epochs `<epochs>] [--loop-epochs `<count>] [--delay `<milliseconds>]**
+  Manually process node stake cache for one or more epochs.
+- **add-node `<middlewareAddress>` `<nodeId>` `<blsKey>` [--initial-stake `<initialStake>] [--registration-expiry `<expiry>] [--pchain-remaining-balance-owner-threshold `<threshold>] [--pchain-disable-owner-threshold `<threshold>] [--pchain-remaining-balance-owner-address `<address>...] [--pchain-disable-owner-address `<address>...]**
+  Add a new node to an L1.
+- **complete-validator-registration `<middlewareAddress>` `<addNodeTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>] [--initial-balance `<initialBalance>] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the middleware after adding a node.
+- **remove-node `<middlewareAddress>` `<nodeId>`**
+  Remove a node from an L1.
+- **complete-validator-removal `<middlewareAddress>` `<removeNodeTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>] [--skip-wait-api] [--node-id `<nodeId>]**
+  Complete validator removal on the P-Chain and on the middleware after removing a node.
+- **init-stake-update `<middlewareAddress>` `<nodeId>` `<newStake>`**
+  Initialize validator stake update and lock.
+- **complete-stake-update `<middlewareAddress>` `<validatorStakeUpdateTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>] [--node-id `<nodeId>]**
+  Complete validator stake update of all or specified node IDs.
+- **calc-operator-cache `<middlewareAddress>` `<epoch>` `<collateralClass>`**
+  Calculate and cache stakes for operators.
+- **calc-node-stakes `<middlewareAddress>`**
+  Calculate and cache node stakes for all operators.
+- **force-update-nodes `<middlewareAddress>` `<operator>` [--limit-stake `<stake>]**
+  Force update operator nodes with stake limit.
+- **top-up-operator-validators `<middlewareAddress>` `<operator>` `<targetBalance>`**
+  Top up all operator validators to meet a target continuous fee balance.
+- **get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<collateralClass>`**
+  Get operator stake for a specific epoch and collateral class.
+- **get-operator-used-stake-cached-per-epoch `<middlewareAddress>` `<epoch>` `<operator>` `<collateralClass>`**
+  Get operator stake cached per epoch for a specific collateral class.
+- **get-current-epoch `<middlewareAddress>`**
+  Get current epoch number.
+- **get-epoch-start-ts `<middlewareAddress>` `<epoch>`**
+  Get epoch start timestamp.
+- **get-active-nodes-for-epoch `<middlewareAddress>` `<operator>` `<epoch>`**
+  Get active nodes for an operator in a specific epoch.
+- **get-operator-nodes-length `<middlewareAddress>` `<operator>`**
+  Get current number of nodes for an operator.
+- **get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validationId>`**
+  Get node stake cache for a specific epoch and validator.
+- **get-operator-locked-stake `<middlewareAddress>` `<operator>`**
+  Get operator locked stake.
+- **node-pending-removal `<middlewareAddress>` `<validationId>`**
+  Check if node is pending removal.
+- **node-pending-update `<middlewareAddress>` `<validationId>`**
+  Check if node is pending stake update.
+- **get-operator-used-stake `<middlewareAddress>` `<operator>`**
+  Get operator used stake from cache.
+- **get-operator-available-stake `<middlewareAddress>` `<operator>`**
+  Get operator available stake.
+- **get-all-operators `<middlewareAddress>`**
+  Get all operators registered.
+- **get-collateral-class-ids `<middlewareAddress>`**
+  Get all collateral class IDs from the middleware.
+- **get-active-collateral-classes `<middlewareAddress>`**
+  Get active collateral classes (primary and secondary).
+- **node-logs `<middlewareAddress>` [--node-id `<nodeId>] [--snowscan-api-key `<string>]**
+  Get middleware node logs.
+- **get-last-node-validation-id `<middlewareAddress>` `<nodeId>`**
+  Set middleware log level.
+- **to-vault-epoch `<middlewareAddress>` `<vaultAddress>` `<middlewareEpoch>`**
+  Convert middleware epoch to a vault epoch.
+- **update-window-ends-ts `<middlewareAddress>`**
+  Get the end timestamp of the last completed middleware epoch window.
+- **vault-to-middleware-epoch `<middlewareAddress>` `<vaultAddress>` `<vaultEpoch>`**
+  Convert vault epoch to a middleware epoch.
 
-### Vault Deposit/Withdraw/Claim Commands
+### Operator Opt-In Commands (`opt-in`)
 
-- **deposit `<vaultAddress>` `<amount>` [--onBehalfOf `<address>`]**  
-  Deposits the specified amount into the vault. Optionally, deposit on behalf of another address.
-- **withdraw `<vaultAddress>` `<amount>` [--claimer `<address>`]**  
-  Withdraws the specified amount from the vault. Optionally, designate a different claimer address.
-- **claim `<vaultAddress>` `<epoch>` [--recipient `<address>`]**  
-  Claims withdrawal for a specific epoch. Optionally, specify the recipient address.
+- **l1-in `<l1Address>`**
+  Operator opts in to a given L1.
+- **l1-out `<l1Address>`**
+  Operator opts out from a given L1.
+- **check-l1 `<operator>` `<l1Address>`**
+  Check if an operator is opted in to a given L1.
+- **vault-in `<vaultAddress>`**
+  Operator opts in to a given Vault.
+- **vault-out `<vaultAddress>`**
+  Operator opts out from a given Vault.
+- **check-vault `<operator>` `<vaultAddress>`**
+  Check if an operator is opted in to a given Vault.
 
----
+### Balancer Commands (`balancer`)
 
-### Vault Read Commands
+- **set-up-security-module `<balancerValidatorManagerAddress>` `<middlewareAddress>` `<maxWeight>`**
+  Set up a security module.
+- **get-security-modules `<balancerValidatorManagerAddress>`**
+  Get all security modules.
+- **get-security-module-weights `<balancerValidatorManagerAddress>` `<securityModule>`**
+  Get security module weights.
+- **get-validator-status `<balancerAddress>` `<nodeId>`**
+  Get validator status by node ID.
+- **resend-validator-registration `<balancerAddress>` `<nodeId>`**
+  Resend validator registration transaction.
+- **resend-weight-update `<balancerAddress>` `<nodeId>`**
+  Resend validator weight update transaction.
+- **resend-validator-removal `<balancerAddress>` `<nodeId>`**
+  Resend validator removal transaction.
+- **transfer-l1-ownership `<balancerAddress>` `<newOwner>`**
+  Transfer Validator manager, balancer and its security modules ownership to a new owner.
 
-- **get-vault-collateral `<vaultAddress>`**  
-  Returns the collateral token address of the vault.
-- **get-vault-delegator `<vaultAddress>`**  
-  Returns the delegator address of the vault.
-- **get-vault-balance `<vaultAddress>` [--account `<address>`]**  
-  Returns the vault token balance for an account (defaults to sender).
-- **get-vault-active-balance `<vaultAddress>` [--account `<address>`]**  
-  Returns the active vault balance for an account (tokens not pending withdrawal).
-- **get-vault-total-supply `<vaultAddress>`**  
-  Returns the total supply of vault tokens.
-- **get-vault-withdrawal-shares `<vaultAddress>` `<epoch>` [--account `<address>`]**  
-  Returns the withdrawal shares for an account at a specific epoch.
-- **get-vault-withdrawals `<vaultAddress>` `<epoch>` [--account `<address>`]**  
-  Returns the withdrawal amount for an account at a specific epoch.
+### POA Security Module Commands (`poa`)
 
----
+- **add-node `<poaSecurityModule>` `<nodeId>` `<blsKey>` `<initialWeight>` [--registration-expiry `<expiry>] [--pchain-remaining-balance-owner-threshold `<threshold>] [--pchain-disable-owner-threshold `<threshold>] [--pchain-remaining-balance-owner-address `<address>...] [--pchain-disable-owner-address `<address>...]**
+  Add a new node to an L1.
+- **complete-validator-registration `<poaSecurityModuleAddress>` `<addNodeTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>] [--initial-balance `<initialBalance>] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the middleware after adding a node.
+- **remove-node `<poaSecurityModuleAddress>` `<nodeId>`**
+  Initiate validator removal.
+- **complete-validator-removal `<poaSecurityModuleAddress>` `<nodeId>` `<removeNodeTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>]**
+  Complete validator removal in the P-Chain and in the POA Security Module.
+- **init-weight-update `<poaSecurityModuleAddress>` `<nodeId>` `<newWeight>`**
+  Update validator weight.
+- **complete-weight-update `<middlewareAddress>` `<validatorStakeUpdateTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>] [--node-id `<nodeId>]**
+  Complete validator weight update of all or specified node IDs.
 
-### L1RestakeDelegator Commands
+### Uptime Commands (`uptime`)
 
-- **set-l1-limit `<delegatorAddress>` `<l1Address>` `<limit>` `<collateralClass>`**  
-  Sets the staking limit for the given L1 address within a delegator.
-- **set-operator-l1-shares `<delegatorAddress>` `<l1Address>` `<operatorAddress>` `<shares>` `<collateralClass>`**  
-  Sets the share allocation for an operator under the given L1 in the delegator contract.
-
----
-
-### Middleware Commands
-
-#### Operator-Related Actions
-
-- **middleware-register-operator `<middlewareAddress>` `<operator>`**  
-  Registers an operator in the middleware.
-- **middleware-disable-operator `<middlewareAddress>` `<operator>`**  
-  Disables an operator in the middleware.
-- **middleware-remove-operator `<middlewareAddress>` `<operator>`**  
-  Removes an operator from the middleware.
-- **middleware-get-all-operators `<middlewareAddress>`**  
-  Lists all operators registered in the middleware.
-
-#### Node Operations
-
-- **middleware-add-node `<middlewareAddress>` `<nodeId>` `<blsKey>` [--initial-stake `<initialStake>`] [--registration-expiry `<expiry>`] [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**  
-  Adds a node with its BLS key. Options include setting the initial stake (default: 0), registration expiry (default: now + 12 hours), P-Chain thresholds, and owner addresses.
-- **middleware-complete-validator-registration `<middlewareAddress>` `<operator>` `<nodeId>` `<addNodeTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`]**  
-  Completes validator registration for a given node. Includes the transaction hash from the add-node operation and BLS proof of possession. Optionally specify a P-Chain transaction private key and initial balance (default: 0.1 AVAX).
-- **middleware-remove-node `<middlewareAddress>` `<nodeId>`**  
-  Removes a node from the middleware.
-- **middleware-complete-validator-removal `<middlewareAddress>` `<nodeId>` `<removeNodeTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**  
-  Completes the validator removal process, specifying the transaction hash from the removal operation.
-
-#### Weight Update & Caching
-
-- **middleware-init-stake-update `<middlewareAddress>` `<nodeId>` `<newStake>`**  
-  Initiates a node stake update.
-- **middleware-complete-stake-update `<middlewareAddress>` `<nodeId>` `<validatorStakeUpdateTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**  
-  Completes a node's stake update.
-- **middleware-operator-cache `<middlewareAddress>` `<epoch>` `<collateralClass>`**  
-  Caches operator stakes for a specified epoch and collateral class.
-- **middleware-calc-node-stakes `<middlewareAddress>`**  
-  Calculates and caches node stakes for all operators.
-- **middleware-force-update-nodes `<middlewareAddress>` `<operator>` [--limit-stake `<stake>`]**  
-  Forces an update of nodes for an operator with an optional stake limit (default: 0).
-- **middleware-process-node-stake-cache `<middlewareAddress>` [--epochs `<epochs>`] [--loop-epochs `<count>`] [--delay `<milliseconds>`]**  
-  Manually processes node stake cache for one or more epochs.
-  - `--epochs`: Number of epochs to process per call (default: 1)
-  - `--loop-epochs`: Number of iterations to perform
-  - `--delay`: Delay between iterations in milliseconds (default: 1000)
-
-#### Middleware Read Operations
-
-- **middleware-get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<collateralClass>`**  
-  Retrieves the stake of an operator for the specified epoch and collateral class.
-- **middleware-get-current-epoch `<middlewareAddress>`**  
-  Returns the current epoch.
-- **middleware-get-epoch-start-ts `<middlewareAddress>` `<epoch>`**  
-  Retrieves the start timestamp for the given epoch.
-- **middleware-get-active-nodes-for-epoch `<middlewareAddress>` `<operator>` `<epoch>`**  
-  Retrieves the active nodes for an operator during a specific epoch.
-- **middleware-get-operator-nodes-length `<middlewareAddress>` `<operator>`**  
-  Returns the number of nodes associated with an operator.
-- **middleware-get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validatorId>`**  
-  Fetches the cached stake for a node (validator) for a given epoch.
-- **middleware-get-operator-locked-stake `<middlewareAddress>` `<operator>`**  
-  Retrieves the locked stake for the operator.
-- **middleware-node-pending-removal `<middlewareAddress>` `<validatorId>`**  
-  Checks if a node is pending removal.
-- **middleware-node-pending-update `<middlewareAddress>` `<validatorId>`**  
-  Checks if a node is pending an update. (Note: Currently not available in the contract - placeholder for future versions)
-- **middleware-get-operator-used-stake `<middlewareAddress>` `<operator>`**  
-  Retrieves the used stake for an operator.
-
----
-
-### Operator → L1 Opt-In/Opt-Out Commands
-
-- **opt-in-l1 `<l1Address>`**  
-  Operator opts in to a specified L1.
-- **opt-out-l1 `<l1Address>`**  
-  Operator opts out from a specified L1.
-- **check-opt-in-l1 `<operator>` `<l1Address>`**  
-  Checks whether the operator is opted in to the given L1.
-
----
-
-### Operator → Vault Opt-In/Opt-Out Commands
-
-- **opt-in-vault `<vaultAddress>`**  
-  Operator opts in to a specified vault.
-- **opt-out-vault `<vaultAddress>`**  
-  Operator opts out from a specified vault.
-- **check-opt-in-vault `<operator>` `<vaultAddress>`**  
-  Checks whether the operator is opted in to the specified vault.
-
----
-
-### Balancer Commands
-
-- **balancer-set-up-security-module `<balancerValidatorManagerAddress>` `<middlewareAddress>` `<maxWeight>`**  
-  Sets up a security module with the given parameters and maximum weight.
-- **balancer-get-security-modules `<balancerValidatorManagerAddress>`**  
-  Retrieves the list of security modules for the specified balancer validator manager.
-- **balancer-get-security-module-weights `<securityModule>`**  
-  Retrieves weight details for the specified security module.
-
----
-
-### Utility Commands
-
-- **opstakes `<middlewareVaultManager>` `<operatorAddress>`**  
-  Shows operator stakes across L1s, enumerating each L1 the operator is opted into.
-- **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**  
-  Gets the validation uptime message for a given validator in the specified L1 RPC.
-- **help [command]**  
-  Displays help information for a specific command or the entire CLI.
-
----
-
-### Uptime Tracking Commands
-
-- **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**  
-  Gets the validation uptime message for a given validator in the specified L1 RPC.
+- **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**
+  Get the validation uptime message for a given validator in the given L1 RPC.
 - **compute-validator-uptime `<uptimeTrackerAddress>` `<signedUptimeHex>`**
-  Computes validator uptime based on the signed uptime message.
+  Compute validator uptime based on the signed uptime message.
 - **report-uptime-validator `<rpcUrl>` `<sourceChainId>` `<nodeId>` `<uptimeTrackerAddress>`**
   Gets a validator's signed uptime message and submits it to the UptimeTracker contract.
+- **compute-operator-uptime `<uptimeTrackerAddress>` `<operator>` `<epoch>`**
+  Compute uptime for an operator at a specific epoch.
+- **compute-operator-uptime-range `<uptimeTrackerAddress>` `<operator>` `<startEpoch>` `<endEpoch>`**
+  Compute uptime for an operator over a range of epochs (client-side looping).
+- **get-validator-uptime `<uptimeTrackerAddress>` `<validationID>` `<epoch>`**
+  Get the recorded uptime for a validator at a specific epoch.
+- **check-validator-uptime-set `<uptimeTrackerAddress>` `<validationID>` `<epoch>`**
+  Check if uptime data is set for a validator at a specific epoch.
+- **get-operator-uptime `<uptimeTrackerAddress>` `<operator>` `<epoch>`**
+  Get the recorded uptime for an operator at a specific epoch.
+- **check-operator-uptime-set `<uptimeTrackerAddress>` `<operator>` `<epoch>`**
+  Check if uptime data is set for an operator at a specific epoch.
 
----
+### Rewards Commands (`rewards`)
 
-### Rewards Commands
-
-The following commands allow you to interact with the Rewards contract, which distributes, calculates, and tracks rewards across stakeholders in the Suzaku protocol.
-
-#### Rewards Distribution and Claiming
-
-- **rewards-distribute `<rewardsAddress>` `<epoch>` `<batchSize>`**  
-  Distribute rewards for a specific epoch, processing a batch of operators.
-- **rewards-claim `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>`]**  
-  Claim rewards for a staker. Optionally specify the recipient address.
-- **rewards-claim-operator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>`]**  
-  Claim operator fees. Optionally specify the recipient address.
-- **rewards-claim-curator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>`]**  
-  Claim curator fees. Optionally specify the recipient address.
-- **rewards-claim-protocol-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>`]**  
-  Claim protocol fees (only for protocol owner). Optionally specify the recipient address.
-- **rewards-claim-undistributed `<rewardsAddress>` `<epoch>` `<rewardsToken>` [--recipient `<recipient>`]**  
-  Claim undistributed rewards for an epoch (admin only). Optionally specify the recipient address.
-
-#### Rewards Configuration
-
-- **rewards-set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsToken>` `<rewardsAmount>`**  
-  Set rewards amount for a range of epochs.
-- **rewards-set-share-collateral-class `<rewardsAddress>` `<collateralClass>` `<share>`**  
-  Set rewards share for an collateral class (in basis points, 100 = 1%).
-- **rewards-set-min-uptime `<rewardsAddress>` `<minUptime>`**  
-  Set minimum required uptime for rewards eligibility (in seconds).
-- **rewards-set-admin `<rewardsAddress>` `<newAdmin>`**  
-  Set admin role (DEFAULT_ADMIN_ROLE only).
-- **rewards-set-protocol-owner `<rewardsAddress>` `<newOwner>`**  
+- **distribute `<rewardsAddress>` `<epoch>` `<batchSize>`**
+  Distribute rewards for a specific epoch.
+- **claim `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
+  Claim rewards for a staker.
+- **claim-operator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
+  Claim operator fees.
+- **claim-curator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
+  Claim curator fees.
+- **claim-protocol-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
+  Claim protocol fees (only for protocol owner).
+- **claim-undistributed `<rewardsAddress>` `<epoch>` `<rewardsToken>` [--recipient `<recipient>]**
+  Claim undistributed rewards (admin only).
+- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsToken>` `<rewardsAmount>`**
+  Set rewards amount for epochs.
+- **set-share-collateral-class `<rewardsAddress>` `<collateralClass>` `<share>`**
+  Set rewards share for collateral class.
+- **set-min-uptime `<rewardsAddress>` `<minUptime>`**
+  Set minimum required uptime for rewards eligibility.
+- **set-protocol-owner `<rewardsAddress>` `<newOwner>`**
   Set protocol owner (DEFAULT_ADMIN_ROLE only).
-- **rewards-update-protocol-fee `<rewardsAddress>` `<newFee>`**  
-  Update protocol fee (in basis points, 100 = 1%).
-- **rewards-update-operator-fee `<rewardsAddress>` `<newFee>`**  
-  Update operator fee (in basis points, 100 = 1%).
-- **rewards-update-curator-fee `<rewardsAddress>` `<newFee>`**  
-  Update curator fee (in basis points, 100 = 1%).
-
-#### Rewards Queries
-
-- **rewards-get-amounts `<rewardsAddress>` `<epoch>`**  
-  Get rewards amounts per token for an epoch.
-- **rewards-get-amount-for-token `<rewardsAddress>` `<epoch>` `<token>`**  
-  Get rewards amount for a specific token and epoch.
-- **rewards-get-operator-shares `<rewardsAddress>` `<epoch>` `<operator>`**  
+- **update-protocol-fee `<rewardsAddress>` `<newFee>`**
+  Update protocol fee.
+- **update-operator-fee `<rewardsAddress>` `<newFee>`**
+  Update operator fee.
+- **update-curator-fee `<rewardsAddress>` `<newFee>`**
+  Update curator fee.
+- **update-all-fees `<rewardsAddress>` `<protocolFee>` `<operatorFee>` `<curatorFee>`**
+  Update all fees at once (protocol, operator, curator).
+- **get-amounts `<rewardsAddress>` `<epoch>`**
+  Get rewards amounts per token for epoch.
+- **get-amount-for-token `<rewardsAddress>` `<epoch>` `<token>`**
+  Get rewards amount for a specific token from epoch.
+- **get-operator-shares `<rewardsAddress>` `<epoch>` `<operator>`**
   Get operator shares for a specific epoch.
-- **rewards-get-vault-shares `<rewardsAddress>` `<epoch>` `<vault>`**  
+- **get-vault-shares `<rewardsAddress>` `<epoch>` `<vault>`**
   Get vault shares for a specific epoch.
-- **rewards-get-curator-shares `<rewardsAddress>` `<epoch>` `<curator>`**  
+- **get-curator-shares `<rewardsAddress>` `<epoch>` `<curator>`**
   Get curator shares for a specific epoch.
-- **rewards-get-protocol-rewards `<rewardsAddress>` `<token>`**  
+- **get-protocol-rewards `<rewardsAddress>` `<token>`**
   Get protocol rewards for a token.
-- **rewards-get-distribution-batch `<rewardsAddress>` `<epoch>`**  
+- **get-distribution-batch `<rewardsAddress>` `<epoch>`**
   Get distribution batch status for an epoch.
-- **rewards-get-fees-config `<rewardsAddress>`**  
+- **get-fees-config `<rewardsAddress>`**
   Get current fees configuration.
-- **rewards-get-share-collateral-class `<rewardsAddress>` `<collateralClass>`**  
+- **get-share-collateral-class `<rewardsAddress>` `<collateralClass>`**
   Get rewards share for collateral class.
-- **rewards-get-min-uptime `<rewardsAddress>`**  
+- **get-min-uptime `<rewardsAddress>`**
   Get minimum required uptime for rewards eligibility.
-- **rewards-get-last-claimed-staker `<rewardsAddress>` `<staker>`**  
+- **get-last-claimed-staker `<rewardsAddress>` `<staker>` `<rewardToken>`**
   Get last claimed epoch for a staker.
-- **rewards-get-last-claimed-operator `<rewardsAddress>` `<operator>`**  
+- **get-last-claimed-operator `<rewardsAddress>` `<operator>` `<rewardToken>`**
   Get last claimed epoch for an operator.
-- **rewards-get-last-claimed-curator `<rewardsAddress>` `<curator>`**  
+- **get-last-claimed-curator `<rewardsAddress>` `<curator>` `<rewardToken>`**
   Get last claimed epoch for a curator.
-- **rewards-get-last-claimed-protocol `<rewardsAddress>` `<protocolOwner>`**  
+- **get-last-claimed-protocol `<rewardsAddress>` `<protocolOwner>` `<rewardToken>`**
   Get last claimed epoch for protocol owner.
 
----
+### Key Store Commands (`key`)
 
-_Bullet Points for Clarification:_
+- **list-gpg-ids**
+  List available gpg key ids installed on the system.
+- **init `<gpgKeyIds...>`**
+  Initialize the keystore.
+- **create `<name>` [--clip] [--value `<value>]**
+  Create a new encrypted secret.
+- **rm `<name>`**
+  Remove an encrypted secret.
+- **list**
+  List all encrypted secrets.
+- **addresses `<name>`**
+  Show the address of an encrypted private key.
 
-- Global options like `--private-key` and `--network` are inherited by every command.
-- Optional flags are shown in square brackets and have default values where applicable.
-- Numeric inputs are processed as BigInt values when needed.
+### Access Control Commands (`access-control`)
 
-For further details on options and examples for each command, run:
+- **grant-role `<contractAddress>` `<role>` `<account>`**
+  Grant a role to an account.
+- **revoke-role `<contractAddress>` `<role>` `<account>`**
+  Revoke a role from an account.
+- **has-role `<contractAddress>` `<role>` `<account>`**
+  Check if an account has a specific role.
+- **get-role-admin `<contractAddress>` `<role>`**
+  Get the admin role that controls a specific role.
 
-```bash
-pnpm cli --help
-```
+### Other Commands
+
+- **verify-abi `<address>` `<abi>`**
+  Verify that a contract at a given address matches the expected Suzaku ABI (5% tolerance).
+- **top-up-l1-validators `<subnetID>` `<targetBalance>` [--node-id `<nodeId>]**
+  Top up all/selected l1 validators to meet a target continuous fee balance.
+- **help-all**
+  Display help for all commands and sub-commands.

@@ -32,13 +32,13 @@ function isValidHex(hex: string, bytes?: number): boolean {
 
 // Parser (may be used by args or opts)
 
-export function parseSecretName(value: string, previousValue: string): string {
+export function parseSecretName(value: string, previousValue: string): Hex {
     const pass = new Pass(passPath)
     const secret = pass.show(value);
     if (typeof secret !== 'string' || secret.trim() === '') {
         throw new Error("Secret name cannot be empty");
     }
-    return secret;
+  return ParserHex(secret, 32, `Invalid Private Key format from keystore key '${value}'. Private key must be a 32-byte Hex string`);
 }
 
 export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
@@ -48,7 +48,16 @@ export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
   return value as Hex;
 };
 
-export const ParserPrivateKey = (value: string) => ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
+export const ParserPrivateKey = (value: string): Hex => {
+  // Check if it's an hex, otherwise try to get it from the keystore
+  if (!value.startsWith('0x')) {
+    return parseSecretName(value, '').trim() as Hex;
+  }
+  if (process.argv.includes('mainnet')) {
+    throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
+  }
+  return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
+};
 
 export const ParserAddress = (value: string) => ParserHex(value, 20, 'Invalid Address format. Address must be a 20-byte Hex string');
 

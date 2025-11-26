@@ -2,7 +2,7 @@ import { Command, Option } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import { confPath } from './config';
 import { logger, wrapAsyncAction } from './lib/logger';
-import { getClipboardValue } from './lib/utils';
+import { getClipboardValue, setClipboardValue } from './lib/utils';
 import { getAddresses } from './lib/utils';
 import { ParserAddress } from './lib/cliParser';
 
@@ -27,9 +27,10 @@ export function buildCommands(program: Command) {
     .command("create")
     .description("create a new encrypted secret")
     .argument("<name>", "Name of the secret to create")
-    .addOption(new Option('-c, --clip', 'Extract the value of the secret to create from the clipboard'))
+    .addOption(new Option('-c, --clip', 'Extract the value of the secret to create from the clipboard and erase it afterwards').conflicts('value'))
     .addOption(new Option('-v, --value', 'Value of the secret to create').conflicts('clip'))
     .action(wrapAsyncAction(async (name: string, options) => {
+      const opts = program.opts();
       let value: string;
       if (options.clip) {
         value = getClipboardValue();
@@ -38,6 +39,12 @@ export function buildCommands(program: Command) {
       } else {
         throw new Error("Either --clip or --value must be provided to create a secret.");
       }
+      // Validate address
+      const address = getAddresses(value as string, (opts as { network: string }).network);
+      ParserAddress(address.C);
+      logger.log(`Address for secret '${name}':\n  C-Chain: ${address.C}\n  P-Chain: ${address.P}`);
+      if (options.clip) setClipboardValue(''); // Erase clipboard
+      // Insert secret
       const pass = new Pass(passPath)
       pass.insert(name, value)
       logger.log(`Secret '${name}' created successfully.`);

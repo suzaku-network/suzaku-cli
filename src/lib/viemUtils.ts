@@ -75,10 +75,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
             logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join(', ')})`, hash, options });
 
-            if (!hash) return undefined; // when skipping a transaction
-
-            // If no confirmations required, return the hash directly
-            if (confirmations === 0) return hash
+            if (!hash) return undefined; // when skipping
 
             const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
             if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + receipt.logs);

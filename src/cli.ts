@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
 import { formatUnits, getAbiItem, getFunctionSelector, Hex, parseEventLogs, parseUnits, toFunctionSelector } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
@@ -147,7 +148,7 @@ async function main() {
         .addOption(new Option('-n, --network <network>')
             .choices(['fuji', 'mainnet', 'anvil'])
             .default('fuji'))
-        .addOption(new Option('-k, --private-key <privateKey>')
+        .addOption(new Option('-k, --private-key <privateKey>', 'Private key in Hex format')
             .env('PK').argParser(ParserPrivateKey))
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
             .conflicts('privateKey')
@@ -1140,7 +1141,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))// In decimals
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
@@ -2108,7 +2109,7 @@ async function main() {
         .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserAddress))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.1').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
@@ -3246,9 +3247,6 @@ async function main() {
 
     program.hook("preAction", (thisCommand, actionCommand) => {
 
-        // logger.log(`Executing command: ${actionCommand.optsWithGlobals() }`);
-        // logger.log(`Executing action: ${actionCommand}`);
-        // logger.log(`With options: ${JSON.stringify(thisCommand.opts())}`);
         const opts = program.opts();
         // Block manually private key on mainnet
         if (opts.privateKey! && opts.network === "mainnet") {
