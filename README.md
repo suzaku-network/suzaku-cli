@@ -805,7 +805,7 @@ suzaku-cli --help
 ### Other Commands
 
 - **verify-abi `<address>` `<abi>`**
-  Verify that a contract at a given address matches the expected Suzaku ABI (5% tolerance).
+  Verify that a contract at a given address matches the expected Suzaku ABI (5% tolerance). This verification is done every time a contract is used and raises an error if validation fails.
 - **top-up-l1-validators `<subnetID>` `<targetBalance>` [--node-id `<nodeId>]**
   Top up all/selected l1 validators to meet a target continuous fee balance.
 - **help-all**
