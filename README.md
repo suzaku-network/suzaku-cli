@@ -88,6 +88,8 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
   It's often the case that, on fuji or on the mainnet, we should ensure the transaction haven't reverted waiting some blocks.
   To wait some blocks to confirm a tx, use the `--wait` parameter followed by the number of block to wait.
 
+  To see all parameters, see the [Commands Reference](#commands-reference) below.
+
 ### Identify the required addresses and credentials
 
 The specific commands and required information (such as contract addresses and private keys) will vary depending on your role—Operator, Curator, or L1. Ensure you have the relevant contract addresses and credentials prepared before proceeding.
@@ -102,7 +104,7 @@ The specific commands and required information (such as contract addresses and p
   # Check if you have already setup gpg keys
   suzaku-cli key list-gpg-ids
   # initialize the keystore
-  suzaku-cli key init <all-gpg-ids-needed>
+  suzaku-cli key init <all-needed-gpg-ids>
   ```
 
   To save a new private key, the best way is copying it into the clipboard and use the following command:
