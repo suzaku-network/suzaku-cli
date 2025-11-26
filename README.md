@@ -142,7 +142,9 @@ Transaction management strategy:
   - Options: Confirm an existing transaction, Create a new one, or Skip.
 - No match: Create a new transaction.
 
-The first signer to reach the safe threshold will execute the tx
+The first signer to reach the safe threshold will execute the tx.
+
+All others operations like reject tx... are not supported. Pls use the official [Safe wallet UI](https://app.safe.global/).
 
 ## Token values
 
