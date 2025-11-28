@@ -21,7 +21,7 @@ export interface Config {
   client: ExtendedClient;
 }
 
-export function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
+export function getConfig(client: ExtendedClient, waitForTxCount = 0, skipAbiValidation: boolean = false): Config {
 
   // Dynamically build the contracts map using the curriedContract function
   const contracts = Object.fromEntries(
