@@ -55,7 +55,7 @@ async function prepareCchainExport(privateKeyHex: string, pAddress: string, cAdd
   return [tx.getSignedTx(), exportFees]
 }
 
-export async function pChainImport(client: ExtendedWalletClient, privateKeyHex: string): Promise<{ txID: string } > {
+export async function pChainImport(client: ExtendedWalletClient, privateKeyHex: string): Promise<{ txID: string }> {
 
   const { P: pAddress } = getAddresses(privateKeyHex, client.network);
   const rpcUrl = getRPCEndpoint(client);
@@ -117,16 +117,18 @@ export async function requirePChainBallance(privateKeyHex: string, client: Exten
     const neededOnCchain = transferFees - remainingPBalance// Turn remainingPBalance positive and add fees to get the needed amount on the C-Chain
 
     // Ask user to transfer AVAX to its C-Chain address if not enough found
-    const cBalance = await requireCChainBallance(privateKeyHex, client, neededOnCchain, promptUser, undefined, checkRetry);
+    await requireCChainBallance(privateKeyHex, client, neededOnCchain, promptUser, undefined, checkRetry);
+
+    let cChainExportTxResponse, pChainImportTxResponse;
 
     switch (promptUser ? await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${nToAVAX(neededOnCchain)} to the P-Chain address ${nToAVAX(neededOnCchain)}.. Do you want to transfer it automatically (y/n)`) : 'y') {
       case 'y':
         logger.log(`Exporting AVAX from C-Chain...`);
-        const cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
+        cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
         logger.log(cChainExportTxResponse.txID)
         await waitCChainTx(cChainExportTxResponse.txID, evmapi);
         logger.log(`Importing AVAX to P-Chain...`);
-        const pChainImportTxResponse = await pChainImport(client, privateKeyHex);
+        pChainImportTxResponse = await pChainImport(client, privateKeyHex);
         await waitPChainTx(pChainImportTxResponse.txID, pvmApi);
         logger.log("Transfer successfully completed !")
         // Call the transfer function here

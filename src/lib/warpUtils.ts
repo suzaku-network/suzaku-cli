@@ -1,9 +1,8 @@
 import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log } from 'viem';
 import { sha256 } from '@noble/hashes/sha256';
-import { cb58ToBytes, bytesToCB58, retryWhileError } from './utils';
+import { cb58ToBytes, retryWhileError, cb58ToHex } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
-import { cb58ToHex } from './utils';
 import { Network } from '../client';
 import { pChainChainID } from '../config';
 import { logger } from './logger';
@@ -374,10 +373,10 @@ export interface SolidityValidationPeriod {
 const CODEC_ID = 0; // uint16 internal constant CODEC_ID = 0; (replaces codecVersion variable)
 // const codecVersion = 0; // Replaced by CODEC_ID
 
-const SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID = 0; // uint32
+// const SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID = 0; // uint32
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1; // uint32 (already defined in original file)
-const L1_VALIDATOR_REGISTRATION_MESSAGE_TYPE_ID = 2; // uint32 (already defined in original file)
-const L1_VALIDATOR_WEIGHT_MESSAGE_TYPE_ID = 3; // uint32
+// const L1_VALIDATOR_REGISTRATION_MESSAGE_TYPE_ID = 2; // uint32 (already defined in original file)
+// const L1_VALIDATOR_WEIGHT_MESSAGE_TYPE_ID = 3; // uint32
 const VALIDATION_UPTIME_MESSAGE_TYPE_ID = 0; // uint32 (Note: same as SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID)
 
 
@@ -557,11 +556,10 @@ function parseVarBytes(input: Uint8Array, offset: number): { bytes: Uint8Array; 
 const bytesToHexPrefixed = (bytes: Uint8Array): Hex => `0x${Buffer.from(bytes).toString('hex')}`;
 
 export function packValidationUptimeMessage(validationId: string, uptimeSeconds: number, networkID: number, sourceChainID: string): Uint8Array {
-    let validationIdBytes: Uint8Array;
 
     // Convert validationId to hex
     const validationIdHex = cb58ToHex(validationId);
-    validationIdBytes = hexToBytes(validationIdHex as Hex);
+    const validationIdBytes = hexToBytes(validationIdHex as Hex);
 
     // Create the message payload with the proper format
     const messagePayload = concatenateUint8Arrays(

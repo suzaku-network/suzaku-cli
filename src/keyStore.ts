@@ -2,8 +2,7 @@ import { Command, Option } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import { confPath } from './config';
 import { logger, wrapAsyncAction } from './lib/logger';
-import { getClipboardValue, setClipboardValue } from './lib/utils';
-import { getAddresses } from './lib/utils';
+import { getClipboardValue, setClipboardValue, getAddresses } from './lib/utils';
 import { ParserAddress } from './lib/cliParser';
 
 export const passPath = confPath + '/.password-store'
@@ -19,7 +18,7 @@ export function buildCommands(program: Command) {
     .description("Initialize the keystore")
     .argument("<gpgKeyIds...>", "desired gpg key ids used to encrypt/decrypt the key store")
     .action(wrapAsyncAction(async (gpgKeyIds: string[]) => {
-      const pass = new Pass(passPath, gpgKeyIds)
+      new Pass(passPath, gpgKeyIds)
       logger.log(`Key store initialized with GPG keys: ${gpgKeyIds.join(' ')}`);
     }))
 
@@ -68,7 +67,7 @@ export function buildCommands(program: Command) {
       logger.log("Available secrets:");
       logger.log(pass)
     }));
-  
+
   program
     .command("addresses")
     .description("Show the address of an encrypted private key")

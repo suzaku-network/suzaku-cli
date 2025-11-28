@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import { Abi, fromBytes, Hex, pad, sliceHex, getAddress } from "viem";
+import { fromBytes, Hex, pad, sliceHex, getAddress } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
 import { spawnSync } from "child_process";
@@ -16,11 +16,6 @@ export function bytes32ToAddress(bytes32: `0x${string}`) {
 
 
 const CHECKSUM_LENGTH = 4;
-
-function calculateChecksum(data: Uint8Array): Uint8Array {
-    // In Avalanche, hashing.Checksum uses a single SHA256
-    return sha256(data).slice(0, CHECKSUM_LENGTH);
-}
 
 export function cb58ToBytes(cb58: string): Uint8Array {
     const decodedBytes = base58.decode(cb58);
@@ -181,7 +176,7 @@ export function setClipboardValue(value: string): void {
         spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8' });
     } else if (platform === 'darwin') {
         // macOS
-        const proc = spawnSync('pbcopy', [], { input: value, encoding: 'utf-8' });
+        spawnSync('pbcopy', [], { input: value, encoding: 'utf-8' });
     } else {
         // Linux and others
         spawnSync('xclip', ['-selection', 'clipboard'], { input: value, encoding: 'utf-8' });

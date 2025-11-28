@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { formatUnits, getAbiItem, getFunctionSelector, Hex, parseEventLogs, parseUnits, toFunctionSelector } from "viem";
+import { formatUnits, Hex, parseUnits } from "viem";
 import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -20,7 +20,6 @@ import {
     withdrawVault,
     claimVault,
     getVaultDelegator,
-    getStake,
     getVaultCollateral,
     getVaultBalanceOf,
     getVaultActiveBalanceOf,
@@ -52,7 +51,6 @@ import {
     middlewareGetNodeStakeCache,
     middlewareGetOperatorLockedStake,
     middlewareNodePendingRemoval,
-    middlewareNodePendingUpdate,
     middlewareGetOperatorUsedStake,
     middlewareGetAllOperators,
     getCollateralClassIds,
@@ -87,8 +85,7 @@ import {
     getValidatorUptimeForEpoch,
     isValidatorUptimeSetForEpoch,
     getOperatorUptimeForEpoch,
-    isOperatorUptimeSetForEpoch,
-    getLastUptimeCheckpoint
+    isOperatorUptimeSetForEpoch
 } from "./uptime";
 
 import {
@@ -122,12 +119,11 @@ import {
     getLastEpochClaimedProtocol,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
-import { bigintReplacer, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
+import { encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgAVAX, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, ParserHex, OptAddress } from "./lib/cliParser";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress } from "./lib/cliParser";
 import { getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
-import { color } from 'console-log-colors';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { utils } from '@avalabs/avalanchejs';
@@ -1100,9 +1096,9 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             // Default registration expiry to now + 12 hours if not provided
-            const registrationExpiry = options.registrationExpiry
-                ? BigInt(options.registrationExpiry)
-                : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
+            // const registrationExpiry = options.registrationExpiry
+            //     ? BigInt(options.registrationExpiry)
+            //     : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
@@ -1570,19 +1566,6 @@ async function main() {
                 middlewareSvc,
                 validationId
             );
-        }));
-
-    // nodePendingUpdate (read)
-    middlewareCmd
-        .command("node-pending-update")
-        .description("Check if node is pending stake update")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgHex("validationId", "Validation ID"))
-        .action(wrapAsyncAction(async (middlewareAddress, validationId) => {
-            const client = await generateClient(program.opts().network);
-            const config = getConfig(client, program.opts().wait);
-            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-            // const isPending = await middlewareSvc.read.pe
         }));
 
     // getOperatorUsedStakeCached (read)
@@ -2078,9 +2061,9 @@ async function main() {
             const poaSM = await config.contracts.PoASecurityModule(poaSecurityModule);
 
             // Default registration expiry to now + 12 hours if not provided
-            const registrationExpiry = options.registrationExpiry
-                ? BigInt(options.registrationExpiry)
-                : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
+            // const registrationExpiry = options.registrationExpiry
+            //     ? BigInt(options.registrationExpiry)
+            //     : BigInt(Math.floor(Date.now() / 1000) + 12 * 60 * 60); // current time + 12 hours in seconds
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
@@ -2289,7 +2272,7 @@ async function main() {
             const l1Array: Hex[] = [];
             for (let i = 0n; i < totalL1s; i++) {
                 // e.g. getL1At(i) might return [address, metadataUrl], adjust as needed
-                const [l1Address, metadataUrl] = await l1Registry.read.getL1At([i]);
+                const [l1Address, _] = await l1Registry.read.getL1At([i]);
 
                 l1Array.push(l1Address as Hex);
             }
@@ -2356,7 +2339,7 @@ async function main() {
         .description("Show L1 stakes for a given validator manager")
         .addArgument(ArgAddress("validatorManagerAddress", "Validator manager address"))
         .description("Show L1 stakes for a given validator manager")
-        .action(wrapAsyncAction(async (validatorManagerAddress) => {
+        .action(wrapAsyncAction(async () => {
             // TODO: Implement
         }));
 
@@ -3129,7 +3112,7 @@ async function main() {
         let newLineToLog = false;
         let hasSubCmds = false;
 
-        cmd.commands.forEach((sub, i) => {
+        cmd.commands.forEach((sub,) => {
             const args = sub.args?.map(a => `<${a}>`).join(" ");
             const desc = sub.description() ? sub.description() : "";
             console.log(`${newLineToLog ? "\n" : ""}${pad}${sub.name()} ${args.padEnd(31 - sub.name().length)} ${desc}`);
@@ -3245,7 +3228,7 @@ async function main() {
             printIndentedHelp(program);
         });
 
-    program.hook("preAction", (thisCommand, actionCommand) => {
+    program.hook("preAction", () => {
 
         const opts = program.opts();
         // Block manually private key on mainnet

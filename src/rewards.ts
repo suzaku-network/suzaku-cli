@@ -12,7 +12,7 @@ export async function distributeRewards(
   account: Account
 ) {
 
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.distributeRewards(
     [epoch, batchSize],
     { chain: null, account }
@@ -29,7 +29,7 @@ export async function claimRewards(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimRewards(
     rewardsToken ? [rewardsToken, recipient] : [recipient],
     { chain: null, account }
@@ -46,7 +46,7 @@ export async function claimOperatorFee(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimOperatorFee(
     rewardsToken ? [rewardsToken, recipient] : [recipient],
     { chain: null, account }
@@ -63,7 +63,7 @@ export async function claimCuratorFee(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimCuratorFee(
     rewardsToken ? [rewardsToken, recipient] : [recipient],
     { chain: null, account }
@@ -80,7 +80,7 @@ export async function claimProtocolFee(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimProtocolFee(
     rewardsToken ? [rewardsToken, recipient] : [recipient],
     { chain: null, account }
@@ -98,7 +98,7 @@ export async function claimUndistributedRewards(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimUndistributedRewards(
     rewardsToken ? [epoch, rewardsToken, recipient] : [epoch, recipient],
     { chain: null, account }
@@ -117,7 +117,7 @@ export async function setRewardsAmountForEpochs(
   rewardsAmount: bigint,
   rewardsToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setRewardsAmountForEpochs(
     rewardsToken ? [startEpoch, numberOfEpochs, rewardsToken, rewardsAmount] : [startEpoch, numberOfEpochs, rewardsAmount],
     { chain: null, account }
@@ -134,7 +134,7 @@ export async function setRewardsShareForCollateralClass(
   share: number,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setRewardsShareForCollateralClass(
     [collateralClass, share],
     { chain: null, account }
@@ -150,7 +150,7 @@ export async function setMinRequiredUptime(
   minUptime: bigint,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setMinRequiredUptime(
     [minUptime],
     { chain: null, account }
@@ -166,7 +166,7 @@ export async function setProtocolOwner(
   newOwner: Hex,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setProtocolOwner(
     [newOwner],
     { chain: null, account }
@@ -182,7 +182,7 @@ export async function updateProtocolFee(
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateProtocolFee(
     [newFee],
     { chain: null, account }
@@ -198,7 +198,7 @@ export async function updateOperatorFee(
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateOperatorFee(
     [newFee],
     { chain: null, account }
@@ -214,7 +214,7 @@ export async function updateCuratorFee(
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateCuratorFee(
     [newFee],
     { chain: null, account }
@@ -232,7 +232,7 @@ export async function updateAllFees(
   newCuratorFee: number,
   account: Account
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateAllFees(
     [newProtocolFee, newOperatorFee, newCuratorFee],
     { chain: null, account }
@@ -280,7 +280,7 @@ export async function getRewardsAmountForTokenFromEpoch(
     logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
   }
 
-  
+
   return amount;
 }
 
@@ -421,7 +421,7 @@ export async function getLastEpochClaimedStaker(
   staker: Hex,
   rewardToken?: Hex
 ) {
-  //@ts-expect-error
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const lastEpoch = await rewards.read.lastEpochClaimedStaker(rewardToken ? [staker, rewardToken] : [staker]);
 
   logger.log(`Last epoch claimed by staker ${staker} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
@@ -436,8 +436,8 @@ export async function getLastEpochClaimedOperator(
   operator: Hex,
   rewardToken?: Hex
 ) {
-  //@ts-expect-error
-  const lastEpoch = await rewards.read.lastEpochClaimedOperator(rewardToken? [operator, rewardToken] : [operator]);
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
+  const lastEpoch = await rewards.read.lastEpochClaimedOperator(rewardToken ? [operator, rewardToken] : [operator]);
 
   logger.log(`Last epoch claimed by operator ${operator} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
   return lastEpoch;
@@ -451,8 +451,8 @@ export async function getLastEpochClaimedCurator(
   curator: Hex,
   rewardToken?: Hex
 ) {
-  //@ts-expect-error
-  const lastEpoch = await rewards.read.lastEpochClaimedCurator(rewardToken? [curator, rewardToken] : [curator]);
+  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
+  const lastEpoch = await rewards.read.lastEpochClaimedCurator(rewardToken ? [curator, rewardToken] : [curator]);
 
   logger.log(`Last epoch claimed by curator ${curator} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
   return lastEpoch;
@@ -466,7 +466,7 @@ export async function getLastEpochClaimedProtocol(
   protocolOwner: Hex,
   rewardToken: Hex
 ) {
-  
+
   const lastEpoch = await rewards.read.lastEpochClaimedProtocol([protocolOwner, rewardToken]);
 
   logger.log(`Last epoch claimed by protocol owner ${protocolOwner} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);

@@ -19,7 +19,7 @@ _${cli}_completions() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   line="\${COMP_LINE}"
 
-  COMPREPLY=( $(compgen -W "$(${cli} __complete --line \"$line\")" -- "$cur") )
+  COMPREPLY=( $(compgen -W "$(${cli} __complete --line "$line")" -- "$cur") )
 }
 
 complete -F _${cli}_completions ${cli}

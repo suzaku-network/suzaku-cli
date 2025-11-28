@@ -1,4 +1,4 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, decodeFunctionData, pad } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
@@ -40,7 +40,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
     // Proxy handler for write methods to add Safe transaction handling and wait for confirmations
     const writeHandler: ProxyHandler<Record<string, any>> = {
-      get(target, prop, _recv) {
+      get(target, prop,) {
         const fn = (target as any)[prop]
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
@@ -106,7 +106,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
     // Proxy handler for safeWrite methods to simulate the write operation before executing it
     const safeWriteHandler: ProxyHandler<Record<string, any>> = {
-      get(target, prop, _recv) {
+      get(target, prop,) {
         const fn = (target as any)[prop]
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
@@ -133,7 +133,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
     // Proxy handler for read methods to catch and format errors
     const readHandler: ProxyHandler<Record<string, any>> = {
-      get(target, prop, _recv) {
+      get(target, prop,) {
         const fn = (target as any)[prop]
         if (typeof fn !== 'function') return fn
         return async (...args: any[]) => {
@@ -158,7 +158,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0): CurriedContractFn<T> =>
   async (address: Address) => {
     await contractAbiValidation(client, abi, address);
-    let contract = getContract({
+    const contract = getContract({
       abi: SuzakuABI[abi],
       address,
       client,
@@ -204,5 +204,5 @@ async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedC
   if (!result) {
     logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abi} contract.`], 3)
   }
-    return true;
-  }
+  return true;
+}

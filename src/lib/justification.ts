@@ -1,6 +1,6 @@
 // Using more generic types without specific library dependencies
 import { Buffer } from 'buffer';
-import { createPublicClient, http, parseAbiItem, Chain, Hex, hexToBytes } from 'viem';
+import { parseAbiItem, Hex, hexToBytes } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
 import { sha256 } from '@noble/hashes/sha256';
 import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from './warpUtils';
@@ -10,36 +10,10 @@ import { logger } from './logger';
 const codecVersion = 0;
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1;
 
-// Assuming these types/interfaces exist or will be defined elsewhere
-interface IDs {
-    ID: string;
-    Append(index: number): string;
-}
-
-// Constants equivalent to the Go code
-const DefaultBootstrapValidatorsToSearch = 100; // Assuming this value
-const BatchSize = 1000; // Assuming this value
-const RateLimitDelay = 100; // Assuming this value in milliseconds
-
-// Cache for registration messages
-const registrationMessageCache: Record<string, Uint8Array> = {};
-
-// Interfaces for the protobuf equivalents
-interface L1ValidatorRegistrationJustification {
-    preimage: {
-        convertSubnetToL1TxData?: {
-            subnetId: Uint8Array;
-            index: number;
-        };
-        registerL1ValidatorMessage?: Uint8Array;
-    };
-}
-
-
 /**
  * Extracts the addressedCall from an unsignedWarpMessage
  * 
- * UnsignedMessage structure from convertWarp.ts:
+ * UnsignedMessage structure from convertWarp:
  * - codecVersion (uint16 - 2 bytes)
  * - networkID (uint32 - 4 bytes)
  * - sourceChainID (32 bytes)
@@ -398,7 +372,7 @@ export async function GetRegistrationJustification(
         const BATCH_SIZE = 2048;
         let fromBlock = BigInt(latestBlock);
         let toBlock = BigInt(latestBlock);
-        let justification = null;
+        let justification: Uint8Array<ArrayBuffer> | null = null;
 
         logger.log(`Starting search from latest block ${latestBlock} in batches of ${BATCH_SIZE} blocks...`);
 
@@ -463,7 +437,7 @@ export async function GetRegistrationJustification(
                                 justification = marshalledJustification;
                                 break; // Exit the loop once found
                             }
-                        } catch (parseOrHashError) {
+                        } catch {
                             // logger.warn(`Error parsing/hashing RegisterL1ValidatorMessage payload from Tx ${log.transactionHash}:`, parseOrHashError);
                         }
                     } catch (logProcessingError) {
@@ -496,168 +470,12 @@ export async function GetRegistrationJustification(
     }
 }
 
-/**
- * Gets the registration message for a validator
- * @param rpcURL The RPC URL to connect to
- * @param validationID The validation ID
- * @param chain The Viem chain configuration
- * @returns The registration message
- */
-export async function getRegistrationMessage(
-    rpcURL: string,
-    validationID: string,
-    chain: Chain
-): Promise<Hex | null> {
-    // Check cache first
-    if (registrationMessageCache[validationID]) {
-        return `0x${Buffer.from(registrationMessageCache[validationID]).toString('hex')}` as Hex;
-    }
-
-    // Create a Viem public client with the provided chain configuration
-    const client = createPublicClient({
-        transport: http(rpcURL),
-        chain: chain,
-    });
-
-    // Get current block height
-    const height = await client.getBlockNumber();
-
-    // Start from most recent blocks and work backwards all the way to block 0
-    // const endBlock = Number(height);
-    const endBlock = 38892305;
-    // const startBlock = 0;
-    const startBlock = 38892302;
-
-    // SubnetEVM Warp contract address
-    const subnetEvmWarpAddress = "0x0200000000000000000000000000000000000005"; // Replace with actual address
-
-    logger.log(`Looking for validationID in topics: ${validationID}`);
-
-    // Search from most recent to oldest in batches
-    for (let blockNumber = endBlock; blockNumber >= startBlock; blockNumber -= BatchSize) {
-        // Calculate batch end and start
-        const batchEnd = blockNumber;
-        let batchStart = blockNumber - BatchSize + 1;
-        if (batchStart < startBlock) {
-            batchStart = startBlock;
-        }
-
-        logger.log(`Searching blocks ${batchStart} to ${batchEnd} for validation ID ${validationID}`);
-
-        try {
-            // Query logs for all blocks in the batch using Viem
-            const logs = await client.getLogs({
-                address: subnetEvmWarpAddress,
-                fromBlock: BigInt(batchStart),
-                toBlock: BigInt(batchEnd),
-            });
-
-            logger.log(`Found ${logs.length} logs in blocks ${batchStart} to ${batchEnd}`);
-
-            // Process logs for this batch - simply check if topics[2] matches validationID
-            for (const log of logs) {
-                if (log.topics.length >= 3) {
-                    logger.log(`Comparing log topic: ${log.topics[2]} with validationID: ${validationID}`);
-
-                    // Check if the third topic matches our validationID
-                    if (log.topics[2] === validationID) {
-                        logger.log("Found matching log:", log);
-
-                        // Cache the result before returning
-                        registrationMessageCache[validationID] = hexToUint8Array(log.data);
-
-                        return log.data;
-                    }
-                }
-            }
-        } catch (error) {
-            logger.error(`Error fetching logs for blocks ${batchStart}-${batchEnd}:`, error);
-        }
-
-        // Rate limit delay between batches
-        await new Promise(resolve => setTimeout(resolve, RateLimitDelay));
-    }
-
-    return null;
-}
-
 // Helper functions
-function appendToID(id: string, index: number): string {
-    // Implementation would depend on how IDs are structured
-    return `${id}-${index}`;
-}
-
-function stringToUint8Array(str: string): Uint8Array {
-    return Buffer.from(str, 'hex');
-}
 
 export function hexToUint8Array(hex: Hex): Uint8Array {
     // Remove '0x' prefix if present
     const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
     return Buffer.from(hexString, 'hex');
-}
-
-async function marshalProto(obj: L1ValidatorRegistrationJustification): Promise<Uint8Array> {
-    // We'll use protobufjs for serialization
-    const protobuf = require('protobufjs');
-
-    // Define the Protocol Buffer message structure
-    const root = protobuf.Root.fromJSON({
-        nested: {
-            L1ValidatorRegistrationJustification: {
-                fields: {
-                    preimage: {
-                        type: "Preimage",
-                        id: 1
-                    }
-                }
-            },
-            Preimage: {
-                oneofs: {
-                    content: {
-                        oneof: ["convertSubnetToL1TxData", "registerL1ValidatorMessage"]
-                    }
-                },
-                fields: {
-                    convertSubnetToL1TxData: {
-                        type: "ConvertSubnetToL1TxData",
-                        id: 1
-                    },
-                    registerL1ValidatorMessage: {
-                        type: "bytes",
-                        id: 2
-                    }
-                }
-            },
-            ConvertSubnetToL1TxData: {
-                fields: {
-                    subnetId: {
-                        type: "bytes",
-                        id: 1
-                    },
-                    index: {
-                        type: "uint32",
-                        id: 2
-                    }
-                }
-            }
-        }
-    });
-
-    // Get the message type
-    const L1ValidatorRegistrationJustificationType = root.lookupType("L1ValidatorRegistrationJustification");
-
-    // Verify the payload
-    const errMsg = L1ValidatorRegistrationJustificationType.verify(obj);
-    if (errMsg) {
-        throw new Error(`Invalid protocol buffer message: ${errMsg}`);
-    }
-
-    // Create the message
-    const message = L1ValidatorRegistrationJustificationType.create(obj);
-
-    // Encode the message to binary format
-    return L1ValidatorRegistrationJustificationType.encode(message).finish();
 }
 
 export interface PChainOwner {

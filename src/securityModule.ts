@@ -2,7 +2,7 @@ import { Account, bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "./client";
 import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
-import { encodeNodeID, getAddresses, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
+import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
@@ -59,6 +59,7 @@ export async function completeValidatorRegistration(
 
     // Register validator on P-Chain
     logger.log("\nRegistering validator on P-Chain...");
+    // eslint-disable-next-line
     pipe(await registerL1Validator({
       privateKeyHex: pChainTxPrivateKey,
       client,
@@ -239,7 +240,11 @@ export async function completeWeightUpdate(
         }
       })
     })).reduce((acc, res) => {
-      res.result ? acc.push(res.result as Hex) : logger.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[acc.length]}`));
+      if (res.result) {
+        acc.push(res.result as Hex)
+      } else {
+        logger.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[acc.length]}`))
+      };
       return acc;
     }, [] as Hex[]);
   } else validationIds = undefined;

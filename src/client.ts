@@ -1,7 +1,6 @@
 import { avalancheFuji, avalanche, anvil } from 'viem/chains'
-import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions, Hex } from 'viem'
+import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions, Hex, PublicActions  } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { PublicActions } from 'viem'
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 
 // Define the network types

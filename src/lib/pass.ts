@@ -319,7 +319,7 @@ export class Pass {
   }
 
   /** Custom inspect method for better console output (auto call toString when logger.log the object) */
-  [util.inspect.custom](_depth: number, _opts: util.InspectOptions): string {
+  [util.inspect.custom](): string {
     return this.toString();
   }
 }

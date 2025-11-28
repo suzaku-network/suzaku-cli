@@ -8,10 +8,10 @@ import * as os from 'os';
 // Load environment variables
 dotenv.config();
 
-export const confPath =os.homedir()+'/.suzaku-cli'
+export const confPath = os.homedir() + '/.suzaku-cli'
 
 // Define the configuration interface
-interface Config {
+export interface Config {
   l1Registry: Hex;
   operatorRegistry: Hex;
   opL1OptIn: Hex;
@@ -21,7 +21,7 @@ interface Config {
   client: ExtendedClient;
 }
 
-function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
+export function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
 
   // Dynamically build the contracts map using the curriedContract function
   const contracts = Object.fromEntries(
@@ -65,8 +65,6 @@ function getConfig(client: ExtendedClient, waitForTxCount = 0): Config {
     throw new Error(`Unsupported network: ${client.network}`);
   }
 }
-
-export { Config, getConfig };
 
 // Constants
 export const pChainChainID = '11111111111111111111111111111111LpoYY';

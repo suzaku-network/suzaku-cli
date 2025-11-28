@@ -1,20 +1,12 @@
-import { bytesToHex, hexToBytes, fromBytes, pad, parseAbiItem, decodeEventLog, Hex, Account, Abi, parseEventLogs } from 'viem';
+import { Hex, Account } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
-import { utils } from '@avalabs/avalanchejs';
-import { GetRegistrationJustification, hexToUint8Array } from './lib/justification';
-import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedPublicClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
-import { Config, pChainChainID } from './config';
-import { bigintReplacer, bytesToCB58, encodeNodeID, NodeId, parseNodeID, retryWhileError } from './lib/utils';
+import { Config } from './config';
+import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
-import { collectSignatures, decodeWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
-import { getValidatorsAt, registerL1Validator, setValidatorWeight, getCurrentValidators } from './lib/pChainUtils';
 import { logger } from './lib/logger';
-import { pipe, R } from '@mobily/ts-belt';
-import { getLogs } from 'viem/actions';
-
-// @ts-ignore - Wrapping in try/catch for minimal changes
 
 export async function middlewareRegisterOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
@@ -331,9 +323,9 @@ export async function middlewareGetNodeLogs(
   const from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
 
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-  bar && bar.start(0, 0);
+  if (bar) bar.start(0, 0);
 
-  let logsProm = []
+  const logsProm: Promise<DecodedEvent[]>[] = []
 
   logsProm.push(GetContractEvents(
     client,
@@ -406,7 +398,6 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
       const hash = same ? "↑same↑" : log.transactionHash;
       const executionTime = log.timestamp ? same ? "↑same↑" : new Date(Number(log.timestamp) * 1000).toLocaleString() : 'N/A';
 
-      log.blockNumber
       acc[key].push({
         source: log.address,
         event: log.eventName,

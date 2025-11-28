@@ -1,5 +1,5 @@
-import cliProgress from 'cli-progress';
-import { decodeEventLog, decodeAbiParameters, Hex, Abi, Block } from 'viem';
+import { SingleBar, Presets } from 'cli-progress';
+import { decodeEventLog, Hex, Abi } from 'viem';
 import { ExtendedClient, ExtendedPublicClient } from '../client';
 import { SafeSuzakuContract } from './viemUtils';
 import { logger } from './logger';
@@ -37,7 +37,7 @@ export async function GetContractEvents(
   eventNames?: string[],
   snowscanApiKey?: string,
   forceTimestamp: boolean = true,
-  bar?: cliProgress.SingleBar
+  bar?: SingleBar
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
   try {
@@ -71,14 +71,14 @@ export async function GetContractEvents(
 
       const blockToScan = toBlock - fromBlock;
       if (!bar) {
-        bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+        bar = new SingleBar({}, Presets.shades_classic);
         bar.start(blockToScan, 0);
       } else {
         bar.setTotal(bar.getTotal() + blockToScan);
       }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
 
-        let toSub = i + 2000 > toBlock ? toBlock : i + 2000;
+        const toSub = i + 2000 > toBlock ? toBlock : i + 2000;
         events.push(...await client.getContractEvents({
           address: address,
           abi: abi,
@@ -139,7 +139,7 @@ export async function fillEventsNodeId(
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
 
-  let validationIdMap: Record<string, string> = {};
+  const validationIdMap: Record<string, string> = {};
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i];

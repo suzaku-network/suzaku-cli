@@ -1,7 +1,6 @@
-import { packValidationUptimeMessage, collectSignatures } from "./lib/warpUtils";
+import { packValidationUptimeMessage, collectSignatures, packWarpIntoAccessList } from "./lib/warpUtils";
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
-import { packWarpIntoAccessList } from './lib/warpUtils';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
 import { Network } from "./client";
@@ -163,7 +162,7 @@ export async function computeOperatorUptimeForEpochs(
   let currentNonce = initialNonce ?? 0;
 
   for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
-    const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt(
+    await uptimeTracker.safeWrite.computeOperatorUptimeAt(
       [operator, epoch],
       { chain: null, account, nonce: currentNonce }
     );

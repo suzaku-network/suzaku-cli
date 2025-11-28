@@ -1,15 +1,15 @@
 import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, networkIDs } from "@avalabs/avalanchejs";
-import { cb58ToBytes, cb58ToHex, getAddresses, NodeId, nToAVAX } from "./utils";
-import { ExtendedClient, ExtendedWalletClient, generateClient } from "../client";
+import { cb58ToHex, getAddresses, NodeId } from "./utils";
+import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { bytesToHex, Hex, hexToBytes } from "viem";
+import { Hex, hexToBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
 
-export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: BigInt } };
+export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: bigint } };
 
 export interface PChainBaseParams {
     privateKeyHex: string;
@@ -527,7 +527,7 @@ export async function increasePChainValidatorBalance(
     const addressBytes = utils.bech32ToBytes(pChainAddress);
     const nAVAX = BigInt(Math.floor(amount * 1e9)); // Convert AVAX to nAVAX
     // Ensure the P-Chain address has enough balance
-    check && await requirePChainBallance(privateKeyHex, client, nAVAX);
+    if (check) await requirePChainBallance(privateKeyHex, client, nAVAX);
 
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pChainAddress]
@@ -719,6 +719,6 @@ export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise
         R.map(res => res.txID as Hex),
         R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`)
     )
-    R.isOk(result) && await waitPChainTx( result._0, pvmApi)
+    if (R.isOk(result)) await waitPChainTx(result._0, pvmApi)
     return result;
 }

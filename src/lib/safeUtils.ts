@@ -1,5 +1,5 @@
 import { SafeClient } from "@safe-global/sdk-starter-kit";
-import { Hex, SafeTransaction } from "@safe-global/types-kit";
+import { Hex } from "@safe-global/types-kit";
 import { Abi, decodeFunctionData } from "viem";
 import { logger } from "./logger";
 
@@ -66,7 +66,7 @@ export async function handleTransactionStrategy(
   if (exactMatch) {
     if (exactMatch.signed) {
       logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly and is already confirmed. Skipping.`);
-      return { action: 'skip',  hash: exactMatch.safeTxHash};
+      return { action: 'skip', hash: exactMatch.safeTxHash };
     }
     logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly. Confirming.`);
     return { hash: exactMatch.safeTxHash, action: 'confirm' };

@@ -20,7 +20,7 @@ function isValidCB58(value: string): boolean {
       return false;
     }
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -32,12 +32,12 @@ function isValidHex(hex: string, bytes?: number): boolean {
 
 // Parser (may be used by args or opts)
 
-export function parseSecretName(value: string, previousValue: string): Hex {
-    const pass = new Pass(passPath)
-    const secret = pass.show(value);
-    if (typeof secret !== 'string' || secret.trim() === '') {
-        throw new Error("Secret name cannot be empty");
-    }
+export function parseSecretName(value: string,): Hex {
+  const pass = new Pass(passPath)
+  const secret = pass.show(value);
+  if (typeof secret !== 'string' || secret.trim() === '') {
+    throw new Error("Secret name cannot be empty");
+  }
   return ParserHex(secret, 32, `Invalid Private Key format from keystore key '${value}'. Private key must be a 32-byte Hex string`);
 }
 
@@ -51,7 +51,7 @@ export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
 export const ParserPrivateKey = (value: string): Hex => {
   // Check if it's an hex, otherwise try to get it from the keystore
   if (!value.startsWith('0x')) {
-    return parseSecretName(value, '').trim() as Hex;
+    return parseSecretName(value,).trim() as Hex;
   }
   if (process.argv.includes('mainnet')) {
     throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
@@ -99,7 +99,7 @@ export const ParserNodeID = (value: string) => {
 export const OptHex = <T extends string>(name: T, description?: string, bytes?: number, errorMsg?: string) => new Option(
   name,
   `${description ? description : "Hex string (e.g., 0x1234567890abcdef1234567890abcdef12345678)"}`
-).argParser((value) => ParserHex(value, bytes, errorMsg ? `${name}: `+errorMsg+` (${value})` : undefined));
+).argParser((value) => ParserHex(value, bytes, errorMsg ? `${name}: ` + errorMsg + ` (${value})` : undefined));
 
 // Argument exports
 
@@ -167,7 +167,7 @@ export const ArgBigInt = (name?: string, description?: string) => new Argument(
 });
 
 // Validate AVAX amount
-export const ArgAVAX = (name?: string, description?: string, errorMsg?: string) => new Argument(
+export const ArgAVAX = (name?: string, description?: string) => new Argument(
   `<${name ? name : "AVAX"}>`,
   `${description ? description : "AVAX amount in number format (e.g., 0.8)"}`
 ).argParser(ParserAVAX);

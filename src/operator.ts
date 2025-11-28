@@ -1,7 +1,6 @@
-import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from "viem";
-import {logger} from './lib/logger';
+import { logger } from './lib/logger';
 
 async function registerOperator(
     operatorRegistry: SafeSuzakuContract['OperatorRegistry'],

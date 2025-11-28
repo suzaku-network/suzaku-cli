@@ -49,7 +49,7 @@ export async function isAccessControl(
 ): Promise<boolean> {
   try {
     return await accessControl.read.supportsInterface(["0x7965db0b"]);
-  } catch (e) {
+  } catch {
     return false;
   }
 }
