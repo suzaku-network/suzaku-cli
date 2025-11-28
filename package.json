@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "suzaku-cli": "node dist/cli.js",
-    "cli": "ts-node src/cli.ts",
+    "cli": "pnpx ts-node src/cli.ts",
     "prepare": "tsc",
     "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli"
   },
@@ -47,7 +47,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "@commander-js/extra-typings": "^14.0.0",
     "@types/cli-progress": "^3.11.6"
