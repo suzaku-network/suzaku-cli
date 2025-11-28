@@ -27,7 +27,7 @@ export function getConfig(client: ExtendedClient, waitForTxCount = 0, skipAbiVal
   const contracts = Object.fromEntries(
     (Object.keys(SuzakuABI) as SuzakuABINames[]).map((name) => [
       name,
-      curriedContract(name, client, waitForTxCount),
+      curriedContract(name, client, waitForTxCount, skipAbiValidation),
     ]),
   ) as CurriedSuzakuContractMap;
 

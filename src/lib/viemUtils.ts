@@ -155,9 +155,9 @@ export function withSafeWrite<T extends SuzakuABINames>(
   return contract as unknown as SafeSuzakuContract[T];
 }
 
-export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0): CurriedContractFn<T> =>
+export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address: Address) => {
-    await contractAbiValidation(client, abi, address);
+    if (!skipAbiValidation) await contractAbiValidation(client, abi, address);
     const contract = getContract({
       abi: SuzakuABI[abi],
       address,
