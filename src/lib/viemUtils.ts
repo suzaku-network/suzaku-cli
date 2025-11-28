@@ -157,7 +157,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address: Address) => {
-    if (!skipAbiValidation && !(abi === 'DefaultCollateral')) await contractAbiValidation(client, abi, address);
+    if (!skipAbiValidation) await contractAbiValidation(client, abi, address);
     const contract = getContract({
       abi: SuzakuABI[abi],
       address,
@@ -185,11 +185,23 @@ async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedC
   }
   // Validate ABI by checking that all function selectors are present in the bytecode
   const ac = new AhoCorasick(AllSelectors[abi])// Use Aho-Corasick algorithm for multi-pattern search (perf)
-  const contractByteCode = await client.getCode({ address })
+  let contractByteCode = await client.getCode({ address })
   if (!contractByteCode || contractByteCode === '0x') {
     logger.exitError([`No contract found at address ${address} for ABI ${abi}`], 3);
     return false;
   }
+
+  // Check for EIP-1167 minimal proxy
+  if (contractByteCode.startsWith('0x363d3d373d3d3d363d73') && contractByteCode.endsWith('5af43d82803e903d91602b57fd5bf3')) {
+    const implementationAddress = '0x' + contractByteCode.slice(22, 62);
+    logger.log(`Detected EIP-1167 minimal proxy. Using implementation at address ${implementationAddress} for ABI validation.`);
+    contractByteCode = await client.getCode({ address: implementationAddress as Address });
+    if (!contractByteCode || contractByteCode === '0x') {
+      logger.exitError([`No contract found at address ${address} for ABI ${abi}`], 3);
+      return false;
+    }
+  }
+
   const matches = new Set(ac.search(contractByteCode).map(m => m[1][0])); // get only the matched selectors
   // Validation
   const missingCount = Object.keys(AllSelectors[abi]).length - matches.size;
