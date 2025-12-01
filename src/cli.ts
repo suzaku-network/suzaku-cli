@@ -3261,7 +3261,7 @@ async function main() {
 
     program
         .command("completion install")
-        .description("Installe autocomplétion Bash/Zsh")
+        .description("Install autocompletion for Bash/Zsh")
         .action(() => installCompletion(program));
 
     program
