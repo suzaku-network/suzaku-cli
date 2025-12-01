@@ -53,10 +53,10 @@ export function getConfig(client: ExtendedClient, waitForTxCount = 0, skipAbiVal
     };
   } else if (client.network === 'mainnet') {
     return {
-      l1Registry: (process.env.L1_REGISTRY_MAINNET as Hex) || '0x3fDaC1aD6D0E1E7E9A3D3cC6e8B8Dc5D3bF2E1A0',
-      operatorRegistry: (process.env.OPERATOR_REGISTRY_MAINNET as Hex) || '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4',
-      opL1OptIn: (process.env.OP_L1_OPT_IN_MAINNET as Hex) || '0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2',
-      opVaultOptIn: (process.env.OP_VAULT_OPT_IN_MAINNET as Hex) || '0x4B20993Bc481177ec7E8f571ceCaE8E9e22C02db',
+      l1Registry: (process.env.L1_REGISTRY_MAINNET as Hex) || '0xaA59b19A7636bf6d821aA124A14eEE6C92746110',
+      operatorRegistry: (process.env.OPERATOR_REGISTRY_MAINNET as Hex) || '0xCccb4eC6408bF2c9D057d63DAB01E55BB536936e',
+      opL1OptIn: (process.env.OP_L1_OPT_IN_MAINNET as Hex) || '0x48a990A31EC2B994A54f248BFD560954991Fa574',
+      opVaultOptIn: (process.env.OP_VAULT_OPT_IN_MAINNET as Hex) || '0xE437b5EFA4c0717Ec15ACED13a82bBd8ce92da47',
       abis: SuzakuABI,
       contracts,
       client,
