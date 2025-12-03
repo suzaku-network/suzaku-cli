@@ -1139,7 +1139,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))// In decimals
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))// In decimals
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
@@ -1148,6 +1148,8 @@ async function main() {
             if (!options.pchainTxPrivateKey) {
                 options.pchainTxPrivateKey = opts.privateKey!;
             }
+
+            const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
 
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
@@ -1166,7 +1168,7 @@ async function main() {
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
-                options.initialBalance,
+                initialBalance,
                 !options.skipWaitApi
             );
         }));
@@ -2108,7 +2110,7 @@ async function main() {
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
-        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.1').argParser((value) => ParseUnits(value, 9, 'Invalid initial balance')))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(wrapAsyncAction(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
@@ -2123,6 +2125,8 @@ async function main() {
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
 
+            const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
+
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
             await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9), opts.yes);
 
@@ -2135,7 +2139,7 @@ async function main() {
                 options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
-                options.initialBalance,
+                initialBalance,
                 !options.skipWaitApi
             );
         }));
