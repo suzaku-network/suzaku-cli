@@ -73,7 +73,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
               hash = await fn(args, options)
             }
 
-            logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join(', ')})`, hash, options });
+            logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`, hash, options });
 
             if (!hash) return undefined; // when skipping
 
