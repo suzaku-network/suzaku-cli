@@ -1148,16 +1148,14 @@ async function main() {
             if (!options.pchainTxPrivateKey) {
                 options.pchainTxPrivateKey = opts.privateKey!;
             }
-
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
-
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
-            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((100000000 + Number(options.initialBalance)))), opts.yes);
+            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
@@ -1208,8 +1206,8 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
-            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
+            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was added recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -1271,8 +1269,8 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
-            // Check if P-Chain address have 0.01 AVAX for tx fees
-            await requirePChainBallance(opts.privateKey!, client, BigInt(0.01 * 1e9), opts.yes);
+            // Check if P-Chain address have 0.000050000 AVAX for tx fees
+            await requirePChainBallance(opts.privateKey!, client, 50000n, opts.yes);
 
             await completeWeightUpdate(
                 client,
@@ -2127,8 +2125,8 @@ async function main() {
 
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
 
-            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round(0.1 + Number(options.initialBalance)) * 1e9), opts.yes);
+            // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
+            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
@@ -2182,8 +2180,8 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
-            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
+            // Check if P-Chain address have 0.000050000 AVAX for tx fees
+            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
 
             // Derive pchainTxAddress from the private key
             const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
@@ -2239,8 +2237,8 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
-            // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.00005 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(0.01 * 1e9), opts.yes);
+            // Check if P-Chain address have 0.000050000 AVAX for tx fees
+            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
 
             const txHash = await completeWeightUpdate(
                 client,

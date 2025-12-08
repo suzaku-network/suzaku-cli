@@ -109,13 +109,6 @@ export const encodeNodeID = (nodeIDBytes: Hex): NodeId => {
     return nodeId as NodeId;
 }
 
-export function nToAVAX(value: bigint): string {
-    const avaxValue = value / BigInt(1e9);
-    const decimalValue = value % BigInt(1e9);
-    const decimalString = decimalValue.toString().padStart(9, '0');
-    return `${avaxValue}.${decimalString}`;
-}
-
 export async function retryWhileError<T>(
     fetcher: () => Promise<T>,
     intervalMs: number,

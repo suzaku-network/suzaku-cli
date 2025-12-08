@@ -487,8 +487,6 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     });
 
     // Create a new set validator weight transaction
-    logger.log("Setting validator weight with message:", params.message);
-
     const tx = pvm.e.newSetL1ValidatorWeightTx(
         {
             feeState,
