@@ -25,13 +25,13 @@ function buildTree(dirPath: string, extensions: string[] = ['gpg']): Tree {
   return node;
 }
 
-function printTree(pass: Pass, relativePath?: string): string {
+function printTree(pass: Pass, relativePath?: string, showAddresses: boolean = true): string {
 
   const tree = (relativePath ? getSubTree(pass.tree, relativePath)! : pass.tree)
 
   const lines: string[] = [];
 
-  const buildLines = (node: Tree, prefix: string, path: string) => {
+  const buildLines = (node: Tree, prefix: string, path: string, showAddresses: boolean) => {
     const keys = Object.keys(node);
     const maxKeyLength = Math.max(...keys.map(key => key.length)) + prefix.length;
     keys.forEach((key, i) => {
@@ -41,7 +41,7 @@ function printTree(pass: Pass, relativePath?: string): string {
       const displayedKey = (child ? color.blue(formatedKey) : formatedKey);
       let address;
       try {
-        address = child ? '' : (getCchainAddress(pass.show(path.length ? path + '/' + formatedKey : formatedKey) as string).trim());
+        address = child ? '' : showAddresses ? getCchainAddress(pass.show(path.length ? path + '/' + formatedKey : formatedKey) as string).trim() : '';
       } catch {
         address = 'corrupted';
       }
@@ -51,12 +51,12 @@ function printTree(pass: Pass, relativePath?: string): string {
 
       if (child) {
         const newPrefix = prefix + (isLast ? '    ' : '│   ');
-        buildLines(child, newPrefix, path.length ? path + '/' + key : key);
+        buildLines(child, newPrefix, path.length ? path + '/' + key : key, showAddresses);
       }
     });
   };
 
-  buildLines(tree, '', relativePath ? relativePath : '');
+  buildLines(tree, '', relativePath ? relativePath : '', showAddresses);
   return lines.join('\n');
 }
 
@@ -324,13 +324,13 @@ export class Pass {
     return this.run(`${this.passBin} version`).match(/(\d+\.\d+\.\d+)/)?.[0] || 'unknown';
   }
 
-  toString(name?: string): string {
-    return printTree(this, name);
+  toString(showAddresses: boolean = true, name?: string): string {
+    return printTree(this, name, showAddresses);
   }
 
   /** Custom inspect method for better console output (auto call toString when logger.log the object) */
   [util.inspect.custom](): string {
-    return this.toString();
+    return this.toString(true);
   }
 }
 

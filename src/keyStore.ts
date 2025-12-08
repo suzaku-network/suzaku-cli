@@ -62,11 +62,12 @@ export function buildCommands(program: Command) {
   program
     .command("list")
     .description("List all encrypted secrets")
-    .action(wrapAsyncAction(async () => {
+    .option("-h, --hide-addresses", "Hide addresses of the secrets")
+    .action(wrapAsyncAction(async (options) => {
       const pass = new Pass(passPath)
       pass
       logger.log("Available secrets:");
-      logger.log(pass)
+      logger.log(pass.toString(!options.hideAddresses))
     }));
 
   program
