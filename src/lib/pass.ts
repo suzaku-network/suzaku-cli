@@ -220,6 +220,11 @@ export class Pass {
     return new Proxy(this, getPassProxyHandler(subfolder));
   }
 
+  exists(name: string): boolean {
+    const fullDir = path.join(this.storeDir, name);
+    return fs.existsSync(fullDir) && fs.statSync(fullDir).isFile();
+  }
+
   /** Show entry or return SubPass if name path is directory.
    * @returns string or SubPass
    */

@@ -30,7 +30,7 @@ export function buildCommands(program: Command) {
     .addOption(new Option('-v, --value', 'Value of the secret to create').conflicts(['clip', 'prompt']))
     .addOption(new Option('-p, --prompt', 'Prompt for the value of the secret to create').conflicts(['clip', 'value']))
     .action(wrapAsyncAction(async (name: string, options) => {
-      const opts = program.opts();
+      const opts = program.opts() as { network: string, yes: boolean };
       let value: string;
       if (options.clip) {
         value = getClipboardValue();
@@ -43,11 +43,15 @@ export function buildCommands(program: Command) {
         throw new Error("Either --clip or --value or --prompt must be provided to create a secret.");
       }
       // Validate address
-      const address = getAddresses(value as string, (opts as { network: string }).network);
+      const address = getAddresses(value as string, opts.network);
       ParserAddress(address.C);
       logger.log(`Address for secret '${name}':\n  C-Chain: ${address.C}\n  P-Chain: ${address.P}`);
       // Insert secret
       const pass = new Pass(passPath)
+      if (pass.exists(name) && !opts.yes) {
+        const overwrite = prompt(`Secret '${name}' already exists. Overwrite? (y/n)`);
+        if (overwrite !== 'y') return;
+      }
       pass.insert(name, value)
       logger.log(`Secret '${name}' created successfully.`);
     }))
@@ -57,7 +61,12 @@ export function buildCommands(program: Command) {
     .description("remove an encrypted secret")
     .argument("<name>", "Name of the secret to remove")
     .action(wrapAsyncAction(async (name: string) => {
+      const opts = program.opts() as { yes: boolean };
       const pass = new Pass(passPath)
+      if (!opts.yes) {
+        const confirm = prompt(`Are you sure you want to remove secret '${name}'? (y/n)`);
+        if (confirm !== 'y') return;
+      }
       pass.rm(name)
       logger.log(`Secret '${name}' removed successfully.`);
     }))
@@ -78,10 +87,10 @@ export function buildCommands(program: Command) {
     .description("Show the address of an encrypted private key")
     .argument("<name>", "Name of the secret to show the address for")
     .action(wrapAsyncAction(async (name: string) => {
-      const opts = program.opts();
+      const opts = program.opts() as { network: string };
       const pass = new Pass(passPath)
       const privateKey = pass.show(name);
-      const address = getAddresses(privateKey as string, (opts as { network: string }).network);
+      const address = getAddresses(privateKey as string, opts.network);
       ParserAddress(address.C); // Validate address
       logger.log(`Address for secret '${name}':\n  C-Chain: ${address.C}\n  P-Chain: ${address.P}`);
     }));
