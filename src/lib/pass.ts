@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as util from 'util';
 import { color } from 'console-log-colors';
 import { logger } from './logger';
+import { getCchainAddress } from './utils';
 
 // Tree representation type
 type Tree = { [key: string]: Tree | undefined };
@@ -24,28 +25,38 @@ function buildTree(dirPath: string, extensions: string[] = ['gpg']): Tree {
   return node;
 }
 
-function printTree(baseName: string, tree: Tree): string {
+function printTree(pass: Pass, relativePath?: string): string {
 
-  const lines: string[] = [color.blue(baseName)];
+  const tree = (relativePath ? getSubTree(pass.tree, relativePath)! : pass.tree)
 
-  const buildLines = (node: Tree, prefix: string) => {
+  const lines: string[] = [];
+
+  const buildLines = (node: Tree, prefix: string, path: string) => {
     const keys = Object.keys(node);
+    const maxKeyLength = Math.max(...keys.map(key => key.length)) + prefix.length;
     keys.forEach((key, i) => {
       const isLast = i === keys.length - 1;
       const child = node[key];
-      const displayedKey = (child ? color.blue(key) : key).replace(/\.gpg$/, ''); // Remove .gpg extension for display
+      const formatedKey = key.replace(/\.gpg$/, ''); // Remove .gpg extension for display
+      const displayedKey = (child ? color.blue(formatedKey) : formatedKey);
+      let address;
+      try {
+        address = child ? '' : (getCchainAddress(pass.show(path.length ? path + '/' + formatedKey : formatedKey) as string).trim());
+      } catch {
+        address = 'corrupted';
+      }
       lines.push(
-        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}`
+        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}${address ? ' '.repeat(maxKeyLength+2 - key.length) + ' (' + address + ')' : ''}`
       );
 
       if (child) {
         const newPrefix = prefix + (isLast ? '    ' : '│   ');
-        buildLines(child, newPrefix);
+        buildLines(child, newPrefix, path.length ? path + '/' + key : key);
       }
     });
   };
 
-  buildLines(tree, '');
+  buildLines(tree, '', relativePath ? relativePath : '');
   return lines.join('\n');
 }
 
@@ -128,7 +139,7 @@ const getPassProxyHandler = (relPath: string): ProxyHandler<Pass> => {
 export class Pass {
   private passBin = 'pass';
   public storeDir: string;
-  private tree: Tree;
+  public tree: Tree;
 
   /**
    * @param storePath Absolute path to password-store directory.
@@ -314,8 +325,7 @@ export class Pass {
   }
 
   toString(name?: string): string {
-    const baseName = name ? path.basename(name) : path.basename(this.storeDir);
-    return printTree(baseName, (name ? getSubTree(this.tree, name)! : this.tree));
+    return printTree(this, name);
   }
 
   /** Custom inspect method for better console output (auto call toString when logger.log the object) */

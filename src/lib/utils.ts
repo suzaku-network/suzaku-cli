@@ -62,6 +62,11 @@ export function getAddresses(privateKeyHex: string, network: string): AddressMap
     };
 }
 
+export function getCchainAddress(privateKeyHex: string): string {
+    const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
+    return Address.fromPublicKey(publicKey) as Hex;
+}
+
 /**
  * Validates a private key format
  * @param privateKeyHex - Private key in hexadecimal format

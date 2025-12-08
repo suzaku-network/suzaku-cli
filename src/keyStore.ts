@@ -64,6 +64,7 @@ export function buildCommands(program: Command) {
     .description("List all encrypted secrets")
     .action(wrapAsyncAction(async () => {
       const pass = new Pass(passPath)
+      pass
       logger.log("Available secrets:");
       logger.log(pass)
     }));
