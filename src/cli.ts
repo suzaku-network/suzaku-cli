@@ -2,7 +2,7 @@
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
 import { formatUnits, Hex, parseUnits } from "viem";
-import { registerL1, getL1s, setL1MetadataUrl, setL1Middleware } from "./l1";
+import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
 import { generateClient } from "./client";
@@ -275,9 +275,18 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            await getL1s(
-                await config.contracts.L1Registry(config.l1Registry)
-            );
+            const l1Registry = await config.contracts.L1Registry(config.l1Registry)
+            const l1s = await l1Registry.read.getAllL1s()
+            // l1s: [balancerAddress[], middleware[], metadataUrl[]]
+            const data: { MetadataUrl: string; Balancer: string; Middleware: string }[] = [];
+            for (let i = 0; i < l1s[0].length; i++) {
+                data.push({
+                    MetadataUrl: l1s[2][i],
+                    Balancer: l1s[0][i],
+                    Middleware: l1s[1][i],
+                })
+            }
+            logger.table(data)
         }));
 
     l1RegistryCmd

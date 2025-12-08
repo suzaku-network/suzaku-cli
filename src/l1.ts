@@ -53,22 +53,3 @@ export async function setL1Middleware(
     logger.log("Set L1 Middleware successfully, Transaction hash:", hash);
 
 }
-
-export async function getL1s(l1Registry: SafeSuzakuContract['L1Registry']) {
-    logger.log("Getting L1s...");
-
-    // Get total number of L1s
-    const totalL1s = await l1Registry.read.totalL1s();
-
-    logger.log("Total L1s:", Number(totalL1s));
-
-    // Get each L1
-    const l1s: (readonly [string, string, string])[] = [];
-    for (let i = 0n; i < totalL1s; i++) {
-        const l1 = await l1Registry.read.getL1At([i]);
-        l1s.push(l1);
-        logger.log("L1 Address:", l1[0]);
-        logger.log("L1 Middleware:", l1[1]);
-        logger.log("L1 Metadata URL:", l1[2]);
-    }
-}
