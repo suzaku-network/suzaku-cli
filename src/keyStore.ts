@@ -26,23 +26,26 @@ export function buildCommands(program: Command) {
     .command("create")
     .description("create a new encrypted secret")
     .argument("<name>", "Name of the secret to create")
-    .addOption(new Option('-c, --clip', 'Extract the value of the secret to create from the clipboard and erase it afterwards').conflicts('value'))
-    .addOption(new Option('-v, --value', 'Value of the secret to create').conflicts('clip'))
+    .addOption(new Option('-c, --clip', 'Extract the value of the secret to create from the clipboard and erase it afterwards').conflicts(['value', 'prompt']))
+    .addOption(new Option('-v, --value', 'Value of the secret to create').conflicts(['clip', 'prompt']))
+    .addOption(new Option('-p, --prompt', 'Prompt for the value of the secret to create').conflicts(['clip', 'value']))
     .action(wrapAsyncAction(async (name: string, options) => {
       const opts = program.opts();
       let value: string;
       if (options.clip) {
         value = getClipboardValue();
+        setClipboardValue(''); // Erase clipboard
       } else if (options.value) {
         value = options.value;
+      } else if (options.prompt) {
+        value = prompt("Enter the value of the secret to create") || ""
       } else {
-        throw new Error("Either --clip or --value must be provided to create a secret.");
+        throw new Error("Either --clip or --value or --prompt must be provided to create a secret.");
       }
       // Validate address
       const address = getAddresses(value as string, (opts as { network: string }).network);
       ParserAddress(address.C);
       logger.log(`Address for secret '${name}':\n  C-Chain: ${address.C}\n  P-Chain: ${address.P}`);
-      if (options.clip) setClipboardValue(''); // Erase clipboard
       // Insert secret
       const pass = new Pass(passPath)
       pass.insert(name, value)
