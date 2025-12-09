@@ -150,7 +150,7 @@ async function main() {
             .conflicts('privateKey')
             .argParser(parseSecretName))
         .addOption(new Option('-w, --wait <confirmations>', 'Number of confirmations to wait after a write transaction')
-            .default(0)
+            .default(2)
             .argParser(ParserNumber))
         .addOption(new Option("--json", "Output logs in JSON format"))
         .addOption(new Option('-y, --yes', 'Automatic yes to prompts'))
