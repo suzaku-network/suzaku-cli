@@ -1,19 +1,6 @@
 import { bigintReplacer } from "./utils";
 import * as readline from 'readline';
 
-export function wrapAsyncAction(actionFn: (...args: any[]) => Promise<void>) {
-  return async (...args: any[]) => {
-    try {
-      await actionFn(...args);
-    } catch (error) {
-      logger.error(error);
-      process.exitCode = 1;
-    } finally {
-      await logger.printJson();
-    }
-  };
-}
-
 type LogData = Record<string, any>;
 
 interface LoggerConfig {
