@@ -19,6 +19,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "VALIDATOR_MANAGER",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract ValidatorManager"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "completeValidatorRegistration",
         "inputs": [
             {
@@ -892,6 +905,37 @@ export default [
     },
     {
         "type": "event",
+        "name": "SecurityModuleWeightUpdated",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "newWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "maxWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "SetUpSecurityModule",
         "inputs": [
             {
@@ -908,6 +952,22 @@ export default [
             }
         ],
         "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__CannotRemoveModuleWithAssignedValidators",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "remainingValidators",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
     },
     {
         "type": "error",
@@ -959,6 +1019,33 @@ export default [
                 "name": "nonce",
                 "type": "uint64",
                 "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__InvalidValidatorStatus",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum ValidatorStatus"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__InvalidValidatorWeight",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
@@ -1094,11 +1181,6 @@ export default [
                 "internalType": "bytes32"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "BalancerValidatorManager__ValidatorManagerNotOwnedByBalancer",
-        "inputs": []
     },
     {
         "type": "error",
