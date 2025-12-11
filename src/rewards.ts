@@ -1,6 +1,15 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import { contractAbiValidation, SafeSuzakuContract } from './lib/viemUtils';
+import type { Hex, Account, Address } from 'viem';
 import { logger } from './lib/logger';
+import { Config } from './config';
+
+export async function detectRewardsContract(config: Config, address: Address): Promise<SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken']> {
+  const rewardsContractName = (await contractAbiValidation(config.client, ['Rewards', 'RewardsNativeToken'], address))
+      .filter(r => r.valid)
+      .map(r => r.name)[0]
+  const rewardsContract = await config.contracts[rewardsContractName](address);
+  return rewardsContract;
+}
 
 /**
  * Distributes rewards for a specific epoch

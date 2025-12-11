@@ -117,6 +117,7 @@ import {
     getLastEpochClaimedOperator,
     getLastEpochClaimedCurator,
     getLastEpochClaimedProtocol,
+    detectRewardsContract,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
@@ -130,7 +131,7 @@ import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
-import { SuzakuABINames } from './lib/viemUtils';
+import { contractAbiValidation, SuzakuABINames } from './lib/viemUtils';
 import { withJsonLogger } from './lib/commandUtils';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
@@ -2584,8 +2585,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, batchSize) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
@@ -2604,8 +2605,8 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimRewards(
                 rewardsContract,
@@ -2631,8 +2632,8 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimOperatorFee(
                 rewardsContract,
@@ -2660,8 +2661,8 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimCuratorFee(
                 rewardsContract,
@@ -2687,8 +2688,8 @@ async function main() {
         .action(async (rewardsAddress, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimProtocolFee(
                 rewardsContract,
@@ -2715,8 +2716,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, rewardsToken, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimUndistributedRewards(
                 rewardsContract,
@@ -2745,8 +2746,8 @@ async function main() {
         .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const token = await config.contracts.ERC20(rewardsToken);
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
@@ -2770,8 +2771,8 @@ async function main() {
         .action(async (rewardsAddress, collateralClass, share) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await setRewardsShareForCollateralClass(
                 rewardsContract,
                 collateralClass,
@@ -2789,8 +2790,8 @@ async function main() {
         .action(async (rewardsAddress, minUptime) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await setMinRequiredUptime(
                 rewardsContract,
                 minUptime,
@@ -2807,8 +2808,8 @@ async function main() {
         .action(async (rewardsAddress, newOwner) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await setProtocolOwner(
                 rewardsContract,
                 newOwner,
@@ -2825,8 +2826,8 @@ async function main() {
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await updateProtocolFee(
                 rewardsContract,
                 newFee,
@@ -2861,8 +2862,8 @@ async function main() {
         .action(async (rewardsAddress, newFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await updateCuratorFee(
                 rewardsContract,
                 newFee,
@@ -2881,8 +2882,8 @@ async function main() {
         .action(async (rewardsAddress, protocolFee, operatorFee, curatorFee) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const hash = await updateAllFees(
                 rewardsContract,
                 protocolFee,
@@ -2918,8 +2919,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, token) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getRewardsAmountForTokenFromEpoch(
                 rewardsContract,
                 epoch,
@@ -2936,8 +2937,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getOperatorShares(
                 rewardsContract,
                 epoch,
@@ -2954,8 +2955,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, vault) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getVaultShares(
                 rewardsContract,
                 epoch,
@@ -2972,8 +2973,8 @@ async function main() {
         .action(async (rewardsAddress, epoch, curator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getCuratorShares(
                 rewardsContract,
                 epoch,
@@ -2989,8 +2990,8 @@ async function main() {
         .action(async (rewardsAddress, token) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getProtocolRewards(
                 rewardsContract,
                 token
@@ -3005,8 +3006,8 @@ async function main() {
         .action(async (rewardsAddress, epoch) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getDistributionBatch(
                 rewardsContract,
                 epoch
@@ -3020,8 +3021,8 @@ async function main() {
         .action(async (rewardsAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getFeesConfiguration(
                 rewardsContract
             );
@@ -3035,8 +3036,8 @@ async function main() {
         .action(async (rewardsAddress, collateralClass) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getRewardsShareForCollateralClass(
                 rewardsContract,
                 collateralClass
@@ -3050,8 +3051,8 @@ async function main() {
         .action(async (rewardsAddress) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getMinRequiredUptime(
                 rewardsContract
             );
@@ -3066,8 +3067,8 @@ async function main() {
         .action(async (rewardsAddress, staker, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
                 staker,
@@ -3084,8 +3085,8 @@ async function main() {
         .action(async (rewardsAddress, operator, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
                 operator,
@@ -3102,8 +3103,8 @@ async function main() {
         .action(async (rewardsAddress, curator, rewardToken) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const rewardsContract = await config.contracts.Rewards(rewardsAddress);
+            const config = getConfig(client, opts.wait, true);
+            const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
                 curator,

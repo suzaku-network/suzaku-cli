@@ -157,7 +157,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address: Address) => {
-    if (!skipAbiValidation) await contractAbiValidation(client, abi, address);
+    if (!skipAbiValidation) await contractAbiValidation(client, [abi], address);
     const contract = getContract({
       abi: SuzakuABI[abi],
       address,
@@ -171,7 +171,7 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
     )
   };
 
-async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abi: T, address: Address): Promise<boolean | undefined> {
+export async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abis: T[], address: Address): Promise<{name: T, ratio: number, valid: boolean}[]> {
   // Tolerance for missing selectors 5%
   const TOLERANCE = 0.05;
   // Check for proxy
@@ -183,12 +183,11 @@ async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedC
     address = bytes32ToAddress(proxyImplementation as `0x${string}`);
     logger.log(`Detected proxy contract. Using implementation at address ${address} for ABI validation.`);
   }
-  // Validate ABI by checking that all function selectors are present in the bytecode
-  const ac = new AhoCorasick(AllSelectors[abi])// Use Aho-Corasick algorithm for multi-pattern search (perf)
+  
   let contractByteCode = await client.getCode({ address })
   if (!contractByteCode || contractByteCode === '0x') {
-    logger.exitError([`No contract found at address ${address} for ABI ${abi}`], 3);
-    return false;
+    logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
+    return [];
   }
 
   // Check for EIP-1167 minimal proxy
@@ -197,24 +196,31 @@ async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedC
     logger.log(`Detected EIP-1167 minimal proxy. Using implementation at address ${implementationAddress} for ABI validation.`);
     contractByteCode = await client.getCode({ address: implementationAddress as Address });
     if (!contractByteCode || contractByteCode === '0x') {
-      logger.exitError([`No contract found at address ${address} for ABI ${abi}`], 3);
-      return false;
+      logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
+      return [];
     }
   }
 
-  const matches = new Set(ac.search(contractByteCode).map(m => m[1][0])); // get only the matched selectors
-  // Validation
-  const missingCount = Object.keys(AllSelectors[abi]).length - matches.size;
-  const missingRatio = missingCount / Object.keys(AllSelectors[abi]).length;
-  const result = missingRatio <= TOLERANCE;
+  // Validate ABI by checking that all function selectors are present in the bytecode
+  const ACs: [AhoCorasick, number][] = abis.map((abi) => [new AhoCorasick(AllSelectors[abi]), Object.keys(AllSelectors[abi]).length])// Use Aho-Corasick algorithm for multi-pattern search (perf)
 
-  if (missingRatio > 0) {
-    logger.warn(`ABI validation for contract ${abi} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(missingRatio * 100).toFixed(2)}% missing)`);
-    logger.log(`Missing selectors: ${AllSelectors[abi].filter(s => !matches.has(s)).join(', ')}`);
-  }
+  const missingRatio = ACs.map(([ac, selectorCount]) => {
+    const matches = new Set(ac.search(contractByteCode).map(m => m[1][0])); // get only the matched selectors
+    // Validation
+    const missingCount = selectorCount - matches.size;
+    return [missingCount, missingCount / selectorCount, matches] as [number, number, Set<string>];
+  })
 
-  if (!result) {
-    logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abi} contract.`], 3)
+  const result = missingRatio.reduce((acc, [missingCount, ratio, matches], i) => {
+    if (ratio > 0) {
+      logger.warn(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
+      logger.log(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
+    }
+    return [...acc, {name: abis[i], ratio, valid: ratio < TOLERANCE}]
+  }, [] as {name: T, ratio: number, valid: boolean}[])
+
+  if (!result.every(r => r.valid)) {
+    logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abis.join(', ')} contract.`], 3)
   }
-  return true;
+  return result;
 }
