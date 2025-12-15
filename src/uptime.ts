@@ -30,6 +30,7 @@ export async function getValidationUptimeMessage(
   });
   const data = await response.json();
   if (data.error) logger.exitError(["Error from validators.getCurrentValidators:", data.error])
+  if (!data.result.validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
   const validator = data.result.validators[0];
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;

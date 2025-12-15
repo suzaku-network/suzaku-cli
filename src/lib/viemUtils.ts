@@ -214,12 +214,12 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   const result = missingRatio.reduce((acc, [missingCount, ratio, matches], i) => {
     if (ratio > 0) {
       logger.warn(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
-      logger.log(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
+      logger.warn(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
     }
     return [...acc, {name: abis[i], ratio, valid: ratio < TOLERANCE}]
   }, [] as {name: T, ratio: number, valid: boolean}[])
 
-  if (!result.every(r => r.valid)) {
+  if (result.every(r => !r.valid)) {
     logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abis.join(', ')} contract.`], 3)
   }
   return result;

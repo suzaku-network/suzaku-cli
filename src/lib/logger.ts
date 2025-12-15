@@ -1,6 +1,10 @@
 import { bigintReplacer } from "./utils";
 import * as readline from 'readline';
 
+type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
+interface JsonObject { [key: string]: JsonValue }
+interface JsonArray extends Array<JsonValue> { }
+
 type LogData = Record<string, any>;
 
 interface LoggerConfig {
@@ -11,7 +15,7 @@ interface LoggerConfig {
 class Logger {
   private static instance: Logger;
   private config: LoggerConfig = { silent: false, jsonMode: false };
-  private data: LogData = {};
+  public data: LogData = {};
 
   public static getInstance(): Logger {
     if (!Logger.instance) {
@@ -70,6 +74,74 @@ class Logger {
       console.table(data);
     }
   }
+
+  public logJsonTree(data: JsonObject | JsonArray): void {
+    if (this.config.silent) return;
+
+    const lines: string[] = [];
+
+    const buildLines = (node: any, prefix: string, skipFirstKey: boolean = false) => {
+      let keys = Object.keys(node);
+
+      if (skipFirstKey && !Array.isArray(node)) {
+        keys = keys.slice(1);
+      }
+
+      const isParentArray = Array.isArray(node);
+      let childPrefix: string;
+      keys.forEach((key, i) => {
+        const value = node[key];
+        const isContainer = typeof value === 'object' && value !== null;
+        const isLast = i === keys.length - 1;
+
+        if (isParentArray && i > 0 && isContainer) {
+          lines.push(childPrefix || '');
+        }
+
+        let connector = isLast ? '└── ' : '├── ';
+
+        if (isParentArray && isContainer) {
+          const childKeys = Object.keys(value);
+
+          if (childKeys.length > 0) {
+            const firstKey = childKeys[0];
+            const firstVal = value[firstKey];
+            const displayFirstVal = typeof firstVal === 'string' ? `"${firstVal}"` : firstVal;
+
+            const headerLabel = `${firstKey}: ${displayFirstVal}`;
+
+            const specialConnector = isLast ? '└───┬── ' : childPrefix ? '├───┬── ' : '┌───┬── ';
+
+            lines.push(`${prefix}${specialConnector}${headerLabel}`);
+
+            childPrefix = prefix + (isLast ? '    ' : '│   ');
+            buildLines(value, childPrefix, true);
+            return;
+          }
+        }
+
+        let displayLabel = key;
+        if (isParentArray) displayLabel = '';
+
+        if (isContainer) {
+          lines.push(`${prefix}${connector}${displayLabel}`);
+          childPrefix = prefix + (isLast ? '    ' : '│   ');
+          buildLines(value, childPrefix, false);
+        } else {
+          const displayValue = typeof value === 'string' ? `"${value}"` : value;
+
+          if (isParentArray) {
+            lines.push(`${prefix}${connector}${displayValue}`);
+          } else {
+            lines.push(`${prefix}${connector}${displayLabel}: ${displayValue}`);
+          }
+        }
+      });
+    };
+
+    buildLines(data, '');
+    console.log(lines.join('\n'));
+}
 
   // Data management methods
   public addData<K extends string>(key: K, value: any) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { formatUnits, Hex, parseUnits } from "viem";
+import { Abi, formatUnits, getAbiItem, Hex, parseUnits } from "viem";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -118,6 +118,7 @@ import {
     getLastEpochClaimedCurator,
     getLastEpochClaimedProtocol,
     detectRewardsContract,
+    getRewardsClaimsCount,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
@@ -131,7 +132,7 @@ import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
-import { contractAbiValidation, SuzakuABINames } from './lib/viemUtils';
+import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
 import { withJsonLogger } from './lib/commandUtils';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
@@ -288,7 +289,7 @@ async function main() {
                     Middleware: l1s[1][i],
                 })
             }
-            logger.table(data)
+            logger.logJsonTree(data)
         });
 
     l1RegistryCmd
@@ -1449,23 +1450,30 @@ async function main() {
         });
 
     middlewareCmd
-        .command("get-operator-used-stake-cached-per-epoch")
-        .description("Get operator stake cached per epoch for a specific collateral class")
+        .command("get-operator-nodes")
+        .description("Get operator nodes")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgAddress("operator", "Operator address"))
-        .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (middlewareAddress, epoch, operator, collateralClass) => {
+        .action(async (middlewareAddress, operator) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-            const usedStake = await middlewareSvc.read.getOperatorUsedStakeCachedPerEpoch(
-                [epoch, operator, collateralClass]
-            );
-            logger.log(`Used stake for operator ${operator} in epoch ${epoch} for collateral class ${collateralClass}: ${usedStake}`);
-            logger.addData('used_stake', Number(usedStake));
+            const nodeCount = await middlewareSvc.read.getOperatorNodesLength([operator]);
+            const abi = [getAbiItem({abi: middlewareSvc.abi, name: 'operatorNodesArray'})] as Abi
+
+            const multicallResult = await client.multicall(
+                {
+                    contracts: A.range(0, Number(nodeCount) - 1).map(i => {return {args: [operator, BigInt(i)], abi, address: middlewareAddress, functionName: 'operatorNodesArray'}})
+                }
+            )
+
+            const nodes = multicallResult.map((node) => node.error ? "error" : encodeNodeID(node.result as Hex))
+
+            logger.log(nodes)
+            logger.addData('nodes', nodes)
         });
+
 
     // getCurrentEpoch (read)
     middlewareCmd
@@ -2598,24 +2606,30 @@ async function main() {
 
     rewardsCmd
         .command("claim")
-        .description("Claim rewards for a staker")
+        .description("Claim rewards for a staker in batch of 64 epochs")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, rewardsToken, options) => {
+        .action(async (rewardsAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            const hash = await claimRewards(
-                rewardsContract,
-                client.account!,
-                recipient,
-                rewardsToken
-            );
-            const logs = await getERC20Events(hash, config)
-            logs.forEach((log) => {
+
+            let hashs: Hex[] = [];
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Staker', client.account!) })) {
+                hashs.push(await claimRewards(
+                    rewardsContract,
+                    client.account!,
+                    recipient,
+                    options.rewardsToken
+                ));
+            }
+
+            
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
                     console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
@@ -2625,25 +2639,31 @@ async function main() {
 
     rewardsCmd
         .command("claim-operator-fee")
-        .description("Claim operator fees")
+        .description("Claim operator fees in batch of 64 epochs")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, rewardsToken, options) => {
+        .action(async (rewardsAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            const hash = await claimOperatorFee(
-                rewardsContract,
-                client.account!,
-                recipient,
-                rewardsToken
-            );
 
-            const logs = await getERC20Events(hash, config)
-            logs.forEach((log) => {
+            let hashs: Hex[] = [];
+
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Operator', client.account!) })) {
+                hashs.push(await claimRewards(
+                    rewardsContract,
+                    client.account!,
+                    recipient,
+                    options.rewardsToken
+                ));
+            }
+
+
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
                     console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
@@ -2654,24 +2674,31 @@ async function main() {
 
     rewardsCmd
         .command("claim-curator-fee")
-        .description("Claim curator fees")
+        .description("Claim all curator fees in batch of 64 epochs")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, rewardsToken, options) => {
+        .action(async (rewardsAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await detectRewardsContract(config, rewardsAddress);
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
-            const hash = await claimCuratorFee(
-                rewardsContract,
-                client.account!,
-                recipient,
-                rewardsToken
-            );
-            const logs = await getERC20Events(hash, config)
-            logs.forEach((log) => {
+
+            let hashs: Hex[] = [];
+            
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Curator', client.account!) })) {
+                hashs.push(await claimRewards(
+                    rewardsContract,
+                    client.account!,
+                    recipient,
+                    options.rewardsToken
+                ));
+            }
+
+
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
                     console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
@@ -2683,9 +2710,9 @@ async function main() {
         .command("claim-protocol-fee")
         .description("Claim protocol fees (only for protocol owner)")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, rewardsToken, options) => {
+        .action(async (rewardsAddress, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
@@ -2695,7 +2722,7 @@ async function main() {
                 rewardsContract,
                 client.account!,
                 recipient,
-                rewardsToken
+                options.rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2711,9 +2738,9 @@ async function main() {
         .description("Claim undistributed rewards (admin only)")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgNumber("epoch", "Epoch to claim undistributed rewards for"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, epoch, rewardsToken, options) => {
+        .action(async (rewardsAddress, epoch, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
@@ -2724,7 +2751,7 @@ async function main() {
                 client.account!,
                 epoch,
                 recipient,
-                rewardsToken
+                options.rewardsToken
             );
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
@@ -2741,14 +2768,23 @@ async function main() {
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
-        .addArgument(ArgAddress("rewardsToken", "Address of the rewards token"))
         .argument("rewardsAmount", "Amount of rewards in decimal format")
-        .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsToken, rewardsAmount) => {
+        .addOption(OptAddress("--rewards-token <rewardsToken>", "Address of the rewards token"))
+        .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount, { rewardsToken }) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await detectRewardsContract(config, rewardsAddress);
-            const token = await config.contracts.ERC20(rewardsToken);
+            let token;
+            if (rewardsToken) {
+                token = await config.contracts.ERC20(rewardsToken);
+            } else {
+                if (rewardsContract.name !== 'RewardsNativeToken') {
+                    throw new Error('Rewards contract is not a RewardsNativeToken');
+                }
+                const tokenAddress = await (rewardsContract as SafeSuzakuContract['RewardsNativeToken']).read.rewardsToken() as Hex;
+                token = await config.contracts.ERC20(tokenAddress);
+            }
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const txHash = await setRewardsAmountForEpochs(

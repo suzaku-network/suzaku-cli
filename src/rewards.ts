@@ -29,6 +29,22 @@ export async function distributeRewards(
   return txHash;
 }
 
+export async function getRewardsClaimsCount(
+  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  config: Config,
+  role: 'Staker' | 'Operator' | 'Curator',
+  account: Account
+) {
+  const [lastEpoch, middlewareAddress, maxEpochPerClaim] = await Promise.all([
+    rewards.read[`lastEpochClaimed${role}`]([account.address!] as never),
+    rewards.read.middleware(),
+    rewards.read.MAX_EPOCHS_PER_CLAIM()
+  ]);
+  const middleware = await config.contracts.L1Middleware(middlewareAddress);
+  const epoch = await middleware.read.getCurrentEpoch();
+  return Math.floor((epoch - lastEpoch) / maxEpochPerClaim);
+}
+
 /**
  * Claims rewards for a staker
  */
@@ -38,6 +54,7 @@ export async function claimRewards(
   recipient: Hex,
   rewardsToken?: Hex
 ) {
+  
   //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimRewards(
     rewardsToken ? [rewardsToken, recipient] : [recipient],

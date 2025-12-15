@@ -21,8 +21,6 @@ async function registerOperator(
 async function listOperators(
     operatorRegistry: SafeSuzakuContract['OperatorRegistry']
 ) {
-    logger.log("Listing operators...");
-
     const result = await operatorRegistry.read.getAllOperators();
 
     const [addresses, metadataUrls] = result;
@@ -30,11 +28,11 @@ async function listOperators(
 
     logger.log(`\nTotal operators: ${totalOperators}\n`);
 
-    for (let i = 0; i < totalOperators; i++) {
-        logger.log(`Operator ${i + 1}:`);
-        logger.log(`  Address: ${addresses[i]}`);
-        logger.log(`  Metadata URL: ${metadataUrls[i]}\n`);
-    }
+    const operators = Array.from({ length: totalOperators }, (_, i) => ({
+        address: addresses[i],
+        metadataUrl: metadataUrls[i]
+    }));
+    logger.logJsonTree(operators);
 
 }
 
