@@ -138,7 +138,9 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (...args: any[]) => {
           try {
-            return await fn(...args)
+            const result = await fn(...args)
+            logger.addData('receipt', result);
+            return result
           } catch (error: any) {
             const msg = (error.message as string)
             const eraseToIndex = msg.indexOf("Docs:")

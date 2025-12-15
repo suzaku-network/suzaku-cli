@@ -130,7 +130,8 @@ import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
 import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
-import { withJsonLogger } from './lib/commandUtils';
+import './lib/commandUtils';
+// import { Command } from '@commander-js/extra-typings';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
     const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
@@ -139,7 +140,7 @@ async function getDefaultAccount(opts: any): Promise<Hex> {
 
 // Main function to set up the CLI commands
 async function main() {
-    const program = withJsonLogger(new Command())
+    const program = new Command()
         .name('suzaku-cli')
         .addOption(new Option('-n, --network <network>')
             .choices(['fuji', 'mainnet', 'anvil'])
@@ -1457,11 +1458,11 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const nodeCount = await middlewareSvc.read.getOperatorNodesLength([operator]);
-            const abi = [getAbiItem({abi: middlewareSvc.abi, name: 'operatorNodesArray'})] as Abi
+            const abi = [getAbiItem({ abi: middlewareSvc.abi, name: 'operatorNodesArray' })] as Abi
 
             const multicallResult = await client.multicall(
                 {
-                    contracts: A.range(0, Number(nodeCount) - 1).map(i => {return {args: [operator, BigInt(i)], abi, address: middlewareAddress, functionName: 'operatorNodesArray'}})
+                    contracts: A.range(0, Number(nodeCount) - 1).map(i => { return { args: [operator, BigInt(i)], abi, address: middlewareAddress, functionName: 'operatorNodesArray' } })
                 }
             )
 
@@ -2622,7 +2623,7 @@ async function main() {
                 ));
             }
 
-            
+
             const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
@@ -2678,7 +2679,7 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
 
             let hashs: Hex[] = [];
-            
+
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Curator', client.account!) })) {
                 hashs.push(await claimRewards(
                     rewardsContract,
