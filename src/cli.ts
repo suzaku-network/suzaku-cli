@@ -2623,6 +2623,10 @@ async function main() {
                 ));
             }
 
+            if (hashs.length === 0) {
+                console.log("No rewards to claim");
+                return;
+            }
 
             const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
             logs.flat().forEach((log) => {
@@ -2648,13 +2652,17 @@ async function main() {
             let hashs: Hex[] = [];
 
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Operator', client.account!) })) {
-                hashs.push(await claimRewards(
+                hashs.push(await claimOperatorFee(
                     rewardsContract,
                     client.account!,
                     recipient,
                 ));
             }
 
+            if (hashs.length === 0) {
+                console.log("No operator fees to claim");
+                return;
+            }
 
             const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
             logs.flat().forEach((log) => {
@@ -2681,13 +2689,17 @@ async function main() {
             let hashs: Hex[] = [];
 
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Curator', client.account!) })) {
-                hashs.push(await claimRewards(
+                hashs.push(await claimCuratorFee(
                     rewardsContract,
                     client.account!,
                     recipient,
                 ));
             }
 
+            if (hashs.length === 0) {
+                console.log("No curator fees to claim");
+                return;
+            }
 
             const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
             logs.flat().forEach((log) => {
@@ -2714,6 +2726,12 @@ async function main() {
                 client.account!,
                 recipient,
             );
+
+            if (!hash) {
+                console.log("No protocol fees to claim");
+                return;
+            }
+
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {
@@ -2741,6 +2759,12 @@ async function main() {
                 epoch,
                 recipient,
             );
+
+            if (!hash) {
+                console.log("No undistributed rewards to claim");
+                return;
+            }
+            
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {

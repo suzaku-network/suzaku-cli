@@ -139,7 +139,8 @@ export function withSafeWrite<T extends SuzakuABINames>(
         return async (...args: any[]) => {
           try {
             const result = await fn(...args)
-            logger.addData('receipt', result);
+            const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
+            logger.addData('receipt', { functionSignature, result });
             return result
           } catch (error: any) {
             const msg = (error.message as string)

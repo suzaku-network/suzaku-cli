@@ -33,7 +33,7 @@ export async function getRewardsClaimsCount(
   ]);
   const middleware = await config.contracts.L1Middleware(middlewareAddress);
   const epoch = await middleware.read.getCurrentEpoch();
-  return Math.floor((epoch - lastEpoch) / maxEpochPerClaim);
+  return Math.ceil((epoch - lastEpoch) / maxEpochPerClaim);
 }
 
 /**
