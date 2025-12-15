@@ -342,6 +342,22 @@ export default [
     },
     {
         "type": "error",
+        "name": "UptimeTracker__OperatorUptimeAlreadySet",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "UptimeTracker__ValidatorUptimeNotRecorded",
         "inputs": [
             {

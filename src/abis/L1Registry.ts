@@ -26,10 +26,6 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
-        "type": "receive",
-        "stateMutability": "payable"
-    },
-    {
         "type": "function",
         "name": "feeCollector",
         "inputs": [],
