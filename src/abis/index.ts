@@ -9,7 +9,6 @@ import VaultFactory from './VaultFactory';
 import OperatorVaultOptInService from './OperatorVaultOptInService';
 import OperatorL1OptInService from './OperatorL1OptInService';
 import UptimeTracker from './UptimeTracker';
-import Rewards from './Rewards';
 import PoASecurityModule from './PoASecurityModule';
 import DefaultCollateral from './DefaultCollateral';
 import ERC20 from './ERC20';
@@ -31,7 +30,6 @@ export const SuzakuABI = {
   OperatorVaultOptInService,
   OperatorL1OptInService,
   UptimeTracker,
-  Rewards,
   PoASecurityModule,
   DefaultCollateral,
   ERC20,

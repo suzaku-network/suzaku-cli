@@ -21,7 +21,6 @@ const contractMappings = {
   OperatorRegistry: "OperatorRegistry.ts",
   OperatorVaultOptInService: "OperatorVaultOptInService.ts",
   PoASecurityModule: "PoASecurityModule.ts",
-  Rewards: "Rewards.ts",
   UptimeTracker: "UptimeTracker.ts",
   VaultFactory: "VaultFactory.ts",
   BalancerValidatorManager: "BalancerValidatorManager.ts",

@@ -1825,6 +1825,17 @@ export default [
     },
     {
         "type": "error",
+        "name": "AvalancheL1Middleware__InvalidNodeIdFormat",
+        "inputs": [
+            {
+                "name": "nodeId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AvalancheL1Middleware__InvalidStakeAmount",
         "inputs": []
     },

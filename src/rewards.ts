@@ -1,27 +1,18 @@
-import { contractAbiValidation, SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account, Address } from 'viem';
+import { SafeSuzakuContract } from './lib/viemUtils';
+import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
-
-export async function detectRewardsContract(config: Config, address: Address): Promise<SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken']> {
-  const rewardsContractName = (await contractAbiValidation(config.client, ['Rewards', 'RewardsNativeToken'], address))
-      .filter(r => r.valid)
-      .map(r => r.name)[0]
-  const rewardsContract = await config.contracts[rewardsContractName](address);
-  return rewardsContract;
-}
 
 /**
  * Distributes rewards for a specific epoch
  */
 export async function distributeRewards(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   batchSize: number,
   account: Account
 ) {
 
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.distributeRewards(
     [epoch, batchSize],
     { chain: null, account }
@@ -30,7 +21,7 @@ export async function distributeRewards(
 }
 
 export async function getRewardsClaimsCount(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   config: Config,
   role: 'Staker' | 'Operator' | 'Curator',
   account: Account
@@ -49,15 +40,13 @@ export async function getRewardsClaimsCount(
  * Claims rewards for a staker
  */
 export async function claimRewards(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
-  recipient: Hex,
-  rewardsToken?: Hex
+  recipient: Hex
 ) {
   
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimRewards(
-    rewardsToken ? [rewardsToken, recipient] : [recipient],
+    [recipient],
     { chain: null, account }
   );
   return txHash;
@@ -67,14 +56,12 @@ export async function claimRewards(
  * Claims operator fees
  */
 export async function claimOperatorFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
-  recipient: Hex,
-  rewardsToken?: Hex
+  recipient: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimOperatorFee(
-    rewardsToken ? [rewardsToken, recipient] : [recipient],
+    [recipient],
     { chain: null, account }
   );
   return txHash;
@@ -84,14 +71,12 @@ export async function claimOperatorFee(
  * Claims curator fees
  */
 export async function claimCuratorFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
-  recipient: Hex,
-  rewardsToken?: Hex
+  recipient: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimCuratorFee(
-    rewardsToken ? [rewardsToken, recipient] : [recipient],
+    [recipient],
     { chain: null, account }
   );
   return txHash;
@@ -101,14 +86,12 @@ export async function claimCuratorFee(
  * Claims protocol fees
  */
 export async function claimProtocolFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
-  recipient: Hex,
-  rewardsToken?: Hex
+  recipient: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimProtocolFee(
-    rewardsToken ? [rewardsToken, recipient] : [recipient],
+    [recipient],
     { chain: null, account }
   );
   return txHash;
@@ -118,15 +101,13 @@ export async function claimProtocolFee(
  * Claims undistributed rewards
  */
 export async function claimUndistributedRewards(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
   epoch: number,
-  recipient: Hex,
-  rewardsToken?: Hex
+  recipient: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.claimUndistributedRewards(
-    rewardsToken ? [epoch, rewardsToken, recipient] : [epoch, recipient],
+    [epoch, recipient],
     { chain: null, account }
   );
   return txHash;
@@ -136,16 +117,14 @@ export async function claimUndistributedRewards(
  * Sets rewards amount for epochs
  */
 export async function setRewardsAmountForEpochs(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   account: Account,
   startEpoch: number,
   numberOfEpochs: number,
-  rewardsAmount: bigint,
-  rewardsToken?: Hex
+  rewardsAmount: bigint
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setRewardsAmountForEpochs(
-    rewardsToken ? [startEpoch, numberOfEpochs, rewardsToken, rewardsAmount] : [startEpoch, numberOfEpochs, rewardsAmount],
+    [startEpoch, numberOfEpochs, rewardsAmount],
     { chain: null, account }
   );
   return txHash;
@@ -155,12 +134,11 @@ export async function setRewardsAmountForEpochs(
  * Sets rewards share for collateral class
  */
 export async function setRewardsShareForCollateralClass(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   collateralClass: bigint,
   share: number,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setRewardsShareForCollateralClass(
     [collateralClass, share],
     { chain: null, account }
@@ -172,11 +150,10 @@ export async function setRewardsShareForCollateralClass(
  * Sets minimum required uptime
  */
 export async function setMinRequiredUptime(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   minUptime: bigint,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setMinRequiredUptime(
     [minUptime],
     { chain: null, account }
@@ -188,11 +165,10 @@ export async function setMinRequiredUptime(
  * Sets protocol owner
  */
 export async function setProtocolOwner(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   newOwner: Hex,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.setProtocolOwner(
     [newOwner],
     { chain: null, account }
@@ -204,11 +180,10 @@ export async function setProtocolOwner(
  * Updates protocol fee
  */
 export async function updateProtocolFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateProtocolFee(
     [newFee],
     { chain: null, account }
@@ -220,11 +195,10 @@ export async function updateProtocolFee(
  * Updates operator fee
  */
 export async function updateOperatorFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateOperatorFee(
     [newFee],
     { chain: null, account }
@@ -236,11 +210,10 @@ export async function updateOperatorFee(
  * Updates curator fee
  */
 export async function updateCuratorFee(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   newFee: number,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateCuratorFee(
     [newFee],
     { chain: null, account }
@@ -252,13 +225,12 @@ export async function updateCuratorFee(
  * Updates all fees at once to avoid order dependency issues
  */
 export async function updateAllFees(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   newProtocolFee: number,
   newOperatorFee: number,
   newCuratorFee: number,
   account: Account
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
   const txHash = await rewards.safeWrite.updateAllFees(
     [newProtocolFee, newOperatorFee, newCuratorFee],
     { chain: null, account }
@@ -267,54 +239,24 @@ export async function updateAllFees(
 }
 
 /**
- * Gets rewards amount per token from epoch
- */
-export async function getRewardsAmountPerTokenFromEpoch(
-  rewards: SafeSuzakuContract['Rewards'],
-  epoch: number
-) {
-  const result = await rewards.read.getRewardsAmountPerTokenFromEpoch(
-    [epoch]
-  ) as [string[], bigint[]];
-
-  logger.log(`Rewards amount per token for epoch ${epoch}:`);
-  for (let i = 0; i < result[0].length; i++) {
-    logger.log(`  Token: ${result[0][i]}, Amount: ${result[1][i].toString()}`);
-  }
-
-  return result;
-}
-
-/**
  * Gets rewards amount for a specific token from epoch
  */
-export async function getRewardsAmountForTokenFromEpoch(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
-  epoch: number,
-  token?: Hex
+export async function getEpochRewards(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  epoch: number
 ) {
-  let amount;
-  if ('getRewardsAmountPerTokenFromEpoch' in rewards.read) {
-    amount = await rewards.read.getRewardsAmountPerTokenFromEpoch(
-      [epoch, token!]
-    ) as bigint;
-    logger.log(`Rewards amount for token ${token} at epoch ${epoch}: ${amount.toString()}`);
-  } else {
-    amount = await rewards.read.getEpochRewards(
+    const amount = await rewards.read.getEpochRewards(
       [epoch]
     ) as bigint;
     logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
-  }
-
-
-  return amount;
+    return amount;
 }
 
 /**
  * Gets operator shares for a specific epoch
  */
 export async function getOperatorShares(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   operator: Hex
 ) {
@@ -330,7 +272,7 @@ export async function getOperatorShares(
  * Gets vault shares for a specific epoch
  */
 export async function getVaultShares(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   vault: Hex
 ) {
@@ -346,7 +288,7 @@ export async function getVaultShares(
  * Gets curator shares for a specific epoch
  */
 export async function getCuratorShares(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   curator: Hex
 ) {
@@ -362,14 +304,11 @@ export async function getCuratorShares(
  * Gets protocol rewards for a token
  */
 export async function getProtocolRewards(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
-  token: Hex
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
-  const rewardsAmount = await rewards.read.protocolRewards(
-    [token]
-  ) as bigint;
+  const rewardsAmount = await rewards.read.protocolRewards();
 
-  logger.log(`Protocol rewards for token ${token}: ${rewardsAmount.toString()}`);
+  logger.log(`Protocol rewards: ${rewardsAmount.toString()}`);
   return rewardsAmount;
 }
 
@@ -377,7 +316,7 @@ export async function getProtocolRewards(
  * Gets distribution batch status for an epoch
  */
 export async function getDistributionBatch(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number
 ) {
   const result = await rewards.read.distributionBatches(
@@ -398,7 +337,7 @@ export async function getDistributionBatch(
  * Gets current fees configuration
  */
 export async function getFeesConfiguration(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken']
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
   const protocolFee = await rewards.read.protocolFee();
   const operatorFee = await rewards.read.operatorFee();
@@ -416,7 +355,7 @@ export async function getFeesConfiguration(
  * Gets rewards share for collateral class
  */
 export async function getRewardsShareForCollateralClass(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   collateralClass: bigint
 ) {
   const share = await rewards.read.rewardsSharePerCollateralClass(
@@ -431,7 +370,7 @@ export async function getRewardsShareForCollateralClass(
  * Gets min required uptime
  */
 export async function getMinRequiredUptime(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken']
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
   const minUptime = await rewards.read.minRequiredUptime();
 
@@ -443,14 +382,12 @@ export async function getMinRequiredUptime(
  * Gets last claimed epoch for a staker
  */
 export async function getLastEpochClaimedStaker(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
-  staker: Hex,
-  rewardToken?: Hex
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  staker: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
-  const lastEpoch = await rewards.read.lastEpochClaimedStaker(rewardToken ? [staker, rewardToken] : [staker]);
+  const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker]);
 
-  logger.log(`Last epoch claimed by staker ${staker} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -458,14 +395,12 @@ export async function getLastEpochClaimedStaker(
  * Gets last claimed epoch for an operator
  */
 export async function getLastEpochClaimedOperator(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
-  operator: Hex,
-  rewardToken?: Hex
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  operator: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
-  const lastEpoch = await rewards.read.lastEpochClaimedOperator(rewardToken ? [operator, rewardToken] : [operator]);
+  const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator]);
 
-  logger.log(`Last epoch claimed by operator ${operator} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -473,28 +408,11 @@ export async function getLastEpochClaimedOperator(
  * Gets last claimed epoch for a curator
  */
 export async function getLastEpochClaimedCurator(
-  rewards: SafeSuzakuContract['Rewards'] | SafeSuzakuContract['RewardsNativeToken'],
-  curator: Hex,
-  rewardToken?: Hex
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  curator: Hex
 ) {
-  //@ts-expect-error - Event both Rewards and RewardsNativeToken have this method but types are not aligned
-  const lastEpoch = await rewards.read.lastEpochClaimedCurator(rewardToken ? [curator, rewardToken] : [curator]);
+  const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator]);
 
-  logger.log(`Last epoch claimed by curator ${curator} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
-  return lastEpoch;
-}
-
-/**
- * Gets last claimed epoch for protocol
- */
-export async function getLastEpochClaimedProtocol(
-  rewards: SafeSuzakuContract['Rewards'],
-  protocolOwner: Hex,
-  rewardToken: Hex
-) {
-
-  const lastEpoch = await rewards.read.lastEpochClaimedProtocol([protocolOwner, rewardToken]);
-
-  logger.log(`Last epoch claimed by protocol owner ${protocolOwner} for ${rewardToken ? 'token' + rewardToken : 'the native token'}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
