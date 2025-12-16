@@ -1,4 +1,4 @@
-import { Hex, Account } from 'viem';
+import { Hex, Account, getAbiItem } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient } from './client';
 import { color } from 'console-log-colors';
@@ -452,3 +452,62 @@ export async function middlewareLastValidationId(
     return validationId;
   }
 }
+
+
+// export async function processMiddlewareStakeCaches(
+//   middleware: SafeSuzakuContract['L1Middleware'],
+//   config: Config,
+//   account: Account,
+//   options: {
+//     epochs?: number;
+//     loopEpochs?: number;
+//   }
+// ) {
+
+//   // middlewareManualProcessNodeStakeCache configuration
+//   const lastGlobalNodeStakeUpdateEpoch = await middleware.read.lastGlobalNodeStakeUpdateEpoch();
+//   const currentEpoch = await middleware.read.getCurrentEpoch();
+//   let epochsPerCall;
+//   let loopCount;
+//   if (options.epochs || options.loopEpochs) { // Fully specified by user
+//     epochsPerCall = options.epochs || 1;
+//     loopCount = options.loopEpochs || 1;
+//   } else { // Automatic calculation
+//     epochsPerCall = await middleware.read.getCurrentEpoch() - lastGlobalNodeStakeUpdateEpoch;
+//     loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
+//     epochsPerCall = Math.ceil(epochsPerCall / loopCount);
+//   }
+
+//   logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
+
+//   for (let i = 0; i < loopCount; i++) {
+//     logger.log(`\nIteration ${i + 1}/${loopCount}`);
+//     const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
+//       [epochsPerCall],
+//       { chain: null, account }
+//     );
+//     logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
+//   }
+
+//   const processedEpochs =  Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
+
+//   // process stake cache for operators
+//   const collateralClasses = await middleware.read.getCollateralClassIds();
+
+//   for (const epoch of Array.from({ length: processedEpochs }) as number[]) {
+//     for (const collateralClass of collateralClasses) {
+//       await middleware.safeWrite.calcAndCacheStakes(
+//         [epoch, collateralClass],
+//         { chain: null, account }
+//       );
+//     }
+//   }
+
+//   const operatorStakeCache = getAbiItem({ abi: config.abis.L1Middleware, name: 'getOperatorUsedStakeCachedPerEpoch' });
+
+//   const operators = await middleware.read.getAllOperators();
+//   const 
+  
+  
+// }
+  

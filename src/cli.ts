@@ -1762,6 +1762,19 @@ async function main() {
             logger.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
         });
 
+    middlewareCmd
+        .command("get-operator-validation-ids")
+        .description("Get operator validation IDs")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .action(async (middlewareAddress, operator) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const validationIDs = await middlewareSvc.read.getOperatorValidationIDs([operator]);
+            logger.log(`Validation IDs for operator ${operator}: ${validationIDs.join(', ')}`);
+        });
     /**
      * --------------------------------------------------
      * OPERATOR → L1: optIn / optOut / check
