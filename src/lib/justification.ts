@@ -319,7 +319,8 @@ export async function GetRegistrationJustification(
     nodeID: string, // Keep for logging/confirmation
     validationIDHex: string,
     subnetIDStr: string,
-    ExtendedPublicClient: { getLogs: ExtendedPublicClient['getLogs'] }
+    ExtendedPublicClient: { getLogs: ExtendedPublicClient['getLogs'] },
+    latestBlock?: bigint | 0
 ): Promise<Uint8Array | null> {
     const WARP_ADDRESS = '0x0200000000000000000000000000000000000005' as const;
     const NUM_BOOTSTRAP_VALIDATORS_TO_SEARCH = 100;
@@ -368,15 +369,15 @@ export async function GetRegistrationJustification(
     // 2. If not a bootstrap validator, search Warp logs
     try {
         // Start from the latest block and search backwards in batches
-        const latestBlock = await ExtendedPublicClient.getLogs({ fromBlock: 'latest' }).then(logs => logs.length > 0 ? logs[0].blockNumber : 0);
+        latestBlock = latestBlock ? latestBlock : await ExtendedPublicClient.getLogs({ fromBlock: 'latest' }).then(logs => logs.length > 0 ? logs[0].blockNumber : 0) || 0n;
         const BATCH_SIZE = 2048;
-        let fromBlock = BigInt(latestBlock);
-        let toBlock = BigInt(latestBlock);
+        let fromBlock = latestBlock;
+        let toBlock = latestBlock;
         let justification: Uint8Array<ArrayBuffer> | null = null;
 
         logger.log(`Starting search from latest block ${latestBlock} in batches of ${BATCH_SIZE} blocks...`);
 
-        while (fromBlock > 0 && !justification) {
+        while (fromBlock > 0n && !justification) {
             // Calculate batch range
             fromBlock = BigInt(Math.max(0, Number(toBlock) - BATCH_SIZE + 1));
 

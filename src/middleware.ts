@@ -1,4 +1,4 @@
-import { Hex, Account, getAbiItem } from 'viem';
+import { Hex, Account, getAbiItem, decodeEventLog, Abi, parseAbi } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient } from './client';
 import { color } from 'console-log-colors';
@@ -310,11 +310,12 @@ export async function getActiveCollateralClasses(
 }
 
 export async function middlewareGetNodeLogs(
-  client: ExtendedPublicClient,
+  client: ExtendedClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   config: Config,
   nodeId?: NodeId,
   snowscanApiKey?: string,
+  quiet?: boolean
 ) {
   logger.log("Reading logs from middleware and balancer...");
 
@@ -365,7 +366,9 @@ export async function middlewareGetNodeLogs(
   const allLogs = await Promise.all(logsProm);
   let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
   logs = await fillEventsNodeId(balancer, logs);
-
+  if (quiet) {
+    return logs;
+  }
   // Human readable addresses and structured logs
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
     log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
@@ -454,60 +457,188 @@ export async function middlewareLastValidationId(
 }
 
 
-// export async function processMiddlewareStakeCaches(
-//   middleware: SafeSuzakuContract['L1Middleware'],
-//   config: Config,
-//   account: Account,
-//   options: {
-//     epochs?: number;
-//     loopEpochs?: number;
-//   }
-// ) {
+export async function weightWatcher(
+  middleware: SafeSuzakuContract['L1Middleware'],
+  config: Config,
+  account: Account,
+  options: {
+    epochs?: number;
+    loopEpochs?: number;
+  }
+) {
 
-//   // middlewareManualProcessNodeStakeCache configuration
-//   const lastGlobalNodeStakeUpdateEpoch = await middleware.read.lastGlobalNodeStakeUpdateEpoch();
-//   const currentEpoch = await middleware.read.getCurrentEpoch();
-//   let epochsPerCall;
-//   let loopCount;
-//   if (options.epochs || options.loopEpochs) { // Fully specified by user
-//     epochsPerCall = options.epochs || 1;
-//     loopCount = options.loopEpochs || 1;
-//   } else { // Automatic calculation
-//     epochsPerCall = await middleware.read.getCurrentEpoch() - lastGlobalNodeStakeUpdateEpoch;
-//     loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
-//     epochsPerCall = Math.ceil(epochsPerCall / loopCount);
-//   }
+  // middlewareManualProcessNodeStakeCache configuration
+  const lastGlobalNodeStakeUpdateEpoch = await middleware.read.lastGlobalNodeStakeUpdateEpoch();
+  const currentEpoch = await middleware.read.getCurrentEpoch();
+  let epochsPerCall;
+  let loopCount;
+  if (options.epochs || options.loopEpochs) { // Fully specified by user
+    epochsPerCall = options.epochs || 1;
+    loopCount = options.loopEpochs || 1;
+  } else { // Automatic calculation
+    epochsPerCall = currentEpoch - lastGlobalNodeStakeUpdateEpoch;
+    loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
+    epochsPerCall = Math.ceil(epochsPerCall / loopCount);
+  }
 
-//   logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
+  logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
 
-//   for (let i = 0; i < loopCount; i++) {
-//     logger.log(`\nIteration ${i + 1}/${loopCount}`);
-//     const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
-//       [epochsPerCall],
-//       { chain: null, account }
-//     );
-//     logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
-//   }
+  for (let i = 0; i < loopCount; i++) {
+    logger.log(`\nIteration ${i + 1}/${loopCount}`);
+    const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
+      [epochsPerCall],
+      { chain: null, account }
+    );
+    logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
+  }
 
-//   const processedEpochs =  Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
+  const processedEpochs =  Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
 
-//   // process stake cache for operators
-//   const collateralClasses = await middleware.read.getCollateralClassIds();
+  // process stake cache for operators
+  const collateralClasses = await middleware.read.getCollateralClassIds();
 
-//   for (const epoch of Array.from({ length: processedEpochs }) as number[]) {
-//     for (const collateralClass of collateralClasses) {
-//       await middleware.safeWrite.calcAndCacheStakes(
-//         [epoch, collateralClass],
-//         { chain: null, account }
-//       );
-//     }
-//   }
+  const operatorStakeABI = [getAbiItem({ abi: config.abis.L1Middleware, name: 'getOperatorStake' })] as Abi;
 
-//   const operatorStakeCache = getAbiItem({ abi: config.abis.L1Middleware, name: 'getOperatorUsedStakeCachedPerEpoch' });
+  const processedEpochsRange: number[] = Array.from({ length: processedEpochs }, (_, i) => i + lastGlobalNodeStakeUpdateEpoch)
+  for (const epoch of processedEpochsRange) {
+    for (const collateralClass of collateralClasses) {
+      await middleware.safeWrite.calcAndCacheStakes(
+        [epoch, collateralClass],
+        { chain: null, account }
+      );
+    }
+  }
 
-//   const operators = await middleware.read.getAllOperators();
-//   const 
+  const operators = await middleware.read.getAllOperators();
   
+  const predictions = await predictForceUpdateImpact(config.client, middleware, operators as Hex[]);
   
-// }
-  
+  for (const prediction of predictions) {
+    if (prediction.willLoseWeight) {
+      logger.log(`Operator ${prediction.operator} will ${prediction.willLoseWeight ? 'lose' : 'gain'} weight`);
+      logger.log(`Current total stake: ${prediction.currentTotalStake}`);
+      logger.log(`Capped total stake: ${prediction.cappedTotalStake}`);
+      logger.log(`Registered stake: ${prediction.registeredStake}`);
+      logger.log(`Stake deficit: ${prediction.stakeDeficit}`);
+      logger.log(`Active nodes count: ${prediction.activeNodesCount}`);
+      await middleware.safeWrite.forceUpdateNodes(
+        [prediction.operator, 0n],
+        { chain: null, account }
+      );
+    }
+  }
+}
+
+const balancerAbi = parseAbi([
+  'function getSecurityModuleWeights(address securityModule) external view returns (uint64 minWeight, uint64 maxWeight)'
+]);
+
+
+export interface OperatorForceUpdatePrediction {
+  operator: Hex;
+  willLoseWeight: boolean;
+  currentTotalStake: bigint;
+  cappedTotalStake: bigint;
+  registeredStake: bigint;
+  stakeDeficit: bigint;
+  activeNodesCount: number;
+}
+
+export async function predictForceUpdateImpact(
+  client: ExtendedClient,
+  middleware: SafeSuzakuContract['L1Middleware'],
+  operators: Hex[]
+): Promise<OperatorForceUpdatePrediction[]> {
+  if (operators.length === 0) return [];
+
+  const [
+    currentEpoch,
+    weightScaleFactor,
+    balancerAddress,
+    primaryAssetClass
+  ] = await Promise.all([
+    middleware.read.getCurrentEpoch(),
+    middleware.read.WEIGHT_SCALE_FACTOR(),
+    middleware.read.BALANCER(),
+    middleware.read.PRIMARY_ASSET_CLASS()
+  ]);
+
+  const balancerContract = {
+    address: balancerAddress,
+    abi: balancerAbi
+  };
+
+  const [, securityModuleMaxWeight] = await client.readContract({
+    ...balancerContract,
+    functionName: 'getSecurityModuleWeights',
+    args: [middleware.address]
+  });
+
+  const maxStakeCap = BigInt(securityModuleMaxWeight) * weightScaleFactor;
+
+  const contractAddress = middleware.address;
+  const abi = middleware.abi;
+
+  const calls = operators.flatMap(op => [
+    {
+      address: contractAddress, abi, functionName: 'getOperatorStake',
+      args: [op, currentEpoch, primaryAssetClass]
+    },
+    {
+      address: contractAddress, abi, functionName: 'getOperatorUsedStakeCached',
+      args: [op]
+    },
+    {
+      address: contractAddress, abi, functionName: 'operatorLockedStake',
+      args: [op]
+    },
+    {
+      address: contractAddress, abi, functionName: 'getActiveNodesForEpoch',
+      args: [op, currentEpoch]
+    }
+  ] as const);
+
+  const results = await client.multicall({ contracts: calls, allowFailure: false });
+
+  const predictions: OperatorForceUpdatePrediction[] = [];
+
+  for (let i = 0; i < operators.length; i++) {
+    const baseIndex = i * 4;
+    const operator = operators[i];
+
+    const theoreticalStake = results[baseIndex] as bigint;
+    const usedStake = results[baseIndex + 1] as bigint;
+    const lockedStake = results[baseIndex + 2] as bigint;
+    const activeNodes = results[baseIndex + 3] as readonly `0x${string}`[];
+
+    let cappedStake = theoreticalStake;
+    if (cappedStake > maxStakeCap) {
+      cappedStake = maxStakeCap;
+    }
+
+    const registeredStake = usedStake + lockedStake;
+    let stakeDeficit = 0n;
+    let willLoseWeight = false;
+    if (cappedStake < registeredStake) {
+      stakeDeficit = registeredStake - cappedStake;
+
+      if (stakeDeficit >= weightScaleFactor) {
+        if (activeNodes.length > 0) {
+          willLoseWeight = true;
+        }
+      }
+    }
+
+    predictions.push({
+      operator,
+      willLoseWeight,
+      currentTotalStake: theoreticalStake,
+      cappedTotalStake: cappedStake,
+      registeredStake,
+      stakeDeficit,
+      activeNodesCount: activeNodes.length
+    });
+  }
+
+  return predictions;
+}

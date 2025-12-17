@@ -112,7 +112,8 @@ export async function completeValidatorRemoval(
   pChainTxPrivateKey: string,
   pChainTxAddress: string,
   waitValidatorVisible: boolean,
-  nodeIDs?: NodeId[]
+  nodeIDs?: NodeId[],
+  addNodeTxHash?: Hex[]
 ) {
   logger.log("Completing validator removal...");
 
@@ -140,16 +141,37 @@ export async function completeValidatorRemoval(
     abi: config.abis.IWarpMessenger,
     logs: receipt.logs,
   })
+
+  const subnetIDHex = await balancerValidatorManager.read.subnetID();
+  const currentValidators = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex))))
+
   for (const event of nodeRemoved) {
+    const eventIndex = nodeRemoved.indexOf(event);
     const initiatedValidatorRemoval = initiatedValidatorRemovals.find((e) => e.args.validationID === event.args.validationID)!;
     const warpLog = warpLogs.find((w) => w.args.messageID === initiatedValidatorRemoval.args.validatorWeightMessageID)!;
 
     const validationID = event.args.validationID;
     const nodeID = encodeNodeID(event.args.nodeId); // Convert bytes32 to NodeID format by removing the first 12 bytes
     logger.log(nodeID)
+
+    let addNodeBlockNumber = event.blockNumber;
+
+    if (addNodeTxHash && addNodeTxHash.length > eventIndex) {
+      const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash[eventIndex], confirmations: 0 });
+      if (receipt.status === 'reverted') throw new Error(`Transaction ${addNodeTxHash[eventIndex]} reverted, pls use another addNode tx`);
+      const addNodeLogs = parseEventLogs({
+        abi: config.abis.L1Middleware,
+        logs: receipt.logs,
+      })
+      if (!addNodeLogs.some((w) => w.eventName === 'NodeAdded')) {
+        logger.error(color.red("No matching NodeAdded event found for the provided NodeIDs, verify the addNode tx hash."));
+        process.exit(1);
+      }
+      addNodeBlockNumber = receipt.blockNumber;
+    }
+
     // Check if the node is still registered as a validator on the P-Chain
-    const subnetIDHex = await balancerValidatorManager.read.subnetID();
-    const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID);
+    const isValidator = currentValidators.some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       logger.log(color.yellow("Node is not registered as a validator on the P-Chain."));
     } else {
@@ -171,7 +193,7 @@ export async function completeValidatorRemoval(
     }
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
-    const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client);
+    const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client, addNodeBlockNumber);
     if (!justification) {
       throw new Error("Justification not found for validator removal");
     }

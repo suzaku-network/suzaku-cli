@@ -121,7 +121,7 @@ import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress } from "./lib/cliParser";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex } from "./lib/cliParser";
 import { getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
@@ -1197,7 +1197,7 @@ async function main() {
                 client.account!
             );
         });
-
+    
     // Complete validator removal
     middlewareCmd
         .command("complete-validator-removal")
@@ -1207,6 +1207,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
+        .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .action(async (middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -1231,6 +1232,7 @@ async function main() {
                 pchainTxAddress,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
+                options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
             );
         });
 
@@ -2203,6 +2205,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
+        .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .action(async (poaSecurityModuleAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -2226,6 +2229,7 @@ async function main() {
                 pchainTxAddress,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
+                options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
             );
 
             logger.log(`End validation initialized for node . Transaction hash: ${txHash}`);

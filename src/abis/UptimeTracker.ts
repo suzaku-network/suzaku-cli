@@ -169,6 +169,25 @@ export default [
     },
     {
         "type": "function",
+        "name": "validatorHighestUptime",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "highestUptime",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "validatorLastUptimeCheckpoint",
         "inputs": [
             {

@@ -29,7 +29,7 @@ export type DecodedEvent = {
 
 // TODO: optimize eventNames filtering it from apis
 export async function GetContractEvents(
-  client: ExtendedPublicClient,
+  client: ExtendedClient,
   address: Hex,
   fromBlock: number,
   toBlock: number,
@@ -113,7 +113,7 @@ export async function GetContractEvents(
 }
 
 export async function PatchEventsTimestamp(
-  client: ExtendedPublicClient,
+  client: ExtendedClient,
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
   const blockTimstamps = (await Promise.all([...new Set(events.map(event => event.blockNumber))]
