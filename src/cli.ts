@@ -2812,6 +2812,11 @@ async function main() {
             const token = await config.contracts.ERC20(tokenAddress);
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
+            const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
+            await token.safeWrite.approve([rewardsAddress, amountToApprove], {
+                chain: null,
+                account: client.account!,
+            });
             const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
                 client.account!,
