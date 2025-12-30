@@ -38,7 +38,7 @@ export function buildCommands(program: Command) {
       } else if (options.value) {
         value = options.value;
       } else if (options.prompt) {
-        value = prompt("Enter the value of the secret to create") || ""
+        value = await logger.prompt("Enter the value of the secret to create") || ""
       } else {
         throw new Error("Either --clip or --value or --prompt must be provided to create a secret.");
       }
@@ -49,7 +49,7 @@ export function buildCommands(program: Command) {
       // Insert secret
       const pass = new Pass(passPath)
       if (pass.exists(name) && !opts.yes) {
-        const overwrite = prompt(`Secret '${name}' already exists. Overwrite? (y/n)`);
+        const overwrite = await logger.prompt(`Secret '${name}' already exists. Overwrite? (y/n)`);
         if (overwrite !== 'y') return;
       }
       pass.insert(name, value)
@@ -64,7 +64,7 @@ export function buildCommands(program: Command) {
       const opts = program.opts() as { yes: boolean };
       const pass = new Pass(passPath)
       if (!opts.yes) {
-        const confirm = prompt(`Are you sure you want to remove secret '${name}'? (y/n)`);
+        const confirm = await logger.prompt(`Are you sure you want to remove secret '${name}'? (y/n)`);
         if (confirm !== 'y') return;
       }
       pass.rm(name)
