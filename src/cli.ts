@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Abi, formatUnits, getAbiItem, Hex, parseUnits } from "viem";
+import { Abi, formatUnits, fromBytes, getAbiItem, Hex, parseUnits } from "viem";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -144,7 +144,7 @@ async function main() {
         .name('suzaku-cli')
         .addOption(new Option('-n, --network <network>')
             .choices(['fuji', 'mainnet', 'anvil'])
-            .default('fuji'))
+            .default('mainnet'))
         .addOption(new Option('-k, --private-key <privateKey>', 'Private key in Hex format')
             .env('PK').argParser(ParserPrivateKey))
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
@@ -1104,6 +1104,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
 
             // Default registration expiry to now + 12 hours if not provided
             // const registrationExpiry = options.registrationExpiry
@@ -1112,8 +1113,8 @@ async function main() {
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
-            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
-            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
+            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
             const remainingBalanceOwner: [number, Hex[]] = [
                 Number(options.pchainRemainingBalanceOwnerThreshold),
                 remainingBalanceOwnerAddress
@@ -2105,6 +2106,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const poaSM = await config.contracts.PoASecurityModule(poaSecurityModule);
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
 
             // Default registration expiry to now + 12 hours if not provided
             // const registrationExpiry = options.registrationExpiry
@@ -2113,8 +2115,8 @@ async function main() {
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             // If pchainRemainingBalanceOwnerAddress or pchainDisableOwnerAddress are empty (not provided), use the client account
-            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [(await getDefaultAccount(opts))];
-            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [(await getDefaultAccount(program.opts()))];
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
+            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
             const remainingBalanceOwner: [number, Hex[]] = [
                 Number(options.pchainRemainingBalanceOwnerThreshold),
                 remainingBalanceOwnerAddress

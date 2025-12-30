@@ -2,6 +2,7 @@ import { avalancheFuji, avalanche, anvil } from 'viem/chains'
 import { createWalletClient, http, WalletClient, createPublicClient, PublicClient, publicActions, Hex, PublicActions  } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
+import { getAddresses } from './lib/utils';
 
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
@@ -12,7 +13,7 @@ const chains = {
 };
 
 // Create extended client type that includes public actions and network type
-export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, safe?: SafeClient };
+export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, addresses: { P: string, C: Hex }, safe?: SafeClient };
 export type ExtendedPublicClient = PublicClient & { network: Network };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
@@ -34,7 +35,8 @@ export async function generateClient(network: Network, privateKey?: Hex, safe?: 
             safeAddress: safe,
             txServiceUrl: 'https://api.safe.global/tx-service/avax/api',
             apiKey: process.env.SAFE_API_KEY
-        }) : undefined
+        }) : undefined,
+        addresses: getAddresses(privateKey, network)
     } :
         {
             ...createPublicClient({
