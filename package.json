@@ -33,10 +33,12 @@
   "author": "",
   "dependencies": {
     "@avalabs/avalanchejs": "5.0.0",
+    "@commander-js/extra-typings": "^14.0.0",
+    "@ledgerhq/hw-app-eth": "^7.1.1",
+    "@ledgerhq/hw-transport-node-hid": "^6.29.16",
     "@mobily/ts-belt": "^3.13.1",
     "@noble/hashes": "^1.7.2",
     "@safe-global/sdk-starter-kit": "^3.0.2",
-    "@commander-js/extra-typings": "^14.0.0",
     "@scure/base": "^1.2.4",
     "cli-progress": "^3.12.0",
     "commander": "^14.0.0",
@@ -48,9 +50,9 @@
     "viem": "^2.24.2"
   },
   "devDependencies": {
+    "@types/cli-progress": "^3.11.6",
     "@types/node": "^24.1.0",
-    "typescript": "^5.3.3",
-    "@types/cli-progress": "^3.11.6"
+    "typescript": "^5.3.3"
   },
   "packageManager": "pnpm@10.13.1"
 }

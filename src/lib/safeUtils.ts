@@ -14,7 +14,7 @@ interface SelectedTx {
 interface TransactionStrategyResponse {
   hash?: Hex;
   nonce?: number;
-  action: 'confirm' | 'skip' | 'new';
+  action: 'confirm' | 'skip' | 'new' | 'propose';
 }
 
 /**
@@ -27,6 +27,7 @@ interface TransactionStrategyResponse {
  *    - Display an interactive menu.
  *    - Options: Confirm an existing transaction, Create a new one, or Skip all.
  * 4. No match: Create a new transaction.
+ * 5. Proposal: Create a new proposal if the client is not an owner (If you're not a proposer, It will result as an error).
  */
 export async function handleTransactionStrategy(
   transaction: { to: Hex, data: Hex, value: string | number },
@@ -36,6 +37,10 @@ export async function handleTransactionStrategy(
 
   const [safeAddress, nonce] = await Promise.all([client.getAddress(), client.getNonce()]);
   const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce })
+
+  // Determine if the client is an owner or a proposer
+  const owners = await client.getOwners()
+  const newOrProposal = owners.includes(clientAddress) ? 'new' : 'propose'
 
   const selections = pendingTxs.results.reduce((acc, tx) => {
     // filter similar method calls
@@ -94,7 +99,7 @@ export async function handleTransactionStrategy(
       if (answer === 's') {
         return { action: 'skip' };
       } else if (answer === 'n') {
-        return { action: 'new' };
+        return { action: newOrProposal };
       } else {
         const index = parseInt(answer) - 1;
         if (index >= 0 && index < selections.length && !selections[index].signed) {
@@ -106,5 +111,5 @@ export async function handleTransactionStrategy(
     }
     logger.exitError(['Retry count exceeded'])
   }
-  return { action: 'new' };
+  return { action: newOrProposal };
 }

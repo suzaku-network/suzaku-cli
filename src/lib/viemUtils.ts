@@ -58,6 +58,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                 ...options,
                 value: options?.value ? options.value : '0',
               }
+              
               const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
               switch (selection.action) {
                 case 'new':
@@ -65,6 +66,21 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   break;
                 case 'confirm':
                   hash = (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
+                  break;
+                case 'propose':
+                  const safeTransaction = await client.safe.protocolKit.createTransaction({
+                    transactions: [transaction]
+                  })
+                  const safeTxHash = await client.safe.protocolKit.getTransactionHash(safeTransaction)
+                  const signature = await client.safe.protocolKit.signHash(safeTxHash)
+                  await client.safe.apiKit.proposeTransaction({
+                    safeAddress: await client.safe.getAddress(),
+                    safeTransactionData: safeTransaction.data,
+                    safeTxHash,
+                    senderAddress: client.account!.address as Hex,
+                    senderSignature: signature.data
+                  })
+                  hash = selection.hash!;
                   break;
                 default:// same as skip
                   hash = selection.hash!;
