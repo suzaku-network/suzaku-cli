@@ -1,4 +1,4 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
@@ -58,16 +58,19 @@ export function withSafeWrite<T extends SuzakuABINames>(
                 ...options,
                 value: options?.value ? options.value : '0',
               }
-              
+
               const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
               switch (selection.action) {
                 case 'new':
+                  logger.log(`Sending a new Safe transaction as owner`)
                   hash = (await client.safe.send({ transactions: [transaction] })).transactions?.ethereumTxHash as Hex;
                   break;
                 case 'confirm':
+                  logger.log(`Confirming a Safe transaction as owner`)
                   hash = (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
                   break;
                 case 'propose':
+                  logger.log(`Proposing a Safe transaction as delegate`)
                   const safeTransaction = await client.safe.protocolKit.createTransaction({
                     transactions: [transaction]
                   })
@@ -77,12 +80,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
                     safeAddress: await client.safe.getAddress(),
                     safeTransactionData: safeTransaction.data,
                     safeTxHash,
-                    senderAddress: client.account!.address as Hex,
+                    senderAddress: getAddress(client.account!.address),
                     senderSignature: signature.data
                   })
                   hash = selection.hash!;
                   break;
                 default:// same as skip
+                  logger.log(`Skipping a Safe transaction`)
                   hash = selection.hash!;
               }
             } else {
@@ -112,7 +116,8 @@ export function withSafeWrite<T extends SuzakuABINames>(
           } catch (error: any) {
             const msg = (error.message as string)
             const eraseToIndex = msg.indexOf("Docs:")
-            logger.exitError([`${abi}:\n\n${eraseToIndex === -1 ? (error as Error) : msg.slice(0, eraseToIndex - 1)}`], 2)
+            if (eraseToIndex === -1) throw error;
+            logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
           }
         }
       },
@@ -136,6 +141,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
           } catch (error: any) {
             const msg = (error.message as string)
             const eraseToIndex = msg.indexOf("Docs:")
+            if (eraseToIndex === -1) throw error;
             logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
           }
         }
@@ -161,6 +167,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
           } catch (error: any) {
             const msg = (error.message as string)
             const eraseToIndex = msg.indexOf("Docs:")
+            if (eraseToIndex === -1) throw error;
             logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
           }
         }
@@ -190,7 +197,7 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
     )
   };
 
-export async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abis: T[], address: Address): Promise<{name: T, ratio: number, valid: boolean}[]> {
+export async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abis: T[], address: Address): Promise<{ name: T, ratio: number, valid: boolean }[]> {
   // Tolerance for missing selectors 5%
   const TOLERANCE = 0.05;
   // Check for proxy
@@ -202,7 +209,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
     address = bytes32ToAddress(proxyImplementation as `0x${string}`);
     logger.log(`Detected proxy contract. Using implementation at address ${address} for ABI validation.`);
   }
-  
+
   let contractByteCode = await client.getCode({ address })
   if (!contractByteCode || contractByteCode === '0x') {
     logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
@@ -235,8 +242,8 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
       logger.warn(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
       logger.warn(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
     }
-    return [...acc, {name: abis[i], ratio, valid: ratio < TOLERANCE}]
-  }, [] as {name: T, ratio: number, valid: boolean}[])
+    return [...acc, { name: abis[i], ratio, valid: ratio < TOLERANCE }]
+  }, [] as { name: T, ratio: number, valid: boolean }[])
 
   if (result.every(r => !r.valid)) {
     logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abis.join(', ')} contract.`], 3)

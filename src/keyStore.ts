@@ -32,16 +32,19 @@ export function buildCommands(program: Command) {
     .action(async (name: string, options) => {
       const opts = program.opts() as { network: string, yes: boolean };
       let value: string;
+
       if (options.clip) {
         value = getClipboardValue();
         setClipboardValue(''); // Erase clipboard
       } else if (options.value) {
         value = options.value;
       } else if (options.prompt) {
-        value = await logger.prompt("Enter the value of the secret to create") || ""
+        value = await logger.prompt("Enter the value of the secret to create: ") || ""
       } else {
         throw new Error("Either --clip or --value or --prompt must be provided to create a secret.");
       }
+      if (value === "") throw new Error("Value cannot be empty");
+      if (value === "ledger") throw new Error("Value 'ledger' is reserved. Use another value.");
       // Validate address
       const address = getAddresses(value as string, opts.network);
       ParserAddress(address.C);
@@ -74,7 +77,8 @@ export function buildCommands(program: Command) {
   program
     .command("list")
     .description("List all encrypted secrets")
-    .option("-h, --hide-addresses", "Hide addresses of the secrets")
+    .option("-h, --hide-addresses", "Hide account addresses of the secrets")
+    // .option("-b, --balance", "Show account balance of the secrets")
     .action(async (options) => {
       const pass = new Pass(passPath)
       pass

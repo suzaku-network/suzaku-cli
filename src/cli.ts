@@ -131,6 +131,7 @@ import { installCompletion } from './lib/autoCompletion';
 import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
 import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
 import './lib/commandUtils';
+import { execSync } from 'child_process';
 // import { Command } from '@commander-js/extra-typings';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
@@ -146,10 +147,11 @@ async function main() {
             .choices(['fuji', 'mainnet', 'anvil'])
             .default('mainnet'))
         .addOption(new Option('-k, --private-key <privateKey>', 'Private key in Hex format')
-            .env('PK').argParser(ParserPrivateKey))
+            .env('PK').argParser(ParserPrivateKey).conflicts(['secretName', 'ledger']))
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
-            .conflicts('privateKey')
+            .conflicts(['privateKey', 'ledger'])
             .argParser(parseSecretName))
+        .addOption(new Option('-l, --ledger', 'Use Ledger hardware wallet for signing').conflicts(['privateKey', 'secretName']))
         .addOption(new Option('-w, --wait <confirmations>', 'Number of confirmations to wait after a write transaction')
             .default(2)
             .argParser(ParserNumber))
@@ -214,7 +216,7 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up:`);
-            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
+            await requirePChainBallance(client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
             if (!opts.yes) {
                 const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
@@ -228,7 +230,6 @@ async function main() {
                 const amount = Number(topup) / 1e9
                 pipe(await increasePChainValidatorBalance(
                     client,
-                    opts.privateKey!,
                     amount,
                     validationId,
                     false
@@ -1148,7 +1149,7 @@ async function main() {
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))// In decimals
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
@@ -1165,15 +1166,15 @@ async function main() {
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
+            // await requirePChainBallance(client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
-            // Call middlewareCompleteValidatorRegistration
+            // Call middlewareCompleteValidatorRegistration (no safe for pChain txs)
             await completeValidatorRegistration(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 middlewareSvc,
                 balancerSvc,
                 config,
-                options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
                 initialBalance,
@@ -1198,14 +1199,14 @@ async function main() {
                 client.account!
             );
         });
-    
+
     // Complete validator removal
     middlewareCmd
         .command("complete-validator-removal")
         .description("Complete validator removal on the P-Chain and on the middleware after removing a node")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
@@ -1218,19 +1219,15 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
-
-            // Derive pchainTxAddress from the private key
-            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
+            await requirePChainBallance(client, 50000n, opts.yes);
 
             await completeValidatorRemoval(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 middlewareSvc,
                 balancerSvc,
                 config,
                 removeNodeTxHash,
-                options.pchainTxPrivateKey,
-                pchainTxAddress,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
                 options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
@@ -1267,7 +1264,7 @@ async function main() {
         .description("Complete validator stake update of all or specified node IDs")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .action(async (middlewareAddress, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
@@ -1282,15 +1279,14 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(opts.privateKey!, client, 50000n, opts.yes);
+            await requirePChainBallance(client, 50000n, opts.yes);
 
             await completeWeightUpdate(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 middlewareSvc,
                 config,
                 validatorStakeUpdateTxHash,
-                options.pchainTxPrivateKey,
-                client.account!,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
             );
         });
@@ -1403,7 +1399,7 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
-            await requirePChainBallance(opts.privateKey!, client, totalTopUp + BigInt(2e4) * nodeCount, opts.yes); // extra 20000 for fees
+            await requirePChainBallance(client, totalTopUp + BigInt(2e4) * nodeCount, opts.yes); // extra 20000 for fees
             if (!opts.yes) {
                 const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
@@ -1417,7 +1413,6 @@ async function main() {
                 const amount = Number(topup) / 1e9
                 pipe(await increasePChainValidatorBalance(
                     client,
-                    opts.privateKey!,
                     amount,
                     validationId,
                     false
@@ -2140,7 +2135,7 @@ async function main() {
         .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
         .addArgument(ArgHex("addNodeTxHash", "Add node transaction hash"))
         .addArgument(ArgBLSPOP())
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .action(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
@@ -2159,15 +2154,15 @@ async function main() {
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(options.pchainTxPrivateKey, client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
+            await requirePChainBallance(client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 poaSecurityModule,
                 balancerSvc,
                 config,
-                options.pchainTxPrivateKey,
                 blsProofOfPossession,
                 addNodeTxHash,
                 initialBalance,
@@ -2204,7 +2199,7 @@ async function main() {
         .description("Complete validator removal in the P-Chain and in the POA Security Module")
         .addArgument(ArgAddress("poaSecurityModuleAddress", "POA Security Module address"))
         .addArgument(ArgHex("removeNodeTxHash", "Remove node transaction hash"))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
@@ -2216,19 +2211,15 @@ async function main() {
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
-
-            // Derive pchainTxAddress from the private key
-            const { P: pchainTxAddress } = getAddresses(options.pchainTxPrivateKey, opts.network);
+            await requirePChainBallance(client, 50000n, opts.yes);
 
             const txHash = await completeValidatorRemoval(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 poaSecurityModule,
                 balancerSvc,
                 config,
                 removeNodeTxHash,
-                options.pchainTxPrivateKey,
-                pchainTxAddress,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
                 options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
@@ -2265,7 +2256,7 @@ async function main() {
         .description("Complete validator weight update of all or specified node IDs")
         .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .action(async (poaSecurityModuleAddress, weightUpdateTxHash, options) => {
             const opts = program.opts();
@@ -2274,15 +2265,14 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(options.pchainTxPrivateKey, client, 50000n, opts.yes);
+            await requirePChainBallance(client, 50000n, opts.yes);
 
             const txHash = await completeWeightUpdate(
                 client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 poaSecurityModule,
                 config,
                 weightUpdateTxHash,
-                options.pchainTxPrivateKey,
-                client.account!,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
             );
 
@@ -2618,7 +2608,7 @@ async function main() {
                 batchSize,
                 client.account!
             );
-            console.log(`Rewards distributed for epoch ${epoch}. tx hash: ${txHash}`);
+            logger.log(`Rewards distributed for epoch ${epoch}. tx hash: ${txHash}`);
         });
 
     rewardsCmd
@@ -2643,7 +2633,7 @@ async function main() {
             }
 
             if (hashs.length === 0) {
-                console.log("No rewards to claim");
+                logger.log("No rewards to claim");
                 return;
             }
 
@@ -2651,7 +2641,7 @@ async function main() {
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
-                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                    logger.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
                 }
             });
         });
@@ -2679,7 +2669,7 @@ async function main() {
             }
 
             if (hashs.length === 0) {
-                console.log("No operator fees to claim");
+                logger.log("No operator fees to claim");
                 return;
             }
 
@@ -2687,7 +2677,7 @@ async function main() {
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
-                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                    logger.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
                 }
             });
 
@@ -2716,7 +2706,7 @@ async function main() {
             }
 
             if (hashs.length === 0) {
-                console.log("No curator fees to claim");
+                logger.log("No curator fees to claim");
                 return;
             }
 
@@ -2724,7 +2714,7 @@ async function main() {
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
-                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                    logger.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
                 }
             });
         });
@@ -2747,7 +2737,7 @@ async function main() {
             );
 
             if (!hash) {
-                console.log("No protocol fees to claim");
+                logger.log("No protocol fees to claim");
                 return;
             }
 
@@ -2755,7 +2745,7 @@ async function main() {
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
-                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                    logger.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
                 }
             });
         });
@@ -2780,15 +2770,15 @@ async function main() {
             );
 
             if (!hash) {
-                console.log("No undistributed rewards to claim");
+                logger.log("No undistributed rewards to claim");
                 return;
             }
-            
+
             const logs = await getERC20Events(hash, config)
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
-                    console.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
+                    logger.log(`Rewards claimed: ${value.toString()} tokens transferred from ${from} to ${to}`);
                 }
             });
         });
@@ -2824,7 +2814,7 @@ async function main() {
                 numberOfEpochs,
                 rewardsAmountWei
             );
-            console.log(`setRewardsAmountForEpochs tx hash: ${txHash}`);
+            logger.log(`setRewardsAmountForEpochs tx hash: ${txHash}`);
         });
 
     rewardsCmd
@@ -2844,7 +2834,7 @@ async function main() {
                 share,
                 client.account!
             );
-            console.log(`setRewardsShareForCollateralClass tx hash: ${hash}`);
+            logger.log(`setRewardsShareForCollateralClass tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2862,7 +2852,7 @@ async function main() {
                 minUptime,
                 client.account!
             );
-            console.log(`setMinRequiredUptime tx hash: ${hash}`);
+            logger.log(`setMinRequiredUptime tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2880,7 +2870,7 @@ async function main() {
                 newOwner,
                 client.account!
             );
-            console.log(`setProtocolOwner tx hash: ${hash}`);
+            logger.log(`setProtocolOwner tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2898,7 +2888,7 @@ async function main() {
                 newFee,
                 client.account!
             );
-            console.log(`updateProtocolFee tx hash: ${hash}`);
+            logger.log(`updateProtocolFee tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2916,7 +2906,7 @@ async function main() {
                 newFee,
                 client.account!
             );
-            console.log(`updateOperatorFee tx hash: ${hash}`);
+            logger.log(`updateOperatorFee tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2934,7 +2924,7 @@ async function main() {
                 newFee,
                 client.account!
             );
-            console.log(`updateCuratorFee tx hash: ${hash}`);
+            logger.log(`updateCuratorFee tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -2956,7 +2946,7 @@ async function main() {
                 curatorFee,
                 client.account!
             );
-            console.log(`updateAllFees tx hash: ${hash}`);
+            logger.log(`updateAllFees tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -3204,7 +3194,7 @@ async function main() {
                 account,
                 client.account!
             );
-            console.log(`Role granted. tx hash: ${txHash}`);
+            logger.log(`Role granted. tx hash: ${txHash}`);
         });
 
     accessControlCmd
@@ -3227,7 +3217,7 @@ async function main() {
                 account,
                 client.account!
             );
-            console.log(`Role revoked. tx hash: ${txHash}`);
+            logger.log(`Role revoked. tx hash: ${txHash}`);
         });
 
     accessControlCmd
@@ -3249,7 +3239,7 @@ async function main() {
                 role,
                 account
             );
-            console.log(`Account ${account} has role ${role}: ${hasRoleResult}`);
+            logger.log(`Account ${account} has role ${role}: ${hasRoleResult}`);
         });
 
     accessControlCmd
@@ -3269,7 +3259,68 @@ async function main() {
                 accessControl,
                 role
             );
-            console.log(`Admin role for role ${role} is: ${adminRole}`);
+            logger.log(`Admin role for role ${role} is: ${adminRole}`);
+        });
+    
+    const ledgerCmd = program
+        .command("ledger")
+        .description("Commands for ledger")
+    
+    ledgerCmd
+        .command("addresses")
+        .description("Get ledger addresses")
+        .action(async () => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, 'ledger');
+            logger.log(client.addresses);
+        });
+    
+    ledgerCmd
+        .command('fix-usb-rules')
+        .description('Fix ledger usb rules on linux')
+        .action(async () => {
+            logger.log("Fixing ledger usb rules...");
+            try {
+                // Execute system command to fix ledger usb rules (https://github.com/LedgerHQ/ledger-live-desktop/issues/2873#issuecomment-674844905)
+                const result = execSync('wget -q -O - https://raw.githubusercontent.com/LedgerHQ/udev-rules/master/add_udev_rules.sh | sudo bash');
+                logger.log(result.toString());
+            } catch (error) {
+                logger.error("Failed to fix ledger usb rules");
+                logger.error(error);
+            }
+        });
+    
+    const safeCmd = program
+        .command("safe")
+        .description("Commands for safe")
+    
+    safeCmd
+        .command("nonce")
+        .description("Get safe nonce")
+        .addArgument(ArgAddress("safeAddress", "Address of the safe"))
+        .action(async (safeAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            logger.log((await client.safe!.getNonce()).toString());
+        });
+    
+    safeCmd
+        .command("get-role")
+        .description("Get user role in the safe")
+        .addOption(OptAddress("--account <account>", "Account address to check"))
+        .action(async (options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const addressToCheck = options.account || client.account!.address;
+            const owners = await client.safe!.getOwners()
+            const delegates = await client.safe!.apiKit!.getSafeDelegates({safeAddress: opts.safe!})
+            if (owners.find(owner => owner.toLowerCase() === addressToCheck.toLowerCase())) {
+                logger.log("Owner");
+            } else if (delegates.results.find(delegate => delegate.delegate.toLowerCase() === addressToCheck.toLowerCase())) {
+                logger.log("Delegate");
+            } else {
+                logger.log("No role");
+            }
         });
 
     program
@@ -3287,11 +3338,15 @@ async function main() {
         const opts = program.opts();
         // Block manually private key on mainnet
         if (opts.privateKey! && opts.network === "mainnet") {
-            logger.error("Using private key on mainnet is not allowed. Use the secret keystore instead.");
+            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }
-        // Ensure privateKey is set if opts.secret is provided
-        opts.privateKey! = opts.privateKey! || opts.secretName;
+        // Ensure privateKey is set if opts.secret or ledger is provided
+        if (opts.secretName) {
+            program.setOptionValue('privateKey', opts.secretName)
+        } else if (opts.ledger) {
+            program.setOptionValue('privateKey', 'ledger')
+        }
 
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);

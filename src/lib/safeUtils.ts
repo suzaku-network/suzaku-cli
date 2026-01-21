@@ -1,7 +1,8 @@
 import { SafeClient } from "@safe-global/sdk-starter-kit";
 import { Hex } from "@safe-global/types-kit";
-import { Abi, decodeFunctionData } from "viem";
+import { Abi, decodeFunctionData, PublicActions, SignableMessage } from "viem";
 import { logger } from "./logger";
+import { ExtendedWalletClient } from "../client";
 
 interface SelectedTx {
   safeTxHash: Hex;
@@ -34,13 +35,18 @@ export async function handleTransactionStrategy(
   client: SafeClient,
   abi: Abi,
   clientAddress: Hex): Promise<TransactionStrategyResponse> {
-
+  clientAddress = clientAddress.toLowerCase() as Hex
   const [safeAddress, nonce] = await Promise.all([client.getAddress(), client.getNonce()]);
   const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce })
 
-  // Determine if the client is an owner or a proposer
-  const owners = await client.getOwners()
+  // Determine if the client is an owner or a proposer (a delegate)
+  const owners = (await client.getOwners()).map((o) => o.toLowerCase())
+  const delegates = (await client.apiKit.getSafeDelegates({ safeAddress })).results.map((d) => d.delegate.toLowerCase())
   const newOrProposal = owners.includes(clientAddress) ? 'new' : 'propose'
+
+  if (newOrProposal === 'propose' && !delegates.includes(clientAddress)) {
+    logger.exitError(['You are neither an owner or a delegate of this Safe'])
+  }
 
   const selections = pendingTxs.results.reduce((acc, tx) => {
     // filter similar method calls
@@ -73,8 +79,8 @@ export async function handleTransactionStrategy(
       logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly and is already confirmed. Skipping.`);
       return { action: 'skip', hash: exactMatch.safeTxHash };
     }
-    logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly. Confirming.`);
-    return { hash: exactMatch.safeTxHash, action: 'confirm' };
+    logger.log(`Transaction ${exactMatch.safeTxHash} matches exactly. ${newOrProposal === 'propose' ? 'Already proposed.' : 'Confirming.'}`);
+    return { hash: exactMatch.safeTxHash, action: newOrProposal === 'propose' ? 'skip' : 'confirm' };
   }
 
   // Prompt a message which summarizes the pending transactions and asks the user to choose between available actions: 'confirm' | 'skip' | 'new'.

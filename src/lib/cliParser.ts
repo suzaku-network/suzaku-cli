@@ -48,8 +48,11 @@ export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
   return value as Hex;
 };
 
-export const ParserPrivateKey = (value: string): Hex => {
+export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
   // Check if it's an hex, otherwise try to get it from the keystore
+  if (value === 'ledger') {
+    return value;
+  }
   if (!value.startsWith('0x')) {
     return parseSecretName(value,).trim() as Hex;
   }

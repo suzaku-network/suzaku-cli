@@ -34,7 +34,7 @@ export async function getValidationUptimeMessage(
   const validator = data.result.validators[0];
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;
-  console.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
+  logger.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
 
   const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);

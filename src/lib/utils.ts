@@ -3,10 +3,11 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import { fromBytes, Hex, pad, sliceHex, getAddress } from "viem";
+import { fromBytes, Hex, pad, sliceHex, getAddress, Account } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
 import { spawnSync } from "child_process";
+import { Addresses } from "../client";
 
 export function bytes32ToAddress(bytes32: `0x${string}`) {
     // on garde les 20 derniers bytes (40 hex chars)
@@ -35,17 +36,12 @@ export function cb58ToHex(cb58: string, include0x: boolean = true): string {
     return (include0x ? '0x' : '') + paddedHex;
 }
 
-interface AddressMap {
-    P: string;    // Platform chain address
-    C: Hex; // C-Chain address
-}
-
 /**
  * Derives addresses from a private key
  * @param privateKeyHex - Private key in hexadecimal format
  * @returns Object containing derived addresses for different chains
  */
-export function getAddresses(privateKeyHex: string, network: string): AddressMap {
+export function getAddresses(privateKeyHex: string, network: string): Addresses {
     const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';
     const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
 
@@ -58,7 +54,7 @@ export function getAddresses(privateKeyHex: string, network: string): AddressMap
 
     return {
         C: cChainAddress,
-        P: pChainAddress
+        P: pChainAddress as `P-${string}`
     };
 }
 
@@ -154,13 +150,13 @@ export function getClipboardValue(): string {
 
     if (platform === 'win32') {
         // Windows
-        result = spawnSync('powershell', ['-command', 'Get-Clipboard'], { encoding: 'utf-8' }).stdout;
+        result = spawnSync('powershell', ['-command', 'Get-Clipboard'], { encoding: 'utf-8', shell: false }).stdout;
     } else if (platform === 'darwin') {
         // macOS
-        result = spawnSync('pbpaste', [], { encoding: 'utf-8' }).stdout;
+        result = spawnSync('pbpaste', [], { encoding: 'utf-8', shell: false }).stdout;
     } else {
         // Linux and others
-        result = spawnSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8' }).stdout;
+        result = spawnSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8', shell: false }).stdout;
     }
 
     return result.trim();
@@ -171,12 +167,12 @@ export function setClipboardValue(value: string): void {
 
     if (platform === 'win32') {
         // Windows
-        spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8' });
+        spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8', shell: false });
     } else if (platform === 'darwin') {
         // macOS
-        spawnSync('pbcopy', [], { input: value, encoding: 'utf-8' });
+        spawnSync('pbcopy', [], { input: value, encoding: 'utf-8', shell: false });
     } else {
         // Linux and others
-        spawnSync('xclip', ['-selection', 'clipboard'], { input: value, encoding: 'utf-8' });
+        spawnSync('echo ' + value + ' | xclip -selection clipboard', { encoding: 'utf-8', shell: false });
     }
 }

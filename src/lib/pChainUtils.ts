@@ -2,17 +2,17 @@ import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PCh
 import { cb58ToHex, getAddresses, NodeId } from "./utils";
 import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { Hex, hexToBytes } from "viem";
+import { Hex, hexToBytes, toBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
+import { sha256 } from '@noble/hashes/sha256';
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: bigint } };
 
 export interface PChainBaseParams {
-    privateKeyHex: string;
     client: ExtendedWalletClient;
 }
 
@@ -159,33 +159,38 @@ export const getRPCEndpoint = (client: ExtendedClient): string => {
 };
 
 
-async function addSigToAllCreds(
+export async function addSigToAllCreds(
     unsignedTx: UnsignedTx,
-    privateKey: Uint8Array,
+    client: ExtendedWalletClient,
+    cChain = false
 ) {
     const unsignedBytes = unsignedTx.toBytes();
-    const publicKey = secp256k1.getPublicKey(privateKey);
-
-    if (!unsignedTx.hasPubkey(publicKey)) {
-        return;
+    const hash = '0x' + Buffer.from(sha256(unsignedBytes)).toString('hex') as Hex
+    // Bypass EIP-193
+    let signer: (parameters: { hash: Hex }) => Promise<Hex>;
+    if (client.account!.cSign && cChain) {
+        signer = client.account!.cSign;
+    } else {
+        signer = client.account!.sign!;
     }
-
-    const signature = await secp256k1.sign(unsignedBytes, privateKey);
+    
+    const signatureV2 = hexToBytes(await signer({ hash }))
+    signatureV2[64] = signatureV2[64] - 27
+    if (!signatureV2) {
+        throw new Error("Failed to sign message");
+    }
     for (let i = 0; i < unsignedTx.getCredentials().length; i++) {
-        unsignedTx.addSignatureAt(signature, i, 0);
+        unsignedTx.addSignatureAt(signatureV2, i, 0);
     }
 }
 
 export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
-    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pAddress } = params.client.addresses;
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -201,23 +206,20 @@ export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
         },
         context,
     );
-
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
-    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
+    await addSigToAllCreds(tx, params.client);
+    const res = await issueSignedTx(pvmApi, tx)
+    const txID = R.getExn(res)
 
     return txID;
 }
 
 export async function createChain(params: CreateChainParams): Promise<Hex> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
-    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pAddress } = params.client.addresses;
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -239,7 +241,7 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
         context,
     );
 
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+    await addSigToAllCreds(tx, params.client);
     const txID = R.getExn(await issueSignedTx(pvmApi, tx))
 
     logger.log('Created chain: ', txID);
@@ -247,15 +249,12 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
 }
 
 // export async function convertToL1(params: ConvertToL1Params): Promise<string> {
-//     if (!params.privateKeyHex) {
-//         throw new Error("Private key required");
-//     }
 //     const rpcUrl = getRPCEndpoint(params.client);
 //     const pvmApi = new pvm.PVMApi(rpcUrl);
 //     const feeState = await pvmApi.getFeeState();
 //     const context = await Context.getContextFromURI(rpcUrl);
 
-//     const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+//     const { P: pAddress } = params.client.addresses;
 //     const addressBytes = utils.bech32ToBytes(pAddress);
 
 //     const { utxos } = await pvmApi.getUTXOs({
@@ -296,7 +295,7 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
 //         context,
 //     );
 
-//     await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+//     await addSigToAllCreds(tx, params.client);
 //     const txID = await sendSignedTx(pvmApi, tx);
 
 //     // Sleep for 3 seconds
@@ -306,15 +305,12 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
 // }
 
 export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
-    const { P: pAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pAddress } = params.client.addresses;
     const addressBytes = utils.bech32ToBytes(pAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -346,21 +342,18 @@ export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
         context,
     );
 
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+    await addSigToAllCreds(tx, params.client);
     const txID = R.getExn(await issueSignedTx(pvmApi, tx))
 
     return txID;
 }
 
 export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<Result<Hex, string>> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
-    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pChainAddress } = params.client.addresses;
 
     const addressBytes = utils.bech32ToBytes(pChainAddress);
 
@@ -379,24 +372,21 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
     }, context);
 
     // Sign the transaction
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+    await addSigToAllCreds(tx, params.client);
 
     // Issue the signed transaction
-    const txID = issueSignedTx(pvmApi, tx);
+    const txID = await issueSignedTx(pvmApi, tx);
 
     return txID;
 }
 
 export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<Result<string, string>> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
-    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pChainAddress } = params.client.addresses;
     const addressBytes = utils.bech32ToBytes(pChainAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -416,10 +406,10 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     );
 
     // Sign the transaction
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+    await addSigToAllCreds(tx, params.client);
 
     // Issue the signed transaction
-    const txID = issueSignedTx(pvmApi, tx);
+    const txID = await issueSignedTx(pvmApi, tx);
 
     return txID;
 }
@@ -472,14 +462,11 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
 }
 
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<Result<string, string>> {
-    if (!params.privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
-    const { P: pChainAddress } = getAddresses(params.privateKeyHex, params.client.network!);
+    const { P: pChainAddress } = params.client.addresses;
     const addressBytes = utils.bech32ToBytes(pChainAddress);
 
     const { utxos } = await pvmApi.getUTXOs({
@@ -498,34 +485,30 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
     );
 
     // Sign the transaction
-    await addSigToAllCreds(tx, utils.hexToBuffer(params.privateKeyHex));
+    await addSigToAllCreds(tx, params.client);
 
     // Issue the signed transaction
-    const txID = issueSignedTx(pvmApi, tx);
+    const txID = await issueSignedTx(pvmApi, tx);
 
     return txID;
 }
 
 export async function increasePChainValidatorBalance(
     client: ExtendedWalletClient,
-    privateKeyHex: string,
     amount: number,
     validationId: string,
     check: boolean = true
 ): Promise<Result<Hex, string>> {
-    if (!privateKeyHex) {
-        throw new Error("Private key required");
-    }
     const rpcUrl = getRPCEndpoint(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
-    const { P: pChainAddress } = getAddresses(privateKeyHex, client.network!);
+    const { P: pChainAddress } = client.addresses;
     const addressBytes = utils.bech32ToBytes(pChainAddress);
     const nAVAX = BigInt(Math.floor(amount * 1e9)); // Convert AVAX to nAVAX
     // Ensure the P-Chain address has enough balance
-    if (check) await requirePChainBallance(privateKeyHex, client, nAVAX);
+    if (check) await requirePChainBallance(client, nAVAX);
 
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pChainAddress]
@@ -544,10 +527,10 @@ export async function increasePChainValidatorBalance(
     );
 
     // Sign the transaction
-    await addSigToAllCreds(tx, utils.hexToBuffer(privateKeyHex));
+    await addSigToAllCreds(tx, client);
 
     // Issue the signed transaction
-    const txID = issueSignedTx(pvmApi, tx);
+    const txID = await issueSignedTx(pvmApi, tx);
 
     return txID;
 }
@@ -639,11 +622,10 @@ export async function convertSubnetToL1(params:
         validators: NodeConfig[];
     }) {
     const managerAddress = params.validatorManager.address;
-    const { client, privateKeyHex, validators } = params;
+    const { client, validators } = params;
     // 1) convert to L1
     const convertTx = await convertToL1({
         client,
-        privateKeyHex: privateKeyHex,
         subnetId: params.subnetId,
         chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
         managerAddress,

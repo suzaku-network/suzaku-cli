@@ -9,8 +9,9 @@ Command.prototype.action = function (fn: (...args: any[]) => void | Promise<void
       await fn(...args);
       logger.printJson();
     } catch (error: any) {
-      const msg = (error.message as string);
-      logger.exitError([msg], 2);
+      error.stack = error.stack?.split("\n").slice(0, -1).join("\n");
+      logger.error(error);
+      process.exit(1);
     }
   };
   return originalAction.call(this, wrappedFn);

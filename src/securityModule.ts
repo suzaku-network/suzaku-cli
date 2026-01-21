@@ -13,10 +13,10 @@ import { utils } from "@avalabs/avalanchejs";
 
 export async function completeValidatorRegistration(
   client: ExtendedWalletClient,
+  pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['PoASecurityModule'] | SafeSuzakuContract['L1Middleware'],
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   config: Config,
-  pChainTxPrivateKey: string,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
   initialBalance: bigint,
@@ -61,8 +61,7 @@ export async function completeValidatorRegistration(
     logger.log("\nRegistering validator on P-Chain...");
     // eslint-disable-next-line
     pipe(await registerL1Validator({
-      privateKeyHex: pChainTxPrivateKey,
-      client,
+      client: pchainClient,
       blsProofOfPossession: blsProofOfPossession,
       signedMessage,
       initialBalance: initialBalance
@@ -105,12 +104,11 @@ export async function completeValidatorRegistration(
 
 export async function completeValidatorRemoval(
   client: ExtendedWalletClient,
+  pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['L1Middleware'] | SafeSuzakuContract['PoASecurityModule'],
   balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
   config: Config,
   initializeEndValidationTxHash: Hex,
-  pChainTxPrivateKey: string,
-  pChainTxAddress: string,
   waitValidatorVisible: boolean,
   nodeIDs?: NodeId[],
   addNodeTxHash?: Hex[]
@@ -183,14 +181,24 @@ export async function completeValidatorRemoval(
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
-      const pChainSetWeightTxId = await setValidatorWeight({
-        privateKeyHex: pChainTxPrivateKey,
-        client,
-        validationID: validationID,
-        message: signedL1ValidatorWeightMessage
-      });
-      logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId);
+      pipe(
+        await setValidatorWeight({
+          client: pchainClient,
+          validationID: validationID,
+          message: signedL1ValidatorWeightMessage
+        }),
+        R.tapError(
+          (error) => {
+            throw new Error("SetL1ValidatorWeightTx failed on P-Chain: " + error+'\n');
+          }),
+        R.tap((txId) => {
+          logger.log("SetL1ValidatorWeightTx executed on P-Chain: " + txId);
+        })
+      );
+      
     }
+    
+
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
     const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client, addNodeBlockNumber);
@@ -234,11 +242,10 @@ export async function completeValidatorRemoval(
 
 export async function completeWeightUpdate(
   client: ExtendedWalletClient,
+  pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['PoASecurityModule'] | SafeSuzakuContract['L1Middleware'],
   config: Config,
   validatorWeightUpdateTxHash: Hex,
-  pChainTxPrivateKey: string,
-  account: Account,
   nodeIDs?: NodeId[]
 ) {
   logger.log("Completing node stake update...");
@@ -300,8 +307,7 @@ export async function completeWeightUpdate(
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
     pipe(await setValidatorWeight({
-      privateKeyHex: pChainTxPrivateKey,
-      client,
+      client: pchainClient,
       validationID: validationIDHex,
       message: signedL1ValidatorWeightMessage
     }),
@@ -331,7 +337,7 @@ export async function completeWeightUpdate(
     const method = securityModule.safeWrite.completeValidatorWeightUpdate as any;
     const hash = await method(
       [0],
-      { chain: null, account, accessList }
+      { chain: null, account: client.account!, accessList }
     );
     logger.log("completeStakeUpdate done, tx hash:", hash);
   }

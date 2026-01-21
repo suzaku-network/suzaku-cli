@@ -24,7 +24,7 @@
     "suzaku-cli": "node dist/cli.js",
     "cli": "pnpx ts-node src/cli.ts",
     "build": "tsc",
-    "prepare": "pnpm build",
+    "prepare": "pnpm build && cd node_modules/node-hid && npm run install",
     "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli"
   },
   "bin": {
@@ -33,6 +33,7 @@
   "author": "",
   "dependencies": {
     "@avalabs/avalanchejs": "5.0.0",
+    "@avalabs/hw-app-avalanche": "1.1.1",
     "@commander-js/extra-typings": "^14.0.0",
     "@ledgerhq/hw-app-eth": "^7.1.1",
     "@ledgerhq/hw-transport-node-hid": "^6.29.16",
