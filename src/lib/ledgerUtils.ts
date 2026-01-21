@@ -112,7 +112,6 @@ export async function getLedgerAccount(network: Network, accountIndex: number = 
       throw error;
     });
   const { address: pChainAddress } = await appAva.getAddressAndPubKey(ledger.getPChainPath(accountIndex), false, network === 'mainnet' ? 'avax' : 'fuji')
-  console.log(pChainAddress)
   return {
     pChainAddress,
     cSign: async (parameters: { hash: Hex }) => {
