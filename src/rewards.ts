@@ -133,14 +133,14 @@ export async function setRewardsAmountForEpochs(
 /**
  * Sets rewards share for collateral class
  */
-export async function setRewardsShareForCollateralClass(
+export async function setRewardsBipsForCollateralClass(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   collateralClass: bigint,
-  share: number,
+  bips: number,
   account: Account
 ) {
-  const txHash = await rewards.safeWrite.setRewardsShareForCollateralClass(
-    [collateralClass, share],
+  const txHash = await rewards.safeWrite.setRewardsBipsForCollateralClass(
+    [collateralClass, bips],
     { chain: null, account }
   );
   return txHash;
@@ -352,18 +352,18 @@ export async function getFeesConfiguration(
 }
 
 /**
- * Gets rewards share for collateral class
+ * Gets rewards bips for collateral class
  */
-export async function getRewardsShareForCollateralClass(
+export async function getRewardsBipsForCollateralClass(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   collateralClass: bigint
 ) {
-  const share = await rewards.read.rewardsSharePerCollateralClass(
+  const bips = await rewards.read.rewardsBipsPerCollateralClass(
     [collateralClass]
   );
 
-  logger.log(`Rewards share for collateral class ${collateralClass}: ${share}`);
-  return share;
+  logger.log(`Rewards bips for collateral class ${collateralClass}: ${bips}`);
+  return bips;
 }
 
 /**

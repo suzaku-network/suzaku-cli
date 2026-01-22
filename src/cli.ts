@@ -96,7 +96,7 @@ import {
     claimProtocolFee,
     claimUndistributedRewards,
     setRewardsAmountForEpochs,
-    setRewardsShareForCollateralClass,
+    setRewardsBipsForCollateralClass,
     setMinRequiredUptime,
     setProtocolOwner,
     updateProtocolFee,
@@ -110,7 +110,7 @@ import {
     getProtocolRewards,
     getDistributionBatch,
     getFeesConfiguration,
-    getRewardsShareForCollateralClass,
+    getRewardsBipsForCollateralClass,
     getMinRequiredUptime,
     getLastEpochClaimedStaker,
     getLastEpochClaimedOperator,
@@ -2431,17 +2431,17 @@ async function main() {
         .command("get-validation-uptime-message")
         .description("Get the validation uptime message for a given validator in the given L1 RPC")
         .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
-        .addArgument(ArgCB58("chainId", "Chain ID"))
+        .addArgument(ArgCB58("blockchainId", "Blockchain ID"))
         .addArgument(ArgNodeID())
-        .action(async (rpcUrl, chainId, nodeId) => {
-            rpcUrl = rpcUrl + "/ext/bc/" + chainId;
+        .action(async (rpcUrl, blockchainId, nodeId) => {
+            rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
             const opts = program.opts();
             await getValidationUptimeMessage(
                 opts.network,
                 rpcUrl,
                 nodeId,
                 opts.network === "fuji" ? 5 : 1,
-                chainId);
+                blockchainId);
         });
 
     uptimeCmd
@@ -2465,10 +2465,10 @@ async function main() {
         .command("report-uptime-validator")
         .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
         .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
-        .addArgument(ArgCB58("sourceChainId", "The Chain ID for which the uptime is being reported"))
+        .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
         .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract on the C-Chain"))
-        .action(async (rpcUrl, sourceChainId, nodeId, uptimeTrackerAddress) => {
+        .action(async (rpcUrl, blockchainId, nodeId, uptimeTrackerAddress) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
@@ -2477,13 +2477,13 @@ async function main() {
 
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            rpcUrl = rpcUrl + "/ext/bc/" + sourceChainId;
+            rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
                 opts.network,
                 rpcUrl,
                 nodeId,
-                sourceChainId,
+                blockchainId,
                 await config.contracts.UptimeTracker(uptimeTrackerAddress),
                 client.account!
             );
@@ -2849,23 +2849,23 @@ async function main() {
         });
 
     rewardsCmd
-        .command("set-share-collateral-class")
-        .description("Set rewards share for collateral class")
+        .command("set-bips-collateral-class")
+        .description("Set rewards bips for collateral class")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .addArgument(ArgNumber("share", "Share in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, collateralClass, share) => {
+        .addArgument(ArgNumber("bips", "Bips in basis points (100 = 1%)"))
+        .action(async (rewardsAddress, collateralClass, bips) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const hash = await setRewardsShareForCollateralClass(
+            const hash = await setRewardsBipsForCollateralClass(
                 rewardsContract,
                 collateralClass,
-                share,
+                bips,
                 client.account!
             );
-            logger.log(`setRewardsShareForCollateralClass tx hash: ${hash}`);
+            logger.log(`setRewardsBipsForCollateralClass tx hash: ${hash}`);
         });
 
     rewardsCmd
@@ -3096,8 +3096,8 @@ async function main() {
         });
 
     rewardsCmd
-        .command("get-share-collateral-class")
-        .description("Get rewards share for collateral class")
+        .command("get-bips-collateral-class")
+        .description("Get rewards bips for collateral class")
         .addArgument(ArgAddress("rewardsAddress", "Address of the rewards contract"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .action(async (rewardsAddress, collateralClass) => {
@@ -3105,7 +3105,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true);
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            await getRewardsShareForCollateralClass(
+            await getRewardsBipsForCollateralClass(
                 rewardsContract,
                 collateralClass
             );
@@ -3209,7 +3209,7 @@ async function main() {
         .command("grant-role")
         .description("Grant a role to an account")
         .addArgument(ArgAddress("contractAddress", "Address of the contract"))
-        .argument("role", "Role hash or name case unsensitive")
+        .argument("role", "Role hash or name case unsensitive without '()'")
         .addArgument(ArgAddress("account", "Account address to grant the role to"))
         .action(async (contractAddress, role, account) => {
             const opts = program.opts();

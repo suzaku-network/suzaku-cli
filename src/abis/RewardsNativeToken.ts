@@ -680,7 +680,7 @@ export default [
     },
     {
         "type": "function",
-        "name": "rewardsSharePerCollateralClass",
+        "name": "rewardsBipsPerCollateralClass",
         "inputs": [
             {
                 "name": "collateralClass",
@@ -761,6 +761,24 @@ export default [
     },
     {
         "type": "function",
+        "name": "setRewardsBipsForCollateralClass",
+        "inputs": [
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "internalType": "uint96"
+            },
+            {
+                "name": "share",
+                "type": "uint16",
+                "internalType": "uint16"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setRewardsDistributorRole",
         "inputs": [
             {
@@ -780,24 +798,6 @@ export default [
                 "name": "newRewardsManager",
                 "type": "address",
                 "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setRewardsShareForCollateralClass",
-        "inputs": [
-            {
-                "name": "collateralClass",
-                "type": "uint96",
-                "internalType": "uint96"
-            },
-            {
-                "name": "share",
-                "type": "uint16",
-                "internalType": "uint16"
             }
         ],
         "outputs": [],
@@ -1107,6 +1107,25 @@ export default [
     },
     {
         "type": "event",
+        "name": "RewardsBipsUpdated",
+        "inputs": [
+            {
+                "name": "collateralClassId",
+                "type": "uint96",
+                "indexed": true,
+                "internalType": "uint96"
+            },
+            {
+                "name": "rewardsBips",
+                "type": "uint16",
+                "indexed": false,
+                "internalType": "uint16"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "RewardsClaimed",
         "inputs": [
             {
@@ -1165,25 +1184,6 @@ export default [
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RewardsShareUpdated",
-        "inputs": [
-            {
-                "name": "collateralClassId",
-                "type": "uint96",
-                "indexed": true,
-                "internalType": "uint96"
-            },
-            {
-                "name": "rewardsPercentage",
-                "type": "uint16",
-                "indexed": false,
-                "internalType": "uint16"
             }
         ],
         "anonymous": false
@@ -1375,23 +1375,28 @@ export default [
     },
     {
         "type": "error",
+        "name": "CollateralClassBipsExceed10000",
+        "inputs": [
+            {
+                "name": "totalBp",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "CollateralClassBipsNotSet",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "CollateralClassNotFound",
         "inputs": [
             {
                 "name": "vault",
                 "type": "address",
                 "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "CollateralClassSharesExceed100",
-        "inputs": [
-            {
-                "name": "totalBp",
-                "type": "uint256",
-                "internalType": "uint256"
             }
         ]
     },
@@ -1452,7 +1457,7 @@ export default [
     },
     {
         "type": "error",
-        "name": "FeeConfigurationExceeds100",
+        "name": "FeeConfigurationExceeds10000",
         "inputs": [
             {
                 "name": "totalBp",
@@ -1713,7 +1718,7 @@ export default [
     },
     {
         "type": "error",
-        "name": "TotalFeesExceed100",
+        "name": "TotalFeesExceed10000",
         "inputs": [
             {
                 "name": "totalFees",
