@@ -1,8 +1,6 @@
 import { SafeClient } from "@safe-global/sdk-starter-kit";
-import { Hex } from "@safe-global/types-kit";
-import { Abi, decodeFunctionData, PublicActions, SignableMessage } from "viem";
+import { Abi, decodeFunctionData, Hex } from "viem";
 import { logger } from "./logger";
-import { ExtendedWalletClient } from "../client";
 
 interface SelectedTx {
   safeTxHash: Hex;

@@ -1,4 +1,4 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
@@ -19,7 +19,48 @@ export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typ
 export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] extends { write: infer W } ? W : never };
 
 // Define the type for the safe contract instances that include a safeWrite method
-export type SafeSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] & { safeWrite: TWriteSuzakuContract[K] } };
+export type SafeSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] & { safeWrite: TWriteSuzakuContract[K], multicall: MulticallFn<K> } };
+
+// Multicall Types
+// Extract read function names from a contract ABI
+type ReadFunctionNames<T extends SuzakuABINames> = ContractFunctionName<typeof SuzakuABI[T], 'view' | 'pure'>;
+
+// Check if a function has required arguments (args length > 0)
+type HasArgs<T extends SuzakuABINames, FName extends ReadFunctionNames<T>> =
+  ContractFunctionArgs<typeof SuzakuABI[T], 'view' | 'pure', FName> extends readonly [] ? false : true;
+
+// Multicall input item: string for no-args functions, {name, args} for functions with args
+type MulticallItem<T extends SuzakuABINames, FName extends ReadFunctionNames<T> = ReadFunctionNames<T>> =
+  FName extends ReadFunctionNames<T>
+  ? HasArgs<T, FName> extends true
+  ? { name: FName; args: ContractFunctionArgs<typeof SuzakuABI[T], 'view' | 'pure', FName> }
+  : FName | { name: FName }
+  : never;
+
+// Extract function name from a MulticallItem
+type ExtractFunctionName<T extends SuzakuABINames, Item> =
+  Item extends string ? Item :
+  Item extends { name: infer N } ? N extends ReadFunctionNames<T> ? N : never :
+  never;
+
+// Result type for a single multicall item
+type MulticallItemResult<T extends SuzakuABINames, Item> =
+  ExtractFunctionName<T, Item> extends ReadFunctionNames<T>
+  ? ContractFunctionReturnType<typeof SuzakuABI[T], 'view' | 'pure', ExtractFunctionName<T, Item>>
+  : never;
+
+// Map over array of items to get result types
+type MulticallResults<T extends SuzakuABINames, Items extends readonly MulticallItem<T>[]> = {
+  [K in keyof Items]: {
+    name: ExtractFunctionName<T, Items[K]>;
+    result: MulticallItemResult<T, Items[K]>;
+  }
+};
+
+// The multicall function signature
+type MulticallFn<T extends SuzakuABINames> = <const Items extends readonly MulticallItem<T>[]>(
+  items: Items
+) => Promise<MulticallResults<T, Items>>;
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
 export type CurriedContractFn<T extends SuzakuABINames> = (address: Address) => Promise<SafeSuzakuContract[T]>;
@@ -175,6 +216,34 @@ export function withSafeWrite<T extends SuzakuABINames>(
     };
 
     (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
+
+    // Multicall implementation for batching read operations
+    (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>) => {
+      const contracts = items.map((item) => {
+        const functionName = typeof item === 'string' ? item : item.name;
+        const args = typeof item === 'object' && 'args' in item ? item.args : [];
+        return {
+          address: contract.address,
+          abi: SuzakuABI[abi] as Abi,
+          functionName,
+          args,
+        };
+      });
+
+      const results = await client.multicall({ contracts: contracts as any });
+
+      return results.map((result, index) => {
+        const item = items[index];
+        const name = typeof item === 'string' ? item : item.name;
+        if (result.status === 'failure') {
+          logger.warn(`Multicall failed for ${name}: ${result.error}`);
+        }
+        return {
+          name,
+          result: result.status === 'success' ? result.result : undefined,
+        };
+      });
+    };
 
   }
 

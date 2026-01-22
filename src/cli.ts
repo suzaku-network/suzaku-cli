@@ -1889,6 +1889,37 @@ async function main() {
 
     /**
      * --------------------------------------------------
+     * Validator Manager
+     * --------------------------------------------------
+     */
+    const validatorManagerCmd = program
+        .command("vmc")
+        .description("Commands to interact with ValidatorManager contracts");
+
+    validatorManagerCmd
+        .command("info")
+        .description("Get summary informations of a ValidatorManager contract")
+        .addArgument(ArgAddress("validatorManagerAddress", "Validator manager address"))
+        .action(async (validatorManagerAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // instantiate ValidatorManager contract
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
+
+            const results = await validatorManager.multicall([
+                'getChurnTracker',
+                'getChurnPeriodSeconds',
+                'l1TotalWeight',
+                'owner',
+                'subnetID'
+            ]);
+
+            console.log(results.reduce((acc, r) => ({ ...acc, [r.name]: r.result }), {} as Record<string, unknown>));
+        });
+
+    /**
+     * --------------------------------------------------
      * BALANCER
      * --------------------------------------------------
      */
@@ -3261,11 +3292,11 @@ async function main() {
             );
             logger.log(`Admin role for role ${role} is: ${adminRole}`);
         });
-    
+
     const ledgerCmd = program
         .command("ledger")
         .description("Commands for ledger")
-    
+
     ledgerCmd
         .command("addresses")
         .description("Get ledger addresses")
@@ -3274,7 +3305,7 @@ async function main() {
             const client = await generateClient(opts.network, 'ledger');
             logger.log(client.addresses);
         });
-    
+
     ledgerCmd
         .command('fix-usb-rules')
         .description('Fix ledger usb rules on linux')
@@ -3289,11 +3320,11 @@ async function main() {
                 logger.error(error);
             }
         });
-    
+
     const safeCmd = program
         .command("safe")
         .description("Commands for safe")
-    
+
     safeCmd
         .command("nonce")
         .description("Get safe nonce")
@@ -3303,7 +3334,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             logger.log((await client.safe!.getNonce()).toString());
         });
-    
+
     safeCmd
         .command("get-role")
         .description("Get user role in the safe")
@@ -3313,7 +3344,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const addressToCheck = options.account || client.account!.address;
             const owners = await client.safe!.getOwners()
-            const delegates = await client.safe!.apiKit!.getSafeDelegates({safeAddress: opts.safe!})
+            const delegates = await client.safe!.apiKit!.getSafeDelegates({ safeAddress: opts.safe! })
             if (owners.find(owner => owner.toLowerCase() === addressToCheck.toLowerCase())) {
                 logger.log("Owner");
             } else if (delegates.results.find(delegate => delegate.delegate.toLowerCase() === addressToCheck.toLowerCase())) {
