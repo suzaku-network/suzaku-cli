@@ -16,6 +16,158 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "OperatorUptimeComputed",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "indexed": true,
+                "internalType": "uint48"
+            },
+            {
+                "name": "uptime",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ValidatorUptimeComputed",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "firstEpoch",
+                "type": "uint48",
+                "indexed": true,
+                "internalType": "uint48"
+            },
+            {
+                "name": "uptimeSecondsAdded",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "numberOfEpochs",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpMessage",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpOriginSenderAddress",
+        "inputs": [
+            {
+                "name": "senderAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpSourceChainID",
+        "inputs": [
+            {
+                "name": "sourceChainID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UptimeBeforeStart",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "startEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "currentEpoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UptimeTracker__NoValidators",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UptimeTracker__OperatorUptimeAlreadySet",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UptimeTracker__ValidatorUptimeNotRecorded",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint48",
+                "internalType": "uint48"
+            },
+            {
+                "name": "validator",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
         "type": "function",
         "name": "WARP_MESSENGER",
         "inputs": [],
@@ -238,157 +390,5 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "event",
-        "name": "OperatorUptimeComputed",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "indexed": true,
-                "internalType": "uint48"
-            },
-            {
-                "name": "uptime",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "ValidatorUptimeComputed",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "firstEpoch",
-                "type": "uint48",
-                "indexed": true,
-                "internalType": "uint48"
-            },
-            {
-                "name": "uptimeSecondsAdded",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "numberOfEpochs",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpMessage",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpOriginSenderAddress",
-        "inputs": [
-            {
-                "name": "senderAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpSourceChainID",
-        "inputs": [
-            {
-                "name": "sourceChainID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UptimeBeforeStart",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "startEpoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "currentEpoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UptimeTracker__NoValidators",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UptimeTracker__OperatorUptimeAlreadySet",
-        "inputs": [
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UptimeTracker__ValidatorUptimeNotRecorded",
-        "inputs": [
-            {
-                "name": "epoch",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "validator",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
     }
 ] as const;

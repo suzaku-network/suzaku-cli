@@ -11,6 +11,784 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "Approval",
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "spender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "value",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Claim",
+        "inputs": [
+            {
+                "name": "claimer",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "epoch",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ClaimBatch",
+        "inputs": [
+            {
+                "name": "claimer",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "epochs",
+                "type": "uint256[]",
+                "indexed": false,
+                "internalType": "uint256[]"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Deposit",
+        "inputs": [
+            {
+                "name": "depositor",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "onBehalfOf",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "shares",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OnSlash",
+        "inputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "captureTimestamp",
+                "type": "uint48",
+                "indexed": false,
+                "internalType": "uint48"
+            },
+            {
+                "name": "slashedAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleAdminChanged",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "previousAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "newAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleGranted",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleRevoked",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetDelegator",
+        "inputs": [
+            {
+                "name": "delegator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetDepositLimit",
+        "inputs": [
+            {
+                "name": "limit",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetDepositWhitelist",
+        "inputs": [
+            {
+                "name": "status",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetDepositorWhitelistStatus",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "status",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetIsDepositLimit",
+        "inputs": [
+            {
+                "name": "status",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetSlasher",
+        "inputs": [
+            {
+                "name": "slasher",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SlashWithRedistribution",
+        "inputs": [
+            {
+                "name": "requestedNextSlashed",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "nextWithdrawalsSlashed",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "deficit",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "epoch",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Transfer",
+        "inputs": [
+            {
+                "name": "from",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "to",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "value",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Withdraw",
+        "inputs": [
+            {
+                "name": "withdrawer",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "claimer",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "burnedShares",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "mintedShares",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "AccessControlBadConfirmation",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AccessControlUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "neededRole",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AlreadyInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CheckpointUnorderedInsertion",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ERC20InsufficientAllowance",
+        "inputs": [
+            {
+                "name": "spender",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "allowance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "needed",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC20InsufficientBalance",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "balance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "needed",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC20InvalidApprover",
+        "inputs": [
+            {
+                "name": "approver",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC20InvalidReceiver",
+        "inputs": [
+            {
+                "name": "receiver",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC20InvalidSender",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC20InvalidSpender",
+        "inputs": [
+            {
+                "name": "spender",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotFactory",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OwnableInvalidOwner",
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "OwnableUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ReentrancyGuardReentrantCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SafeCastOverflowedUintDowncast",
+        "inputs": [
+            {
+                "name": "bits",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "value",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "SafeERC20FailedOperation",
+        "inputs": [
+            {
+                "name": "token",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "Vault__AlreadyClaimed",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__AlreadySet",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__DelegatorAlreadyInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__DepositLimitReached",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InconsistentRoles",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InsufficientClaim",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InsufficientDeposit",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InsufficientRedemption",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InsufficientWithdrawal",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidAccount",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidBurner",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidCaptureEpoch",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidClaimer",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidCollateral",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidDelegator",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidEpoch",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidEpochDuration",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidFactory",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidLengthEpochs",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidOnBehalfOf",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidRecipient",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidSlasher",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__InvalidTimestamp",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__MigrationNotImplemented",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__MissingRoles",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__NoPreviousEpoch",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__NotDelegator",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__NotSlasher",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__NotWhitelistedDepositor",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__SlasherAlreadyInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__TooMuchRedeem",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Vault__TooMuchWithdraw",
+        "inputs": []
+    },
+    {
         "type": "function",
         "name": "DEFAULT_ADMIN_ROLE",
         "inputs": [],
@@ -1329,783 +2107,5 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "event",
-        "name": "Approval",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "spender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Claim",
-        "inputs": [
-            {
-                "name": "claimer",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "epoch",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "ClaimBatch",
-        "inputs": [
-            {
-                "name": "claimer",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "epochs",
-                "type": "uint256[]",
-                "indexed": false,
-                "internalType": "uint256[]"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Deposit",
-        "inputs": [
-            {
-                "name": "depositor",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "onBehalfOf",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "shares",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Initialized",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OnSlash",
-        "inputs": [
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "captureTimestamp",
-                "type": "uint48",
-                "indexed": false,
-                "internalType": "uint48"
-            },
-            {
-                "name": "slashedAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OwnershipTransferred",
-        "inputs": [
-            {
-                "name": "previousOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleAdminChanged",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "previousAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "newAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleGranted",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleRevoked",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetDelegator",
-        "inputs": [
-            {
-                "name": "delegator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetDepositLimit",
-        "inputs": [
-            {
-                "name": "limit",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetDepositWhitelist",
-        "inputs": [
-            {
-                "name": "status",
-                "type": "bool",
-                "indexed": false,
-                "internalType": "bool"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetDepositorWhitelistStatus",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "status",
-                "type": "bool",
-                "indexed": false,
-                "internalType": "bool"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetIsDepositLimit",
-        "inputs": [
-            {
-                "name": "status",
-                "type": "bool",
-                "indexed": false,
-                "internalType": "bool"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetSlasher",
-        "inputs": [
-            {
-                "name": "slasher",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SlashWithRedistribution",
-        "inputs": [
-            {
-                "name": "requestedNextSlashed",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "nextWithdrawalsSlashed",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "deficit",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "epoch",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Transfer",
-        "inputs": [
-            {
-                "name": "from",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "to",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Withdraw",
-        "inputs": [
-            {
-                "name": "withdrawer",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "claimer",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "burnedShares",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "mintedShares",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AccessControlUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "neededRole",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "AlreadyInitialized",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "CheckpointUnorderedInsertion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "ERC20InsufficientAllowance",
-        "inputs": [
-            {
-                "name": "spender",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "allowance",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "needed",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InsufficientBalance",
-        "inputs": [
-            {
-                "name": "sender",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "balance",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "needed",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidApprover",
-        "inputs": [
-            {
-                "name": "approver",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidReceiver",
-        "inputs": [
-            {
-                "name": "receiver",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidSender",
-        "inputs": [
-            {
-                "name": "sender",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidSpender",
-        "inputs": [
-            {
-                "name": "spender",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitialization",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotFactory",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotInitialized",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotInitializing",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ReentrancyGuardReentrantCall",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "SafeCastOverflowedUintDowncast",
-        "inputs": [
-            {
-                "name": "bits",
-                "type": "uint8",
-                "internalType": "uint8"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "SafeERC20FailedOperation",
-        "inputs": [
-            {
-                "name": "token",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "Vault__AlreadyClaimed",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__AlreadySet",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__DelegatorAlreadyInitialized",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__DepositLimitReached",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InconsistentRoles",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InsufficientClaim",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InsufficientDeposit",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InsufficientRedemption",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InsufficientWithdrawal",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidAccount",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidBurner",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidCaptureEpoch",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidClaimer",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidCollateral",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidDelegator",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidEpoch",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidEpochDuration",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidFactory",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidLengthEpochs",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidOnBehalfOf",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidRecipient",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidSlasher",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__InvalidTimestamp",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__MigrationNotImplemented",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__MissingRoles",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__NoPreviousEpoch",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__NotDelegator",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__NotSlasher",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__NotWhitelistedDepositor",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__SlasherAlreadyInitialized",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__TooMuchRedeem",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "Vault__TooMuchWithdraw",
-        "inputs": []
     }
 ] as const;

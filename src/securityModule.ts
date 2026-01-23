@@ -88,10 +88,7 @@ export async function completeValidatorRegistration(
   logger.log("\nCalling function completeValidatorRegistration...");
   // TODO: Find a way to use the proper signature of the method
   const method = securityModule.safeWrite.completeValidatorRegistration as any;
-  const hash = await method(
-    [0],
-    { chain: null, account: client.account!, accessList }
-  );
+  const hash = await method([0]);
 
   // Wait until the validator is visible on the P-Chain
   if (waitValidatorVisible) {
@@ -189,15 +186,15 @@ export async function completeValidatorRemoval(
         }),
         R.tapError(
           (error) => {
-            throw new Error("SetL1ValidatorWeightTx failed on P-Chain: " + error+'\n');
+            throw new Error("SetL1ValidatorWeightTx failed on P-Chain: " + error + '\n');
           }),
         R.tap((txId) => {
           logger.log("SetL1ValidatorWeightTx executed on P-Chain: " + txId);
         })
       );
-      
+
     }
-    
+
 
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
@@ -335,10 +332,7 @@ export async function completeWeightUpdate(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
     // TODO: Find a way to use the proper signature of the method
     const method = securityModule.safeWrite.completeValidatorWeightUpdate as any;
-    const hash = await method(
-      [0],
-      { chain: null, account: client.account!, accessList }
-    );
+    const hash = await method([0]);
     logger.log("completeStakeUpdate done, tx hash:", hash);
   }
 }

@@ -1,5 +1,47 @@
 export default [
     {
+        "type": "event",
+        "name": "RegisterOperator",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetMetadataURL",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "metadataURL",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "OperatorRegistry__OperatorAlreadyRegistered",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OperatorRegistry__OperatorNotRegistered",
+        "inputs": []
+    },
+    {
         "type": "function",
         "name": "getAllOperators",
         "inputs": [],
@@ -117,47 +159,5 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "event",
-        "name": "RegisterOperator",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetMetadataURL",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "metadataURL",
-                "type": "string",
-                "indexed": false,
-                "internalType": "string"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "OperatorRegistry__OperatorAlreadyRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OperatorRegistry__OperatorNotRegistered",
-        "inputs": []
     }
 ] as const;

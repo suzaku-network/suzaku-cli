@@ -25,15 +25,11 @@ export const ValidatorStatusNames = [
 export async function setUpSecurityModule(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex,
-  maxWeight: bigint,
-  account: Account
+  maxWeight: bigint
 ) {
   logger.log("Setting up security module...");
 
-  const hash = await balancer.safeWrite.setUpSecurityModule(
-    [securityModule, maxWeight],
-    { chain: null, account }
-  );
+  const hash = await balancer.safeWrite.setUpSecurityModule([securityModule, maxWeight]);
   logger.log("Security module updated, tx hash:", hash);
 }
 

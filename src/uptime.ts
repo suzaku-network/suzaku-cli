@@ -49,7 +49,6 @@ export async function getValidationUptimeMessage(
 
 export async function computeValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  account: Account,
   signedUptimeHex: Hex
 ) {
 
@@ -57,10 +56,7 @@ export async function computeValidatorUptime(
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
 
-  const txHash = await uptimeTracker.write.computeValidatorUptime(
-    [0],
-    { chain: null, account, accessList }
-  );
+  const txHash = await uptimeTracker.write.computeValidatorUptime([0]);
 
   logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;
@@ -119,7 +115,6 @@ export async function reportAndSubmitValidatorUptime(
   logger.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
   const txHash = await computeValidatorUptime(
     uptimeTracker,
-    account,
     signedUptimeHex as Hex
   );
 
@@ -134,15 +129,11 @@ export async function reportAndSubmitValidatorUptime(
 export async function computeOperatorUptimeAtEpoch(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   operator: Hex,
-  epoch: number,
-  account: Account
+  epoch: number
 ) {
 
 
-  const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt(
-    [operator, epoch],
-    { chain: null, account }
-  );
+  const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
 
   logger.log(`computeOperatorUptimeAt for epoch ${epoch} done, tx hash: ${txHash}`);
   return txHash;
@@ -156,17 +147,13 @@ export async function computeOperatorUptimeForEpochs(
   operator: Hex,
   startEpoch: number,
   endEpoch: number,
-  account: Account,
   initialNonce?: number
 ) {
 
   let currentNonce = initialNonce ?? 0;
 
   for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
-    await uptimeTracker.safeWrite.computeOperatorUptimeAt(
-      [operator, epoch],
-      { chain: null, account, nonce: currentNonce }
-    );
+    await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
     currentNonce++;
   }
 }

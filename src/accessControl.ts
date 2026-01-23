@@ -4,25 +4,16 @@ import { type Hex, type Account, keccak256, toBytes } from 'viem';
 export async function grantRole(
   accessControl: SafeSuzakuContract['AccessControl'],
   role: string,
-  address: Hex,
-  account: Account
+  address: Hex
 ) {
-  return await accessControl.safeWrite.grantRole(
-    [ensureRoleHex(role), address],
-    { chain: null, account }
-  );
+  return await accessControl.safeWrite.grantRole([ensureRoleHex(role), address]);
 }
 
 export async function revokeRole(
   accessControl: SafeSuzakuContract['AccessControl'],
   role: string,
-  address: Hex,
-  account: Account
-) {
-  return await accessControl.safeWrite.revokeRole(
-    [ensureRoleHex(role), address],
-    { chain: null, account }
-  );
+  address: Hex) {
+  return await accessControl.safeWrite.revokeRole([ensureRoleHex(role), address]);
 }
 
 export async function hasRole(
@@ -54,4 +45,4 @@ export async function isAccessControl(
   }
 }
 
-export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : keccak256(toBytes(role.toUpperCase()+"()"));
+export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : keccak256(toBytes(role.toUpperCase() + "()"));

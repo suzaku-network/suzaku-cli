@@ -11,10 +11,7 @@ export async function registerVaultL1(
 ) {
     logger.log("Registering Vault L1...");
 
-    const hash = await vaultManager.safeWrite.registerVault(
-        [vaultAddress, collateralClass, maxLimit],
-        { chain: null, account }
-    );
+    const hash = await vaultManager.safeWrite.registerVault([vaultAddress, collateralClass, maxLimit]);
     logger.log("Vault registered, tx hash:", hash);
 }
 
@@ -27,10 +24,7 @@ export async function updateVaultMaxL1Limit(
 ) {
     logger.log("Updating Vault Max L1 limit...");
 
-    const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit(
-        [vaultAddress, collateralClass, maxLimit],
-        { chain: null, account }
-    );
+    const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit([vaultAddress, collateralClass, maxLimit]);
     logger.log("Max L1 limit updated, tx hash:", hash);
 }
 
@@ -41,10 +35,7 @@ export async function removeVault(
 ) {
     logger.log("Removing vault...");
 
-    const hash = await vaultManager.safeWrite.removeVault(
-        [vaultAddress],
-        { chain: null, account }
-    );
+    const hash = await vaultManager.safeWrite.removeVault([vaultAddress]);
     logger.log("Vault removed, tx hash:", hash);
 }
 

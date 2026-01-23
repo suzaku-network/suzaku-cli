@@ -23,15 +23,11 @@ export async function registerL1(
 export async function setL1MetadataUrl(
     l1Registry: SafeSuzakuContract['L1Registry'],
     l1Address: Hex,
-    metadataUrl: string,
-    account: Account
+    metadataUrl: string
 ) {
     logger.log("Setting L1 Metadata URL...");
 
-    const hash = await l1Registry.safeWrite.setMetadataURL(
-        [l1Address, metadataUrl],
-        { chain: null, account }
-    );
+    const hash = await l1Registry.safeWrite.setMetadataURL([l1Address, metadataUrl]);
 
     logger.log("Set L1 Metadata URL successfully, Transaction hash:", hash);
 
@@ -40,15 +36,11 @@ export async function setL1MetadataUrl(
 export async function setL1Middleware(
     l1Registry: SafeSuzakuContract['L1Registry'],
     validatorManager: Hex,
-    newMiddleware: Hex,
-    account: Account
+    newMiddleware: Hex
 ) {
     logger.log("Setting L1 Middleware...");
 
-    const hash = await l1Registry.safeWrite.setL1Middleware(
-        [validatorManager, newMiddleware],
-        { chain: null, account }
-    );
+    const hash = await l1Registry.safeWrite.setL1Middleware([validatorManager, newMiddleware]);
 
     logger.log("Set L1 Middleware successfully, Transaction hash:", hash);
 

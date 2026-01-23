@@ -43,6 +43,45 @@ console.log('🔄 Updating ABI files...');
 console.log(`Source: ${sourceDir}`);
 console.log(`Target: ${targetDir}`);
 
+/**
+ * Removes duplicate overloaded functions from an ABI, keeping only the one with the fewest parameters.
+ * This helps avoid issues with viem's union type handling for overloaded functions.
+ */
+function deduplicateOverloadedFunctions(abi) {
+  // Group functions by name
+  const functionsByName = new Map();
+  const otherItems = [];
+
+  for (const item of abi) {
+    if (item.type === 'function') {
+      const name = item.name;
+      if (!functionsByName.has(name)) {
+        functionsByName.set(name, []);
+      }
+      functionsByName.get(name).push(item);
+    } else {
+      otherItems.push(item);
+    }
+  }
+
+  // For each function name, keep only the one with the fewest inputs
+  const deduplicatedFunctions = [];
+  for (const [name, functions] of functionsByName) {
+    if (functions.length === 1) {
+      deduplicatedFunctions.push(functions[0]);
+    } else {
+      // Sort by number of inputs (ascending) and keep the first one
+      functions.sort((a, b) => (a.inputs?.length || 0) - (b.inputs?.length || 0));
+      const kept = functions[0];
+      const removed = functions.slice(1);
+      console.log(`  ⚡ Deduplicating "${name}": keeping ${kept.inputs?.length || 0} params, removing variants with ${removed.map(f => f.inputs?.length || 0).join(', ')} params`);
+      deduplicatedFunctions.push(kept);
+    }
+  }
+
+  return [...otherItems, ...deduplicatedFunctions];
+}
+
 function convertAbiToTypeScript(contractName, abi) {
   const tsContent = `export default ${JSON.stringify(abi, null, 4)} as const;\n`;
   return tsContent;
@@ -70,8 +109,11 @@ function updateAbiFile(contractName, outputFileName) {
       return false;
     }
 
+    // Deduplicate overloaded functions (keep only the one with fewest params)
+    const deduplicatedAbi = deduplicateOverloadedFunctions(contractData.abi);
+
     // Convert to TypeScript format
-    const tsContent = convertAbiToTypeScript(contractName, contractData.abi);
+    const tsContent = convertAbiToTypeScript(contractName, deduplicatedAbi);
 
     // process all functions and events selectors (to validate contract ABI on instantiation)
     selectors = contractData.abi.reduce((acc, item) => {

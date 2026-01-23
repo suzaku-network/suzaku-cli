@@ -9,16 +9,22 @@ type LogData = Record<string, any>;
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
+enum LogLevelEnum {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3
+}
 
 interface LoggerConfig {
   silent: boolean;
   jsonMode: boolean;
-  logLevel: LogLevel;
+  logLevel: LogLevelEnum;
 }
 
 class Logger {
   private static instance: Logger;
-  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: process.env.LogLevel as LogLevel || 'INFO' };
+  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: LogLevelEnum[process.env.LogLevel as LogLevel] || LogLevelEnum.INFO };
   public data: LogData = {};
 
   public static getInstance(): Logger {
@@ -34,7 +40,7 @@ class Logger {
   }
 
   public setLogLevel(level: LogLevel) {
-    this.config.logLevel = level;
+    this.config.logLevel = LogLevelEnum[level];
   }
 
   public setJsonMode(jsonMode?: boolean) {
@@ -43,7 +49,7 @@ class Logger {
   }
 
   private shouldLog(level: LogLevel): boolean {
-    return !this.config.silent && level >= this.config.logLevel;
+    return !this.config.silent && LogLevelEnum[level] >= this.config.logLevel;
   }
 
   // Console methods
@@ -89,7 +95,7 @@ class Logger {
 
   public exitError(args: any[], stackPop: number = 0) {
     const err = new Error();
-    this.error(...args, "\nCLI Stack trace:\n" + err.stack?.split("\n").slice(2 + stackPop).join("\n"));
+    this.error(...args, "\nCLI Stack trace:\n" + err.stack?.split("\n").slice( 2 + stackPop, -1).join("\n"));
     process.exit(1);
   }
 

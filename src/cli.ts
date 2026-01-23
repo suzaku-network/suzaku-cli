@@ -57,7 +57,8 @@ import {
     getActiveCollateralClasses,
     middlewareGetNodeLogs,
     middlewareManualProcessNodeStakeCache,
-    middlewareLastValidationId
+    middlewareLastValidationId,
+    weightWatcher
 } from "./middleware";
 
 import {
@@ -304,8 +305,7 @@ async function main() {
             await setL1MetadataUrl(
                 l1Reg,
                 l1Address,
-                metadataUrl,
-                client.account!
+                metadataUrl
             );
         });
 
@@ -322,8 +322,7 @@ async function main() {
             await setL1Middleware(
                 l1Reg2,
                 l1Address,
-                l1Middleware,
-                client.account!
+                l1Middleware
             );
         });
     /* --------------------------------------------------
@@ -344,8 +343,7 @@ async function main() {
             const opReg = await config.contracts.OperatorRegistry(config.operatorRegistry);
             await registerOperator(
                 opReg,
-                metadataUrl,
-                client.account!
+                metadataUrl
             );
         });
 
@@ -519,8 +517,7 @@ async function main() {
             await withdrawVault(
                 vault,
                 claimer,
-                amountWei,
-                client.account!
+                amountWei
             );
         });
 
@@ -539,8 +536,7 @@ async function main() {
             await claimVault(
                 vault,
                 recipient,
-                epoch,
-                client.account!
+                epoch
             );
         });
 
@@ -788,8 +784,7 @@ async function main() {
                 delegator,
                 l1Address,
                 collateralClass,
-                limitWei,
-                client.account!
+                limitWei
             );
         });
 
@@ -815,8 +810,7 @@ async function main() {
                 l1Address,
                 collateralClass,
                 operatorAddress,
-                shares,
-                client.account!
+                shares
             );
         });
 
@@ -1002,8 +996,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRegisterOperator(
                 middlewareSvc,
-                operator,
-                client.account!
+                operator
             );
         });
 
@@ -1020,8 +1013,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareDisableOperator(
                 middlewareSvc,
-                operator,
-                client.account!
+                operator
             );
         });
 
@@ -1038,8 +1030,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveOperator(
                 middlewareSvc,
-                operator,
-                client.account!
+                operator
             );
         });
 
@@ -1074,8 +1065,7 @@ async function main() {
                 logger.log(`\nIteration ${i + 1}/${loopCount}`);
                 await middlewareManualProcessNodeStakeCache(
                     middlewareSvc,
-                    epochsPerCall,
-                    client.account!
+                    epochsPerCall
                 );
 
                 if (i < loopCount - 1 && options.delay > 0) {
@@ -1137,8 +1127,7 @@ async function main() {
                 blsKey,
                 remainingBalanceOwner,
                 disableOwner,
-                initialStakeWei,
-                client.account!
+                initialStakeWei
             );
         });
 
@@ -1195,8 +1184,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveNode(
                 middlewareSvc,
-                nodeId,
-                client.account!
+                nodeId
             );
         });
 
@@ -1253,8 +1241,7 @@ async function main() {
             await middlewareInitStakeUpdate(
                 middlewareSvc,
                 nodeId,
-                newStakeWei,
-                client.account!
+                newStakeWei
             );
         });
 
@@ -1328,8 +1315,7 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareCalcNodeStakes(
-                middlewareSvc,
-                client.account!
+                middlewareSvc
             );
         });
 
@@ -1348,8 +1334,7 @@ async function main() {
             await middlewareForceUpdateNodes(
                 middlewareSvc,
                 operator,
-                options.limitStake,
-                client
+                options.limitStake
             );
         });
 
@@ -1773,6 +1758,19 @@ async function main() {
             const validationIDs = await middlewareSvc.read.getOperatorValidationIDs([operator]);
             logger.log(`Validation IDs for operator ${operator}: ${validationIDs.join(', ')}`);
         });
+
+    middlewareCmd
+        .command('weight-watcher')
+        .description('Watch for operators weight changes')
+        .addArgument(ArgAddress('middlewareAddress', 'Middleware address'))
+        .addOption(new Option('-e, --epochs <number>', 'Number of epochs to watch').argParser(Number))
+        .addOption(new Option('-l, --loop-epochs <number>', 'Number of epochs to loop').argParser(Number))
+        .action(async (middlewareAddress, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            await weightWatcher(await config.contracts.L1Middleware(middlewareAddress), config, { epochs: options.epochs, loopEpochs: options.loopEpochs });
+        });
     /**
      * --------------------------------------------------
      * OPERATOR → L1: optIn / optOut / check
@@ -1794,8 +1792,7 @@ async function main() {
             const service = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optInL1(
                 service,
-                l1Address,
-                client.account!
+                l1Address
             );
         });
 
@@ -1810,8 +1807,7 @@ async function main() {
             const service = await config.contracts.OperatorL1OptInService(config.opL1OptIn);
             await optOutL1(
                 service,
-                l1Address,
-                client.account!
+                l1Address
             );
         });
 
@@ -1849,8 +1845,7 @@ async function main() {
             const service = await config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optInVault(
                 service,
-                vaultAddress,
-                client.account!
+                vaultAddress
             );
         });
 
@@ -1865,8 +1860,7 @@ async function main() {
             const service = await config.contracts.OperatorVaultOptInService(config.opVaultOptIn);
             await optOutVault(
                 service,
-                vaultAddress,
-                client.account!
+                vaultAddress
             );
         });
 
@@ -1942,8 +1936,7 @@ async function main() {
             await setUpSecurityModule(
                 balancer,
                 middlewareAddress,
-                maxWeight,
-                client.account!
+                maxWeight
             );
         });
 
@@ -2014,10 +2007,7 @@ async function main() {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
-            const hash = await balancer.safeWrite.resendRegisterValidatorMessage(
-                [validationId],
-                { chain: null, account: client.account! },
-            );
+            const hash = await balancer.safeWrite.resendRegisterValidatorMessage([validationId]);
             logger.log("resendValidatorRegistration executed successfully, tx hash:", hash);
         }
         );
@@ -2034,10 +2024,7 @@ async function main() {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
-            const hash = await balancer.safeWrite.resendValidatorWeightUpdate(
-                [validationId],
-                { chain: null, account: client.account! },
-            );
+            const hash = await balancer.safeWrite.resendValidatorWeightUpdate([validationId]);
             logger.log("resendWeightUpdate executed successfully, tx hash:", hash);
         }
         );
@@ -2054,10 +2041,7 @@ async function main() {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
-            const hash = await balancer.safeWrite.resendValidatorRemovalMessage(
-                [validationId],
-                { chain: null, account: client.account! },
-            );
+            const hash = await balancer.safeWrite.resendValidatorRemovalMessage([validationId]);
             logger.log("resendValidatorRemoval executed successfully, tx hash:", hash);
         }
         );
@@ -2072,32 +2056,20 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
-            const VMTx = await balancer.safeWrite.transferValidatorManagerOwnership(
-                [newOwner],
-                { chain: null, account: client.account! },
-            );
+            const VMTx = await balancer.safeWrite.transferValidatorManagerOwnership([newOwner]);
             logger.log("transferValidatorManagerOwnership executed successfully, tx hash:", VMTx);
-            const BTx = await balancer.safeWrite.transferOwnership(
-                [newOwner],
-                { chain: null, account: client.account! },
-            );
+            const BTx = await balancer.safeWrite.transferOwnership([newOwner]);
             logger.log("transferOwnership of balancer executed successfully, tx hash:", BTx);
             const securityModules = await balancer.read.getSecurityModules();
             for (const smAddress of securityModules) {
                 const smOwnable = await config.contracts.Ownable(smAddress);
 
-                const SMTx = await smOwnable.safeWrite.transferOwnership(
-                    [newOwner],
-                    { chain: null, account: client.account! },
-                )
+                const SMTx = await smOwnable.safeWrite.transferOwnership([newOwner])
                 logger.log(`transferOwnership of security module ${smAddress} executed successfully, tx hash:`, SMTx);
                 const smAccessControl = await config.contracts.AccessControl(smAddress);
                 const isAccessControl = await smAccessControl.read.supportsInterface(["0x7965db0b"])
                 if (isAccessControl) {
-                    const ROLETX = await smAccessControl.safeWrite.grantRole(
-                        [await smAccessControl.read.DEFAULT_ADMIN_ROLE(), newOwner],
-                        { chain: null, account: client.account! },
-                    )
+                    const ROLETX = await smAccessControl.safeWrite.grantRole([await smAccessControl.read.DEFAULT_ADMIN_ROLE(), newOwner])
                     logger.log(`grantRole DEFAULT_ADMIN_ROLE to ${newOwner} on security module ${smAddress} executed successfully, tx hash:`, ROLETX);
                 }
 
@@ -2153,10 +2125,7 @@ async function main() {
             ];
 
             const nodeIdHex32 = parseNodeID(nodeId, false)
-            const hash = await poaSM.safeWrite.initiateValidatorRegistration(
-                [nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialWeight],
-                { chain: null, account: client.account! },
-            );
+            const hash = await poaSM.safeWrite.initiateValidatorRegistration([nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialWeight]);
             logger.log("addNode executed successfully, tx hash:", hash);
         });
 
@@ -2275,10 +2244,7 @@ async function main() {
             // Parse NodeID to bytes32 format
             const nodeIdHex32 = parseNodeID(nodeId)
 
-            const hash = await poaSecurityModule.safeWrite.initiateValidatorWeightUpdate(
-                [nodeIdHex32, newWeight],
-                { chain: null, account: client.account! }
-            );
+            const hash = await poaSecurityModule.safeWrite.initiateValidatorWeightUpdate([nodeIdHex32, newWeight]);
             logger.log("initiateValidatorWeightUpdate executed successfully, tx hash:", hash);
         });
 
@@ -2455,8 +2421,7 @@ async function main() {
             const config = getConfig(client, wait, opts.skipAbiValidation);
             await computeValidatorUptime(
                 await config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                client.account!,
-                signedUptimeHex as Hex,
+                signedUptimeHex as Hex
             );
         });
 
@@ -2508,8 +2473,7 @@ async function main() {
             await computeOperatorUptimeAtEpoch(
                 uptimeTracker,
                 operator,
-                epoch,
-                client.account!
+                epoch
             );
         });
 
@@ -2533,8 +2497,7 @@ async function main() {
                 uptimeTracker,
                 operator,
                 startEpoch,
-                endEpoch,
-                client.account!
+                endEpoch
             );
         });
 
@@ -2636,8 +2599,7 @@ async function main() {
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
-                batchSize,
-                client.account!
+                batchSize
             );
             logger.log(`Rewards distributed for epoch ${epoch}. tx hash: ${txHash}`);
         });
@@ -2658,7 +2620,6 @@ async function main() {
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Staker', client.account!) })) {
                 hashs.push(await claimRewards(
                     rewardsContract,
-                    client.account!,
                     recipient,
                 ));
             }
@@ -2694,8 +2655,7 @@ async function main() {
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Operator', client.account!) })) {
                 hashs.push(await claimOperatorFee(
                     rewardsContract,
-                    client.account!,
-                    recipient,
+                    recipient
                 ));
             }
 
@@ -2731,8 +2691,7 @@ async function main() {
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Curator', client.account!) })) {
                 hashs.push(await claimCuratorFee(
                     rewardsContract,
-                    client.account!,
-                    recipient,
+                    recipient
                 ));
             }
 
@@ -2763,8 +2722,7 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimProtocolFee(
                 rewardsContract,
-                client.account!,
-                recipient,
+                recipient
             );
 
             if (!hash) {
@@ -2795,9 +2753,8 @@ async function main() {
             const recipient = options.recipient ?? (await getDefaultAccount(opts));
             const hash = await claimUndistributedRewards(
                 rewardsContract,
-                client.account!,
                 epoch,
-                recipient,
+                recipient
             );
 
             if (!hash) {
@@ -2840,7 +2797,6 @@ async function main() {
             });
             const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
-                client.account!,
                 startEpoch,
                 numberOfEpochs,
                 rewardsAmountWei
@@ -2862,8 +2818,7 @@ async function main() {
             const hash = await setRewardsBipsForCollateralClass(
                 rewardsContract,
                 collateralClass,
-                bips,
-                client.account!
+                bips
             );
             logger.log(`setRewardsBipsForCollateralClass tx hash: ${hash}`);
         });
@@ -2880,8 +2835,7 @@ async function main() {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await setMinRequiredUptime(
                 rewardsContract,
-                minUptime,
-                client.account!
+                minUptime
             );
             logger.log(`setMinRequiredUptime tx hash: ${hash}`);
         });
@@ -2898,8 +2852,7 @@ async function main() {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await setProtocolOwner(
                 rewardsContract,
-                newOwner,
-                client.account!
+                newOwner
             );
             logger.log(`setProtocolOwner tx hash: ${hash}`);
         });
@@ -2916,8 +2869,7 @@ async function main() {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateProtocolFee(
                 rewardsContract,
-                newFee,
-                client.account!
+                newFee
             );
             logger.log(`updateProtocolFee tx hash: ${hash}`);
         });
@@ -2934,8 +2886,7 @@ async function main() {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateOperatorFee(
                 rewardsContract,
-                newFee,
-                client.account!
+                newFee
             );
             logger.log(`updateOperatorFee tx hash: ${hash}`);
         });
@@ -2952,8 +2903,7 @@ async function main() {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateCuratorFee(
                 rewardsContract,
-                newFee,
-                client.account!
+                newFee
             );
             logger.log(`updateCuratorFee tx hash: ${hash}`);
         });
@@ -2974,8 +2924,7 @@ async function main() {
                 rewardsContract,
                 protocolFee,
                 operatorFee,
-                curatorFee,
-                client.account!
+                curatorFee
             );
             logger.log(`updateAllFees tx hash: ${hash}`);
         });
@@ -3222,8 +3171,7 @@ async function main() {
             const txHash = await grantRole(
                 accessControl,
                 role,
-                account,
-                client.account!
+                account
             );
             logger.log(`Role granted. tx hash: ${txHash}`);
         });
@@ -3245,8 +3193,7 @@ async function main() {
             const txHash = await revokeRole(
                 accessControl,
                 role,
-                account,
-                client.account!
+                account
             );
             logger.log(`Role revoked. tx hash: ${txHash}`);
         });

@@ -21,6 +21,146 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "EIP712DomainChanged",
+        "inputs": [],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "IncreaseNonce",
+        "inputs": [
+            {
+                "name": "who",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "where",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OptIn",
+        "inputs": [
+            {
+                "name": "who",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "where",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OptOut",
+        "inputs": [
+            {
+                "name": "who",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "where",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "CheckpointUnorderedInsertion",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidShortString",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__AlreadyOptedIn",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__ExpiredSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__InvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__NotOptedIn",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__NotWhereEntity",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__NotWhereRegistered",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__NotWho",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OptInService__OptOutCooldown",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SafeCastOverflowedUintDowncast",
+        "inputs": [
+            {
+                "name": "bits",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "value",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "StringTooLong",
+        "inputs": [
+            {
+                "name": "str",
+                "type": "string",
+                "internalType": "string"
+            }
+        ]
+    },
+    {
         "type": "function",
         "name": "WHERE_REGISTRY",
         "inputs": [],
@@ -199,62 +339,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "optIn",
-        "inputs": [
-            {
-                "name": "who",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "where",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "deadline",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "signature",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "optOut",
-        "inputs": [
-            {
-                "name": "who",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "where",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "deadline",
-                "type": "uint48",
-                "internalType": "uint48"
-            },
-            {
-                "name": "signature",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "optOut",
         "inputs": [
             {
@@ -283,145 +367,5 @@ export default [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "event",
-        "name": "EIP712DomainChanged",
-        "inputs": [],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "IncreaseNonce",
-        "inputs": [
-            {
-                "name": "who",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "where",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OptIn",
-        "inputs": [
-            {
-                "name": "who",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "where",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OptOut",
-        "inputs": [
-            {
-                "name": "who",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "where",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "CheckpointUnorderedInsertion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidShortString",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__AlreadyOptedIn",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__ExpiredSignature",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__InvalidSignature",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotOptedIn",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWhereEntity",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWhereRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWho",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__OptOutCooldown",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "SafeCastOverflowedUintDowncast",
-        "inputs": [
-            {
-                "name": "bits",
-                "type": "uint8",
-                "internalType": "uint8"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "StringTooLong",
-        "inputs": [
-            {
-                "name": "str",
-                "type": "string",
-                "internalType": "string"
-            }
-        ]
     }
 ] as const;

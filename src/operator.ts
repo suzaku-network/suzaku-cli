@@ -1,18 +1,13 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Account } from "viem";
 import { logger } from './lib/logger';
 
 async function registerOperator(
     operatorRegistry: SafeSuzakuContract['OperatorRegistry'],
-    metadataUrl: string,
-    account: Account
+    metadataUrl: string
 ) {
     logger.log("Registering operator...");
 
-    const hash = await operatorRegistry.safeWrite.registerOperator(
-        [metadataUrl],
-        { chain: null, account }
-    );
+    const hash = await operatorRegistry.safeWrite.registerOperator([metadataUrl]);
 
     logger.log("Registered operator successfully, Transaction hash:", hash);
 

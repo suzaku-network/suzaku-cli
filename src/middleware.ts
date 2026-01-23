@@ -10,43 +10,31 @@ import { logger } from './lib/logger';
 
 export async function middlewareRegisterOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
-  operator: Hex,
-  account: Account
+  operator: Hex
 ) {
   logger.log("Registering operator...");
 
-  const hash = await middleware.safeWrite.registerOperator(
-    [operator],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.registerOperator([operator]);
   logger.log("registerOperator done, tx hash:", hash);
 }
 
 export async function middlewareDisableOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
-  operator: Hex,
-  account: Account
+  operator: Hex
 ) {
   logger.log("Disabling operator...");
 
-  const hash = await middleware.safeWrite.disableOperator(
-    [operator],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.disableOperator([operator]);
   logger.log("disableOperator done, tx hash:", hash);
 }
 
 export async function middlewareRemoveOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
-  operator: Hex,
-  account: Account
+  operator: Hex
 ) {
   logger.log("Removing operator...");
 
-  const hash = await middleware.safeWrite.removeOperator(
-    [operator],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.removeOperator([operator]);
   logger.log("removeOperator done, tx hash:", hash);
 }
 
@@ -57,18 +45,14 @@ export async function middlewareAddNode(
   blsKey: Hex,
   remainingBalanceOwner: [number, `0x${string}`[]],
   disableOwner: [number, `0x${string}`[]],
-  initialStake: bigint,
-  account: Account
+  initialStake: bigint
 ) {
   logger.log("Calling function addNode...");
 
   // Parse NodeID to bytes32 format
   const nodeIdHex32 = parseNodeID(nodeId)
 
-  const hash = await middleware.safeWrite.addNode(
-    [nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.addNode([nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStake]);
   logger.log("addNode executed successfully, tx hash:", hash);
   return hash;
 }
@@ -76,18 +60,14 @@ export async function middlewareAddNode(
 // removeNode
 export async function middlewareRemoveNode(
   middleware: SafeSuzakuContract['L1Middleware'],
-  nodeId: NodeId,
-  account: Account
+  nodeId: NodeId
 ) {
   logger.log("Calling function removeNode...");
 
   // Parse NodeID to bytes32 format
   const nodeIdHex32 = parseNodeID(nodeId)
 
-  const hash = await middleware.safeWrite.removeNode(
-    [nodeIdHex32],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.removeNode([nodeIdHex32]);
   logger.log("removeNode executed successfully, tx hash:", hash);
   return hash;
 }
@@ -96,32 +76,25 @@ export async function middlewareRemoveNode(
 export async function middlewareInitStakeUpdate(
   middleware: SafeSuzakuContract['L1Middleware'],
   nodeId: NodeId,
-  newStake: bigint,
-  account: Account
+  newStake: bigint
 ) {
   logger.log("Calling function initializeValidatorStakeUpdate...");
 
   // Parse NodeID to bytes32 format
   const nodeIdHex32 = parseNodeID(nodeId)
 
-  const hash = await middleware.safeWrite.initializeValidatorStakeUpdate(
-    [nodeIdHex32, newStake],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.initializeValidatorStakeUpdate([nodeIdHex32, newStake]);
   logger.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
   return hash;
 }
 
 // calcAndCacheNodeStakeForAllOperators
 export async function middlewareCalcNodeStakes(
-  middleware: SafeSuzakuContract['L1Middleware'],
-  account: Account
+  middleware: SafeSuzakuContract['L1Middleware']
 ) {
   logger.log("Calculating node stakes for all operators...");
 
-  const hash = await middleware.safeWrite.calcAndCacheNodeStakeForAllOperators(
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.calcAndCacheNodeStakeForAllOperators();
   logger.log("calcAndCacheNodeStakeForAllOperators done, tx hash:", hash);
 }
 
@@ -129,15 +102,11 @@ export async function middlewareCalcNodeStakes(
 export async function middlewareForceUpdateNodes(
   middleware: SafeSuzakuContract['L1Middleware'],
   operator: Hex,
-  limitStake: bigint,
-  client: ExtendedClient
+  limitStake: bigint
 ) {
   logger.log("Calling forceUpdateNodes...");
 
-  const hash = await middleware.safeWrite.forceUpdateNodes(
-    [operator, limitStake],
-    { chain: null, account: client.account! }
-  );
+  const hash = await middleware.safeWrite.forceUpdateNodes([operator, limitStake]);
   logger.log("forceUpdateNodes executed successfully");
   logger.log("tx hash:", hash);
 }
@@ -416,15 +385,11 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
 
 export async function middlewareManualProcessNodeStakeCache(
   middleware: SafeSuzakuContract['L1Middleware'],
-  numEpochsToProcess: number,
-  account: Account
+  numEpochsToProcess: number
 ) {
   logger.log("Processing node stake cache...");
 
-  const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
-    [numEpochsToProcess],
-    { chain: null, account }
-  );
+  const hash = await middleware.safeWrite.manualProcessNodeStakeCache([numEpochsToProcess]);
   logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
 }
 
@@ -456,7 +421,6 @@ export async function middlewareLastValidationId(
 export async function weightWatcher(
   middleware: SafeSuzakuContract['L1Middleware'],
   config: Config,
-  account: Account,
   options: {
     epochs?: number;
     loopEpochs?: number;
@@ -464,8 +428,7 @@ export async function weightWatcher(
 ) {
 
   // middlewareManualProcessNodeStakeCache configuration
-  const lastGlobalNodeStakeUpdateEpoch = await middleware.read.lastGlobalNodeStakeUpdateEpoch();
-  const currentEpoch = await middleware.read.getCurrentEpoch();
+  const [lastGlobalNodeStakeUpdateEpoch, currentEpoch] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch']);
   let epochsPerCall;
   let loopCount;
   if (options.epochs || options.loopEpochs) { // Fully specified by user
@@ -481,34 +444,25 @@ export async function weightWatcher(
 
   for (let i = 0; i < loopCount; i++) {
     logger.log(`\nIteration ${i + 1}/${loopCount}`);
-    const hash = await middleware.safeWrite.manualProcessNodeStakeCache(
-      [epochsPerCall],
-      { chain: null, account }
-    );
+    const hash = await middleware.safeWrite.manualProcessNodeStakeCache([epochsPerCall]);
     logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
   }
 
-  const processedEpochs =  Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
+  const processedEpochs = Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
 
   // process stake cache for operators
-  const collateralClasses = await middleware.read.getCollateralClassIds();
-
-  const operatorStakeABI = [getAbiItem({ abi: config.abis.L1Middleware, name: 'getOperatorStake' })] as Abi;
+  const [collateralClasses, operators] = await middleware.multicall(['getCollateralClassIds', 'getAllOperators']);
 
   const processedEpochsRange: number[] = Array.from({ length: processedEpochs }, (_, i) => i + lastGlobalNodeStakeUpdateEpoch)
   for (const epoch of processedEpochsRange) {
     for (const collateralClass of collateralClasses) {
-      await middleware.safeWrite.calcAndCacheStakes(
-        [epoch, collateralClass],
-        { chain: null, account }
-      );
+      logger.log(`Processing epoch ${epoch} for collateral class ${collateralClass}`);
+      await middleware.safeWrite.calcAndCacheStakes([epoch, collateralClass]);
     }
   }
 
-  const operators = await middleware.read.getAllOperators();
-  
   const predictions = await predictForceUpdateImpact(config, middleware, operators as Hex[]);
-  
+
   for (const prediction of predictions) {
     if (prediction.willLoseWeight) {
       logger.log(`Operator ${prediction.operator} will ${prediction.willLoseWeight ? 'lose' : 'gain'} weight`);
@@ -517,18 +471,10 @@ export async function weightWatcher(
       logger.log(`Registered stake: ${prediction.registeredStake}`);
       logger.log(`Stake deficit: ${prediction.stakeDeficit}`);
       logger.log(`Active nodes count: ${prediction.activeNodesCount}`);
-      await middleware.safeWrite.forceUpdateNodes(
-        [prediction.operator, 0n],
-        { chain: null, account }
-      );
+      await middleware.safeWrite.forceUpdateNodes([prediction.operator, 0n]);
     }
   }
 }
-
-const balancerAbi = parseAbi([
-  'function getSecurityModuleWeights(address securityModule) external view returns (uint64 minWeight, uint64 maxWeight)'
-]);
-
 
 export interface OperatorForceUpdatePrediction {
   operator: Hex;
@@ -566,29 +512,25 @@ export async function predictForceUpdateImpact(
 
   const maxStakeCap = BigInt(securityModuleMaxWeight) * weightScaleFactor;
 
-  const contractAddress = middleware.address;
-  const abi = middleware.abi;
 
-  const calls = operators.flatMap(op => [
+  const results = await middleware.multicall(operators.flatMap(op => [
     {
-      address: contractAddress, abi, functionName: 'getOperatorStake',
+      name: 'getOperatorStake',
       args: [op, currentEpoch, primaryAssetClass]
     },
     {
-      address: contractAddress, abi, functionName: 'getOperatorUsedStakeCached',
+      name: 'getOperatorUsedStakeCached',
       args: [op]
     },
     {
-      address: contractAddress, abi, functionName: 'operatorLockedStake',
+      name: 'operatorLockedStake',
       args: [op]
     },
     {
-      address: contractAddress, abi, functionName: 'getActiveNodesForEpoch',
+      name: 'getActiveNodesForEpoch',
       args: [op, currentEpoch]
     }
-  ] as const);
-
-  const results = await config.client.multicall({ contracts: calls, allowFailure: false });
+  ]));
 
   const predictions: OperatorForceUpdatePrediction[] = [];
 

@@ -9,14 +9,10 @@ import { Config } from './config';
 export async function distributeRewards(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
-  batchSize: number,
-  account: Account
+  batchSize: number
 ) {
 
-  const txHash = await rewards.safeWrite.distributeRewards(
-    [epoch, batchSize],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.distributeRewards([epoch, batchSize]);
   return txHash;
 }
 
@@ -41,14 +37,10 @@ export async function getRewardsClaimsCount(
  */
 export async function claimRewards(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   recipient: Hex
 ) {
-  
-  const txHash = await rewards.safeWrite.claimRewards(
-    [recipient],
-    { chain: null, account }
-  );
+
+  const txHash = await rewards.safeWrite.claimRewards([recipient]);
   return txHash;
 }
 
@@ -57,13 +49,9 @@ export async function claimRewards(
  */
 export async function claimOperatorFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   recipient: Hex
 ) {
-  const txHash = await rewards.safeWrite.claimOperatorFee(
-    [recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimOperatorFee([recipient]);
   return txHash;
 }
 
@@ -72,13 +60,9 @@ export async function claimOperatorFee(
  */
 export async function claimCuratorFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   recipient: Hex
 ) {
-  const txHash = await rewards.safeWrite.claimCuratorFee(
-    [recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimCuratorFee([recipient]);
   return txHash;
 }
 
@@ -87,13 +71,9 @@ export async function claimCuratorFee(
  */
 export async function claimProtocolFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   recipient: Hex
 ) {
-  const txHash = await rewards.safeWrite.claimProtocolFee(
-    [recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimProtocolFee([recipient]);
   return txHash;
 }
 
@@ -102,14 +82,10 @@ export async function claimProtocolFee(
  */
 export async function claimUndistributedRewards(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   epoch: number,
   recipient: Hex
 ) {
-  const txHash = await rewards.safeWrite.claimUndistributedRewards(
-    [epoch, recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimUndistributedRewards([epoch, recipient]);
   return txHash;
 }
 
@@ -118,15 +94,11 @@ export async function claimUndistributedRewards(
  */
 export async function setRewardsAmountForEpochs(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  account: Account,
   startEpoch: number,
   numberOfEpochs: number,
   rewardsAmount: bigint
 ) {
-  const txHash = await rewards.safeWrite.setRewardsAmountForEpochs(
-    [startEpoch, numberOfEpochs, rewardsAmount],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setRewardsAmountForEpochs([startEpoch, numberOfEpochs, rewardsAmount]);
   return txHash;
 }
 
@@ -136,13 +108,9 @@ export async function setRewardsAmountForEpochs(
 export async function setRewardsBipsForCollateralClass(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   collateralClass: bigint,
-  bips: number,
-  account: Account
+  bips: number
 ) {
-  const txHash = await rewards.safeWrite.setRewardsBipsForCollateralClass(
-    [collateralClass, bips],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setRewardsBipsForCollateralClass([collateralClass, bips]);
   return txHash;
 }
 
@@ -151,13 +119,9 @@ export async function setRewardsBipsForCollateralClass(
  */
 export async function setMinRequiredUptime(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  minUptime: bigint,
-  account: Account
+  minUptime: bigint
 ) {
-  const txHash = await rewards.safeWrite.setMinRequiredUptime(
-    [minUptime],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setMinRequiredUptime([minUptime]);
   return txHash;
 }
 
@@ -166,13 +130,9 @@ export async function setMinRequiredUptime(
  */
 export async function setProtocolOwner(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  newOwner: Hex,
-  account: Account
+  newOwner: Hex
 ) {
-  const txHash = await rewards.safeWrite.setProtocolOwner(
-    [newOwner],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setProtocolOwner([newOwner]);
   return txHash;
 }
 
@@ -181,13 +141,9 @@ export async function setProtocolOwner(
  */
 export async function updateProtocolFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  newFee: number,
-  account: Account
+  newFee: number
 ) {
-  const txHash = await rewards.safeWrite.updateProtocolFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateProtocolFee([newFee]);
   return txHash;
 }
 
@@ -196,13 +152,9 @@ export async function updateProtocolFee(
  */
 export async function updateOperatorFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  newFee: number,
-  account: Account
+  newFee: number
 ) {
-  const txHash = await rewards.safeWrite.updateOperatorFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateOperatorFee([newFee]);
   return txHash;
 }
 
@@ -211,13 +163,9 @@ export async function updateOperatorFee(
  */
 export async function updateCuratorFee(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
-  newFee: number,
-  account: Account
+  newFee: number
 ) {
-  const txHash = await rewards.safeWrite.updateCuratorFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateCuratorFee([newFee]);
   return txHash;
 }
 
@@ -228,13 +176,9 @@ export async function updateAllFees(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   newProtocolFee: number,
   newOperatorFee: number,
-  newCuratorFee: number,
-  account: Account
+  newCuratorFee: number
 ) {
-  const txHash = await rewards.safeWrite.updateAllFees(
-    [newProtocolFee, newOperatorFee, newCuratorFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateAllFees([newProtocolFee, newOperatorFee, newCuratorFee]);
   return txHash;
 }
 
@@ -245,11 +189,11 @@ export async function getEpochRewards(
   rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number
 ) {
-    const amount = await rewards.read.getEpochRewards(
-      [epoch]
-    ) as bigint;
-    logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
-    return amount;
+  const amount = await rewards.read.getEpochRewards(
+    [epoch]
+  ) as bigint;
+  logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
+  return amount;
 }
 
 /**

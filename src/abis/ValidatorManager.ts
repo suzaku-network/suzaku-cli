@@ -11,6 +11,474 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "CompletedValidatorRegistration",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorRegistration",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nodeID",
+                "type": "bytes20",
+                "indexed": true,
+                "internalType": "bytes20"
+            },
+            {
+                "name": "registrationMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "registrationExpiry",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validatorWeightMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "endTime",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "weightUpdateMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RegisteredInitialValidator",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nodeID",
+                "type": "bytes20",
+                "indexed": true,
+                "internalType": "bytes20"
+            },
+            {
+                "name": "subnetID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "InvalidBLSKeyLength",
+        "inputs": [
+            {
+                "name": "length",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidChurnPeriodLength",
+        "inputs": [
+            {
+                "name": "churnPeriodLength",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidConversionID",
+        "inputs": [
+            {
+                "name": "encodedConversionID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "expectedConversionID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitializationStatus",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidMaximumChurnPercentage",
+        "inputs": [
+            {
+                "name": "maximumChurnPercentage",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidNodeID",
+        "inputs": [
+            {
+                "name": "nodeID",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidNonce",
+        "inputs": [
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidPChainOwnerAddresses",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidPChainOwnerThreshold",
+        "inputs": [
+            {
+                "name": "threshold",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "addressesLength",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidTotalWeight",
+        "inputs": [
+            {
+                "name": "weight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidValidationID",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidValidatorManagerAddress",
+        "inputs": [
+            {
+                "name": "validatorManagerAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidValidatorManagerBlockchainID",
+        "inputs": [
+            {
+                "name": "blockchainID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidValidatorStatus",
+        "inputs": [
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum ValidatorStatus"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpMessage",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpOriginSenderAddress",
+        "inputs": [
+            {
+                "name": "senderAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpSourceChainID",
+        "inputs": [
+            {
+                "name": "sourceChainID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "MaxChurnRateExceeded",
+        "inputs": [
+            {
+                "name": "churnAmount",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NodeAlreadyRegistered",
+        "inputs": [
+            {
+                "name": "nodeID",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OwnableInvalidOwner",
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "OwnableUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UnexpectedRegistrationStatus",
+        "inputs": [
+            {
+                "name": "validRegistration",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ZeroAddress",
+        "inputs": []
+    },
+    {
         "type": "function",
         "name": "BLS_PUBLIC_KEY_LENGTH",
         "inputs": [],
@@ -626,473 +1094,5 @@ export default [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "event",
-        "name": "CompletedValidatorRegistration",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "CompletedValidatorRemoval",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "CompletedValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Initialized",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedValidatorRegistration",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "nodeID",
-                "type": "bytes20",
-                "indexed": true,
-                "internalType": "bytes20"
-            },
-            {
-                "name": "registrationMessageID",
-                "type": "bytes32",
-                "indexed": false,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "registrationExpiry",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedValidatorRemoval",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "validatorWeightMessageID",
-                "type": "bytes32",
-                "indexed": false,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "endTime",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "weightUpdateMessageID",
-                "type": "bytes32",
-                "indexed": false,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OwnershipTransferred",
-        "inputs": [
-            {
-                "name": "previousOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RegisteredInitialValidator",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "nodeID",
-                "type": "bytes20",
-                "indexed": true,
-                "internalType": "bytes20"
-            },
-            {
-                "name": "subnetID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "InvalidBLSKeyLength",
-        "inputs": [
-            {
-                "name": "length",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidChurnPeriodLength",
-        "inputs": [
-            {
-                "name": "churnPeriodLength",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidConversionID",
-        "inputs": [
-            {
-                "name": "encodedConversionID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "expectedConversionID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitialization",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitializationStatus",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidMaximumChurnPercentage",
-        "inputs": [
-            {
-                "name": "maximumChurnPercentage",
-                "type": "uint8",
-                "internalType": "uint8"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidNodeID",
-        "inputs": [
-            {
-                "name": "nodeID",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidNonce",
-        "inputs": [
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidPChainOwnerAddresses",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidPChainOwnerThreshold",
-        "inputs": [
-            {
-                "name": "threshold",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "addressesLength",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidTotalWeight",
-        "inputs": [
-            {
-                "name": "weight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidValidationID",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidValidatorManagerAddress",
-        "inputs": [
-            {
-                "name": "validatorManagerAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidValidatorManagerBlockchainID",
-        "inputs": [
-            {
-                "name": "blockchainID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidValidatorStatus",
-        "inputs": [
-            {
-                "name": "status",
-                "type": "uint8",
-                "internalType": "enum ValidatorStatus"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpMessage",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpOriginSenderAddress",
-        "inputs": [
-            {
-                "name": "senderAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpSourceChainID",
-        "inputs": [
-            {
-                "name": "sourceChainID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "MaxChurnRateExceeded",
-        "inputs": [
-            {
-                "name": "churnAmount",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "NodeAlreadyRegistered",
-        "inputs": [
-            {
-                "name": "nodeID",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "NotInitializing",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UnexpectedRegistrationStatus",
-        "inputs": [
-            {
-                "name": "validRegistration",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ZeroAddress",
-        "inputs": []
     }
 ] as const;

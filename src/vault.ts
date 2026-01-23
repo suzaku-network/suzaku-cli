@@ -35,10 +35,7 @@ export async function depositVault(
   logger.log("Approving:", amount, "tokens");
   logger.log("Approval amount in wei:", amountWei.toString());
   logger.log("Spender (vault):", vault.address);
-  const approveTx = await collateral.safeWrite.approve(
-    [vault.address, amountWei],
-    { chain: null, account }
-  );
+  const approveTx = await collateral.safeWrite.approve([vault.address, amountWei]);
   logger.log("Approval tx hash:", approveTx);
 
   // Wait for the approval transaction to be mined
@@ -51,10 +48,7 @@ export async function depositVault(
   logger.log("Depositing:", amount, "tokens");
   logger.log("Deposit amount in wei:", amountWei.toString());
   logger.log("On behalf of:", onBehalfOf);
-  const hash = await vault.safeWrite.deposit(
-    [onBehalfOf, amountWei],
-    { chain: null, account }
-  );
+  const hash = await vault.safeWrite.deposit([onBehalfOf, amountWei]);
   logger.log("Deposit tx hash:", hash);
 
   // Wait for deposit confirmation
@@ -68,15 +62,11 @@ export async function depositVault(
 export async function withdrawVault(
   vault: SafeSuzakuContract['VaultTokenized'],
   claimer: Hex,
-  amountWei: bigint,
-  account: Account
+  amountWei: bigint
 ) {
   logger.log("Withdrawing...");
 
-  const hash = await vault.safeWrite.withdraw(
-    [claimer, amountWei],
-    { chain: null, account }
-  );
+  const hash = await vault.safeWrite.withdraw([claimer, amountWei]);
   logger.log("Withdraw done, tx hash:", hash);
   logger.log("✅ Withdrawal completed successfully!");
 }
@@ -85,15 +75,11 @@ export async function withdrawVault(
 export async function claimVault(
   vault: SafeSuzakuContract['VaultTokenized'],
   recipient: Hex,
-  epoch: bigint,
-  account: Account
+  epoch: bigint
 ) {
   logger.log("Claiming...");
 
-  const hash = await vault.safeWrite.claim(
-    [recipient, epoch],
-    { chain: null, account }
-  );
+  const hash = await vault.safeWrite.claim([recipient, epoch]);
   logger.log("Claim done, tx hash:", hash);
   logger.log("✅ Claim completed successfully!");
 }
@@ -198,13 +184,10 @@ export async function approveAndDepositCollateral(
   const rewardToken = await config.contracts.ERC20(rewardTokenAddress);
   const decimals = await collateral.read.decimals();
   const amountWei = parseUnits(amount, decimals)
-  const hash = await rewardToken.safeWrite.approve(
-    [collateralAddress, amountWei],
-    { chain: null, account }
-  );
+  const hash = await rewardToken.safeWrite.approve([collateralAddress, amountWei]);
   await client.waitForTransactionReceipt({ hash })
   logger.log("Approval done, tx hash:", hash);
-  const depositTx = await collateral.write.deposit([account.address, amountWei], { chain: null, account });
+  const depositTx = await collateral.safeWrite.deposit([account.address, amountWei]);
   await client.waitForTransactionReceipt({ hash: depositTx })
   logger.log("Deposit to collateral done, tx hash:", depositTx);
 }

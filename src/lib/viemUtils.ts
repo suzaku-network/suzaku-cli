@@ -1,4 +1,4 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
@@ -12,8 +12,22 @@ import AhoCorasick from 'modern-ahocorasick'
 export type SuzakuABINames = keyof typeof SuzakuABI;
 export type TSuzakuABI = { [K in SuzakuABINames]: typeof SuzakuABI[K] };
 
+// Utility type to make 'account' optional in write function options
+// Also makes 'args' optional when the function has no input parameters
+type MakeAccountOptionalInWrite<T> = T extends { write: infer W }
+  ? Omit<T, 'write'> & {
+    write: {
+      [K in keyof W]: W[K] extends (args: infer A, options: infer O) => infer R
+      ? A extends O
+      ? (options?: Omit<O, 'account'> & { account?: O extends { account: infer Acc } ? Acc : never }) => R
+      : (args: A, options?: Omit<O, 'account'> & { account?: O extends { account: infer Acc } ? Acc : never }) => R
+      : W[K]
+    }
+  }
+  : T;
+
 // Define the type for the contract instances
-export type SuzakuContracts = { [K in SuzakuABINames]: GetContractReturnType<typeof SuzakuABI[K], ExtendedClient> & { address: Hex, name: string } };
+export type SuzakuContracts = { [K in SuzakuABINames]: MakeAccountOptionalInWrite<GetContractReturnType<typeof SuzakuABI[K], ExtendedClient>> & { address: Hex, name: string } };
 
 // Define the type to use the same signature write methods of each contract
 export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] extends { write: infer W } ? W : never };
@@ -79,6 +93,22 @@ type MulticallFn<T extends SuzakuABINames> = {
 export type CurriedContractFn<T extends SuzakuABINames> = (address: Address) => Promise<SafeSuzakuContract[T]>;
 export type CurriedSuzakuContractMap = { [key in SuzakuABINames]: CurriedContractFn<key> }
 
+function handleContractError(error: any, abi: SuzakuABINames) {
+  if (error instanceof ContractFunctionExecutionError) {
+    logger.exitError([`${abi} ${error.cause}`], 3)
+  } else if (error instanceof Error) {
+    const eraseToIndex = error.message.indexOf("Docs:")
+    if (eraseToIndex === -1) throw error;
+    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+  } else if (error instanceof Object) {
+    const eraseToIndex = error.message.indexOf("Docs:")
+    if (eraseToIndex === -1) throw error;
+    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+  } else {
+    throw error
+  }
+}
+
 // Map a proxy handler on safeWrite methods of the contract to simulate the write operation before executing it
 export function withSafeWrite<T extends SuzakuABINames>(
   contract: SuzakuContracts[T],
@@ -109,6 +139,8 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   functionName: prop as string,
                   args
                 }),
+                chain: null,
+                account: client.account!,
                 ...options,
                 value: options?.value ? options.value : '0',
               }
@@ -144,7 +176,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   hash = selection.hash!;
               }
             } else {
-              hash = await fn(args, options)
+              hash = await fn(args, { chain: null, account: client.account!, ...options })
             }
 
             logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`, hash, options });
@@ -168,10 +200,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             }
             return hash
           } catch (error: any) {
-            const msg = (error.message as string)
-            const eraseToIndex = msg.indexOf("Docs:")
-            if (eraseToIndex === -1) throw error;
-            logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
+            handleContractError(error, abi)
           }
         }
       },
@@ -193,10 +222,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             }
             return await fn(args, options)
           } catch (error: any) {
-            const msg = (error.message as string)
-            const eraseToIndex = msg.indexOf("Docs:")
-            if (eraseToIndex === -1) throw error;
-            logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
+            handleContractError(error, abi)
           }
         }
       },
@@ -219,10 +245,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             logger.addData('receipt', { functionSignature, result });
             return result
           } catch (error: any) {
-            const msg = (error.message as string)
-            const eraseToIndex = msg.indexOf("Docs:")
-            if (eraseToIndex === -1) throw error;
-            logger.exitError([`${abi}:\n\n${msg.slice(0, eraseToIndex - 1)}`], 2)
+            handleContractError(error, abi)
           }
         }
       },
@@ -293,7 +316,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   });
   if (proxyImplementation !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
     address = bytes32ToAddress(proxyImplementation as `0x${string}`);
-    logger.log(`Detected proxy contract. Using implementation at address ${address} for ABI validation.`);
+    logger.debug(`Detected proxy contract. Using implementation at address ${address} for ABI validation.`);
   }
 
   let contractByteCode = await client.getCode({ address })

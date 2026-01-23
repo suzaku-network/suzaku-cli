@@ -1,31 +1,22 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { Hex } from 'viem';
-import type { Account } from 'viem';
 import { logger } from './lib/logger';
 
 // L1 opt-in functionality
 export async function optInL1(
   optInService: SafeSuzakuContract['OperatorL1OptInService'],
-  l1Address: Hex,
-  account: Account
+  l1Address: Hex
 ) {
-  const hash = await optInService.safeWrite.optIn(
-    [l1Address],
-    { chain: null, account }
-  );
+  logger.log("Opting in to L1...");
+  const hash = await optInService.safeWrite.optIn([l1Address]);
   logger.log("L1 opt-in successful, tx hash:", hash);
 }
 
 export async function optOutL1(
   optInService: SafeSuzakuContract['OperatorL1OptInService'],
-  l1Address: Hex,
-  account: Account
+  l1Address: Hex
 ) {
-
-  const hash = await optInService.safeWrite.optOut(
-    [l1Address],
-    { chain: null, account }
-  );
+  const hash = await optInService.safeWrite.optOut([l1Address]);
   logger.log("L1 opt-out successful, tx hash:", hash);
 }
 
@@ -44,27 +35,17 @@ export async function checkOptInL1(
 // Vault opt-in functionality
 export async function optInVault(
   optInService: SafeSuzakuContract['OperatorVaultOptInService'],
-  vaultAddress: Hex,
-  account: Account
+  vaultAddress: Hex
 ) {
-  const hash = await optInService.safeWrite.optIn(
-    [vaultAddress],
-    { chain: null, account }
-  );
+  const hash = await optInService.safeWrite.optIn([vaultAddress]);
   logger.log("Vault opt-in successful, tx hash:", hash);
 }
 
 export async function optOutVault(
   optInService: SafeSuzakuContract['OperatorVaultOptInService'],
-  vaultAddress: Hex,
-  account: Account
+  vaultAddress: Hex
 ) {
-
-
-  const hash = await optInService.safeWrite.optOut(
-    [vaultAddress],
-    { chain: null, account }
-  );
+  const hash = await optInService.safeWrite.optOut([vaultAddress]);
   logger.log("Vault opt-out successful, tx hash:", hash);
 }
 

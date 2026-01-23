@@ -11,6 +11,145 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "AddEntity",
+        "inputs": [
+            {
+                "name": "entity",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Blacklist",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Migrate",
+        "inputs": [
+            {
+                "name": "entity",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newVersion",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Whitelist",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "EntityNotExist",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__AlreadyBlacklisted",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__AlreadyWhitelisted",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__InvalidImplementation",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__InvalidVersion",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__NotOwner",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__OldVersion",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "MigratableFactory__VersionBlacklisted",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OwnableInvalidOwner",
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "OwnableUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
         "type": "function",
         "name": "blacklist",
         "inputs": [
@@ -232,144 +371,5 @@ export default [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "event",
-        "name": "AddEntity",
-        "inputs": [
-            {
-                "name": "entity",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Blacklist",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": true,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Migrate",
-        "inputs": [
-            {
-                "name": "entity",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newVersion",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OwnershipTransferred",
-        "inputs": [
-            {
-                "name": "previousOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Whitelist",
-        "inputs": [
-            {
-                "name": "implementation",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "EntityNotExist",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__AlreadyBlacklisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__AlreadyWhitelisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__InvalidImplementation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__InvalidVersion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__NotOwner",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__OldVersion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__VersionBlacklisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
     }
 ] as const;
