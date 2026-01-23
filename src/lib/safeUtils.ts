@@ -17,7 +17,7 @@ interface TransactionStrategyResponse {
 }
 
 /**
- * Safe transaction management strategy:
+ * Safe transaction management strategy (ledger support integrated):
  * 1. Search for similar pending transactions in the Safe.
  * 2. Exact match:
  *    - If already signed by the user: Ignore the transaction (Skip).

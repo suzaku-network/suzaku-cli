@@ -18,6 +18,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [User experience](#user-experience)
     - [Identify the required addresses and credentials](#identify-the-required-addresses-and-credentials)
     - [Multi-Signature](#multi-signature)
+    - [Ledger Hardware Wallet](#ledger-hardware-wallet)
   - [Token values](#token-values)
   - [Usage on Fuji](#usage-on-fuji)
     - [L1 Setup Sequence on Fuji](#l1-setup-sequence-on-fuji)
@@ -36,6 +37,9 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [Uptime Commands (`uptime`)](#uptime-commands-uptime)
     - [Rewards Commands (`rewards`)](#rewards-commands-rewards)
     - [Key Store Commands (`key`)](#key-store-commands-key)
+    - [Validator Manager Contract Commands (`vmc`)](#vmc-commands-vmc)
+    - [Ledger Commands (`ledger`)](#ledger-commands-ledger)
+    - [Safe Commands (`safe`)](#safe-commands-safe)
     - [Access Control Commands (`access-control`)](#access-control-commands-access-control)
     - [Other Commands](#other-commands)
 
@@ -78,7 +82,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
   After ward you can use the cli using `suzaku-cli` command which hit the transpiled build (faster than `pnpm cli`)
 
 - Enable the auto-completion (only available on bash & zsh).
-  This will be installed on the default user shell.
+  This will be installed on the default user shell (It can be enforced using `SHELL` env var).
   ```bash
   suzaku-cli completion install
   ```
@@ -123,27 +127,61 @@ The specific commands and required information (such as contract addresses and p
 
 **Requirement:** Set the env var `SAFE_API_KEY` after creating the API key on [Safe developer platform](https://developer.safe.global/api-keys)
 
-The cli support [Safe wallet]("https://app.safe.global/") on all transaction.
-To use it, just use the private key of a signer and set the address of the wallet after `--safe` parameter like that:
+The CLI supports [Safe wallet](https://app.safe.global/) on all transactions.
+To use it, just use the private key of a signer (or use Ledger) and set the address of the wallet after `--safe` parameter like that:
 
 ```bash
-suzaku-cli vault set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 100 1 --network mainnet -s signer1-pk --safe 0x1234567890123456789012345678901234567890
+# Using a secret from the keystore (mainnet is default)
+suzaku-cli vault set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 100 1 -s signer1-pk --safe 0x1234...
+
+# Using Ledger hardware wallet with Safe
+suzaku-cli vault deposit $VAULT 1000 --ledger --safe 0x1234...
 ```
 
-Transaction management strategy:
+**Transaction management strategy:**
 
-- Search for similar pending transactions in the Safe.
-- Exact match:
-  - If already signed by the user: Ignore the transaction (Skip).
-  - If not signed: Automatically confirm the existing transaction.
-- Partial match (same function, different arguments):
-  - Display an interactive menu.
-  - Options: Confirm an existing transaction, Create a new one, or Skip.
-- No match: Create a new transaction.
+1. Search for similar pending transactions in the Safe.
+2. **Exact match:**
+   - If already signed by the user: Ignore the transaction (Skip).
+   - If not signed: Automatically confirm the existing transaction.
+3. **Partial match** (same function, different arguments):
+   - Display an interactive menu.
+   - Options: Confirm an existing transaction, Create a new one, or Skip all.
+4. **No match:** Create a new transaction.
+5. **Proposal:** If the signer is not an owner but is registered as a delegate, the transaction will be proposed instead of executed. Delegates can propose transactions that owners must then confirm.
 
-The first signer to reach the safe threshold will execute the tx.
+The first signer to reach the Safe threshold will execute the transaction.
 
-All others operations like reject tx... are not supported. Pls use the official [Safe wallet UI](https://app.safe.global/).
+All other operations like reject tx... are not supported. Please use the official [Safe wallet UI](https://app.safe.global/).
+
+### Ledger Hardware Wallet
+
+The CLI supports Ledger hardware wallets for secure transaction signing. This is the recommended method for mainnet operations.
+
+```bash
+# Use Ledger for signing (mainnet is default)
+suzaku-cli middleware add-node $MIDDLEWARE $NODE_ID $BLS_KEY --ledger
+
+# Use Ledger with Safe multisig
+suzaku-cli vault deposit $VAULT 1000 --ledger --safe 0x1234...
+
+# Use Ledger on Fuji testnet
+suzaku-cli vault deposit $VAULT 100 --ledger --network fuji
+```
+
+**Configuration:**
+- `LEDGER_ACCOUNT_INDEX`: Set this environment variable to use a different account index (default: 0)
+
+**Ledger commands:**
+```bash
+# Get addresses from connected Ledger
+suzaku-cli ledger addresses
+
+# Fix USB rules on Linux (if Ledger is not detected)
+suzaku-cli ledger fix-usb
+```
+
+> **Note:** On Linux, you may need to run `suzaku-cli ledger fix-usb` with sudo privileges if the device is not detected. It will use the official Ledger script to add `/etc/udev/rules.d/20-hw1.rules` to identify Ledger devices.
 
 ## Token values
 
@@ -479,13 +517,18 @@ suzaku-cli --help
 
 ### Global Options
 
-- `-n, --network <network>`: Network to use (fuji, mainnet, anvil). Default: fuji.
+- `-n, --network <network>`: Network to use (fuji, mainnet, anvil). Default: **mainnet**.
 - `-k, --private-key <privateKey>`: Private key for signing transactions.
 - `-s, --secret-name <secretName>`: The keystore secret name containing the private key.
+- `-l, --ledger`: Use Ledger hardware wallet for signing (conflicts with `-k` and `-s`).
 - `-w, --wait <confirmations>`: Number of confirmations to wait after a write transaction. Default: 0.
 - `--json`: Output logs in JSON format.
 - `-y, --yes`: Automatic yes to prompts.
-- `--safe <address>`: Use safe smart account for transactions.
+- `--safe <address>`: Use Safe smart account for transactions (compatible with Ledger).
+
+**Environment variables:**
+- `LogLevel`: Set log verbosity (DEBUG, INFO, WARN, ERROR). Default: INFO.
+- `LEDGER_ACCOUNT_INDEX`: Ledger account index to use. Default: 0.
 
 ### L1 Registry Commands (`l1-registry`)
 
@@ -621,12 +664,14 @@ suzaku-cli --help
   Get current number of nodes for an operator.
 - **get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validationId>`**
   Get node stake cache for a specific epoch and validator.
+- **get-operator-nodes `<middlewareAddress>` `<operator>`**
+  Get all nodes for an operator.
+- **get-operator-validation-ids `<middlewareAddress>` `<operator>`**
+  Get all validation IDs for an operator.
 - **get-operator-locked-stake `<middlewareAddress>` `<operator>`**
   Get operator locked stake.
 - **node-pending-removal `<middlewareAddress>` `<validationId>`**
   Check if node is pending removal.
-- **node-pending-update `<middlewareAddress>` `<validationId>`**
-  Check if node is pending stake update.
 - **get-operator-used-stake `<middlewareAddress>` `<operator>`**
   Get operator used stake from cache.
 - **get-operator-available-stake `<middlewareAddress>` `<operator>`**
@@ -722,20 +767,20 @@ suzaku-cli --help
 
 - **distribute `<rewardsAddress>` `<epoch>` `<batchSize>`**
   Distribute rewards for a specific epoch.
-- **claim `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
-  Claim rewards for a staker.
-- **claim-operator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
-  Claim operator fees.
-- **claim-curator-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
-  Claim curator fees.
-- **claim-protocol-fee `<rewardsAddress>` `<rewardsToken>` [--recipient `<recipient>]**
+- **claim `<rewardsAddress>` [--recipient `<recipient>]**
+  Claim rewards for a staker in batch of 64 epochs.
+- **claim-operator-fee `<rewardsAddress>` [--recipient `<recipient>]**
+  Claim operator fees in batch of 64 epochs.
+- **claim-curator-fee `<rewardsAddress>` [--recipient `<recipient>]**
+  Claim all curator fees in batch of 64 epochs.
+- **claim-protocol-fee `<rewardsAddress>` [--recipient `<recipient>]**
   Claim protocol fees (only for protocol owner).
-- **claim-undistributed `<rewardsAddress>` `<epoch>` `<rewardsToken>` [--recipient `<recipient>]**
+- **claim-undistributed `<rewardsAddress>` `<epoch>` [--recipient `<recipient>]**
   Claim undistributed rewards (admin only).
-- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsToken>` `<rewardsAmount>`**
+- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsAmount>`**
   Set rewards amount for epochs.
-- **set-share-collateral-class `<rewardsAddress>` `<collateralClass>` `<share>`**
-  Set rewards share for collateral class.
+- **set-bips-collateral-class `<rewardsAddress>` `<collateralClass>` `<bips>`**
+  Set rewards bips for collateral class.
 - **set-min-uptime `<rewardsAddress>` `<minUptime>`**
   Set minimum required uptime for rewards eligibility.
 - **set-protocol-owner `<rewardsAddress>` `<newOwner>`**
@@ -748,24 +793,22 @@ suzaku-cli --help
   Update curator fee.
 - **update-all-fees `<rewardsAddress>` `<protocolFee>` `<operatorFee>` `<curatorFee>`**
   Update all fees at once (protocol, operator, curator).
-- **get-amounts `<rewardsAddress>` `<epoch>`**
-  Get rewards amounts per token for epoch.
-- **get-amount-for-token `<rewardsAddress>` `<epoch>` `<token>`**
-  Get rewards amount for a specific token from epoch.
+- **get-epoch-rewards `<rewardsAddress>` `<epoch>`**
+  Get rewards amount for a specific epoch.
 - **get-operator-shares `<rewardsAddress>` `<epoch>` `<operator>`**
   Get operator shares for a specific epoch.
 - **get-vault-shares `<rewardsAddress>` `<epoch>` `<vault>`**
   Get vault shares for a specific epoch.
 - **get-curator-shares `<rewardsAddress>` `<epoch>` `<curator>`**
   Get curator shares for a specific epoch.
-- **get-protocol-rewards `<rewardsAddress>` `<token>`**
-  Get protocol rewards for a token.
+- **get-protocol-rewards `<rewardsAddress>`**
+  Get protocol rewards.
 - **get-distribution-batch `<rewardsAddress>` `<epoch>`**
   Get distribution batch status for an epoch.
 - **get-fees-config `<rewardsAddress>`**
   Get current fees configuration.
-- **get-share-collateral-class `<rewardsAddress>` `<collateralClass>`**
-  Get rewards share for collateral class.
+- **get-bips-collateral-class `<rewardsAddress>` `<collateralClass>`**
+  Get rewards bips for collateral class.
 - **get-min-uptime `<rewardsAddress>`**
   Get minimum required uptime for rewards eligibility.
 - **get-last-claimed-staker `<rewardsAddress>` `<staker>` `<rewardToken>`**
@@ -774,8 +817,6 @@ suzaku-cli --help
   Get last claimed epoch for an operator.
 - **get-last-claimed-curator `<rewardsAddress>` `<curator>` `<rewardToken>`**
   Get last claimed epoch for a curator.
-- **get-last-claimed-protocol `<rewardsAddress>` `<protocolOwner>` `<rewardToken>`**
-  Get last claimed epoch for protocol owner.
 
 ### Key Store Commands (`key`)
 
@@ -791,6 +832,25 @@ suzaku-cli --help
   List all encrypted secrets.
 - **addresses `<name>`**
   Show the address of an encrypted private key.
+
+### Validator Manager Contract Commands (`vmc`)
+
+- **info `<middlewareAddress>`**
+  Get detailed information about a Validator Manager Contract.
+
+### Ledger Commands (`ledger`)
+
+- **addresses**
+  Get addresses from connected Ledger device.
+- **fix-usb-rules**
+  Fix USB rules on Linux for Ledger device detection.
+
+### Safe Commands (`safe`)
+
+- **nonce `<safeAddress>`**
+  Get the current nonce of a Safe.
+- **get-role `<safeAddress>` `<role>`**
+  Get role information for a Safe.
 
 ### Access Control Commands (`access-control`)
 
