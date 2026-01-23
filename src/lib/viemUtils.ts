@@ -49,18 +49,31 @@ type MulticallItemResult<T extends SuzakuABINames, Item> =
   ? ContractFunctionReturnType<typeof SuzakuABI[T], 'view' | 'pure', ExtractFunctionName<T, Item>>
   : never;
 
-// Map over array of items to get result types
-type MulticallResults<T extends SuzakuABINames, Items extends readonly MulticallItem<T>[]> = {
+// Map over array of items to get result types (detailed version with name and result)
+type MulticallResultsDetailed<T extends SuzakuABINames, Items extends readonly MulticallItem<T>[]> = {
   [K in keyof Items]: {
     name: ExtractFunctionName<T, Items[K]>;
     result: MulticallItemResult<T, Items[K]>;
   }
 };
 
-// The multicall function signature
-type MulticallFn<T extends SuzakuABINames> = <const Items extends readonly MulticallItem<T>[]>(
-  items: Items
-) => Promise<MulticallResults<T, Items>>;
+// Map over array of items to get simple result types (just the return value)
+type MulticallResultsSimple<T extends SuzakuABINames, Items extends readonly MulticallItem<T>[]> = {
+  [K in keyof Items]: MulticallItemResult<T, Items[K]>
+};
+
+interface MulticallOptions<D extends boolean = false, S extends boolean = true> {
+  strict?: S, // If true, throw an error if any of the calls fail
+  details?: D, // If true, return the details of each call, otherwise return only the results
+}
+
+// The multicall function signature with conditional return type based on details option
+type MulticallFn<T extends SuzakuABINames> = {
+  <const Items extends readonly MulticallItem<T>[], D extends boolean = false, S extends boolean = true>(
+    items: Items,
+    options?: MulticallOptions<D, S>
+  ): Promise<D extends true ? MulticallResultsDetailed<T, Items> : MulticallResultsSimple<T, Items>>;
+};
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
 export type CurriedContractFn<T extends SuzakuABINames> = (address: Address) => Promise<SafeSuzakuContract[T]>;
@@ -218,7 +231,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
     (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
 
     // Multicall implementation for batching read operations
-    (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>) => {
+    (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>, options?: MulticallOptions) => {
       const contracts = items.map((item) => {
         const functionName = typeof item === 'string' ? item : item.name;
         const args = typeof item === 'object' && 'args' in item ? item.args : [];
@@ -236,12 +249,16 @@ export function withSafeWrite<T extends SuzakuABINames>(
         const item = items[index];
         const name = typeof item === 'string' ? item : item.name;
         if (result.status === 'failure') {
+          if (options?.strict) {
+            throw new Error(`Multicall failed for ${name}: ${result.error}`);
+          }
           logger.warn(`Multicall failed for ${name}: ${result.error}`);
         }
-        return {
+        return options?.details ? {
           name,
           result: result.status === 'success' ? result.result : undefined,
-        };
+          args: typeof item === 'object' && 'args' in item ? item.args : [],
+        } : result.result;
       });
     };
 

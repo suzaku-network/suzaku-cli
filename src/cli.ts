@@ -1738,7 +1738,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-            const [currentEpoch, updateWindow] = await Promise.all([middlewareSvc.read.getCurrentEpoch(), middlewareSvc.read.UPDATE_WINDOW()]);
+            const [currentEpoch, updateWindow] = await middlewareSvc.multicall(['getCurrentEpoch', 'UPDATE_WINDOW'])
             const lastEpochStartTs = await middlewareSvc.read.getEpochStartTs([currentEpoch])
             logger.log(`Window ends at: ${lastEpochStartTs + updateWindow}`);
         });
@@ -1913,7 +1913,7 @@ async function main() {
                 'l1TotalWeight',
                 'owner',
                 'subnetID'
-            ]);
+            ], { details: true });
 
             console.log(results.reduce((acc, r) => ({ ...acc, [r.name]: r.result }), {} as Record<string, unknown>));
         });

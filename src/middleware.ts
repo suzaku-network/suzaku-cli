@@ -340,11 +340,7 @@ export async function middlewareGetNodeLogs(
     bar
   ));
 
-  const l1ValidatorManagerAddressProm = middleware.read.BALANCER();
-  // 
-  const balancerAddressProm = middleware.read.balancerValidatorManager();
-
-  const [l1ValidatorManagerAddress, balancerAddress] = await Promise.all([l1ValidatorManagerAddressProm, balancerAddressProm]);
+  const [l1ValidatorManagerAddress, balancerAddress] = await middleware.multicall(['BALANCER', 'balancerValidatorManager'])
 
   const completeEventsContractAddress = l1ValidatorManagerAddress as Hex || balancerAddress as Hex;
 
@@ -511,7 +507,7 @@ export async function weightWatcher(
 
   const operators = await middleware.read.getAllOperators();
   
-  const predictions = await predictForceUpdateImpact(config.client, middleware, operators as Hex[]);
+  const predictions = await predictForceUpdateImpact(config, middleware, operators as Hex[]);
   
   for (const prediction of predictions) {
     if (prediction.willLoseWeight) {
@@ -545,7 +541,7 @@ export interface OperatorForceUpdatePrediction {
 }
 
 export async function predictForceUpdateImpact(
-  client: ExtendedClient,
+  config: Config,
   middleware: SafeSuzakuContract['L1Middleware'],
   operators: Hex[]
 ): Promise<OperatorForceUpdatePrediction[]> {
@@ -556,23 +552,17 @@ export async function predictForceUpdateImpact(
     weightScaleFactor,
     balancerAddress,
     primaryAssetClass
-  ] = await Promise.all([
-    middleware.read.getCurrentEpoch(),
-    middleware.read.WEIGHT_SCALE_FACTOR(),
-    middleware.read.BALANCER(),
-    middleware.read.PRIMARY_ASSET_CLASS()
+  ] = await middleware.multicall([
+    'getCurrentEpoch',
+    'WEIGHT_SCALE_FACTOR',
+    'BALANCER',
+    'PRIMARY_ASSET_CLASS'
   ]);
 
-  const balancerContract = {
-    address: balancerAddress,
-    abi: balancerAbi
-  };
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress)
 
-  const [, securityModuleMaxWeight] = await client.readContract({
-    ...balancerContract,
-    functionName: 'getSecurityModuleWeights',
-    args: [middleware.address]
-  });
+  const [, securityModuleMaxWeight] = await balancer.read.getSecurityModuleWeights([middleware.address])
+
 
   const maxStakeCap = BigInt(securityModuleMaxWeight) * weightScaleFactor;
 
@@ -598,7 +588,7 @@ export async function predictForceUpdateImpact(
     }
   ] as const);
 
-  const results = await client.multicall({ contracts: calls, allowFailure: false });
+  const results = await config.client.multicall({ contracts: calls, allowFailure: false });
 
   const predictions: OperatorForceUpdatePrediction[] = [];
 
