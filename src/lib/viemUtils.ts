@@ -103,15 +103,15 @@ export function withSafeWrite<T extends SuzakuABINames>(
               const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
               switch (selection.action) {
                 case 'new':
-                  logger.log(`Sending a new Safe transaction as owner`)
+                  logger.debug(`Sending a new Safe transaction as owner`)
                   hash = (await client.safe.send({ transactions: [transaction] })).transactions?.ethereumTxHash as Hex;
                   break;
                 case 'confirm':
-                  logger.log(`Confirming a Safe transaction as owner`)
+                  logger.debug(`Confirming a Safe transaction as owner`)
                   hash = (await client.safe.confirm({ safeTxHash: selection.hash! })).transactions?.ethereumTxHash as Hex;
                   break;
                 case 'propose':
-                  logger.log(`Proposing a Safe transaction as delegate`)
+                  logger.debug(`Proposing a Safe transaction as delegate`)
                   const safeTransaction = await client.safe.protocolKit.createTransaction({
                     transactions: [transaction]
                   })
@@ -127,7 +127,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   hash = selection.hash!;
                   break;
                 default:// same as skip
-                  logger.log(`Skipping a Safe transaction`)
+                  logger.debug(`Skipping a Safe transaction`)
                   hash = selection.hash!;
               }
             } else {
@@ -288,7 +288,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   // Check for EIP-1167 minimal proxy
   if (contractByteCode.startsWith('0x363d3d373d3d3d363d73') && contractByteCode.endsWith('5af43d82803e903d91602b57fd5bf3')) {
     const implementationAddress = '0x' + contractByteCode.slice(22, 62);
-    logger.log(`Detected EIP-1167 minimal proxy. Using implementation at address ${implementationAddress} for ABI validation.`);
+    logger.debug(`Detected EIP-1167 minimal proxy. Using implementation at address ${implementationAddress} for ABI validation.`);
     contractByteCode = await client.getCode({ address: implementationAddress as Address });
     if (!contractByteCode || contractByteCode === '0x') {
       logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
@@ -308,8 +308,8 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
 
   const result = missingRatio.reduce((acc, [missingCount, ratio, matches], i) => {
     if (ratio > 0) {
-      logger.warn(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
-      logger.warn(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
+      logger.debug(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
+      logger.debug(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
     }
     return [...acc, { name: abis[i], ratio, valid: ratio < TOLERANCE }]
   }, [] as { name: T, ratio: number, valid: boolean }[])

@@ -7,14 +7,18 @@ interface JsonArray extends Array<JsonValue> { }
 
 type LogData = Record<string, any>;
 
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+
+
 interface LoggerConfig {
   silent: boolean;
   jsonMode: boolean;
+  logLevel: LogLevel;
 }
 
 class Logger {
   private static instance: Logger;
-  private config: LoggerConfig = { silent: false, jsonMode: false };
+  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: process.env.LogLevel as LogLevel || 'INFO' };
   public data: LogData = {};
 
   public static getInstance(): Logger {
@@ -29,26 +33,46 @@ class Logger {
     this.config.silent = silent;
   }
 
+  public setLogLevel(level: LogLevel) {
+    this.config.logLevel = level;
+  }
+
   public setJsonMode(jsonMode?: boolean) {
     this.config.jsonMode = Boolean(jsonMode);
     this.config.silent = Boolean(jsonMode); // Auto-set silent when in JSON mode
   }
 
+  private shouldLog(level: LogLevel): boolean {
+    return !this.config.silent && level >= this.config.logLevel;
+  }
+
   // Console methods
+  public debug(...args: any[]) {
+    if (this.shouldLog('DEBUG')) {
+      console.debug('[DEBUG]', ...args);
+    }
+  }
+
   public log(...args: any[]) {
-    if (!this.config.silent) {
+    if (this.shouldLog('INFO')) {
       console.log(...args);
-    };
+    }
+  }
+
+  public info(...args: any[]) {
+    if (this.shouldLog('INFO')) {
+      console.info(...args);
+    }
   }
 
   public warn(...args: any[]) {
-    if (!this.config.silent) {
+    if (this.shouldLog('WARN')) {
       console.warn(...args);
     }
   }
 
   public error(...args: any[]) {
-    if (!this.config.silent) {
+    if (this.shouldLog('ERROR')) {
       console.error(...args);
     }
     // Side effect: add error to data structure
@@ -141,7 +165,7 @@ class Logger {
 
     buildLines(data, '');
     console.log(lines.join('\n'));
-}
+  }
 
   // Data management methods
   public addData<K extends string>(key: K, value: any) {
