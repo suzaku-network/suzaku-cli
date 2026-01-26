@@ -24,8 +24,8 @@
     "suzaku-cli": "node dist/cli.js",
     "cli": "pnpx ts-node src/cli.ts",
     "build": "tsc",
-    "prepare": "pnpm build && cd node_modules/node-hid && npm run install",
-    "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli"
+    "prepare": "pnpm build",
+    "add-shell-completion": "complete -C 'suzaku-cli' suzaku-cli"
   },
   "bin": {
     "suzaku-cli": "bin/cli.js"
