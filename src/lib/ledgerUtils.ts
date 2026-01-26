@@ -33,7 +33,14 @@ class LedgerSingleton {
 
     // Créer une nouvelle instance
     LedgerSingleton.initPromise = (async () => {
-      const transport = await TransportNodeHid.create()
+      let transport: any;
+      setTimeout(() => {
+        if (!transport) {
+          logger.error('Error: Ledger timeout. Please make sure your Ledger device is connected and unlocked.');
+          process.exit(1);
+        }
+      }, 2000);
+      transport = await TransportNodeHid.create()
         .catch((error: any) => {
           if (error.message.includes('cannot open device with path')) {
             logger.error('Error: You should probably use `suzaku-cli ledger fix-usb-rules` to be able to use Ledger devices on Linux');
@@ -41,7 +48,7 @@ class LedgerSingleton {
           }
           throw error;
         });
-
+      
       const appAva = new AvalancheApp(transport);
       LedgerSingleton.instance = new LedgerSingleton(transport, appAva);
       return LedgerSingleton.instance;

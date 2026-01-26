@@ -1,13 +1,8 @@
-name: Release
+name: development
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
-
+  pull_request:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile # the install command trigger the build through the prepare script
       - run: pnpx esbuild --bundle --platform=node --target=node22 --external:usb --external:@ledgerhq/hw-transport-node-hid --outfile=suzaku-cli.js ./src/cli.ts
 
       - name: test
@@ -32,26 +27,3 @@ jobs:
           name: cli-dist
           path: |
             suzaku-cli.js
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: suzaku-cli
-          path: ./artifacts
-
-      - run: artifacts/suzaku-cli.js --version
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          make_latest: true
-          files: |
-            artifacts/suzaku-cli.js
