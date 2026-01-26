@@ -1,31 +1,59 @@
 {
   "name": "suzaku-cli",
   "version": "0.1.0",
-  "description": "",
-  "main": "dist/index.js",
-  "scripts": {
-    "setup": "pnpm i && pnpm tsc",
-    "build": "tsc",
-    "suzaku-cli": "node dist/cli.js",
-    "cli": "ts-node src/cli.ts"
+  "homepage": "https://github.com/suzaku-network/suzaku-cli?tab=readme-ov-file#suzaku-cli",
+  "keywords": [
+    "Avalanche",
+    "blockchain",
+    "defi",
+    "suzaku",
+    "staking",
+    "restaking"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com:suzaku-network/suzaku-cli.git"
   },
-  "keywords": [],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "suzaku-cli": "node dist/cli.js",
+    "cli": "pnpx ts-node src/cli.ts",
+    "build": "tsc",
+    "prepare": "pnpm build && cd node_modules/node-hid && npm run install",
+    "add-bash-completion": "complete -C 'suzaku-cli' suzaku-cli"
+  },
+  "bin": {
+    "suzaku-cli": "bin/cli.js"
+  },
   "author": "",
   "dependencies": {
     "@avalabs/avalanchejs": "5.0.0",
+    "@avalabs/hw-app-avalanche": "1.1.1",
+    "@commander-js/extra-typings": "^14.0.0",
+    "@ledgerhq/hw-app-eth": "^7.1.1",
+    "@ledgerhq/hw-transport-node-hid": "^6.29.16",
+    "@mobily/ts-belt": "^3.13.1",
     "@noble/hashes": "^1.7.2",
+    "@safe-global/sdk-starter-kit": "^3.0.2",
     "@scure/base": "^1.2.4",
-    "@types/cli-progress": "^3.11.6",
     "cli-progress": "^3.12.0",
     "commander": "^14.0.0",
     "console-log-colors": "^0.5.0",
     "dotenv": "^16.4.7",
     "micro-eth-signer": "0.7.2",
+    "modern-ahocorasick": "^2.0.4",
+    "permissionless": "^0.3.2",
     "viem": "^2.24.2"
   },
   "devDependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
-    "ts-node": "^10.9.2",
+    "@types/cli-progress": "^3.11.6",
+    "@types/node": "^24.1.0",
     "typescript": "^5.3.3"
-  }
+  },
+  "packageManager": "pnpm@10.13.1"
 }

@@ -1,119 +1,69 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { logger } from './lib/logger';
 
 export async function registerVaultL1(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
-    assetClass: bigint,
+    collateralClass: bigint,
     maxLimit: bigint,
-    account: Account | undefined
+    account: Account
 ) {
-    console.log("Registering Vault L1...");
+    logger.log("Registering Vault L1...");
 
-    try {
-        if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.safeWrite.registerVault(
-            [vaultAddress, assetClass, maxLimit],
-            { chain: null, account }
-        );
-        console.log("Vault registered, tx hash:", hash);
-    } catch (error) {
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const hash = await vaultManager.safeWrite.registerVault([vaultAddress, collateralClass, maxLimit]);
+    logger.log("Vault registered, tx hash:", hash);
 }
 
 export async function updateVaultMaxL1Limit(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
-    assetClass: bigint,
+    collateralClass: bigint,
     maxLimit: bigint,
-    account: Account | undefined
+    account: Account
 ) {
-    console.log("Updating Vault Max L1 limit...");
+    logger.log("Updating Vault Max L1 limit...");
 
-    try {
-        if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit(
-            [vaultAddress, assetClass, maxLimit],
-            { chain: null, account }
-        );
-        console.log("Max L1 limit updated, tx hash:", hash);
-    } catch (error) {
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const hash = await vaultManager.safeWrite.updateVaultMaxL1Limit([vaultAddress, collateralClass, maxLimit]);
+    logger.log("Max L1 limit updated, tx hash:", hash);
 }
 
 export async function removeVault(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex,
-    account: Account | undefined
+    account: Account
 ) {
-    console.log("Removing vault...");
+    logger.log("Removing vault...");
 
-    try {
-        if (!account) throw new Error('Client account is required');
-        const hash = await vaultManager.safeWrite.removeVault(
-            [vaultAddress],
-            { chain: null, account }
-        );
-        console.log("Vault removed, tx hash:", hash);
-    } catch (error) {
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const hash = await vaultManager.safeWrite.removeVault([vaultAddress]);
+    logger.log("Vault removed, tx hash:", hash);
 }
 
 export async function getVaultCount(
     vaultManager: SafeSuzakuContract['VaultManager']
 ) {
-    console.log("Getting vault count...");
+    logger.log("Getting vault count...");
 
-    try {
-        const val = await vaultManager.read.getVaultCount();
-        console.log("Vault count:", val);
-    } catch (error) {
-        console.error("Read contract failed:", error);
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const val = await vaultManager.read.getVaultCount();
+    logger.log("Vault count:", val);
 }
 
 export async function getVaultAtWithTimes(
     vaultManager: SafeSuzakuContract['VaultManager'],
     index: bigint
 ) {
-    console.log("Getting vault at index with times...");
+    logger.log("Getting vault at index with times...");
 
-    try {
-        const val = await vaultManager.read.getVaultAtWithTimes([index]);
-        console.log("Vault at index with times:", val);
-    } catch (error) {
-        console.error("Read contract failed:", error);
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const val = await vaultManager.read.getVaultAtWithTimes([index]);
+    logger.log("Vault at index with times:", val);
 }
 
-export async function getVaultAssetClass(
+export async function getVaultCollateralClass(
     vaultManager: SafeSuzakuContract['VaultManager'],
     vaultAddress: Hex
 ) {
-    console.log("Getting vault asset class...");
+    logger.log("Getting vault collateral class...");
 
-    try {
-        const val = await vaultManager.read.getVaultAssetClass([vaultAddress]);
-        console.log("Vault asset class:", val);
-    } catch (error) {
-        console.error("Read contract failed:", error);
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    const val = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
+    logger.log("Vault collateral class:", val);
 }

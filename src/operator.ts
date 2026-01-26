@@ -1,53 +1,34 @@
-import { ExtendedWalletClient, ExtendedPublicClient } from "./client";
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Account } from "viem";
+import { logger } from './lib/logger';
 
 async function registerOperator(
     operatorRegistry: SafeSuzakuContract['OperatorRegistry'],
-    metadataUrl: string,
-    account: Account | undefined
+    metadataUrl: string
 ) {
-    console.log("Registering operator...");
+    logger.log("Registering operator...");
 
-    try {
-        if (!account) throw new Error('Client account is required');
-        const hash = await operatorRegistry.safeWrite.registerOperator(
-            [metadataUrl],
-            { chain: null, account }
-        );
+    const hash = await operatorRegistry.safeWrite.registerOperator([metadataUrl]);
 
-        console.log("Registered operator successfully, Transaction hash:", hash);
-    } catch (error) {
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
+    logger.log("Registered operator successfully, Transaction hash:", hash);
+
 }
 
 async function listOperators(
     operatorRegistry: SafeSuzakuContract['OperatorRegistry']
 ) {
-    console.log("Listing operators...");
+    const result = await operatorRegistry.read.getAllOperators();
 
-    try {
-        const result = await operatorRegistry.read.getAllOperators();
+    const [addresses, metadataUrls] = result;
+    const totalOperators = addresses.length;
 
-        const [addresses, metadataUrls] = result;
-        const totalOperators = addresses.length;
+    logger.log(`\nTotal operators: ${totalOperators}\n`);
 
-        console.log(`\nTotal operators: ${totalOperators}\n`);
+    const operators = Array.from({ length: totalOperators }, (_, i) => ({
+        address: addresses[i],
+        metadataUrl: metadataUrls[i]
+    }));
+    logger.logJsonTree(operators);
 
-        for (let i = 0; i < totalOperators; i++) {
-            console.log(`Operator ${i + 1}:`);
-            console.log(`  Address: ${addresses[i]}`);
-            console.log(`  Metadata URL: ${metadataUrls[i]}\n`);
-        }
-    } catch (error) {
-        console.error("Failed to list operators:", error);
-        if (error instanceof Error) {
-            console.error(error.message);
-        }
-    }
 }
 
 export { registerOperator, listOperators };

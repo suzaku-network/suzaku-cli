@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as util from 'util';
 import { color } from 'console-log-colors';
+import { logger } from './logger';
+import { getCchainAddress } from './utils';
 
 // Tree representation type
 type Tree = { [key: string]: Tree | undefined };
@@ -23,28 +25,38 @@ function buildTree(dirPath: string, extensions: string[] = ['gpg']): Tree {
   return node;
 }
 
-function printTree(baseName: string, tree: Tree): string {
-  
-  const lines: string[] = [color.blue(baseName)];
+function printTree(pass: Pass, relativePath?: string, showAddresses: boolean = true): string {
 
-  const buildLines = (node: Tree, prefix: string) => {
+  const tree = (relativePath ? getSubTree(pass.tree, relativePath)! : pass.tree)
+
+  const lines: string[] = [];
+
+  const buildLines = (node: Tree, prefix: string, path: string, showAddresses: boolean) => {
     const keys = Object.keys(node);
+    const maxKeyLength = Math.max(...keys.map(key => key.length)) + prefix.length;
     keys.forEach((key, i) => {
       const isLast = i === keys.length - 1;
       const child = node[key];
-      const displayedKey = (child ? color.blue(key) : key).replace(/\.gpg$/, ''); // Remove .gpg extension for display
+      const formatedKey = key.replace(/\.gpg$/, ''); // Remove .gpg extension for display
+      const displayedKey = (child ? color.blue(formatedKey) : formatedKey);
+      let address;
+      try {
+        address = child ? '' : showAddresses ? getCchainAddress(pass.show(path.length ? path + '/' + formatedKey : formatedKey) as string).trim() : '';
+      } catch {
+        address = 'corrupted';
+      }
       lines.push(
-        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}`
+        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}${address ? ' '.repeat(maxKeyLength+2 - key.length) + ' (' + address + ')' : ''}`
       );
-      
+
       if (child) {
         const newPrefix = prefix + (isLast ? '    ' : '│   ');
-        buildLines(child, newPrefix);
+        buildLines(child, newPrefix, path.length ? path + '/' + key : key, showAddresses);
       }
     });
   };
 
-  buildLines(tree, '');
+  buildLines(tree, '', relativePath ? relativePath : '', showAddresses);
   return lines.join('\n');
 }
 
@@ -127,7 +139,7 @@ const getPassProxyHandler = (relPath: string): ProxyHandler<Pass> => {
 export class Pass {
   private passBin = 'pass';
   public storeDir: string;
-  private tree: Tree;
+  public tree: Tree;
 
   /**
    * @param storePath Absolute path to password-store directory.
@@ -147,7 +159,7 @@ export class Pass {
     // Ensure the store directory exists
     if (!fs.existsSync(this.storeDir)) {
       if (gpgIds && gpgIds.length > 0) {
-        console.log(`Store directory ${this.storeDir} does not exist. Initializing with GPG IDs: ${gpgIds.join(', ')}`);
+        logger.log(`Store directory ${this.storeDir} does not exist. Initializing with GPG IDs: ${gpgIds.join(', ')}`);
         this.init(gpgIds);
       } else {
         throw new Error(`Password store directory ${this.storeDir} does not exist. Please initialize it first.`);
@@ -168,7 +180,7 @@ export class Pass {
     this.tree = buildTree(this.storeDir);
   }
 
-    /** Run a command in the context of the store and return stdout as string (trimmed). */
+  /** Run a command in the context of the store and return stdout as string (trimmed). */
   private run(cmd: string): string {
     try {
       const out = execSync(cmd, {
@@ -189,7 +201,7 @@ export class Pass {
 
   static listGPGIds(): string[] {
     const cmd = `gpg -k | grep '^uid' | sed 's/.*<\\([^>]*\\)>.*/\\1/p'`;
-    const out = execSync(cmd , {
+    const out = execSync(cmd, {
       stdio: ['ignore', 'pipe', 'inherit']
     }).toString()
     return [...new Set(out.split('\n').map(line => line.trim()).filter(line => !!line))];
@@ -198,7 +210,7 @@ export class Pass {
   /** Initialize a new password store: pass init gpg-id... */
   init(gpgIds: string[]): void {
     if (!gpgIds.length) throw new Error('At least one GPG ID is required for init.');
-    this.run(`${this.passBin} init ${gpgIds.join(' ') }`);
+    this.run(`${this.passBin} init ${gpgIds.join(' ')}`);
   }
 
   /** List entries or return SubPass if subfolder path.
@@ -206,6 +218,11 @@ export class Pass {
    */
   ls(subfolder = '') {
     return new Proxy(this, getPassProxyHandler(subfolder));
+  }
+
+  exists(name: string): boolean {
+    const fullDir = path.join(this.storeDir, name);
+    return fs.existsSync(fullDir) && fs.statSync(fullDir).isFile();
   }
 
   /** Show entry or return SubPass if name path is directory.
@@ -266,29 +283,29 @@ export class Pass {
 
   /** Remove an entry or directory: pass rm [--recursive] [--force] pass-name */
   rm(name: string, options: RmOptions = {}): void {
-      // Remove entire directory
-      const flags: string[] = [];
-      if (options.recursive) flags.push('--recursive');
-      if (options.force) flags.push('--force');
-      const flagStr = flags.join(' ');
-      const cmd = `${this.passBin} rm ${flagStr} ${name}`.trim();
-      this.run(cmd);
+    // Remove entire directory
+    const flags: string[] = [];
+    if (options.recursive) flags.push('--recursive');
+    if (options.force) flags.push('--force');
+    const flagStr = flags.join(' ');
+    const cmd = `${this.passBin} rm ${flagStr} ${name}`.trim();
+    this.run(cmd);
     this.refresh()
   }
 
   /** Move or rename: pass mv [--force] old-path new-path */
   mv(oldPath: string, newPath: string, options: MvCpOptions = {}): void {
-      const flag = options.force ? '--force' : '';
-      const cmd = `${this.passBin} mv ${flag} ${oldPath} ${newPath}`.trim();
-      this.run(cmd);
+    const flag = options.force ? '--force' : '';
+    const cmd = `${this.passBin} mv ${flag} ${oldPath} ${newPath}`.trim();
+    this.run(cmd);
     this.refresh()
   }
 
   /** Copy an entry: pass cp [--force] old-path new-path */
   cp(oldPath: string, newPath: string, options: MvCpOptions = {}): void {
-      const flag = options.force ? '--force' : '';
-      const cmd = `${this.passBin} cp ${flag} ${oldPath} ${newPath}`.trim();
-      this.run(cmd);
+    const flag = options.force ? '--force' : '';
+    const cmd = `${this.passBin} cp ${flag} ${oldPath} ${newPath}`.trim();
+    this.run(cmd);
     this.refresh()
   }
 
@@ -312,14 +329,13 @@ export class Pass {
     return this.run(`${this.passBin} version`).match(/(\d+\.\d+\.\d+)/)?.[0] || 'unknown';
   }
 
-  toString(name?: string): string {
-    const baseName = name ? path.basename(name) : path.basename(this.storeDir);
-    return printTree(baseName, (name ? getSubTree(this.tree, name)! : this.tree));
+  toString(showAddresses: boolean = true, name?: string): string {
+    return printTree(this, name, showAddresses);
   }
 
-  /** Custom inspect method for better console output (auto call toString when console.log the object) */
-  [util.inspect.custom](_depth: number, _opts: util.InspectOptions): string {
-    return this.toString();
+  /** Custom inspect method for better console output (auto call toString when logger.log the object) */
+  [util.inspect.custom](): string {
+    return this.toString(true);
   }
 }
 
@@ -331,17 +347,17 @@ export class Pass {
 // pass.insert('email/test/test3', 'MyP@ssw0rd');
 
 // const testKeystore = pass.ls('email/test');
-// console.log(pass)
-// console.log(testKeystore)
+// logger.log(pass)
+// logger.log(testKeystore)
 
-// console.log(pass.version());
-// console.log(pass.ls());
-// console.log(pass.show('email/gitlab'));
+// logger.log(pass.version());
+// logger.log(pass.ls());
+// logger.log(pass.show('email/gitlab'));
 
-// console.log(pass.ls('email'));
-// console.log(pass.show('email'));
+// logger.log(pass.ls('email'));
+// logger.log(pass.show('email'));
 
 // pass.rm('email/gitlab');
 
-// console.log(pass.show());
-// console.log(Pass.listGPGIds())
+// logger.log(pass.show());
+// logger.log(Pass.listGPGIds())

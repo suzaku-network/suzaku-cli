@@ -3,15 +3,20 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
-import * as readline from 'readline';
-import { fromBytes, Hex, pad } from "viem";
+import { fromBytes, Hex, pad, sliceHex, getAddress, Account } from "viem";
+import { logger } from './logger';
+import { hexToUint8Array } from "./justification";
+import { spawnSync } from "child_process";
+import { Addresses } from "../client";
+
+export function bytes32ToAddress(bytes32: `0x${string}`) {
+    // on garde les 20 derniers bytes (40 hex chars)
+    const raw = sliceHex(bytes32, 12, 32); // bytes 12 → 32
+    return getAddress(raw);
+}
+
 
 const CHECKSUM_LENGTH = 4;
-
-function calculateChecksum(data: Uint8Array): Uint8Array {
-    // In Avalanche, hashing.Checksum uses a single SHA256
-    return sha256(data).slice(0, CHECKSUM_LENGTH);
-}
 
 export function cb58ToBytes(cb58: string): Uint8Array {
     const decodedBytes = base58.decode(cb58);
@@ -31,17 +36,12 @@ export function cb58ToHex(cb58: string, include0x: boolean = true): string {
     return (include0x ? '0x' : '') + paddedHex;
 }
 
-interface AddressMap {
-    P: string;    // Platform chain address
-    C: Hex; // C-Chain address
-}
-
 /**
  * Derives addresses from a private key
  * @param privateKeyHex - Private key in hexadecimal format
  * @returns Object containing derived addresses for different chains
  */
-export function getAddresses(privateKeyHex: string, network: string): AddressMap {
+export function getAddresses(privateKeyHex: string, network: string): Addresses {
     const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';
     const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
 
@@ -54,8 +54,13 @@ export function getAddresses(privateKeyHex: string, network: string): AddressMap
 
     return {
         C: cChainAddress,
-        P: pChainAddress
+        P: pChainAddress as `P-${string}`
     };
+}
+
+export function getCchainAddress(privateKeyHex: string): string {
+    const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
+    return Address.fromPublicKey(publicKey) as Hex;
 }
 
 /**
@@ -88,69 +93,86 @@ export function bytesToCB58(bytes: Uint8Array): string {
     return base58.encode(withChecksum);
 }
 
-export async function interruptiblePause(seconds: number): Promise<void> {
-    console.log(`\nWaiting ${seconds} seconds before aggregating signatures...`);
-
-    return new Promise((resolve) => {
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
-        });
-
-        // Set raw mode to detect space key
-        process.stdin.setRawMode?.(true);
-
-        const timer = setTimeout(() => {
-            cleanup();
-            resolve();
-        }, seconds * 1000);
-
-        function cleanup() {
-            rl.close();
-            process.stdin.setRawMode?.(false);
-            process.stdin.removeListener('keypress', handleKeypress);
-        }
-
-        function handleKeypress(key: string) {
-            if (key === '\r' || key === ' ') {
-                clearTimeout(timer);
-                cleanup();
-                resolve();
-            }
-        }
-
-        process.stdin.on('keypress', handleKeypress);
-    });
-}
-
 export type NodeId = `NodeID-${string}`;
 
-export const parseNodeID = (nodeID: NodeId): Hex => {
+export const parseNodeID = (nodeID: NodeId, padding = true): Hex => {
     const nodeIDWithoutPrefix = nodeID.replace("NodeID-", "");
     const decodedID = utils.base58.decode(nodeIDWithoutPrefix)
     const nodeIDHex = fromBytes(decodedID, 'hex')
     const nodeIDHexTrimmed = nodeIDHex.slice(0, -8)
-    const padded = pad(nodeIDHexTrimmed as Hex, { size: 32 })
-    return padded as Hex
+    return padding ? pad(nodeIDHexTrimmed as Hex, { size: 32 }) as Hex : nodeIDHexTrimmed as Hex;
 }
 
-export function prompt(question: string): Promise<string> {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    return new Promise(resolve => {
-        rl.question(question, (answer) => {
-            rl.close();
-            resolve(answer.trim());
-        });
-    });
+export const encodeNodeID = (nodeIDBytes: Hex): NodeId => {
+    let nodeU8Array = hexToUint8Array(nodeIDBytes)
+    nodeU8Array = nodeU8Array.length === 32 ? nodeU8Array.slice(12) : nodeU8Array;// Remove the first 12 bytes if it's a full bytes32
+    const nodeId = `NodeID-${utils.base58check.encode(nodeU8Array)}`;
+    return nodeId as NodeId;
 }
 
-export function nToAVAX(value: bigint): string {
-    const avaxValue = value / BigInt(1e9);
-    const decimalValue = value % BigInt(1e9);
-    const decimalString = decimalValue.toString().padStart(9, '0');
-    return `${avaxValue}.${decimalString}`;
+export async function retryWhileError<T>(
+    fetcher: () => Promise<T>,
+    intervalMs: number,
+    timeoutMs: number,
+    accept: (result: T) => boolean = () => true
+): Promise<T> {
+    const start = Date.now();
+    let lastErr: unknown;
+
+    while (true) {
+        try {
+            const result = await fetcher();
+            if (accept(result)) return result;
+            else throw new Error("retryWhileError Result not accepted by:\n" + accept.toString() + "\n");
+        } catch (e) {
+            lastErr = e;
+            const elapsed = Date.now() - start;
+            const remaining = timeoutMs - elapsed;
+            if (remaining <= 0) break;
+            await new Promise(res => setTimeout(res, Math.min(intervalMs, remaining)));
+        }
+    }
+
+    logger.error("Timeout reached !\n", lastErr);
+    process.exit(1);
+}
+
+export function bigintReplacer(_key: string, value: any) {
+    if (typeof value === "bigint") {
+        return Number(value);
+    }
+    return value;
+}
+
+export function getClipboardValue(): string {
+    let result: string;
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+        // Windows
+        result = spawnSync('powershell', ['-command', 'Get-Clipboard'], { encoding: 'utf-8', shell: false }).stdout;
+    } else if (platform === 'darwin') {
+        // macOS
+        result = spawnSync('pbpaste', [], { encoding: 'utf-8', shell: false }).stdout;
+    } else {
+        // Linux and others
+        result = spawnSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8', shell: false }).stdout;
+    }
+
+    return result.trim();
+}
+
+export function setClipboardValue(value: string): void {
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+        // Windows
+        spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8', shell: false });
+    } else if (platform === 'darwin') {
+        // macOS
+        spawnSync('pbcopy', [], { input: value, encoding: 'utf-8', shell: false });
+    } else {
+        // Linux and others
+        spawnSync('echo ' + value + ' | xclip -selection clipboard', { encoding: 'utf-8', shell: false });
+    }
 }

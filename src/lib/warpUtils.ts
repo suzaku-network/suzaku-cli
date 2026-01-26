@@ -1,26 +1,27 @@
-import { fromBytes, hexToBytes, Hex } from 'viem';
+import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log } from 'viem';
 import { sha256 } from '@noble/hashes/sha256';
-import { cb58ToBytes, bytesToCB58, interruptiblePause } from './utils';
+import { cb58ToBytes, retryWhileError, cb58ToHex } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
-import { cb58ToHex } from './utils';
 import { Network } from '../client';
 import { pChainChainID } from '../config';
+import { logger } from './logger';
 
-interface PackL1ConversionMessageArgs {
+export interface PackL1ConversionMessageArgs {
     subnetId: string;
     managerChainID: string;
-    managerAddress: Hex;
+    managerAddress: string;
     validators: SubnetToL1ConversionValidatorData[];
 }
 
-interface SubnetToL1ConversionValidatorData {
+// Existing interface from original TS file
+export interface SubnetToL1ConversionValidatorData {
     nodeID: string;
     nodePOP: {
-        publicKey: Hex;
-        proofOfPossession: Hex;
+        publicKey: string;
+        proofOfPossession: string;
     };
-    weight: number;
+    weight: number; // Note: Solidity uses uint64 (bigint)
 }
 
 // Helper functions for packing messages
@@ -60,33 +61,101 @@ function concatenateUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 }
 
 export function packL1ConversionMessage(args: PackL1ConversionMessageArgs, networkID: number, sourceChainID: string): [Uint8Array, Uint8Array] {
-    const data = marshalSubnetToL1ConversionData(args);
-    const subnetConversionID = sha256(data);
+    // Uses subnetToL1ConversionID -> marshalSubnetToL1ConversionData (based on TS interfaces)
+    const subnetConversionID = subnetToL1ConversionID(args);
 
-    console.log("ConversionData SHA256:", fromBytes(subnetConversionID, 'hex'));
-    console.log("ConversionData CB58:", bytesToCB58(subnetConversionID));
-
+    // Uses newSubnetToL1Conversion (which packs codec, len=0, id)
     const addressedCallPayload = newSubnetToL1Conversion(subnetConversionID);
+
+    // Uses newAddressedCall (which packs codec, type=1, sourceAddr, payload)
     const subnetConversionAddressedCall = newAddressedCall(new Uint8Array([]), addressedCallPayload);
+
+    // Uses newUnsignedMessage (which packs codec, network, sourceChain, message)
     const unsignedMessage = newUnsignedMessage(networkID, sourceChainID, subnetConversionAddressedCall);
-    return [unsignedMessage, cb58ToBytes(args.subnetId)];
+    return [unsignedMessage, utils.base58check.decode(args.subnetId)];
 }
 
-function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArgs): Uint8Array {
+export function subnetToL1ConversionID(args: PackL1ConversionMessageArgs): Uint8Array {
+    const data = marshalSubnetToL1ConversionData(args);
+    return sha256(data);
+}
+
+export function marshalSubnetToL1ConversionData(args: PackL1ConversionMessageArgs): Uint8Array {
     const parts: Uint8Array[] = [];
-    parts.push(encodeUint16(codecVersion));
-    parts.push(cb58ToBytes(args.subnetId));
-    parts.push(cb58ToBytes(args.managerChainID));
-    parts.push(encodeVarBytes(hexToBytes(args.managerAddress)));
+
+    parts.push(encodeUint16(CODEC_ID)); // Use constant CODEC_ID
+    parts.push(utils.base58check.decode(args.subnetId));
+    parts.push(utils.base58check.decode(args.managerChainID));
+    parts.push(encodeVarBytes(utils.hexToBuffer(args.managerAddress)));
     parts.push(encodeUint32(args.validators.length));
 
-    for (const validator of args.validators) {
-        parts.push(encodeVarBytes(cb58ToBytes(validator.nodeID.split("-")[1])));
-        parts.push(hexToBytes(validator.nodePOP.publicKey));
+    // Sort validators by nodeID (using existing compareNodeIDs)
+    let sortedValidators;
+    try {
+        sortedValidators = [...args.validators].sort((a, b) => compareNodeIDs(a.nodeID, b.nodeID));
+    } catch (error: any) {
+        logger.warn("Error sorting validators, using original order:", error);
+        sortedValidators = args.validators;
+    }
+
+    for (const validator of sortedValidators) {
+        if (!validator.nodeID || !validator.nodePOP || !validator.nodePOP.publicKey) { // Check publicKey existence
+            throw new Error(`Invalid validator data: ${JSON.stringify(validator)}`);
+        }
+
+        let nodeIDBytes;
+        try {
+            nodeIDBytes = validator.nodeID.startsWith("NodeID-")
+                ? utils.base58check.decode(validator.nodeID.split("-")[1])
+                : utils.hexToBuffer(validator.nodeID);
+        } catch (error: any) {
+            throw new Error(`Failed to parse nodeID '${validator.nodeID}': ${error.message}`);
+        }
+
+        // NOTE: This uses nodePOP.publicKey, whereas the Solidity port uses blsPublicKey.
+        // Ensure this publicKey corresponds to the expected BLS key if used for similar purposes.
+        // Assuming nodePOP.publicKey is the BLS key here based on context.
+        const blsPublicKeyBytes = utils.hexToBuffer(validator.nodePOP.publicKey);
+        if (blsPublicKeyBytes.length !== 48) {
+            logger.warn(`Expected BLS public key (nodePOP.publicKey) to be 48 bytes, got ${blsPublicKeyBytes.length}`);
+            // Decide whether to throw or allow based on requirements
+            // throw new Error(`Invalid BLS public key length from nodePOP.publicKey: ${blsPublicKeyBytes.length}`);
+        }
+
+        parts.push(encodeVarBytes(nodeIDBytes));
+        parts.push(blsPublicKeyBytes); // Packing the publicKey as if it's the BLS key
+        // Note: Solidity uses uint64 (bigint), TS interface uses number. Convert.
         parts.push(encodeUint64(BigInt(validator.weight)));
     }
 
-    return concatenateUint8Arrays(...parts);
+    const result = concatenateUint8Arrays(...parts);
+    return result;
+}
+
+export const compareNodeIDs = (a: string, b: string) => {
+    // logger.log(a, b); // Removed console log
+    let aNodeID: Uint8Array;
+    let bNodeID: Uint8Array;
+
+    try {
+        // Try to parse as NodeID-{base58check} or hex
+        aNodeID = a.startsWith("NodeID-") ? utils.base58check.decode(a.split("-")[1]) : utils.hexToBuffer(a);
+        bNodeID = b.startsWith("NodeID-") ? utils.base58check.decode(b.split("-")[1]) : utils.hexToBuffer(b);
+    } catch (error: any) {
+        // Fallback to string comparison if parsing fails (e.g., invalid format)
+        logger.warn(`Failed to parse NodeIDs for comparison ('${a}', '${b}'), falling back to string compare: ${error.message}`);
+        return a.localeCompare(b);
+    }
+
+    // Compare byte arrays lexicographically
+    const minLength = Math.min(aNodeID.length, bNodeID.length);
+    for (let i = 0; i < minLength; i++) {
+        if (aNodeID[i] !== bNodeID[i]) {
+            return aNodeID[i] < bNodeID[i] ? -1 : 1;
+        }
+    }
+    // If one is a prefix of the other, the shorter one comes first
+    return aNodeID.length - bNodeID.length;
 }
 
 function newAddressedCall(sourceAddress: Uint8Array, payload: Uint8Array): Uint8Array {
@@ -151,7 +220,7 @@ interface SignatureResponse {
 }
 
 export async function collectSignaturesInitializeValidatorSet(params: {
-    network: Network, 
+    network: Network,
     subnetId: string;
     validatorManagerBlockchainID: string;
     managerAddress: Hex;
@@ -177,17 +246,14 @@ export async function collectSignaturesInitializeValidatorSet(params: {
             },
             weight: v.weight
         }))
-    }, 5, pChainChainID);
+    }, params.network === 'fuji' ? 5 : 1, pChainChainID);
 
-    // Add 30 second pause
-    await interruptiblePause(30);
-
-    console.log("Message:", fromBytes(message, 'hex'));
-    console.log("Justification:", fromBytes(justification, 'hex'));
+    // logger.log("Message:", fromBytes(message, 'hex'));
+    // logger.log("Justification:", fromBytes(justification, 'hex'));
 
     // Use the signature aggregation API from Glacier
-    const baseURL = params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
-    const signResponse = await fetch(baseURL, {
+    const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : params.network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
@@ -197,7 +263,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
             "message": fromBytes(message, 'hex'),
             "justification": fromBytes(justification, 'hex')
         })
-    });
+    }), 2000, 30000, (result) => result.status !== 500);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();
@@ -209,8 +275,6 @@ export async function collectSignaturesInitializeValidatorSet(params: {
 }
 
 export async function collectSignatures(network: Network, message: string, justification?: string): Promise<string> {
-    // Add 30 second pause
-    await interruptiblePause(30);
 
     // Use the signature aggregation API from Glacier
     const body: { message: string; justification?: string; signingSubnetId?: string } = { message };
@@ -218,18 +282,16 @@ export async function collectSignatures(network: Network, message: string, justi
         body.justification = justification;
         // body.signingSubnetId = pChainChainID;
     }
-
-    // console.log("message", message);
-    // console.log("justification", justification);
-    const baseURL = network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
-    const signResponse = await fetch(baseURL, {
+    // Test every 2 seconds, timeout after 30 seconds
+    const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
+    const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(body)
-    });
+    }), 2000, 30000, (result) => result.status !== 500);
 
     if (!signResponse.ok) {
         const errorText = await signResponse.text();
@@ -311,10 +373,10 @@ export interface SolidityValidationPeriod {
 const CODEC_ID = 0; // uint16 internal constant CODEC_ID = 0; (replaces codecVersion variable)
 // const codecVersion = 0; // Replaced by CODEC_ID
 
-const SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID = 0; // uint32
+// const SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID = 0; // uint32
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1; // uint32 (already defined in original file)
-const L1_VALIDATOR_REGISTRATION_MESSAGE_TYPE_ID = 2; // uint32 (already defined in original file)
-const L1_VALIDATOR_WEIGHT_MESSAGE_TYPE_ID = 3; // uint32
+// const L1_VALIDATOR_REGISTRATION_MESSAGE_TYPE_ID = 2; // uint32 (already defined in original file)
+// const L1_VALIDATOR_WEIGHT_MESSAGE_TYPE_ID = 3; // uint32
 const VALIDATION_UPTIME_MESSAGE_TYPE_ID = 0; // uint32 (Note: same as SUBNET_TO_L1_CONVERSION_MESSAGE_TYPE_ID)
 
 
@@ -494,11 +556,10 @@ function parseVarBytes(input: Uint8Array, offset: number): { bytes: Uint8Array; 
 const bytesToHexPrefixed = (bytes: Uint8Array): Hex => `0x${Buffer.from(bytes).toString('hex')}`;
 
 export function packValidationUptimeMessage(validationId: string, uptimeSeconds: number, networkID: number, sourceChainID: string): Uint8Array {
-    let validationIdBytes: Uint8Array;
 
     // Convert validationId to hex
     const validationIdHex = cb58ToHex(validationId);
-    validationIdBytes = hexToBytes(validationIdHex as Hex);
+    const validationIdBytes = hexToBytes(validationIdHex as Hex);
 
     // Create the message payload with the proper format
     const messagePayload = concatenateUint8Arrays(
@@ -513,4 +574,13 @@ export function packValidationUptimeMessage(validationId: string, uptimeSeconds:
 
     // Create unsigned message
     return newUnsignedMessage(networkID, sourceChainID, addressedCall);
+}
+
+export function decodeWarpMessage(log: Log) {
+    const abi = parseAbiItem('event SendWarpMessage(address indexed sender, bytes32 indexed messageID, bytes message)')
+    return decodeEventLog({
+        abi: [abi],
+        data: log.data,
+        topics: log.topics,
+    });
 }

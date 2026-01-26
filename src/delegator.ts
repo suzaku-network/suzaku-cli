@@ -1,51 +1,27 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import type { Hex } from 'viem';
+import { logger } from './lib/logger';
 
 export async function setL1Limit(
   delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
-  assetClass: bigint,
-  limit: bigint,
-  account: Account | undefined
+  collateralClass: bigint,
+  limit: bigint
 ) {
-  console.log("Setting L1 limit...");
-
-  try {
-    if (!account) throw new Error('Client account is required');
-
-    const hash = await delegator.safeWrite.setL1Limit(
-      [l1Address, assetClass, limit],
-      { chain: null, account }
-    );
-    console.log("setL1Limit done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
+  logger.log("Setting L1 limit...");
+  const hash = await delegator.safeWrite.setL1Limit([l1Address, collateralClass, limit]);
+  logger.log("setL1Limit done, tx hash:", hash);
 }
 
 export async function setOperatorL1Shares(
   delegator: SafeSuzakuContract['L1RestakeDelegator'],
   l1Address: Hex,
-  assetClass: bigint,
+  collateralClass: bigint,
   operatorAddress: Hex,
-  shares: bigint,
-  account: Account | undefined
+  shares: bigint
 ) {
-  console.log("Setting operator L1 shares...");
+  logger.log("Setting operator L1 shares...");
 
-  try {
-    if (!account) throw new Error('Client account is required');
-
-    const hash = await delegator.safeWrite.setOperatorL1Shares(
-      [l1Address, assetClass, operatorAddress, shares],
-      { chain: null, account }
-    );
-    console.log("setOperatorL1Shares done, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
+  const hash = await delegator.safeWrite.setOperatorL1Shares([l1Address, collateralClass, operatorAddress, shares]);
+  logger.log("setOperatorL1Shares done, tx hash:", hash);
 }

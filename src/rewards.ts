@@ -1,37 +1,46 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
+import { logger } from './lib/logger';
+import { Config } from './config';
 
 /**
  * Distributes rewards for a specific epoch
  */
 export async function distributeRewards(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
-  batchSize: number,
-  account: Account | undefined
+  batchSize: number
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.distributeRewards(
-    [epoch, batchSize],
-    { chain: null, account }
-  );
+
+  const txHash = await rewards.safeWrite.distributeRewards([epoch, batchSize]);
   return txHash;
+}
+
+export async function getRewardsClaimsCount(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  config: Config,
+  role: 'Staker' | 'Operator' | 'Curator',
+  account: Account
+) {
+  const [lastEpoch, middlewareAddress, maxEpochPerClaim] = await Promise.all([
+    rewards.read[`lastEpochClaimed${role}`]([account.address!] as never),
+    rewards.read.middleware(),
+    rewards.read.MAX_EPOCHS_PER_CLAIM()
+  ]);
+  const middleware = await config.contracts.L1Middleware(middlewareAddress);
+  const epoch = await middleware.read.getCurrentEpoch();
+  return Math.ceil((epoch - lastEpoch) / maxEpochPerClaim);
 }
 
 /**
  * Claims rewards for a staker
  */
 export async function claimRewards(
-  rewards: SafeSuzakuContract['Rewards'],
-  rewardsToken: Hex,
-  recipient: Hex,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  recipient: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.claimRewards(
-    [rewardsToken, recipient],
-    { chain: null, account }
-  );
+
+  const txHash = await rewards.safeWrite.claimRewards([recipient]);
   return txHash;
 }
 
@@ -39,16 +48,10 @@ export async function claimRewards(
  * Claims operator fees
  */
 export async function claimOperatorFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  rewardsToken: Hex,
-  recipient: Hex,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  recipient: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.claimOperatorFee(
-    [rewardsToken, recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimOperatorFee([recipient]);
   return txHash;
 }
 
@@ -56,16 +59,10 @@ export async function claimOperatorFee(
  * Claims curator fees
  */
 export async function claimCuratorFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  rewardsToken: Hex,
-  recipient: Hex,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  recipient: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.claimCuratorFee(
-    [rewardsToken, recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimCuratorFee([recipient]);
   return txHash;
 }
 
@@ -73,16 +70,10 @@ export async function claimCuratorFee(
  * Claims protocol fees
  */
 export async function claimProtocolFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  rewardsToken: Hex,
-  recipient: Hex,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  recipient: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.claimProtocolFee(
-    [rewardsToken, recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimProtocolFee([recipient]);
   return txHash;
 }
 
@@ -90,17 +81,11 @@ export async function claimProtocolFee(
  * Claims undistributed rewards
  */
 export async function claimUndistributedRewards(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
-  rewardsToken: Hex,
-  recipient: Hex,
-  account: Account | undefined
+  recipient: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.claimUndistributedRewards(
-    [epoch, rewardsToken, recipient],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.claimUndistributedRewards([epoch, recipient]);
   return txHash;
 }
 
@@ -108,35 +93,24 @@ export async function claimUndistributedRewards(
  * Sets rewards amount for epochs
  */
 export async function setRewardsAmountForEpochs(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   startEpoch: number,
   numberOfEpochs: number,
-  rewardsToken: Hex,
-  rewardsAmount: bigint,
-  account: Account | undefined
+  rewardsAmount: bigint
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.setRewardsAmountForEpochs(
-    [startEpoch, numberOfEpochs, rewardsToken, rewardsAmount],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setRewardsAmountForEpochs([startEpoch, numberOfEpochs, rewardsAmount]);
   return txHash;
 }
 
 /**
- * Sets rewards share for asset class
+ * Sets rewards share for collateral class
  */
-export async function setRewardsShareForAssetClass(
-  rewards: SafeSuzakuContract['Rewards'],
-  assetClass: bigint,
-  share: number,
-  account: Account | undefined
+export async function setRewardsBipsForCollateralClass(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  collateralClass: bigint,
+  bips: number
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.setRewardsShareForAssetClass(
-    [assetClass, share],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setRewardsBipsForCollateralClass([collateralClass, bips]);
   return txHash;
 }
 
@@ -144,31 +118,10 @@ export async function setRewardsShareForAssetClass(
  * Sets minimum required uptime
  */
 export async function setMinRequiredUptime(
-  rewards: SafeSuzakuContract['Rewards'],
-  minUptime: bigint,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  minUptime: bigint
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.setMinRequiredUptime(
-    [minUptime],
-    { chain: null, account }
-  );
-  return txHash;
-}
-
-/**
- * Sets admin role
- */
-export async function setAdminRole(
-  rewards: SafeSuzakuContract['Rewards'],
-  newAdmin: Hex,
-  account: Account | undefined
-) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.setAdminRole(
-    [newAdmin],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setMinRequiredUptime([minUptime]);
   return txHash;
 }
 
@@ -176,15 +129,10 @@ export async function setAdminRole(
  * Sets protocol owner
  */
 export async function setProtocolOwner(
-  rewards: SafeSuzakuContract['Rewards'],
-  newOwner: Hex,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  newOwner: Hex
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.setProtocolOwner(
-    [newOwner],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.setProtocolOwner([newOwner]);
   return txHash;
 }
 
@@ -192,15 +140,10 @@ export async function setProtocolOwner(
  * Updates protocol fee
  */
 export async function updateProtocolFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  newFee: number,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  newFee: number
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.updateProtocolFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateProtocolFee([newFee]);
   return txHash;
 }
 
@@ -208,15 +151,10 @@ export async function updateProtocolFee(
  * Updates operator fee
  */
 export async function updateOperatorFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  newFee: number,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  newFee: number
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.updateOperatorFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateOperatorFee([newFee]);
   return txHash;
 }
 
@@ -224,50 +162,37 @@ export async function updateOperatorFee(
  * Updates curator fee
  */
 export async function updateCuratorFee(
-  rewards: SafeSuzakuContract['Rewards'],
-  newFee: number,
-  account: Account | undefined
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  newFee: number
 ) {
-  if (!account) throw new Error("No client account set.");
-  const txHash = await rewards.safeWrite.updateCuratorFee(
-    [newFee],
-    { chain: null, account }
-  );
+  const txHash = await rewards.safeWrite.updateCuratorFee([newFee]);
   return txHash;
 }
 
 /**
- * Gets rewards amount per token from epoch
+ * Updates all fees at once to avoid order dependency issues
  */
-export async function getRewardsAmountPerTokenFromEpoch(
-  rewards: SafeSuzakuContract['Rewards'],
-  epoch: number
+export async function updateAllFees(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  newProtocolFee: number,
+  newOperatorFee: number,
+  newCuratorFee: number
 ) {
-  const result = await rewards.read.getRewardsAmountPerTokenFromEpoch(
-    [epoch]
-  ) as [string[], bigint[]];
-
-  console.log(`Rewards amount per token for epoch ${epoch}:`);
-  for (let i = 0; i < result[0].length; i++) {
-    console.log(`  Token: ${result[0][i]}, Amount: ${result[1][i].toString()}`);
-  }
-
-  return result;
+  const txHash = await rewards.safeWrite.updateAllFees([newProtocolFee, newOperatorFee, newCuratorFee]);
+  return txHash;
 }
 
 /**
  * Gets rewards amount for a specific token from epoch
  */
-export async function getRewardsAmountForTokenFromEpoch(
-  rewards: SafeSuzakuContract['Rewards'],
-  epoch: number,
-  token: Hex
+export async function getEpochRewards(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  epoch: number
 ) {
-  const amount = await rewards.read.getRewardsAmountPerTokenFromEpoch(
-    [epoch, token]
+  const amount = await rewards.read.getEpochRewards(
+    [epoch]
   ) as bigint;
-
-  console.log(`Rewards amount for token ${token} at epoch ${epoch}: ${amount.toString()}`);
+  logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
   return amount;
 }
 
@@ -275,7 +200,7 @@ export async function getRewardsAmountForTokenFromEpoch(
  * Gets operator shares for a specific epoch
  */
 export async function getOperatorShares(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   operator: Hex
 ) {
@@ -283,7 +208,7 @@ export async function getOperatorShares(
     [epoch, operator]
   ) as bigint;
 
-  console.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -291,7 +216,7 @@ export async function getOperatorShares(
  * Gets vault shares for a specific epoch
  */
 export async function getVaultShares(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   vault: Hex
 ) {
@@ -299,7 +224,7 @@ export async function getVaultShares(
     [epoch, vault]
   ) as bigint;
 
-  console.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -307,7 +232,7 @@ export async function getVaultShares(
  * Gets curator shares for a specific epoch
  */
 export async function getCuratorShares(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number,
   curator: Hex
 ) {
@@ -315,7 +240,7 @@ export async function getCuratorShares(
     [epoch, curator]
   ) as bigint;
 
-  console.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
   return share;
 }
 
@@ -323,14 +248,11 @@ export async function getCuratorShares(
  * Gets protocol rewards for a token
  */
 export async function getProtocolRewards(
-  rewards: SafeSuzakuContract['Rewards'],
-  token: Hex
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
-  const rewardsAmount = await rewards.read.protocolRewards(
-    [token]
-  ) as bigint;
+  const rewardsAmount = await rewards.read.protocolRewards();
 
-  console.log(`Protocol rewards for token ${token}: ${rewardsAmount.toString()}`);
+  logger.log(`Protocol rewards: ${rewardsAmount.toString()}`);
   return rewardsAmount;
 }
 
@@ -338,19 +260,19 @@ export async function getProtocolRewards(
  * Gets distribution batch status for an epoch
  */
 export async function getDistributionBatch(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   epoch: number
 ) {
   const result = await rewards.read.distributionBatches(
     [epoch]
   ) as [bigint, boolean];
 
-  console.log(`Distribution batch for epoch ${epoch}:`);
+  logger.log(`Distribution batch for epoch ${epoch}:`);
   const lastProcessedOperator = result[0];
   const isComplete = result[1];
 
-  console.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
-  console.log(`  Is complete: ${isComplete}`);
+  logger.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
+  logger.log(`  Is complete: ${isComplete}`);
 
   return { lastProcessedOperator, isComplete };
 }
@@ -359,44 +281,44 @@ export async function getDistributionBatch(
  * Gets current fees configuration
  */
 export async function getFeesConfiguration(
-  rewards: SafeSuzakuContract['Rewards']
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
   const protocolFee = await rewards.read.protocolFee();
   const operatorFee = await rewards.read.operatorFee();
   const curatorFee = await rewards.read.curatorFee();
 
-  console.log("Fees configuration:");
-  console.log(`  Protocol fee: ${protocolFee}`);
-  console.log(`  Operator fee: ${operatorFee}`);
-  console.log(`  Curator fee: ${curatorFee}`);
+  logger.log("Fees configuration:");
+  logger.log(`  Protocol fee: ${protocolFee}`);
+  logger.log(`  Operator fee: ${operatorFee}`);
+  logger.log(`  Curator fee: ${curatorFee}`);
 
   return { protocolFee, operatorFee, curatorFee };
 }
 
 /**
- * Gets rewards share for asset class
+ * Gets rewards bips for collateral class
  */
-export async function getRewardsShareForAssetClass(
-  rewards: SafeSuzakuContract['Rewards'],
-  assetClass: bigint
+export async function getRewardsBipsForCollateralClass(
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  collateralClass: bigint
 ) {
-  const share = await rewards.read.rewardsSharePerAssetClass(
-    [assetClass]
-  ) as number;
+  const bips = await rewards.read.rewardsBipsPerCollateralClass(
+    [collateralClass]
+  );
 
-  console.log(`Rewards share for asset class ${assetClass}: ${share}`);
-  return share;
+  logger.log(`Rewards bips for collateral class ${collateralClass}: ${bips}`);
+  return bips;
 }
 
 /**
  * Gets min required uptime
  */
 export async function getMinRequiredUptime(
-  rewards: SafeSuzakuContract['Rewards']
+  rewards: SafeSuzakuContract['RewardsNativeToken']
 ) {
   const minUptime = await rewards.read.minRequiredUptime();
 
-  console.log(`Minimum required uptime: ${minUptime.toString()}`);
+  logger.log(`Minimum required uptime: ${minUptime.toString()}`);
   return minUptime;
 }
 
@@ -404,14 +326,12 @@ export async function getMinRequiredUptime(
  * Gets last claimed epoch for a staker
  */
 export async function getLastEpochClaimedStaker(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   staker: Hex
 ) {
-  const lastEpoch = await rewards.read.lastEpochClaimedStaker(
-    [staker]
-  );
+  const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker]);
 
-  console.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -419,14 +339,12 @@ export async function getLastEpochClaimedStaker(
  * Gets last claimed epoch for an operator
  */
 export async function getLastEpochClaimedOperator(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   operator: Hex
 ) {
-  const lastEpoch = await rewards.read.lastEpochClaimedOperator(
-    [operator]
-  );
+  const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator]);
 
-  console.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }
 
@@ -434,28 +352,11 @@ export async function getLastEpochClaimedOperator(
  * Gets last claimed epoch for a curator
  */
 export async function getLastEpochClaimedCurator(
-  rewards: SafeSuzakuContract['Rewards'],
+  rewards: SafeSuzakuContract['RewardsNativeToken'],
   curator: Hex
 ) {
-  const lastEpoch = await rewards.read.lastEpochClaimedCurator(
-    [curator]
-  );
+  const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator]);
 
-  console.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
-  return lastEpoch;
-}
-
-/**
- * Gets last claimed epoch for protocol
- */
-export async function getLastEpochClaimedProtocol(
-  rewards: SafeSuzakuContract['Rewards'],
-  protocolOwner: Hex
-) {
-  const lastEpoch = await rewards.read.lastEpochClaimedProtocol(
-    [protocolOwner]
-  );
-
-  console.log(`Last epoch claimed by protocol owner ${protocolOwner}: ${lastEpoch.toString()}`);
+  logger.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
   return lastEpoch;
 }

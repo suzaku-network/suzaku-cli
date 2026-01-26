@@ -36,6 +36,358 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OnSlash",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "indexed": true,
+                "internalType": "uint96"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "captureTimestamp",
+                "type": "uint48",
+                "indexed": false,
+                "internalType": "uint48"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleAdminChanged",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "previousAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "newAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleGranted",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleRevoked",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetHook",
+        "inputs": [
+            {
+                "name": "hook",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetL1Limit",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "indexed": true,
+                "internalType": "uint96"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetMaxL1Limit",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "indexed": true,
+                "internalType": "uint96"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SetOperatorL1Shares",
+        "inputs": [
+            {
+                "name": "l1",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "collateralClass",
+                "type": "uint96",
+                "indexed": true,
+                "internalType": "uint96"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "shares",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "AccessControlBadConfirmation",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AccessControlUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "neededRole",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__AlreadySet",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__InsufficientHookGas",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__NotAuthorizedMiddleware",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__NotL1",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__NotSlasher",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__NotVault",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BaseDelegator__ZeroAddress",
+        "inputs": [
+            {
+                "name": "name",
+                "type": "string",
+                "internalType": "string"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "CheckpointUnorderedInsertion",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1RestakeDelegator__DuplicateRoleHolder",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1RestakeDelegator__ExceedsMaxL1Limit",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1RestakeDelegator__MaxL1LimitNotSet",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1RestakeDelegator__MissingRoleHolders",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "L1RestakeDelegator__ZeroAddressRoleHolder",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ReentrancyGuardReentrantCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SafeCastOverflowedUintDowncast",
+        "inputs": [
+            {
+                "name": "bits",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "value",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "Vault__NotSlasher",
+        "inputs": []
+    },
+    {
         "type": "function",
         "name": "DEFAULT_ADMIN_ROLE",
         "inputs": [],
@@ -301,7 +653,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -325,7 +677,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -383,7 +735,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -421,7 +773,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -450,7 +802,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -538,7 +890,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -561,7 +913,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -584,7 +936,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -612,7 +964,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -641,7 +993,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -699,7 +1051,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             }
@@ -723,7 +1075,7 @@ export default [
                 "internalType": "address"
             },
             {
-                "name": "assetClass",
+                "name": "collateralClass",
                 "type": "uint96",
                 "internalType": "uint96"
             },
@@ -759,362 +1111,5 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "event",
-        "name": "Initialized",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OnSlash",
-        "inputs": [
-            {
-                "name": "l1",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "assetClass",
-                "type": "uint96",
-                "indexed": true,
-                "internalType": "uint96"
-            },
-            {
-                "name": "operator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "captureTimestamp",
-                "type": "uint48",
-                "indexed": false,
-                "internalType": "uint48"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleAdminChanged",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "previousAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "newAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleGranted",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleRevoked",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetHook",
-        "inputs": [
-            {
-                "name": "hook",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetL1Limit",
-        "inputs": [
-            {
-                "name": "l1",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "assetClass",
-                "type": "uint96",
-                "indexed": true,
-                "internalType": "uint96"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetMaxL1Limit",
-        "inputs": [
-            {
-                "name": "l1",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "assetClass",
-                "type": "uint96",
-                "indexed": true,
-                "internalType": "uint96"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "SetOperatorL1Shares",
-        "inputs": [
-            {
-                "name": "l1",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "assetClass",
-                "type": "uint96",
-                "indexed": true,
-                "internalType": "uint96"
-            },
-            {
-                "name": "operator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "shares",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AccessControlUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "neededRole",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__AlreadySet",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__InsufficientHookGas",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__NotAuthorizedMiddleware",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__NotInitialized",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__NotL1",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__NotSlasher",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__NotVault",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "BaseDelegator__ZeroAddress",
-        "inputs": [
-            {
-                "name": "name",
-                "type": "string",
-                "internalType": "string"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "CheckpointUnorderedInsertion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitialization",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "L1RestakeDelegator__DuplicateRoleHolder",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "L1RestakeDelegator__ExceedsMaxL1Limit",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "L1RestakeDelegator__MaxL1LimitNotSet",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "L1RestakeDelegator__MissingRoleHolders",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "L1RestakeDelegator__ZeroAddressRoleHolder",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MathOverflowedMulDiv",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotInitializing",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "ReentrancyGuardReentrantCall",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "SafeCastOverflowedUintDowncast",
-        "inputs": [
-            {
-                "name": "bits",
-                "type": "uint8",
-                "internalType": "uint8"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "Vault__NotSlasher",
-        "inputs": []
     }
 ] as const;

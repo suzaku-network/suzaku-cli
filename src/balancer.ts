@@ -1,60 +1,55 @@
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import { type Hex, type Account } from 'viem';
+import { logger } from './lib/logger';
+
+export enum ValidatorStatus {
+  Unknown,
+  PendingAdded,
+  Active,
+  PendingRemoved,
+  Completed,
+  Invalidated,
+  PendingStakeUpdated
+}
+
+export const ValidatorStatusNames = [
+  "Unknown",
+  "PendingAdded",
+  "Active",
+  "PendingRemoved",
+  "Completed",
+  "Invalidated",
+  "PendingStakeUpdated"
+];
 
 export async function setUpSecurityModule(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex,
-  maxWeight: bigint,
-  account: Account | undefined
+  maxWeight: bigint
 ) {
-  console.log("Setting up security module...");
+  logger.log("Setting up security module...");
 
-  try {
-    if (!account) throw new Error('Client account is required');
-
-    const hash = await balancer.safeWrite.setUpSecurityModule(
-      [securityModule, maxWeight],
-      { chain: null, account }
-    );
-    console.log("Security module updated, tx hash:", hash);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
+  const hash = await balancer.safeWrite.setUpSecurityModule([securityModule, maxWeight]);
+  logger.log("Security module updated, tx hash:", hash);
 }
 
 export async function getSecurityModules(
   balancer: SafeSuzakuContract['BalancerValidatorManager']
 ) {
-  console.log("Getting security modules...");
+  logger.log("Getting security modules...");
 
-  try {
-    const modules = await balancer.read.getSecurityModules();
-    console.log(modules);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
+  const modules = await balancer.read.getSecurityModules();
+  logger.log(modules);
 }
 
 export async function getSecurityModuleWeights(
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
-  console.log("Getting security module weights...");
+  logger.log("Getting security module weights...");
 
-  try {
-    const val = await balancer.read.getSecurityModuleWeights(
-      [securityModule]
-    );
-    console.log(val);
-  } catch (error) {
-    console.error("Read contract failed:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-  }
+  const val = await balancer.read.getSecurityModuleWeights(
+    [securityModule]
+  );
+  logger.log(val);
 }

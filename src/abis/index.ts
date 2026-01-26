@@ -1,7 +1,7 @@
 import L1Registry from './L1Registry';
 import OperatorRegistry from './OperatorRegistry';
-import VaultManager from './MiddlewareVaultManager';
-import L1Middleware from './AvalancheL1Middleware';
+import VaultManager from './VaultManager';
+import L1Middleware from './L1Middleware';
 import VaultTokenized from './VaultTokenized';
 import L1RestakeDelegator from './L1RestakeDelegator';
 import BalancerValidatorManager from './BalancerValidatorManager';
@@ -9,7 +9,14 @@ import VaultFactory from './VaultFactory';
 import OperatorVaultOptInService from './OperatorVaultOptInService';
 import OperatorL1OptInService from './OperatorL1OptInService';
 import UptimeTracker from './UptimeTracker';
-import Rewards from './Rewards';
+import PoASecurityModule from './PoASecurityModule';
+import DefaultCollateral from './DefaultCollateral';
+import ERC20 from './ERC20';
+import IWarpMessenger from './IWarpMessenger';
+import ValidatorManager from './ValidatorManager';
+import AccessControl from './AccessControl';
+import RewardsNativeToken from './RewardsNativeToken';
+import Ownable from './Ownable';
 
 export const SuzakuABI = {
   L1Registry,
@@ -23,5 +30,12 @@ export const SuzakuABI = {
   OperatorVaultOptInService,
   OperatorL1OptInService,
   UptimeTracker,
-  Rewards
+  PoASecurityModule,
+  DefaultCollateral,
+  ERC20,
+  IWarpMessenger,
+  ValidatorManager,
+  AccessControl,
+  RewardsNativeToken,
+  Ownable
 };

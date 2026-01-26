@@ -5,744 +5,40 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
-        "type": "function",
-        "name": "ADDRESS_LENGTH",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "BALANCER_VALIDATOR_MANAGER_STORAGE_LOCATION",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "BLS_PUBLIC_KEY_LENGTH",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint8",
-                "internalType": "uint8"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "MAXIMUM_CHURN_PERCENTAGE_LIMIT",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint8",
-                "internalType": "uint8"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "MAXIMUM_REGISTRATION_EXPIRY_LENGTH",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "P_CHAIN_BLOCKCHAIN_ID",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "VALIDATOR_MANAGER_STORAGE_LOCATION",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "WARP_MESSENGER",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "contract IWarpMessenger"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "completeEndValidation",
-        "inputs": [
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "completeValidatorRegistration",
-        "inputs": [
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "completeValidatorWeightUpdate",
+        "type": "event",
+        "name": "CompletedValidatorRegistration",
         "inputs": [
             {
                 "name": "validationID",
                 "type": "bytes32",
+                "indexed": true,
                 "internalType": "bytes32"
-            },
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "getChurnPeriodSeconds",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "churnPeriodSeconds",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getCurrentChurnPeriod",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "churnPeriod",
-                "type": "tuple",
-                "internalType": "struct ValidatorChurnPeriod",
-                "components": [
-                    {
-                        "name": "startedAt",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "initialWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "totalWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "churnAmount",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getMaximumChurnPercentage",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "maximumChurnPercentage",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getSecurityModuleWeights",
-        "inputs": [
-            {
-                "name": "securityModule",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "weight",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "maxWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getSecurityModules",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "securityModules",
-                "type": "address[]",
-                "internalType": "address[]"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getValidator",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct Validator",
-                "components": [
-                    {
-                        "name": "status",
-                        "type": "uint8",
-                        "internalType": "enum ValidatorStatus"
-                    },
-                    {
-                        "name": "nodeID",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "startingWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "messageNonce",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "weight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "startedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "endedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "initialize",
-        "inputs": [
-            {
-                "name": "settings",
-                "type": "tuple",
-                "internalType": "struct BalancerValidatorManagerSettings",
-                "components": [
-                    {
-                        "name": "baseSettings",
-                        "type": "tuple",
-                        "internalType": "struct ValidatorManagerSettings",
-                        "components": [
-                            {
-                                "name": "l1ID",
-                                "type": "bytes32",
-                                "internalType": "bytes32"
-                            },
-                            {
-                                "name": "churnPeriodSeconds",
-                                "type": "uint64",
-                                "internalType": "uint64"
-                            },
-                            {
-                                "name": "maximumChurnPercentage",
-                                "type": "uint8",
-                                "internalType": "uint8"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "initialOwner",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "initialSecurityModule",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "initialSecurityModuleMaxWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "migratedValidations",
-                        "type": "bytes32[]",
-                        "internalType": "bytes32[]"
-                    }
-                ]
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeEndValidation",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct Validator",
-                "components": [
-                    {
-                        "name": "status",
-                        "type": "uint8",
-                        "internalType": "enum ValidatorStatus"
-                    },
-                    {
-                        "name": "nodeID",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "startingWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "messageNonce",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "weight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "startedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "endedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeValidatorRegistration",
-        "inputs": [
-            {
-                "name": "registrationInput",
-                "type": "tuple",
-                "internalType": "struct ValidatorRegistrationInput",
-                "components": [
-                    {
-                        "name": "nodeID",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "blsPublicKey",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "registrationExpiry",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "remainingBalanceOwner",
-                        "type": "tuple",
-                        "internalType": "struct PChainOwner",
-                        "components": [
-                            {
-                                "name": "threshold",
-                                "type": "uint32",
-                                "internalType": "uint32"
-                            },
-                            {
-                                "name": "addresses",
-                                "type": "address[]",
-                                "internalType": "address[]"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "disableOwner",
-                        "type": "tuple",
-                        "internalType": "struct PChainOwner",
-                        "components": [
-                            {
-                                "name": "threshold",
-                                "type": "uint32",
-                                "internalType": "uint32"
-                            },
-                            {
-                                "name": "addresses",
-                                "type": "address[]",
-                                "internalType": "address[]"
-                            }
-                        ]
-                    }
-                ]
             },
             {
                 "name": "weight",
                 "type": "uint64",
+                "indexed": false,
                 "internalType": "uint64"
             }
         ],
-        "outputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeValidatorSet",
-        "inputs": [
-            {
-                "name": "conversionData",
-                "type": "tuple",
-                "internalType": "struct ConversionData",
-                "components": [
-                    {
-                        "name": "l1ID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerBlockchainID",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "validatorManagerAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "initialValidators",
-                        "type": "tuple[]",
-                        "internalType": "struct InitialValidator[]",
-                        "components": [
-                            {
-                                "name": "nodeID",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "blsPublicKey",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            },
-                            {
-                                "name": "weight",
-                                "type": "uint64",
-                                "internalType": "uint64"
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "name": "messageIndex",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "initializeValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "newWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "validator",
-                "type": "tuple",
-                "internalType": "struct Validator",
-                "components": [
-                    {
-                        "name": "status",
-                        "type": "uint8",
-                        "internalType": "enum ValidatorStatus"
-                    },
-                    {
-                        "name": "nodeID",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "startingWeight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "messageNonce",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "weight",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "startedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "endedAt",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "isValidatorPendingWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "owner",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "registeredValidators",
-        "inputs": [
-            {
-                "name": "nodeID",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "renounceOwnership",
-        "inputs": [],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendEndValidatorMessage",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendRegisterValidatorMessage",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "resendValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setUpSecurityModule",
-        "inputs": [
-            {
-                "name": "securityModule",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "maxWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "transferOwnership",
-        "inputs": [
-            {
-                "name": "newOwner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
+        "anonymous": false
     },
     {
         "type": "event",
-        "name": "InitialValidatorCreated",
+        "name": "CompletedValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedValidatorWeightUpdate",
         "inputs": [
             {
                 "name": "validationID",
@@ -751,10 +47,10 @@ export default [
                 "internalType": "bytes32"
             },
             {
-                "name": "nodeID",
-                "type": "bytes",
-                "indexed": true,
-                "internalType": "bytes"
+                "name": "nonce",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
             },
             {
                 "name": "weight",
@@ -771,6 +67,105 @@ export default [
         "inputs": [
             {
                 "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorRegistration",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nodeID",
+                "type": "bytes20",
+                "indexed": true,
+                "internalType": "bytes20"
+            },
+            {
+                "name": "registrationMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "registrationExpiry",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validatorWeightMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "endTime",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "weightUpdateMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
                 "type": "uint64",
                 "indexed": false,
                 "internalType": "uint64"
@@ -799,6 +194,68 @@ export default [
     },
     {
         "type": "event",
+        "name": "RegisteredInitialValidator",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nodeID",
+                "type": "bytes20",
+                "indexed": true,
+                "internalType": "bytes20"
+            },
+            {
+                "name": "subnetID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SecurityModuleWeightUpdated",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "newWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "maxWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "SetUpSecurityModule",
         "inputs": [
             {
@@ -817,147 +274,62 @@ export default [
         "anonymous": false
     },
     {
-        "type": "event",
-        "name": "ValidationPeriodCreated",
+        "type": "error",
+        "name": "BalancerValidatorManager__CannotRemoveModuleWithAssignedValidators",
         "inputs": [
             {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
             },
             {
-                "name": "nodeID",
-                "type": "bytes",
-                "indexed": true,
-                "internalType": "bytes"
-            },
-            {
-                "name": "registerValidationMessageID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
+                "name": "remainingValidators",
                 "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "registrationExpiry",
-                "type": "uint64",
-                "indexed": false,
                 "internalType": "uint64"
             }
-        ],
-        "anonymous": false
+        ]
     },
     {
-        "type": "event",
-        "name": "ValidationPeriodEnded",
+        "type": "error",
+        "name": "BalancerValidatorManager__CannotRemoveModuleWithWeight",
         "inputs": [
             {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "status",
-                "type": "uint8",
-                "indexed": true,
-                "internalType": "enum ValidatorStatus"
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
             }
-        ],
-        "anonymous": false
+        ]
     },
     {
-        "type": "event",
-        "name": "ValidationPeriodRegistered",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "timestamp",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
+        "type": "error",
+        "name": "BalancerValidatorManager__InconsistentNonce",
+        "inputs": []
     },
     {
-        "type": "event",
-        "name": "ValidatorRemovalInitialized",
+        "type": "error",
+        "name": "BalancerValidatorManager__InitialSecurityModuleMaxWeightLowerThanTotalWeight",
         "inputs": [
             {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
             },
             {
-                "name": "setWeightMessageID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "weight",
+                "name": "initialMaxWeight",
                 "type": "uint64",
-                "indexed": false,
                 "internalType": "uint64"
             },
             {
-                "name": "endTime",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
+                "name": "totalWeight",
+                "type": "uint64",
+                "internalType": "uint64"
             }
-        ],
-        "anonymous": false
+        ]
     },
     {
-        "type": "event",
-        "name": "ValidatorWeightUpdate",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "indexed": true,
-                "internalType": "uint64"
-            },
-            {
-                "name": "weight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "setWeightMessageID",
-                "type": "bytes32",
-                "indexed": false,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
+        "type": "error",
+        "name": "BalancerValidatorManager__InitialSecurityModuleRequiredForMigration",
+        "inputs": []
     },
     {
         "type": "error",
@@ -972,10 +344,58 @@ export default [
     },
     {
         "type": "error",
-        "name": "BalancerValidatorManager__MigratedValidationsTotalWeightMismatch",
+        "name": "BalancerValidatorManager__InvalidValidatorStatus",
         "inputs": [
             {
-                "name": "migratedValidationsTotalWeight",
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum ValidatorStatus"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__InvalidValidatorWeight",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__InvalidWarpMessage",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__MigratedNodeIDNotFound",
+        "inputs": [
+            {
+                "name": "nodeID",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__MigratedValidatorsRequired",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__MigratedValidatorsTotalWeightMismatch",
+        "inputs": [
+            {
+                "name": "migratedValidatorsTotalWeight",
                 "type": "uint64",
                 "internalType": "uint64"
             },
@@ -1010,17 +430,6 @@ export default [
                 "name": "validationID",
                 "type": "bytes32",
                 "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "BalancerValidatorManager__SecurityModuleAlreadyRegistered",
-        "inputs": [
-            {
-                "name": "securityModule",
-                "type": "address",
-                "internalType": "address"
             }
         ]
     },
@@ -1079,6 +488,22 @@ export default [
     },
     {
         "type": "error",
+        "name": "BalancerValidatorManager__VMValidatorSetNotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "BalancerValidatorManager__ValidatorAlreadyMigrated",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "BalancerValidatorManager__ValidatorNotBelongingToSecurityModule",
         "inputs": [
             {
@@ -1095,19 +520,8 @@ export default [
     },
     {
         "type": "error",
-        "name": "BalancerValidatorManager__WeightUpdateMismatch",
-        "inputs": [
-            {
-                "name": "newWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "expectedWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
+        "name": "BalancerValidatorManager__ZeroValidatorManagerAddress",
+        "inputs": []
     },
     {
         "type": "error",
@@ -1128,6 +542,17 @@ export default [
                 "name": "length",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidChurnPeriodLength",
+        "inputs": [
+            {
+                "name": "churnPeriodLength",
+                "type": "uint64",
+                "internalType": "uint64"
             }
         ]
     },
@@ -1181,6 +606,22 @@ export default [
     },
     {
         "type": "error",
+        "name": "InvalidNonce",
+        "inputs": [
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidPChainOwnerAddresses",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "InvalidPChainOwnerThreshold",
         "inputs": [
             {
@@ -1192,17 +633,6 @@ export default [
                 "name": "addressesLength",
                 "type": "uint256",
                 "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidRegistrationExpiry",
-        "inputs": [
-            {
-                "name": "registrationExpiry",
-                "type": "uint64",
-                "internalType": "uint64"
             }
         ]
     },
@@ -1339,11 +769,6 @@ export default [
     },
     {
         "type": "error",
-        "name": "PChainOwnerAddressesNotSorted",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "UnexpectedRegistrationStatus",
         "inputs": [
             {
@@ -1352,5 +777,690 @@ export default [
                 "internalType": "bool"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "ZeroAddress",
+        "inputs": []
+    },
+    {
+        "type": "function",
+        "name": "BALANCER_VALIDATOR_MANAGER_STORAGE_LOCATION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "VALIDATOR_MANAGER",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract ValidatorManager"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "completeValidatorRegistration",
+        "inputs": [
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "completeValidatorRemoval",
+        "inputs": [
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "completeValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "getChurnPeriodSeconds",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getCurrentChurnPeriod",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "churnPeriod",
+                "type": "tuple",
+                "internalType": "struct ValidatorChurnPeriod",
+                "components": [
+                    {
+                        "name": "startTime",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "initialWeight",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "totalWeight",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "churnAmount",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getMaximumChurnPercentage",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getNodeValidationID",
+        "inputs": [
+            {
+                "name": "nodeID",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getSecurityModuleWeights",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "weight",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "maxWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getSecurityModules",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "securityModules",
+                "type": "address[]",
+                "internalType": "address[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getValidator",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "internalType": "struct Validator",
+                "components": [
+                    {
+                        "name": "status",
+                        "type": "uint8",
+                        "internalType": "enum ValidatorStatus"
+                    },
+                    {
+                        "name": "nodeID",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "startingWeight",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "sentNonce",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "receivedNonce",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "weight",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "startTime",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "endTime",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getValidatorSecurityModule",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "initialize",
+        "inputs": [
+            {
+                "name": "settings",
+                "type": "tuple",
+                "internalType": "struct BalancerValidatorManagerSettings",
+                "components": [
+                    {
+                        "name": "baseSettings",
+                        "type": "tuple",
+                        "internalType": "struct ValidatorManagerSettings",
+                        "components": [
+                            {
+                                "name": "admin",
+                                "type": "address",
+                                "internalType": "address"
+                            },
+                            {
+                                "name": "subnetID",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "churnPeriodSeconds",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "maximumChurnPercentage",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "initialOwner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "initialSecurityModule",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "initialSecurityModuleMaxWeight",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "migratedValidators",
+                        "type": "bytes[]",
+                        "internalType": "bytes[]"
+                    }
+                ]
+            },
+            {
+                "name": "validatorManagerAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initializeValidatorSet",
+        "inputs": [
+            {
+                "name": "conversionData",
+                "type": "tuple",
+                "internalType": "struct ConversionData",
+                "components": [
+                    {
+                        "name": "subnetID",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "validatorManagerBlockchainID",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "validatorManagerAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "initialValidators",
+                        "type": "tuple[]",
+                        "internalType": "struct InitialValidator[]",
+                        "components": [
+                            {
+                                "name": "nodeID",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "blsPublicKey",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "weight",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateValidatorRegistration",
+        "inputs": [
+            {
+                "name": "nodeID",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "blsPublicKey",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "remainingBalanceOwner",
+                "type": "tuple",
+                "internalType": "struct PChainOwner",
+                "components": [
+                    {
+                        "name": "threshold",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "addresses",
+                        "type": "address[]",
+                        "internalType": "address[]"
+                    }
+                ]
+            },
+            {
+                "name": "disableOwner",
+                "type": "tuple",
+                "internalType": "struct PChainOwner",
+                "components": [
+                    {
+                        "name": "threshold",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "addresses",
+                        "type": "address[]",
+                        "internalType": "address[]"
+                    }
+                ]
+            },
+            {
+                "name": "weight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "newWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "messageID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "isValidatorPendingWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "l1TotalWeight",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "migrateFromV1",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "receivedNonce",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "owner",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "renounceOwnership",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "resendRegisterValidatorMessage",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "resendValidatorRemovalMessage",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "resendValidatorWeightUpdate",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setUpSecurityModule",
+        "inputs": [
+            {
+                "name": "securityModule",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "maxWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "subnetID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "transferOwnership",
+        "inputs": [
+            {
+                "name": "newOwner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "transferValidatorManagerOwnership",
+        "inputs": [
+            {
+                "name": "newOwner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
     }
 ] as const;

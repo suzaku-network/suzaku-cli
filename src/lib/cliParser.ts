@@ -1,12 +1,12 @@
-import { Argument } from '@commander-js/extra-typings';
+import { Argument, Option } from '@commander-js/extra-typings';
 import { utils } from "@avalabs/avalanchejs";
 import { Hex, parseUnits } from 'viem';
 import { NodeId } from './utils';
 import { Pass } from "./pass";
 import { passPath } from "../keyStore";
 
-export function collectMultiple(value: string, previous: Hex[]): Hex[] {
-  return previous.concat([ParserAddress(value)]);
+export function collectMultiple<T>(parser: (value: string) => T) {
+  return (value: string, previous: T[]): T[] => previous.concat([parser(value)]);
 }
 
 // Base validators
@@ -20,7 +20,7 @@ function isValidCB58(value: string): boolean {
       return false;
     }
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -32,13 +32,13 @@ function isValidHex(hex: string, bytes?: number): boolean {
 
 // Parser (may be used by args or opts)
 
-export function parseSecretName(value: string, previousValue: string): string {
-    const pass = new Pass(passPath)
-    const secret = pass.show(value);
-    if (typeof secret !== 'string' || secret.trim() === '') {
-        throw new Error("Secret name cannot be empty");
-    }
-    return secret;
+export function parseSecretName(value: string,): Hex {
+  const pass = new Pass(passPath)
+  const secret = pass.show(value);
+  if (typeof secret !== 'string' || secret.trim() === '') {
+    throw new Error("Secret name cannot be empty");
+  }
+  return ParserHex(secret, 32, `Invalid Private Key format from keystore key '${value}'. Private key must be a 32-byte Hex string`);
 }
 
 export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
@@ -48,12 +48,32 @@ export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
   return value as Hex;
 };
 
-export const ParserPrivateKey = (value: string) => ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
+export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
+  // Check if it's an hex, otherwise try to get it from the keystore
+  if (value === 'ledger') {
+    return value;
+  }
+  if (!value.startsWith('0x')) {
+    return parseSecretName(value,).trim() as Hex;
+  }
+  if (process.argv.includes('mainnet')) {
+    throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
+  }
+  return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
+};
 
 export const ParserAddress = (value: string) => ParserHex(value, 20, 'Invalid Address format. Address must be a 20-byte Hex string');
 
+export const ParseUnits = (value: string, decimals: number, errorMsg?: string) => {
+  const parsed = parseUnits(value, decimals);
+  if (isNaN(Number(parsed))) {
+    throw new Error(errorMsg ? errorMsg : 'Invalid units');
+  }
+  return parsed;
+}
+
 export const ParserAVAX = (value: string) => {
-  const avaxAmount = parseUnits(value, 9);
+  const avaxAmount = parseUnits(value, 18);
   if (isNaN(Number(avaxAmount))) {
     throw new Error('Invalid AVAX amount');
   }
@@ -76,6 +96,14 @@ export const ParserNodeID = (value: string) => {
   return value as NodeId;
 }
 
+// Option exports
+
+// Validate Hex strings
+export const OptHex = <T extends string>(name: T, description?: string, bytes?: number, errorMsg?: string) => new Option(
+  name,
+  `${description ? description : "Hex string (e.g., 0x1234567890abcdef1234567890abcdef12345678)"}`
+).argParser((value) => ParserHex(value, bytes, errorMsg ? `${name}: ` + errorMsg + ` (${value})` : undefined));
+
 // Argument exports
 
 // Validate NodeID in CB58 format
@@ -88,7 +116,7 @@ export const ArgNodeID = (name?: string, description?: string) => new Argument(
 export const ArgHex = (name?: string, description?: string, bytes?: number, errorMsg?: string) => new Argument(
   `<${name ? name : "hex"}>`,
   `${description ? description : "Hex string (e.g., 0x1234567890abcdef1234567890abcdef12345678)"}`
-).argParser((value) => ParserHex(value, bytes, errorMsg));
+).argParser((value) => ParserHex(value, bytes, errorMsg ? `${name}: ` + errorMsg + ` (${value})` : undefined));
 
 // Validate CB58 strings
 export const ArgCB58 = (name?: string, description?: string) => new Argument(
@@ -96,7 +124,7 @@ export const ArgCB58 = (name?: string, description?: string) => new Argument(
   `${description ? description : "CB58 string (e.g., 3J4k5L6m7N8o9P0Q1R2S3T4U5V6W7X8Y9Z0A1B2C)"}`
 ).argParser((value) => {
   if (!isValidCB58(value)) {
-    throw new Error('Invalid CB58 string');
+    throw new Error(`${name}: Invalid CB58 string (${value})`);
   }
   return value;
 });
@@ -107,7 +135,7 @@ export const ArgURI = (name?: string, description?: string) => new Argument(
   `${description ? description : "URI (e.g., https://example.com or wss://example.com)"}`
 ).argParser((value) => {
   if (!/^(https?|wss?):\/\/[^\s/$.?#].[^\s]*$/.test(value)) {
-    throw new Error('Invalid URI');
+    throw new Error(`${name}: Invalid URI: (${value})`);
   }
   return value;
 });
@@ -118,7 +146,7 @@ export const ArgPath = (name?: string, description?: string) => new Argument(
   `${description ? description : "Path (e.g., /path/to/resource)"}`
 ).argParser((value) => {
   if (!/^\/[a-zA-Z0-9_\-\/]*$/.test(value)) {
-    throw new Error('Invalid Path');
+    throw new Error(`${name}: Invalid Path (${value})`);
   }
   return value;
 });
@@ -136,13 +164,13 @@ export const ArgBigInt = (name?: string, description?: string) => new Argument(
 ).argParser((value) => {
   const bigIntValue = BigInt(value);
   if (isNaN(Number(bigIntValue))) {
-    throw new Error('Invalid BigInt');
+    throw new Error(`${name}: Invalid BigInt (${value})`);
   }
   return bigIntValue;
 });
 
 // Validate AVAX amount
-export const ArgAVAX = (name?: string, description?: string, errorMsg?: string) => new Argument(
+export const ArgAVAX = (name?: string, description?: string) => new Argument(
   `<${name ? name : "AVAX"}>`,
   `${description ? description : "AVAX amount in number format (e.g., 0.8)"}`
 ).argParser(ParserAVAX);
@@ -179,4 +207,22 @@ export const ArgBLSPOP = (name?: string, description?: string) => ArgHex(
   description || 'BLS Proof of Possession in Hex format',
   96,
   'Invalid BLS Proof of Possession format. BLS POP must be a 96-byte Hex string'
+);
+
+// Predefined options for common use cases
+
+// Private key option
+export const OptPrivateKey = <T extends string>(name: T, description?: string) => OptHex(
+  name,
+  description || 'Private key in Hex format',
+  32,
+  'Invalid private key format. Private key must be a 32-byte Hex string'
+);
+
+// Address option
+export const OptAddress = <T extends string>(name: T, description?: string) => OptHex(
+  name,
+  description || 'Ethereum address in Hex format',
+  20,
+  'Invalid address format. Address must be a 20-byte Hex string'
 );
