@@ -19,17 +19,19 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+      - run: pnpx esbuild --bundle --platform=node --target=node22 --external:usb --external:@ledgerhq/hw-transport-node-hid --outfile=suzaku-cli.js ./src/cli.ts
+
+      - name: test
+        run: ./suzaku-cli.js --help
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: cli-dist
           path: |
-            bin/cli.js
-            dist/
+            suzaku-cli.js
 
   release:
     needs: build
@@ -44,7 +46,7 @@ jobs:
           name: suzaku-cli
           path: ./artifacts
 
-      - run: artifacts/bin/cli.js --version
+      - run: artifacts/suzaku-cli.js --version
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -52,5 +54,4 @@ jobs:
           generate_release_notes: true
           make_latest: true
           files: |
-            artifacts/bin/cli.js
-            artifacts/dist/**
+            artifacts/suzaku-cli.js
