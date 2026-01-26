@@ -16,14 +16,6 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile # the install command trigger the build through the prepare script
-      - run: pnpx esbuild --bundle --platform=node --target=node22 --external:usb --external:@ledgerhq/hw-transport-node-hid --outfile=suzaku-cli.js ./src/cli.ts
 
       - name: test
-        run: ./suzaku-cli.js --help
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: cli-dist
-          path: |
-            suzaku-cli.js
+        run: pnpm suzaku-cli --help
