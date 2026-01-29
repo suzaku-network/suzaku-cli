@@ -1745,6 +1745,20 @@ async function main() {
             const middlewareEpoch = await middlewareSvc.read.getEpochAtTs([vaultEpochStartTs]);
             logger.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
         });
+    
+    middlewareCmd
+        .command("set-vault-manager")
+        .description("Set vault manager")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("vaultManagerAddress", "Vault manager address"))
+        .action(async (middlewareAddress, vaultManagerAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.setVaultManager([vaultManagerAddress])
+            logger.log(`Set vault manager to ${vaultManagerAddress} on middleware ${middlewareAddress} ok`);
+        });
 
     middlewareCmd
         .command("get-operator-validation-ids")
@@ -1772,7 +1786,6 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [owner, operators, epoch, balancerAddress] = await middlewareSvc.multicall(['owner', 'getAllOperators', 'getCurrentEpoch', 'BALANCER']);
             const roles = getRoles(middlewareSvc);
-            console.log(`Roles: ${roles.join(', ')}`)
             const accessControl = await config.contracts.AccessControl(middlewareAddress);
             const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
             logger.log(`Account ${account} has the following rights: `);
