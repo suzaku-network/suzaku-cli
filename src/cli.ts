@@ -585,7 +585,7 @@ async function main() {
         .action(async (collateralAddress, amount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const config = getConfig(client, opts.wait, true); // skip abi validation as erc20 are commonly different
             await approveAndDepositCollateral(
                 client,
                 config,
