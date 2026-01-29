@@ -118,7 +118,7 @@ function updateAbiFile(contractName, outputFileName) {
     // process all functions and events selectors (to validate contract ABI on instantiation)
     selectors = contractData.abi.reduce((acc, item) => {
       if (item.type === 'function') {
-        acc.push(toFunctionSelector(item).replace('0x', ''));
+        acc.push(toFunctionSelector(item).replace('0x', '').replace(/^(00)+/, ''));
       } else if (item.type === 'event') {
         // acc.push(toEventSelector(item).replace("0x", ""));
       }

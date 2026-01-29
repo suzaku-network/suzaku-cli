@@ -2,6 +2,17 @@ import { SafeSuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account } from 'viem';
 import { logger } from './lib/logger';
 
+export interface Validator {
+  status: number;
+  nodeID: `0x${string}`;
+  startingWeight: bigint;
+  sentNonce: bigint;
+  receivedNonce: bigint;
+  weight: bigint;
+  startTime: bigint;
+  endTime: bigint;
+}
+
 export enum ValidatorStatus {
   Unknown,
   PendingAdded,

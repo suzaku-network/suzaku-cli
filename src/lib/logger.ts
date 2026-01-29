@@ -1,5 +1,8 @@
+import { color } from "console-log-colors";
 import { bigintReplacer } from "./utils";
 import * as readline from 'readline';
+import dotenv from 'dotenv';
+dotenv.config();
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
 interface JsonObject { [key: string]: JsonValue }
@@ -24,7 +27,7 @@ interface LoggerConfig {
 
 class Logger {
   private static instance: Logger;
-  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: LogLevelEnum[process.env.LogLevel as LogLevel] || LogLevelEnum.INFO };
+  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: process.env.LogLevel ? LogLevelEnum[process.env.LogLevel as LogLevel] : LogLevelEnum.INFO };
   public data: LogData = {};
 
   public static getInstance(): Logger {
@@ -95,7 +98,7 @@ class Logger {
 
   public exitError(args: any[], stackPop: number = 0) {
     const err = new Error();
-    this.error(...args, "\nCLI Stack trace:\n" + err.stack?.split("\n").slice( 2 + stackPop, -1).join("\n"));
+    this.error(...args, color.red("\nCLI Stack trace:\n" + err.stack?.split("\n").slice( 2 + stackPop, -1).join("\n")));
     process.exit(1);
   }
 
