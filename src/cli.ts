@@ -851,7 +851,7 @@ async function main() {
             // instantiate L1RestakeDelegator contract
             const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const shares = await delegator.read.operatorL1Shares([l1Address, collateralClass, operatorAddress]);
-            logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(shares, await vault.read.decimals())}`);
+            logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${shares}`);
         });
     /* --------------------------------------------------
     * MIDDLEWARE
