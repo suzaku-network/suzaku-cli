@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Abi, formatUnits, fromBytes, getAbiItem, Hex, parseUnits } from "viem";
+import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -75,7 +75,8 @@ import {
     getSecurityModules,
     getSecurityModuleWeights,
     ValidatorStatusNames,
-    ValidatorStatus
+    ValidatorStatus,
+    Validator
 } from "./balancer";
 import {
     getValidationUptimeMessage,
@@ -129,7 +130,7 @@ import { completeValidatorRegistration, completeValidatorRemoval, completeWeight
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
-import { getRoleAdmin, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
+import { ensureRoleHex, getRoleAdmin, getRoles, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
 import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
 import './lib/commandUtils';
 import { execSync } from 'child_process';
@@ -584,7 +585,7 @@ async function main() {
         .action(async (collateralAddress, amount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const config = getConfig(client, opts.wait, true); // skip abi validation as erc20 are commonly different
             await approveAndDepositCollateral(
                 client,
                 config,
@@ -850,7 +851,7 @@ async function main() {
             // instantiate L1RestakeDelegator contract
             const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
             const shares = await delegator.read.operatorL1Shares([l1Address, collateralClass, operatorAddress]);
-            logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${formatUnits(shares, await vault.read.decimals())}`);
+            logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${shares}`);
         });
     /* --------------------------------------------------
     * MIDDLEWARE
@@ -1744,6 +1745,20 @@ async function main() {
             const middlewareEpoch = await middlewareSvc.read.getEpochAtTs([vaultEpochStartTs]);
             logger.log(`Middleware epoch at vault epoch ${vaultEpoch} (timestamp: ${vaultEpochStartTs}) is ${middlewareEpoch}`);
         });
+    
+    middlewareCmd
+        .command("set-vault-manager")
+        .description("Set vault manager")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("vaultManagerAddress", "Vault manager address"))
+        .action(async (middlewareAddress, vaultManagerAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareSvc.safeWrite.setVaultManager([vaultManagerAddress])
+            logger.log(`Set vault manager to ${vaultManagerAddress} on middleware ${middlewareAddress} ok`);
+        });
 
     middlewareCmd
         .command("get-operator-validation-ids")
@@ -1757,6 +1772,49 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const validationIDs = await middlewareSvc.read.getOperatorValidationIDs([operator]);
             logger.log(`Validation IDs for operator ${operator}: ${validationIDs.join(', ')}`);
+        });
+    
+    middlewareCmd
+        .command("account-info")
+        .description("Get account info")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .addArgument(ArgAddress("account", "Account address"))
+        .action(async (middlewareAddress, account) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const [owner, operators, epoch, balancerAddress] = await middlewareSvc.multicall(['owner', 'getAllOperators', 'getCurrentEpoch', 'BALANCER']);
+            const roles = getRoles(middlewareSvc);
+            const accessControl = await config.contracts.AccessControl(middlewareAddress);
+            const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
+            logger.log(`Account ${account} has the following rights: `);
+            if (account === owner) {
+                logger.log(`L1 owner`);
+            }
+            if (hasRole.some(role => role)) {
+                logger.log(`Middleware roles: `);
+                logger.log("  "+roles.filter((_, index) => hasRole[index]).join('\n  '));
+            }
+            if (operators.includes(account)) {
+                const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
+                const [stake, validationIDs] = await middlewareSvc.multicall([
+                    { name: 'getOperatorStake', args: [account, 1, BigInt(epoch)] },
+                    { name: 'getOperatorValidationIDs', args: [account] }]);
+                const validators = await balancerSvc.multicall(validationIDs.flatMap(id => { return [{ name: 'getValidator', args: [id] }, { name: 'isValidatorPendingWeightUpdate', args: [id] }] }));
+                logger.log(`Operator with stake ${stake} and the following validators: `);
+                const subnetIdHex = await balancerSvc.read.subnetID();
+                const pChainValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIdHex)));
+                const formated: {[key: string]: any} = {};
+                for (let i = 0; i < validators.length; i += 2) {
+                    const validator = validators[i] as Validator;
+                    const pendingWeightUpdate = validators[i + 1];
+                    const status = ValidatorStatusNames[validator.status == ValidatorStatus.Active && pendingWeightUpdate ? ValidatorStatus.PendingStakeUpdated : validator.status];
+                    const pChainValidator = pChainValidators.find(v => v.nodeID === validator.nodeID);
+                    formated[encodeNodeID(validator.nodeID)] = { NodeID: encodeNodeID(validator.nodeID), status, weight: validator.weight, ValidationId: validationIDs[i / 2], continuousAVAXBalance: parseUnits(pChainValidator?.balance?.toString() ?? '0', 9)}
+                }
+                logger.logJsonTree(formated);
+            }
         });
 
     middlewareCmd

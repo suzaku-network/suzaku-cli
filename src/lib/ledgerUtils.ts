@@ -174,6 +174,8 @@ export async function getLedgerAccount(network: Network, accountIndex: number = 
         messageHex = messageHex.slice(2);
       }
       logger.log(`Please, confirm the message on your Ledger device`);
+      // TODO: provide empty domane data in signe eip712 from avalanche ledger
+      // const test = await appAva.signEIP712HashedMessage(ledger.getETHPath(accountIndex), '0x0', messageHex)
       const signature = await ledger.getAppEth().signPersonalMessage(ledger.getETHPath(accountIndex), messageHex);
 
       const r = signature.r.slice(2);
@@ -240,7 +242,8 @@ export async function getLedgerAccount(network: Network, accountIndex: number = 
     })
   } as ExtendedAccount;
 }
-
+// TODO: perhaps the sign method of the account call personal_sign wich call cSign so in this case we should erase the mecanism wich use cSign in safe
+// TODO: monitor the signatur flow manualy
 // Convert a WalletClient to a SafeProvider through the EIP-1193 interface
 export async function toSafeProvider(client: WalletClient & PublicActions, account: ExtendedAccount) {
   return {
@@ -278,40 +281,3 @@ export async function toSafeProvider(client: WalletClient & PublicActions, accou
     }
   } as any
 }
-
-
-// request personal_sign[
-//   '0x98835a94fe225acda56ea587c86fe1b84f3b80ca7d2ad901c41341b7f9899e83',
-//   '0x67bF52e7830ACD73441A8D1425C51F5E3AcA3DcF'
-// ]
-// 0x98835a94fe225acda56ea587c86fe1b84f3b80ca7d2ad901c41341b7f9899e83
-// 98835a94fe225acda56ea587c86fe1b84f3b80ca7d2ad901c41341b7f9899e83
-// 0x688c5e6f046b48ee3485b20a18c98d9cbfb79058a72148cfee1ed1a47b4ab5823798b0d614ee0b8d5efaf831ebacf814788c95f0b20fd755a41265049f3f7c1a1b
-// propose:
-// 0x685B3985Ebd160fC9049D3eA320194AC11226191 {
-//   to: '0x80e1D9441f7754158726450878f77515030B00fd',
-//     value: '0',
-//       data: '0xbcb9a217000000000000000000000000e01d5a54c0961b1001162d31ad325af6dd8509020000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000044e33ab6adecb12840000',
-//         operation: 0,
-//           baseGas: '0',
-//             gasPrice: '0',
-//               gasToken: '0x0000000000000000000000000000000000000000',
-//                 refundReceiver: '0x0000000000000000000000000000000000000000',
-//                   nonce: 13,
-//                     safeTxGas: '0'
-// } 0x98835a94fe225acda56ea587c86fe1b84f3b80ca7d2ad901c41341b7f9899e83 0x67bf52e7830acd73441a8d1425c51f5e3aca3dcf 0x688c5e6f046b48ee3485b20a18c98d9cbfb79058a72148cfee1ed1a47b4ab5823798b0d614ee0b8d5efaf831ebacf814788c95f0b20fd755a41265049f3f7c1a1f
-
-// propose:
-// 0x685B3985Ebd160fC9049D3eA320194AC11226191 {
-//   to: '0x80e1D9441f7754158726450878f77515030B00fd',
-//     value: '0',
-//       data: '0xbcb9a217000000000000000000000000e01d5a54c0961b1001162d31ad325af6dd8509020000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000044e33ab6adecb12840000',
-//         operation: 0,
-//           baseGas: '0',
-//             gasPrice: '0',
-//               gasToken: '0x0000000000000000000000000000000000000000',
-//                 refundReceiver: '0x0000000000000000000000000000000000000000',
-//                   nonce: 13,
-//                     safeTxGas: '0'
-// } 0x98835a94fe225acda56ea587c86fe1b84f3b80ca7d2ad901c41341b7f9899e83 0xa2182B4697b15DD76cCa8f3ae2c823Bb63B97185 0x88b3f9ec23cb611bb6ef559cbf7a870da263318b9ebaf5e96cd9db0f610d93b653553512ccd205c0d83814797349c7f2e4693b51d2a334a4bb9c8bca25605bd01f
-// setL1Limit done, tx hash: undefined

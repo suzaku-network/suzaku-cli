@@ -1,5 +1,18 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
-import { type Hex, type Account, keccak256, toBytes } from 'viem';
+import { SafeSuzakuContract, SuzakuABINames, TSuzakuABI } from './lib/viemUtils';
+import { type Hex, keccak256, toBytes, AbiFunction } from 'viem';
+
+
+type ExtractRoleNames<T extends SuzakuABINames> = TSuzakuABI[T][number] extends infer Item
+  ? Item extends { type: 'function'; stateMutability: 'view'; name: infer N extends string }
+  ? N extends `${string}_ROLE`
+  ? N
+  : never
+  : never
+  : never;
+
+export function getRoles<T extends SuzakuABINames>(contract: SafeSuzakuContract[T]): ExtractRoleNames<T>[] {
+  return contract.abi.filter((item) => item.type === 'function' && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
+}
 
 export async function grantRole(
   accessControl: SafeSuzakuContract['AccessControl'],
