@@ -17,6 +17,7 @@ import ValidatorManager from './ValidatorManager';
 import AccessControl from './AccessControl';
 import RewardsNativeToken from './RewardsNativeToken';
 import Ownable from './Ownable';
+import KiteStakingManager from './KiteStakingManager';
 
 export const SuzakuABI = {
   L1Registry,
@@ -37,5 +38,6 @@ export const SuzakuABI = {
   ValidatorManager,
   AccessControl,
   RewardsNativeToken,
-  Ownable
+  Ownable,
+  KiteStakingManager
 };

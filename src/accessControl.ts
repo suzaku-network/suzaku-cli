@@ -11,7 +11,7 @@ type ExtractRoleNames<T extends SuzakuABINames> = TSuzakuABI[T][number] extends 
   : never;
 
 export function getRoles<T extends SuzakuABINames>(contract: SafeSuzakuContract[T]): ExtractRoleNames<T>[] {
-  return contract.abi.filter((item) => item.type === 'function' && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
+  return contract.abi.filter((item) => item.type === 'function' && item.name && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
 }
 
 export async function grantRole(

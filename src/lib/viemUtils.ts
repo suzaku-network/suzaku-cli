@@ -192,7 +192,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             });
             if (logs.length > 0) {
               logger.log("\nLogs emitted during the transaction:");
-              logger.log(logs.map((log) => {
+              logger.log(logs.map((log: any) => {
                 return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
               }).join('\n'));
               logger.log("");
@@ -337,7 +337,14 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   }
 
   // Validate ABI by checking that all function selectors are present in the bytecode
-  const ACs: [AhoCorasick, number][] = abis.map((abi) => [new AhoCorasick(AllSelectors[abi]), Object.keys(AllSelectors[abi]).length])// Use Aho-Corasick algorithm for multi-pattern search (perf)
+  const ACs: [AhoCorasick, number][] = abis.map((abi) => {
+    const selectors = (AllSelectors as Record<string, string[]>)[abi];
+    if (!selectors) {
+      logger.warn(`No selectors found for ABI ${abi}, skipping validation`);
+      return [new AhoCorasick([]), 0];
+    }
+    return [new AhoCorasick(selectors), Object.keys(selectors).length];
+  });// Use Aho-Corasick algorithm for multi-pattern search (perf)
 
   const missingRatio = ACs.map(([ac, selectorCount]) => {
     const matches = new Set(ac.search(contractByteCode).map(m => m[1][0])); // get only the matched selectors
@@ -348,8 +355,11 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
 
   const result = missingRatio.reduce((acc, [missingCount, ratio, matches], i) => {
     if (ratio > 0) {
+      const selectors = (AllSelectors as Record<string, string[]>)[abis[i]];
       logger.debug(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
-      logger.debug(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
+      if (selectors) {
+        logger.debug(`Missing selectors: ${selectors.filter((s: string) => !matches.has(s)).join(', ')}`);
+      }
     }
     return [...acc, { name: abis[i], ratio, valid: ratio < TOLERANCE }]
   }, [] as { name: T, ratio: number, valid: boolean }[])
