@@ -2991,7 +2991,7 @@ async function main() {
             const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             const allocationBipsBigInt = BigInt(allocationBips);
-            stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
+            await stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
         });
 
     /**
