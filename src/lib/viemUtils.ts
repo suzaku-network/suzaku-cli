@@ -292,7 +292,15 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address: Address) => {
-    if (!skipAbiValidation) await contractAbiValidation(client, [abi], address);
+    if (!skipAbiValidation) {
+      // (StakingVault uses delegatecall to forward to operations implementation)
+      // Skip ABI validation since functions are forwarded via fallback
+      if (abi.includes("StakingVault")) {
+        await contractAbiValidation(client, ["StakingVault"], address);
+      } else {
+        await contractAbiValidation(client, [abi], address);
+      }
+    }
     const contract = getContract({
       abi: SuzakuABI[abi],
       address,

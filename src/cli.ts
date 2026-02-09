@@ -2638,7 +2638,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             await depositStakingVault(
                 client,
@@ -2657,7 +2657,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             await requestWithdrawalStakingVault(
                 client,
@@ -2675,7 +2675,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             await claimWithdrawalStakingVault(
                 client,
@@ -2692,7 +2692,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             await processEpochStakingVault(
                 client,
@@ -2715,6 +2715,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
             const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
@@ -2732,7 +2733,7 @@ async function main() {
             await initiateValidatorRegistrationStakingVault(
                 client,
                 config,
-                stakingVaultAddress,
+                stakingVault,
                 nodeId,
                 blsKey,
                 remainingBalanceOwner,
@@ -2752,13 +2753,14 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             const allocationBipsBigInt = BigInt(allocationBips);
 
             await addOperatorStakingVault(
                 client,
                 config,
-                stakingVaultAddress,
+                stakingVault,
                 operator,
                 allocationBipsBigInt,
                 feeRecipient
@@ -2785,13 +2787,15 @@ async function main() {
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await completeValidatorRegistrationStakingVault(
                 client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 blsProofOfPossession,
                 initiateTxHash,
                 initialBalance,
@@ -2809,12 +2813,14 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await initiateValidatorRemovalStakingVault(
                 client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 nodeId
             );
         });
@@ -2834,6 +2840,8 @@ async function main() {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
             await requirePChainBallance(client, 50000n, opts.yes);
 
@@ -2841,8 +2849,8 @@ async function main() {
                 client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 initiateRemovalTxHash,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
@@ -2861,12 +2869,14 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await initiateDelegatorRegistrationStakingVault(
                 client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 nodeId,
                 amount
             );
@@ -2886,13 +2896,15 @@ async function main() {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await completeDelegatorRegistrationStakingVault(
                 client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 initiateTxHash,
                 rpcUrl,
                 uptimeBlockchainID
@@ -2908,11 +2920,12 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
             await initiateDelegatorRemovalStakingVault(
                 client,
                 config,
-                stakingVaultAddress,
+                stakingVault,
                 delegationID
             );
         });
@@ -2932,6 +2945,8 @@ async function main() {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
             await requirePChainBallance(client, 50000n, opts.yes);
 
@@ -2939,8 +2954,8 @@ async function main() {
                 client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 config,
-                stakingVaultAddress,
-                validatorManagerAddress,
+                stakingVault,
+                validatorManager,
                 initiateRemovalTxHash,
                 !options.skipWaitApi,
                 options.delegationId.length > 0 ? options.delegationId : undefined,

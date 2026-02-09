@@ -1,6 +1,6 @@
 import { ExtendedWalletClient } from './client';
 import { Config } from './config';
-import { SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
+import { CurriedSuzakuContractMap, SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
 import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex } from 'viem';
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError } from './lib/utils';
@@ -23,7 +23,7 @@ import { pChainChainID } from './config';
  */
 export async function depositStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault'],
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     amount: string,
     minShares: bigint
 ) {
@@ -43,6 +43,7 @@ export async function depositStakingVault(
         [minShares],
         {
             value: amountWei,
+            chain: null
         }
     );
 
@@ -83,7 +84,7 @@ export async function depositStakingVault(
  */
 export async function requestWithdrawalStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault'],
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     shares: string
 ) {
     logger.log("Requesting withdrawal from StakingVault...");
@@ -137,7 +138,7 @@ export async function requestWithdrawalStakingVault(
  */
 export async function claimWithdrawalStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault'],
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     requestId: bigint
 ) {
     logger.log("Claiming withdrawal from StakingVault...");
@@ -185,7 +186,7 @@ export async function claimWithdrawalStakingVault(
  */
 export async function processEpochStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault']
+    stakingVault: SafeSuzakuContract['StakingVaultFull']
 ) {
     logger.log("Processing epoch in StakingVault...");
 
@@ -230,7 +231,7 @@ export async function processEpochStakingVault(
  * Initiate validator registration in the StakingVault
  * @param client - The wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
+ * @param stakingVault - The StakingVault contract instance
  * @param nodeId - The node ID
  * @param blsKey - The BLS public key
  * @param remainingBalanceOwner - P-Chain remaining balance owner struct
@@ -240,7 +241,7 @@ export async function processEpochStakingVault(
 export async function initiateValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     nodeId: NodeId,
     blsKey: Hex,
     remainingBalanceOwner: [number, Hex[]],
@@ -264,25 +265,10 @@ export async function initiateValidatorRegistrationStakingVault(
     logger.log("Remaining balance owner addresses:", remainingBalanceOwner[1]);
     logger.log("Disable owner threshold:", disableOwner[0]);
     logger.log("Disable owner addresses:", disableOwner[1]);
-    logger.log("Vault address:", stakingVaultAddress);
-
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    // (StakingVault uses delegatecall to forward to operations implementation)
-    // Skip ABI validation since functions are forwarded via fallback
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
+    logger.log("Vault address:", stakingVault.address);
 
     // Call initiateValidatorRegistration
-    const hash = await stakingVaultOperations.safeWrite.initiateValidatorRegistration([
+    const hash = await stakingVault.safeWrite.initiateValidatorRegistration([
         nodeIdBytes,
         blsKey,
         { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] },
@@ -300,7 +286,7 @@ export async function initiateValidatorRegistrationStakingVault(
     // Parse the validator registration initiated event
     try {
         const validatorRegisteredEvents = parseEventLogs({
-            abi: stakingVaultOperations.abi,
+            abi: stakingVault.abi,
             eventName: 'StakingVault__ValidatorRegistrationInitiated',
             logs: receipt.logs,
         }) as any[];
@@ -323,7 +309,7 @@ export async function initiateValidatorRegistrationStakingVault(
  * Add an operator to the StakingVault
  * @param client - The wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
+ * @param stakingVault - The StakingVault contract instance
  * @param operator - The operator address
  * @param allocationBips - The allocation in basis points (1 bips = 0.01%)
  * @param feeRecipient - The fee recipient address
@@ -331,7 +317,7 @@ export async function initiateValidatorRegistrationStakingVault(
 export async function addOperatorStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     operator: Hex,
     allocationBips: bigint,
     feeRecipient: Hex
@@ -342,25 +328,10 @@ export async function addOperatorStakingVault(
     logger.log("Operator address:", operator);
     logger.log("Allocation (bips):", allocationBips.toString());
     logger.log("Fee recipient:", feeRecipient);
-    logger.log("Vault address:", stakingVaultAddress);
-
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    // (StakingVault uses delegatecall to forward to operations implementation)
-    // Skip ABI validation since functions are forwarded via fallback
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
+    logger.log("Vault address:", stakingVault.address);
 
     // Call addOperator
-    const hash = await stakingVaultOperations.safeWrite.addOperator([
+    const hash = await stakingVault.safeWrite.addOperator([
         operator,
         allocationBips,
         feeRecipient
@@ -376,7 +347,7 @@ export async function addOperatorStakingVault(
     // Parse the operator added event
     try {
         const operatorAddedEvents = parseEventLogs({
-            abi: stakingVaultOperations.abi,
+            abi: stakingVault.abi,
             eventName: 'StakingVault__OperatorAdded',
             logs: receipt.logs,
         }) as any[];
@@ -400,8 +371,8 @@ export async function addOperatorStakingVault(
  * @param client - The wallet client
  * @param pchainClient - The P-Chain wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract
+ * @param validatorManager - The ValidatorManager contract
  * @param blsProofOfPossession - The BLS proof of possession
  * @param initiateTxHash - The initiateValidatorRegistration transaction hash
  * @param initialBalance - The initial balance for the validator (in nAVAX, 9 decimals)
@@ -411,8 +382,8 @@ export async function completeValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     blsProofOfPossession: string,
     initiateTxHash: Hex,
     initialBalance: bigint,
@@ -423,25 +394,12 @@ export async function completeValidatorRegistrationStakingVault(
     // Wait for transaction receipt to extract warp message and validation ID
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash });
 
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
-
     // Parse StakingVault__ValidatorRegistrationInitiated event from StakingVaultOperations
     const validatorRegisteredEvents = parseEventLogs({
-        abi: stakingVaultOperations.abi,
+        abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__ValidatorRegistrationInitiated'
-    }) as any[];
+    });
 
     if (!validatorRegisteredEvents || validatorRegisteredEvents.length === 0) {
         logger.error(color.red("No StakingVault__ValidatorRegistrationInitiated event found in the transaction logs, verify the transaction hash."));
@@ -457,7 +415,6 @@ export async function completeValidatorRegistrationStakingVault(
     }
 
     // Get ValidatorManager to get nodeID and subnetID
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
     // Get validator info from ValidatorManager
     const validator = await validatorManager.read.getValidator([validationIDHex]);
@@ -521,7 +478,7 @@ export async function completeValidatorRegistrationStakingVault(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     logger.log("\nCalling function completeValidatorRegistration...");
-    const hash = await stakingVaultOperations.safeWrite.completeValidatorRegistration(
+    const hash = await stakingVault.safeWrite.completeValidatorRegistration(
         [messageIndex],
         {
             account: client.account!,
@@ -544,21 +501,18 @@ export async function completeValidatorRegistrationStakingVault(
  * Initiate validator removal in the StakingVault
  * @param client - The wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
  * @param nodeId - The node ID of the validator to remove
  */
 export async function initiateValidatorRemovalStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId
 ) {
     logger.log("Initiating validator removal in StakingVault...");
-
-    // Get ValidatorManager to get validationID from nodeID
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
     const nodeIdBytes = parseNodeID(nodeId, false);
@@ -569,25 +523,10 @@ export async function initiateValidatorRemovalStakingVault(
     logger.log("\n=== Validator Removal Initiation Details ===");
     logger.log("Node ID:", nodeId);
     logger.log("Validation ID:", validationID);
-    logger.log("Vault address:", stakingVaultAddress);
-
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    // (StakingVault uses delegatecall to forward to operations implementation)
-    // Skip ABI validation since functions are forwarded via fallback
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
+    logger.log("Vault address:", stakingVault.address);
 
     // Call initiateValidatorRemoval
-    const hash = await stakingVaultOperations.safeWrite.initiateValidatorRemoval([
+    const hash = await stakingVault.safeWrite.initiateValidatorRemoval([
         validationID
     ]);
 
@@ -601,7 +540,7 @@ export async function initiateValidatorRemovalStakingVault(
     // Parse the validator removal initiated event
     try {
         const validatorRemovalInitiatedEvents = parseEventLogs({
-            abi: stakingVaultOperations.abi,
+            abi: stakingVault.abi,
             eventName: 'StakingVault__ValidatorRemovalInitiated',
             logs: receipt.logs,
         }) as any[];
@@ -627,8 +566,8 @@ export async function initiateValidatorRemovalStakingVault(
  * @param client - The wallet client
  * @param pchainClient - The P-Chain wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
  * @param initiateRemovalTxHash - The initiateValidatorRemoval transaction hash
  * @param waitValidatorVisible - Whether to wait for the validator to be removed from P-Chain
  * @param nodeIDs - Optional node IDs to filter removals
@@ -638,8 +577,8 @@ export async function completeValidatorRemovalStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
     waitValidatorVisible: boolean,
     nodeIDs?: NodeId[],
@@ -651,25 +590,9 @@ export async function completeValidatorRemovalStakingVault(
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
 
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
-
-    // Get ValidatorManager
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
-
     // Parse StakingVault__ValidatorRemovalInitiated events from StakingVaultOperations
     const validatorRemovalInitiatedEvents = parseEventLogs({
-        abi: stakingVaultOperations.abi,
+        abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__ValidatorRemovalInitiated'
     }) as any[];
@@ -804,7 +727,7 @@ export async function completeValidatorRemovalStakingVault(
 
         // Execute completeValidatorRemoval transaction
         logger.log("Executing completeValidatorRemoval transaction...");
-        const completeHash = await stakingVaultOperations.safeWrite.completeValidatorRemoval(
+        const completeHash = await stakingVault.safeWrite.completeValidatorRemoval(
             [messageIndex],
             {
                 account: client.account!,
@@ -826,16 +749,16 @@ export async function completeValidatorRemovalStakingVault(
  * Initiate delegator registration in the StakingVault
  * @param client - The wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
  * @param nodeId - The node ID of the validator to delegate to
  * @param amount - The stake amount in AVAX (will be converted to wei with 18 decimals)
  */
 export async function initiateDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId,
     amount: string
 ) {
@@ -843,9 +766,6 @@ export async function initiateDelegatorRegistrationStakingVault(
 
     // Convert amount to wei (18 decimals)
     const amountWei = parseUnits(amount, 18);
-
-    // Get ValidatorManager to get validationID from nodeID
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
     const nodeIdBytes = parseNodeID(nodeId, false);
@@ -858,25 +778,19 @@ export async function initiateDelegatorRegistrationStakingVault(
     logger.log("Validation ID:", validationID);
     logger.log("Amount:", amount, "AVAX");
     logger.log("Amount in wei:", amountWei.toString());
-    logger.log("Vault address:", stakingVaultAddress);
+    logger.log("Vault address:", stakingVault.address);
 
     // Get StakingVaultOperations contract instance pointing to StakingVault address
     // (StakingVault uses delegatecall to forward to operations implementation)
     // Skip ABI validation since functions are forwarded via fallback
     const stakingVaultOperationsContract = getContract({
         abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
+        address: stakingVault.address,
         client: config.client,
     });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
 
     // Call initiateDelegatorRegistration
-    const hash = await stakingVaultOperations.safeWrite.initiateDelegatorRegistration([
+    const hash = await stakingVault.safeWrite.initiateDelegatorRegistration([
         validationID,
         amountWei
     ]);
@@ -891,7 +805,7 @@ export async function initiateDelegatorRegistrationStakingVault(
     // Parse the delegator registration initiated event
     try {
         const delegatorRegisteredEvents = parseEventLogs({
-            abi: stakingVaultOperations.abi,
+            abi: stakingVault.abi,
             eventName: 'StakingVault__DelegatorRegistrationInitiated',
             logs: receipt.logs,
         }) as any[];
@@ -919,8 +833,8 @@ export async function initiateDelegatorRegistrationStakingVault(
  * @param client - The wallet client
  * @param pchainClient - The P-Chain wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
  * @param initiateTxHash - The initiateDelegatorRegistration transaction hash
  * @param rpcUrl - RPC URL for getting validator uptime
  * @param uptimeBlockchainID - The uptime blockchain ID (Hex) for the source chain ID
@@ -929,8 +843,8 @@ export async function completeDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateTxHash: Hex,
     rpcUrl: string,
     uptimeBlockchainID: Hex
@@ -944,22 +858,13 @@ export async function completeDelegatorRegistrationStakingVault(
     // Get StakingVaultOperations contract instance pointing to StakingVault address
     const stakingVaultOperationsContract = getContract({
         abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
+        address: stakingVault.address,
         client: config.client,
     });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
-
-    // Get ValidatorManager
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
     // Parse StakingVault__DelegatorRegistrationInitiated event from StakingVaultOperations
     const delegatorRegisteredEvents = parseEventLogs({
-        abi: stakingVaultOperations.abi,
+        abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__DelegatorRegistrationInitiated'
     }) as any[];
@@ -1082,7 +987,7 @@ export async function completeDelegatorRegistrationStakingVault(
     const uptimeMessageIndex = 1;
 
     logger.log("\nCalling function completeDelegatorRegistration...");
-    const hash = await stakingVaultOperations.safeWrite.completeDelegatorRegistration(
+    const hash = await stakingVault.safeWrite.completeDelegatorRegistration(
         [delegationID, messageIndex, uptimeMessageIndex],
         {
             account: client.account!,
@@ -1105,32 +1010,17 @@ export async function completeDelegatorRegistrationStakingVault(
 export async function initiateDelegatorRemovalStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
     delegationID: Hex
 ) {
     logger.log("Initiating delegator removal in StakingVault...");
 
     logger.log("\n=== Delegator Removal Initiation Details ===");
     logger.log("Delegation ID:", delegationID);
-    logger.log("Vault address:", stakingVaultAddress);
-
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    // (StakingVault uses delegatecall to forward to operations implementation)
-    // Skip ABI validation since functions are forwarded via fallback
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
+    logger.log("Vault address:", stakingVault.address);
 
     // Call initiateDelegatorRemoval (StakingVaultOperations version only takes delegationID)
-    const hash = await stakingVaultOperations.safeWrite.initiateDelegatorRemoval([
+    const hash = await stakingVault.safeWrite.initiateDelegatorRemoval([
         delegationID
     ]);
 
@@ -1144,7 +1034,7 @@ export async function initiateDelegatorRemovalStakingVault(
     // Parse the delegator removal initiated event
     try {
         const delegatorRemovalInitiatedEvents = parseEventLogs({
-            abi: stakingVaultOperations.abi,
+            abi: stakingVault.abi,
             eventName: 'StakingVault__DelegatorRemovalInitiated',
             logs: receipt.logs,
         }) as any[];
@@ -1169,8 +1059,8 @@ export async function initiateDelegatorRemovalStakingVault(
  * @param client - The wallet client
  * @param pchainClient - The P-Chain wallet client
  * @param config - The config object
- * @param stakingVaultAddress - The StakingVault contract address
- * @param validatorManagerAddress - The ValidatorManager contract address
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
  * @param initiateRemovalTxHash - The initiateDelegatorRemoval transaction hash
  * @param waitValidatorVisible - Whether to wait for the validator to be removed from P-Chain
  * @param delegationIDs - Optional delegation IDs to filter removals
@@ -1180,8 +1070,8 @@ export async function completeDelegatorRemovalStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVaultAddress: Hex,
-    validatorManagerAddress: Hex,
+    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
     waitValidatorVisible: boolean,
     delegationIDs?: Hex[],
@@ -1193,28 +1083,9 @@ export async function completeDelegatorRemovalStakingVault(
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
 
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVaultAddress,
-        client: config.client,
-    });
-    const stakingVaultOperations = withSafeWrite(
-        stakingVaultOperationsContract as any,
-        'StakingVaultOperations',
-        config.client,
-        0
-    ) as SafeSuzakuContract['StakingVaultOperations'];
-
-    // Get StakingVault contract to access getDelegatorInfo
-    const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
-    // Get ValidatorManager
-    const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
-
     // Parse StakingVault__DelegatorRemovalInitiated events from StakingVaultOperations
     const delegatorRemovalInitiatedEvents = parseEventLogs({
-        abi: stakingVaultOperations.abi,
+        abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__DelegatorRemovalInitiated'
     }) as any[];
@@ -1256,17 +1127,8 @@ export async function completeDelegatorRemovalStakingVault(
         }
 
         // Get delegator info from StakingVault to get validationID
-        const delegatorInfo = await stakingVault.read.getDelegatorInfo([delegationID]) as {
-            status: number;
-            owner: Hex;
-            validationID: Hex;
-            weight: bigint;
-            startTime: bigint;
-            startingNonce: bigint;
-            endingNonce: bigint;
-            lastRewardClaimTime: bigint;
-            lastClaimUptimeSeconds: bigint;
-        };
+        const delegatorInfo = await stakingVault.read.getDelegatorInfo([delegationID]);
+
         const validationID = delegatorInfo.validationID;
 
         // Get the validator info to get nodeID
@@ -1282,7 +1144,7 @@ export async function completeDelegatorRemovalStakingVault(
 
             // Check if this delegationID is in the registration event
             const registrationEvents = parseEventLogs({
-                abi: stakingVaultOperations.abi,
+                abi: stakingVault.abi,
                 logs: addNodeReceipt.logs,
                 eventName: 'StakingVault__DelegatorRegistrationInitiated'
             }) as any[];
@@ -1354,7 +1216,7 @@ export async function completeDelegatorRemovalStakingVault(
         const messageIndex = 0;
 
         logger.log("\nCalling function completeDelegatorRemoval...");
-        const hash = await stakingVaultOperations.safeWrite.completeDelegatorRemoval(
+        const hash = await stakingVault.safeWrite.completeDelegatorRemoval(
             [delegationID, messageIndex],
             {
                 account: client.account!,

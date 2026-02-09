@@ -43,5 +43,6 @@ export const SuzakuABI = {
   Ownable,
   KiteStakingManager,
   StakingVault,
-  StakingVaultOperations
+  StakingVaultOperations,
+  StakingVaultFull: [...StakingVault, ...StakingVaultOperations]
 };

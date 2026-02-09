@@ -871,3 +871,44 @@ suzaku-cli --help
   Top up all/selected l1 validators to meet a target continuous fee balance.
 - **help-all**
   Display help for all commands and sub-commands.
+
+---
+
+## Development Scripts
+
+### Update ABIs (`scripts/update-abis.mjs`)
+
+This script updates the ABI files in `src/abis/` from a Foundry output directory. It extracts ABIs from compiled contract JSON files, deduplicates overloaded functions, and generates TypeScript files.
+
+**Usage:**
+
+```bash
+# Use the default source directory
+scripts/update-abis.mjs
+
+# Specify a custom source directory
+scripts/update-abis.mjs --source-dir /path/to/foundry/out
+scripts/update-abis.mjs -s /path/to/foundry/out
+
+# Show help
+scripts/update-abis.mjs --help
+```
+
+**Options:**
+
+| Option | Alias | Description |
+|--------|-------|-------------|
+| `--source-dir <path>` | `-s` | Path to the Foundry output directory containing compiled contract ABIs |
+| `--help` | `-h` | Show help message |
+
+**What it does:**
+
+1. Reads contract ABIs from the Foundry `out/` directory
+2. Deduplicates overloaded functions (keeps the version with the fewest parameters)
+3. Generates TypeScript files in `src/abis/`
+4. Updates `abi-selectors.json` with function selectors for ABI validation
+
+**What next:**
+
+1. Update the index.ts file in `src/abis/` with the new ABIs
+2. If a contract is not a proxy but use the forward and delegate call pattern, add a combined ABI in the index.ts file (like with the StakingVaultFull), and validate only the abi of the targeted contract address (as done in curriedContract function in `src/lib/viemUtils.ts`). Then you can instantiate the contract with the combined abi.
