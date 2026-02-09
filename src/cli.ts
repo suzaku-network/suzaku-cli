@@ -128,6 +128,7 @@ import { getCurrentValidators, increasePChainValidatorBalance } from './lib/pCha
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval } from './kiteStaking';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, completeDelegatorRemovalStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -2618,10 +2619,340 @@ async function main() {
         });
 
     /**
-         * --------------------------------------------------
-         * OP-STAKES: enumerates the vaults and attempts to read stake for <operator>
-         * --------------------------------------------------
-         */
+     * --------------------------------------------------
+     * STAKING VAULT
+     * --------------------------------------------------
+     */
+    const stakingVaultCmd = program
+        .command("staking-vault")
+        .alias("sv")
+        .description("Commands to interact with StakingVault contracts");
+
+    stakingVaultCmd
+        .command("deposit")
+        .description("Deposit native tokens (AVAX) into the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("amount", "Amount to deposit in AVAX")
+        .addArgument(ArgBigInt("minShares", "Minimum shares expected from the deposit (slippage protection)"))
+        .action(async (stakingVaultAddress, amount, minShares) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            await depositStakingVault(
+                client,
+                stakingVault,
+                amount,
+                minShares
+            );
+        });
+
+    stakingVaultCmd
+        .command("request-withdrawal")
+        .description("Request withdrawal from the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("shares", "Amount of shares to withdraw")
+        .action(async (stakingVaultAddress, shares) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            await requestWithdrawalStakingVault(
+                client,
+                stakingVault,
+                shares
+            );
+        });
+
+    stakingVaultCmd
+        .command("claim-withdrawal")
+        .description("Claim a withdrawal from the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
+        .action(async (stakingVaultAddress, requestId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            await claimWithdrawalStakingVault(
+                client,
+                stakingVault,
+                requestId
+            );
+        });
+
+    stakingVaultCmd
+        .command("process-epoch")
+        .description("Process the current epoch in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            await processEpochStakingVault(
+                client,
+                stakingVault
+            );
+        });
+
+    stakingVaultCmd
+        .command("initiate-validator-registration")
+        .description("Initiate validator registration in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgNodeID())
+        .addArgument(ArgHex("blsKey", "BLS public key"))
+        .argument("stakeAmount", "Stake amount in AVAX")
+        .addOption(new Option("--pchain-remaining-balance-owner-threshold <threshold>", "P-Chain remaining balance owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
+        .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
+        .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
+        .action(async (stakingVaultAddress, nodeId, blsKey, stakeAmount, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
+
+            // Build remainingBalanceOwner and disableOwner PChainOwner structs
+            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
+            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
+            const remainingBalanceOwner: [number, Hex[]] = [
+                Number(options.pchainRemainingBalanceOwnerThreshold),
+                remainingBalanceOwnerAddress
+            ];
+            const disableOwner: [number, Hex[]] = [
+                Number(options.pchainDisableOwnerThreshold),
+                disableOwnerAddress
+            ];
+
+            await initiateValidatorRegistrationStakingVault(
+                client,
+                config,
+                stakingVaultAddress,
+                nodeId,
+                blsKey,
+                remainingBalanceOwner,
+                disableOwner,
+                stakeAmount
+            );
+        });
+
+    stakingVaultCmd
+        .command("add-operator")
+        .description("Add an operator to the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
+        .addArgument(ArgAddress("feeRecipient", "Fee recipient address"))
+        .action(async (stakingVaultAddress, operator, allocationBips, feeRecipient) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            const allocationBipsBigInt = BigInt(allocationBips);
+
+            await addOperatorStakingVault(
+                client,
+                config,
+                stakingVaultAddress,
+                operator,
+                allocationBipsBigInt,
+                feeRecipient
+            );
+        });
+
+    stakingVaultCmd
+        .command("complete-validator-registration")
+        .description("Complete validator registration on the P-Chain and on the StakingVault after initiating registration")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgHex("initiateTxHash", "Initiate validator registration transaction hash"))
+        .addArgument(ArgBLSPOP())
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
+        .action(async (stakingVaultAddress, validatorManagerAddress, initiateTxHash, blsProofOfPossession, options) => {
+            const opts = program.opts();
+
+            // If pchainTxPrivateKey is not provided, use the private key
+            if (!options.pchainTxPrivateKey) {
+                options.pchainTxPrivateKey = opts.privateKey!;
+            }
+            const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
+            const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            await completeValidatorRegistrationStakingVault(
+                client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                blsProofOfPossession,
+                initiateTxHash,
+                initialBalance,
+                !options.skipWaitApi
+            );
+        });
+
+    stakingVaultCmd
+        .command("initiate-validator-removal")
+        .description("Initiate validator removal in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgNodeID())
+        .action(async (stakingVaultAddress, validatorManagerAddress, nodeId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            await initiateValidatorRemovalStakingVault(
+                client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                nodeId
+            );
+        });
+
+    stakingVaultCmd
+        .command("complete-validator-removal")
+        .description("Complete validator removal on the P-Chain and on the StakingVault after initiating removal")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgHex("initiateRemovalTxHash", "Initiate validator removal transaction hash"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
+        .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
+        .addOption(new Option("--initiate-tx <initiateTx>", "Initiate validator registration transaction hash").argParser((value) => value as Hex))
+        .action(async (stakingVaultAddress, validatorManagerAddress, initiateRemovalTxHash, options) => {
+            const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // Check if P-Chain address have 0.000050000 AVAX for tx fees
+            await requirePChainBallance(client, 50000n, opts.yes);
+
+            await completeValidatorRemovalStakingVault(
+                client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                initiateRemovalTxHash,
+                !options.skipWaitApi,
+                options.nodeId.length > 0 ? options.nodeId : undefined,
+                options.initiateTx
+            );
+        });
+
+    stakingVaultCmd
+        .command("initiate-delegator-registration")
+        .description("Initiate delegator registration in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgNodeID())
+        .argument("amount", "Stake amount in AVAX")
+        .action(async (stakingVaultAddress, validatorManagerAddress, nodeId, amount) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            await initiateDelegatorRegistrationStakingVault(
+                client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                nodeId,
+                amount
+            );
+        });
+
+    stakingVaultCmd
+        .command("complete-delegator-registration")
+        .description("Complete delegator registration on the P-Chain and on the StakingVault after initiating registration")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
+        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .addArgument(ArgHex("uptimeBlockchainID", "Uptime blockchain ID (Hex format, same as KiteStakingManager settings)"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
+        .action(async (stakingVaultAddress, validatorManagerAddress, initiateTxHash, rpcUrl, uptimeBlockchainID, options) => {
+            const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            await completeDelegatorRegistrationStakingVault(
+                client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                initiateTxHash,
+                rpcUrl,
+                uptimeBlockchainID
+            );
+        });
+
+    stakingVaultCmd
+        .command("initiate-delegator-removal")
+        .description("Initiate delegator removal in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgHex("delegationID", "Delegation ID"))
+        .action(async (stakingVaultAddress, delegationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
+            await initiateDelegatorRemovalStakingVault(
+                client,
+                config,
+                stakingVaultAddress,
+                delegationID
+            );
+        });
+
+    stakingVaultCmd
+        .command("complete-delegator-removal")
+        .description("Complete delegator removal on the P-Chain and on the StakingVault after initiating removal")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("validatorManagerAddress", "ValidatorManager contract address"))
+        .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
+        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
+        .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
+        .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
+        .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash").argParser((value) => value as Hex))
+        .action(async (stakingVaultAddress, validatorManagerAddress, initiateRemovalTxHash, options) => {
+            const opts = program.opts();
+            if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // Check if P-Chain address have 0.000050000 AVAX for tx fees
+            await requirePChainBallance(client, 50000n, opts.yes);
+
+            await completeDelegatorRemovalStakingVault(
+                client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                config,
+                stakingVaultAddress,
+                validatorManagerAddress,
+                initiateRemovalTxHash,
+                !options.skipWaitApi,
+                options.delegationId.length > 0 ? options.delegationId : undefined,
+                options.initiateTx
+            );
+        });
+
+    /**
+     * --------------------------------------------------
+     * OP-STAKES: enumerates the vaults and attempts to read stake for <operator>
+     * --------------------------------------------------
+     */
     vaultManagerCmd
         .command("opstakes")
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")

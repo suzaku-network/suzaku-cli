@@ -18,6 +18,8 @@ import AccessControl from './AccessControl';
 import RewardsNativeToken from './RewardsNativeToken';
 import Ownable from './Ownable';
 import KiteStakingManager from './KiteStakingManager';
+import StakingVault from './StakingVault';
+import StakingVaultOperations from './StakingVaultOperations';
 
 export const SuzakuABI = {
   L1Registry,
@@ -39,5 +41,7 @@ export const SuzakuABI = {
   AccessControl,
   RewardsNativeToken,
   Ownable,
-  KiteStakingManager
+  KiteStakingManager,
+  StakingVault,
+  StakingVaultOperations
 };
