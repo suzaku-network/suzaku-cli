@@ -5,7 +5,7 @@ import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } 
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
-import { generateClient } from "./client";
+import { Chains, generateClient } from "./client";
 import { logger } from './lib/logger';
 import {
     registerVaultL1,
@@ -136,6 +136,7 @@ import { ensureRoleHex, getRoleAdmin, getRoles, grantRole, hasRole, isAccessCont
 import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
 import './lib/commandUtils';
 import { execSync } from 'child_process';
+import { chainList } from './lib/chainList';
 // import { Command } from '@commander-js/extra-typings';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
@@ -148,7 +149,7 @@ async function main() {
     const program = new Command()
         .name('suzaku-cli')
         .addOption(new Option('-n, --network <network>')
-            .choices(['fuji', 'mainnet', 'anvil'])
+            .choices(Object.keys(chainList) as Chains[])
             .default('mainnet'))
         .addOption(new Option('-k, --private-key <privateKey>', 'Private key in Hex format')
             .env('PK').argParser(ParserPrivateKey).conflicts(['secretName', 'ledger']))
@@ -1971,6 +1972,20 @@ async function main() {
 
             console.log(results.reduce((acc, r) => ({ ...acc, [r.name]: r.result }), {} as Record<string, unknown>));
         });
+    
+    validatorManagerCmd
+        .command("transfer-ownership")
+        .description("Transfer the ownership of a ValidatorManager contract")
+        .addArgument(ArgAddress("validatorManagerAddress", "Validator manager address"))
+        .addArgument(ArgAddress("owner", "Owner address"))
+        .action(async (validatorManagerAddress, owner) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // instantiate ValidatorManager contract
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
+            await validatorManager.safeWrite.transferOwnership([owner]);
+        });
 
     /**
      * --------------------------------------------------
@@ -2962,6 +2977,22 @@ async function main() {
                 options.initiateTx
             );
         });
+    
+    stakingVaultCmd
+        .command("update-operator-allocations")
+        .description("Update operator allocations in the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
+        .action(async (stakingVaultAddress, operator, allocationBips) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+
+            const allocationBipsBigInt = BigInt(allocationBips);
+            stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
+        });
 
     /**
      * --------------------------------------------------
@@ -3089,11 +3120,12 @@ async function main() {
         .action(async (rpcUrl, blockchainId, nodeId) => {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
             const opts = program.opts();
+            const client = await generateClient(opts.network);
             await getValidationUptimeMessage(
-                opts.network,
+                client.network,
                 rpcUrl,
                 nodeId,
-                opts.network === "fuji" ? 5 : 1,
+                client.network === "fuji" ? 5 : 1,
                 blockchainId);
         });
 
@@ -3132,7 +3164,7 @@ async function main() {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
-                opts.network,
+                client.network,
                 rpcUrl,
                 nodeId,
                 blockchainId,

@@ -2,13 +2,15 @@ import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PCh
 import { cb58ToHex, getAddresses, NodeId } from "./utils";
 import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { Hex, hexToBytes, toBytes } from "viem";
+import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicActions, toBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
 import { sha256 } from '@noble/hashes/sha256';
+import { avalanche, avalancheFuji } from "viem/chains";
+import { getConfig } from "../config";
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: bigint } };
 
@@ -173,7 +175,7 @@ export async function addSigToAllCreds(
     } else {
         signer = client.account!.sign!;
     }
-    
+
     const signatureV2 = hexToBytes(await signer({ hash }))
     signatureV2[64] = signatureV2[64] - 27
     if (!signatureV2) {
@@ -616,38 +618,81 @@ export async function convertSubnetToL1(params:
     {
         subnetId: string;
         chainId: string;
-        validatorManager: SafeSuzakuContract['ValidatorManager'];
+        validatorManager: Hex, //SafeSuzakuContract['ValidatorManager'];
         client: ExtendedWalletClient;
-        privateKeyHex: Hex;
         validators: NodeConfig[];
+        validatorManagerBlockchainID: string;
     }) {
-    const managerAddress = params.validatorManager.address;
+    const managerAddress = params.validatorManager;
     const { client, validators } = params;
     // 1) convert to L1
-    const convertTx = await convertToL1({
-        client,
-        subnetId: params.subnetId,
-        chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
-        managerAddress,
-        validators: params.validators,
-    });
+    // const convertTx = await convertToL1({
+    //     client,
+    //     subnetId: params.subnetId,
+    //     chainId: params.validatorManagerBlockchainID,
+    //     managerAddress,
+    //     validators,
+    // });
+    const convertTx = "uj532d5VVT8QMB6JKAG3D2bxdnCfb3uLewW3K8MeJoMbFAmfx"
+    let chain: Chain;
+    if (params.validatorManagerBlockchainID !== 'yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp') {
+        const rpc = await logger.prompt(`Conversion transaction ${convertTx} submitted. Waiting for validator activation and topup...\nPlease, provide rpc url of the node to be activated: `);
+        chain = defineChain({
+            id: 2378,
+            name: 'Custom',
+            network: 'custom',
+            nativeCurrency: {
+                decimals: 18,
+                name: 'AVAX',
+                symbol: 'AVAX',
+            },
+            rpcUrls: {
+                default: { http: ["http://51.159.210.12:9660/ext/bc/" + params.validatorManagerBlockchainID + "/rpc"] },
+            },
+        });
+    } else {
+        chain = client.network === 'fuji' ? avalancheFuji : avalanche;
+    }
+    const dedicatedClient = {
+        ...createWalletClient({
+            account: client.account,
+            chain,
+            transport: http()
+        }).extend(publicActions), network: client.network, addresses: client.addresses, safe: client.safe, ledger: client.ledger, account: client.account
+    }
     // 2) collect signatures
     const signed = await collectSignaturesInitializeValidatorSet({
         network: client.network,
         subnetId: params.subnetId,
-        validatorManagerBlockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+        validatorManagerBlockchainID: params.validatorManagerBlockchainID,
         managerAddress,
         validators,
     });
+    console.log(signed)
 
     // 3) pack warp → accessList
     const signedBytes = hexToBytes(`0x${signed}`);
     const accessList = packWarpIntoAccessList(signedBytes);
 
     // 4) call initializeValidatorSet
+    // client.chain = chain;
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
 
-    const initHash = await params.validatorManager.safeWrite.initializeValidatorSet(args, {
+    logger.setJsonMode(true)
+    logger.addData('args', args)
+    logger.printJson()
+    logger.setJsonMode(false)
+
+    const config = await getConfig(dedicatedClient as ExtendedClient, 2, false)
+    const validatorManager = await config.contracts.ValidatorManager(params.validatorManager)
+    // const init = {
+    //     admin: client.addresses.C,
+    //     subnetID: args[0].subnetID,
+    //     churnPeriodSeconds: 10n,
+    //     maximumChurnPercentage: 20,
+    // }
+    // await validatorManager.safeWrite.initialize([init])
+    const initHash = await validatorManager.safeWrite.initializeValidatorSet(args, {
         account: client.account!,
         chain: null,
         accessList

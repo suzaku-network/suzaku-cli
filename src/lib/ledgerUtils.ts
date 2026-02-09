@@ -1,13 +1,13 @@
 import Eth, { ledgerService } from "@ledgerhq/hw-app-eth";
 import AvalancheApp from "@avalabs/hw-app-avalanche";
 import TransportNodeHid from "@ledgerhq/hw-transport-node-hid";
-import { Account, toAccount } from "viem/accounts";
+import { toAccount } from "viem/accounts";
 import { serializeTransaction, toHex, hashStruct, Hex, PublicActions, WalletClient, bytesToHex, hexToBytes } from "viem";
-import { ExtendedAccount, Network, chains } from "../client";
+import { ExtendedAccount, Network } from "../client";
 import { logger } from "./logger";
 
 
-// Singleton pour le transport Ledger avec AvalancheApp
+// Singleton to transport Ledger with AvalancheApp
 class LedgerSingleton {
   private static instance: LedgerSingleton | null = null;
   private static initPromise: Promise<LedgerSingleton> | null = null;
@@ -21,17 +21,17 @@ class LedgerSingleton {
   }
 
   static async getInstance(): Promise<LedgerSingleton> {
-    // Si une instance existe déjà, la retourner
+    // Return an instance if it already exists
     if (LedgerSingleton.instance) {
       return LedgerSingleton.instance;
     }
 
-    // Si une initialisation est en cours, attendre qu'elle se termine
+    // Wait for initialization ends
     if (LedgerSingleton.initPromise) {
       return LedgerSingleton.initPromise;
     }
 
-    // Créer une nouvelle instance
+    // Create a new instance
     LedgerSingleton.initPromise = (async () => {
       let transport: any;
       setTimeout(() => {

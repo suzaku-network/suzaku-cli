@@ -184,7 +184,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             if (!hash) return undefined; // when skipping
 
             const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + receipt.logs);
+            if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + JSON.stringify(receipt.logs, bigintReplacer));
 
             const logs = parseEventLogs({
               abi: SuzakuABI[abi],
