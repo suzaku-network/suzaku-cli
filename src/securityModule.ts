@@ -115,16 +115,49 @@ export async function completeValidatorRemoval(
   // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
   const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash, confirmations: 1 });
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
-  // Select the NodeRemoved events from the receipt, filter by nodeIDs if provided
-  const nodeRemoved = parseEventLogs({
-    abi: securityModule.abi,
-    logs: receipt.logs,
-    eventName: 'NodeRemoved'
-  }).filter((e) => nodeIDs ? nodeIDs.includes(encodeNodeID(e.args.nodeId)) : true)
 
-  if (nodeRemoved.length === 0) {
-    logger.error(color.red("No matching NodeRemoved event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
-    process.exit(1);
+  // Select the NodeRemoved events from the receipt, filter by nodeIDs if provided and if securityModule is L1Middleware
+  let nodeRemoved: {
+    args: {
+      nodeId: Hex;
+      validationID: Hex;
+    },
+    blockNumber: bigint;
+  }[];
+  if (securityModule.name === "L1Middleware") {
+    nodeRemoved = parseEventLogs({
+      abi: securityModule.abi,
+      logs: receipt.logs,
+      eventName: 'NodeRemoved'
+    }).filter((e) => nodeIDs ? nodeIDs.includes(encodeNodeID(e.args.nodeId)) : true)
+
+    if (nodeRemoved.length === 0) {
+      logger.error(color.red("No matching NodeRemoved event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
+      process.exit(1);
+    }
+  }
+  // If securityModule is PoASecurityModule
+  else {
+    const validationId = parseEventLogs({
+      abi: config.abis.ValidatorManager,
+      logs: receipt.logs,
+      eventName: 'InitiatedValidatorRemoval'
+    })[0].args.validationID
+
+    if (!validationId) {
+      logger.error(color.red("No matching InitiatedValidatorRemoval event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
+      process.exit(1);
+    }
+
+    const nodeID = (await balancerValidatorManager.read.getValidator([validationId])).nodeID;
+
+    nodeRemoved = [{
+      args: {
+        nodeId: nodeID,
+        validationID: validationId
+      },
+      blockNumber: BigInt(receipt.blockNumber), // Not going to be used in GetRegistrationJustification because the justification will be found in the ConvertSubnetToL1Tx
+    }];
   }
 
   const initiatedValidatorRemovals = parseEventLogs({
@@ -196,9 +229,13 @@ export async function completeValidatorRemoval(
     }
 
 
+    // Get SubnetID in Hex from the BalancerValidatorManager
+    const subnetIDHex = await balancerValidatorManager.read.subnetID();
+    // Convert SubnetID to cb58
+    const subnetIDC58 = utils.base58check.encode(hexToBytes(subnetIDHex));
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
-    const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client, addNodeBlockNumber);
+    const justification = await GetRegistrationJustification(nodeID, validationID, subnetIDC58, client, addNodeBlockNumber);
     if (!justification) {
       throw new Error("Justification not found for validator removal");
     }
