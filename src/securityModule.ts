@@ -88,7 +88,12 @@ export async function completeValidatorRegistration(
   logger.log("\nCalling function completeValidatorRegistration...");
   // TODO: Find a way to use the proper signature of the method
   const method = securityModule.safeWrite.completeValidatorRegistration as any;
-  const hash = await method([0]);
+  const hash = await method([0],
+    {
+      account: client.account!,
+      chain: null,
+      accessList
+    });
 
   // Wait until the validator is visible on the P-Chain
   if (waitValidatorVisible) {
