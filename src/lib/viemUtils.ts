@@ -7,6 +7,9 @@ import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
+import { isCastMode, logCastCall, logCastSend } from './castUtils';
+
+export { setCastMode, isCastMode } from './castUtils';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
@@ -129,6 +132,12 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
           try {
+            // ── Cast mode: log the equivalent cast send command and skip execution
+            if (isCastMode()) {
+              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+              logCastSend(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, Array.isArray(args) ? args : args != null ? [args] : [], rpcUrl, options);
+              return undefined;
+            }
             let hash: Hex;
             // If a safe smart account is connected, use it to send the transaction
             if ("safe" in client && client.safe != undefined) {
@@ -215,10 +224,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
           try {
-            const simulateFn = (contract as any).simulate?.[prop]
-            if (typeof simulateFn === 'function') {
-              // If any safe is connected, use its address to simulate the transaction
-              await simulateFn(args, "safe" in client && client.safe != undefined ? { ...options, account: await client.safe.getAddress() } : options)
+            // Skip simulation in cast mode — the write handler will log the command
+            if (!isCastMode()) {
+              const simulateFn = (contract as any).simulate?.[prop]
+              if (typeof simulateFn === 'function') {
+                // If any safe is connected, use its address to simulate the transaction
+                await simulateFn(args, "safe" in client && client.safe != undefined ? { ...options, account: await client.safe.getAddress() } : options)
+              }
             }
             return await fn(args, options)
           } catch (error: any) {
@@ -240,6 +252,10 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (...args: any[]) => {
           try {
+            if (isCastMode()) {
+              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+              logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+            }
             const result = await fn(...args)
             const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
             logger.addData('receipt', { functionSignature, result });
@@ -265,6 +281,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
           args,
         };
       });
+
+      if (isCastMode()) {
+        const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+        for (const c of contracts) {
+          logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
+        }
+      }
 
       const results = await client.multicall({ contracts: contracts as any });
 

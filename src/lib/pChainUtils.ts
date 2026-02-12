@@ -5,6 +5,7 @@ import { requirePChainBallance } from "./transferUtils";
 import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicActions, toBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
+import { isCastMode, logPChainIssueTx } from "./castUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
@@ -314,7 +315,7 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
 export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
     const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-    
+
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
@@ -708,7 +709,11 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     ];
 }
 
-export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<Result<Hex, string>> {
+export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx, testnet: boolean = true): Promise<Result<Hex, string>> {
+    if (isCastMode()) {
+        const rpcUrl = testnet ? avalancheFuji.rpcUrls.default.http[0] : avalanche.rpcUrls.default.http[0];
+        return R.Ok(logPChainIssueTx(tx.getSignedTx().toBytes(), rpcUrl));
+    }
     const result = pipe(await R.fromPromise(pvmApi.issueSignedTx(tx.getSignedTx())),
         R.map(res => res.txID as Hex),
         R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`)

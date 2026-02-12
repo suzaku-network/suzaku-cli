@@ -124,7 +124,7 @@ import { encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex } from "./lib/cliParser";
-import { getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
+import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval } from './kiteStaking';
@@ -133,10 +133,11 @@ import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { ensureRoleHex, getRoleAdmin, getRoles, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
-import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames } from './lib/viemUtils';
+import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames, setCastMode } from './lib/viemUtils';
 import './lib/commandUtils';
 import { execSync } from 'child_process';
 import { chainList } from './lib/chainList';
+import { readFileSync } from 'fs';
 // import { Command } from '@commander-js/extra-typings';
 
 async function getDefaultAccount(opts: any): Promise<Hex> {
@@ -164,7 +165,14 @@ async function main() {
         .addOption(new Option('-y, --yes', 'Automatic yes to prompts'))
         .addOption(OptAddress('--safe <address>', 'Use safe smart account for transactions'))
         .addOption(new Option('--skip-abi-validation', 'Skip the ABI validation for used contract'))
+        .addOption(new Option('--cast', 'Output equivalent Foundry cast commands instead of executing write transactions').conflicts(['safe']))
         .version('0.1.0');
+
+    // Set cast mode globally before any command runs
+    program.hook('preAction', () => {
+        const opts = program.opts();
+        if (opts.cast) setCastMode(true);
+    });
 
     program
         .command('verify-abi')
@@ -1972,7 +1980,7 @@ async function main() {
 
             console.log(results.reduce((acc, r) => ({ ...acc, [r.name]: r.result }), {} as Record<string, unknown>));
         });
-    
+
     validatorManagerCmd
         .command("transfer-ownership")
         .description("Transfer the ownership of a ValidatorManager contract")
@@ -1986,6 +1994,21 @@ async function main() {
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             await validatorManager.safeWrite.transferOwnership([owner]);
         });
+
+    validatorManagerCmd
+        .command("complete-validator-removal")
+        .description("Complete the removal of a validator that has been pending removal")
+        .addArgument(ArgAddress("validatorManagerAddress", "Validator manager address"))
+        .addArgument(ArgHex("removalTxId", "Removal transaction ID"))
+        .action(async (validatorManagerAddress, removalTxId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // instantiate ValidatorManager contract
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
+
+        });
+
 
     /**
      * --------------------------------------------------
@@ -2977,7 +3000,7 @@ async function main() {
                 options.initiateTx
             );
         });
-    
+
     stakingVaultCmd
         .command("update-operator-allocations")
         .description("Update operator allocations in the StakingVault")
@@ -2993,7 +3016,7 @@ async function main() {
             const allocationBipsBigInt = BigInt(allocationBips);
             await stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
         });
-    
+
     stakingVaultCmd
         .command("info")
         .description("Get information about the StakingVault")
@@ -3004,7 +3027,7 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
 
-            
+
             const [currentEpoch, lastEpochProcessed, liquidityBufferBips, operatorList, totalSupply, symbol, owner, paused, totalPooledStake, decimals] = await stakingVault.multicall(["getCurrentEpoch", "getLastEpochProcessed", "getLiquidityBufferBips", "getOperatorList", "totalSupply", "symbol", "owner", "paused", "getTotalPooledStake", 'decimals'])
             const todecimals = (amount: bigint) => Number(amount) / (10 ** Number(decimals));
             logger.log(`StakingVault ${stakingVaultAddress} info:`);
@@ -3019,12 +3042,12 @@ async function main() {
             logger.log(`  Operators:`);
             for (let i = 0; i < operatorList.length; i++) {
                 const operator = operatorList[i]
-                const [{ active, allocationBips, activeStake, accruedFees, feeRecipient }, balance, validatorIDs] = await stakingVault.multicall([{name: "getOperatorInfo", args: [operator]}, {name: "balanceOf", args: [operator]}, {name: 'getOperatorValidators', args: [operator]}]);
+                const [{ active, allocationBips, activeStake, accruedFees, feeRecipient }, balance, validatorIDs] = await stakingVault.multicall([{ name: "getOperatorInfo", args: [operator] }, { name: "balanceOf", args: [operator] }, { name: 'getOperatorValidators', args: [operator] }]);
                 logger.log(`    Operator ${operator}: active=${active} allocationBips=${allocationBips} activeStake=${activeStake} feeRecipient=${feeRecipient}`);
                 logger.log(`      Validator IDs: ${validatorIDs.join(", ")}`);
                 logger.log(`      Accrued Fees: ${accruedFees}`);
                 logger.log(`      Balance (stake): ${todecimals(balance)} ` + symbol);
-                
+
             }
         });
 
@@ -4052,6 +4075,47 @@ async function main() {
             } else {
                 logger.log("No role");
             }
+        });
+
+
+    program.
+        command('create-network', { hidden: true })
+        .description('Create a new network')
+        .argument('chainName', 'Name of the chain')
+        .argument('genesisFile', 'Path to the genesis file')
+        .option('--vm-id <vmId>', 'subnet-evm custom id')
+        .action(async (chainName, genesisFile, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const subnetId = await createSubnet({ client })
+            const genesisData = readFileSync(genesisFile).toString('utf-8');
+            const chainId = await createChain({
+                client,
+                chainName,
+                subnetId,
+                genesisData,
+                SubnetEVMId: options.vmId
+            })
+            logger.log(`Network created:`)
+            logger.log(`  Chain ID: ${chainId}`)
+            logger.log(`  Subnet ID: ${subnetId}`)
+            logger.addData('network', { chainId, subnetId })
+        });
+
+    program
+        .command('subnet-to-l1', { hidden: true })
+        .description('Convert a subnet to L1')
+        .addArgument(ArgCB58('subnetId', 'Subnet ID of the subnet'))
+        .addArgument(ArgCB58('chainId', 'Chain ID of the subnet'))
+        .addArgument(ArgAddress('validatorManagerAddress', 'Validator manager of the subnet'))
+        .addArgument(ArgCB58('vmcChainId', 'Validator Manager Contract Chain ID'))
+        .addOption(new Option('--validatorConfig <validatorConfig>', 'Validator config file path (json)').default([]).argParser(collectMultiple(String)).makeOptionMandatory())
+        .action(async (subnetId, chainId, validatorManagerAddress, vmcChainId, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            // const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress)
+            await convertSubnetToL1({ client, subnetId, chainId, validatorManager: validatorManagerAddress, validatorManagerBlockchainID: vmcChainId, validators: options.validatorConfig.map(v => JSON.parse(readFileSync(v).toString('utf-8'))) })
         });
 
     program
