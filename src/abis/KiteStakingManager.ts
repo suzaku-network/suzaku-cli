@@ -1880,4 +1880,4 @@ export default [
         "name": "ZeroWeightToValueFactor",
         "inputs": []
     }
-]
+] as const;

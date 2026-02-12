@@ -1,94 +1,6 @@
 export default [
     {
         "type": "event",
-        "name": "Initialized",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleAdminChanged",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "previousAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "newAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleGranted",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleRevoked",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
         "name": "StakingVault__AccountingMismatchDetected",
         "inputs": [
             {
@@ -170,6 +82,31 @@ export default [
                 "name": "delegationID",
                 "type": "bytes32",
                 "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRemovalAdopted",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
                 "internalType": "bytes32"
             },
             {
@@ -334,25 +271,6 @@ export default [
     },
     {
         "type": "event",
-        "name": "StakingVault__LiquidityBufferUpdated",
-        "inputs": [
-            {
-                "name": "oldBips",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "newBips",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
         "name": "StakingVault__LiquidityPrepared",
         "inputs": [
             {
@@ -362,51 +280,13 @@ export default [
                 "internalType": "uint256"
             },
             {
-                "name": "delegationsInitiated",
+                "name": "removalsInitiated",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
             },
             {
                 "name": "amountExpected",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "StakingVault__MaximumDelegatorStakeUpdated",
-        "inputs": [
-            {
-                "name": "oldMax",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "newMax",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "StakingVault__MaximumValidatorStakeUpdated",
-        "inputs": [
-            {
-                "name": "oldMax",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "newMax",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
@@ -485,25 +365,6 @@ export default [
     },
     {
         "type": "event",
-        "name": "StakingVault__OperatorFeeUpdated",
-        "inputs": [
-            {
-                "name": "oldFee",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "newFee",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
         "name": "StakingVault__OperatorFeesClaimed",
         "inputs": [
             {
@@ -536,35 +397,16 @@ export default [
     },
     {
         "type": "event",
-        "name": "StakingVault__ProtocolFeeRecipientUpdated",
+        "name": "StakingVault__ProtocolFeeEscrowed",
         "inputs": [
             {
-                "name": "oldRecipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newRecipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "StakingVault__ProtocolFeeUpdated",
-        "inputs": [
-            {
-                "name": "oldFee",
+                "name": "amount",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
             },
             {
-                "name": "newFee",
+                "name": "totalPending",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
@@ -688,11 +530,6 @@ export default [
     },
     {
         "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "AccessControlUnauthorizedAccount",
         "inputs": [
             {
@@ -706,16 +543,6 @@ export default [
                 "internalType": "bytes32"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitialization",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotInitializing",
-        "inputs": []
     },
     {
         "type": "error",
@@ -826,14 +653,8 @@ export default [
     },
     {
         "type": "error",
-        "name": "StakingVault__InvalidFee",
-        "inputs": [
-            {
-                "name": "fee",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
+        "name": "StakingVault__InvalidFeeRecipient",
+        "inputs": []
     },
     {
         "type": "error",
@@ -1057,45 +878,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "DEFAULT_ADMIN_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "OPERATOR_MANAGER_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "VAULT_ADMIN_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "addOperator",
         "inputs": [
             {
@@ -1205,6 +987,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "forceClaimOperatorFees",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "forceRemoveDelegator",
         "inputs": [
             {
@@ -1224,43 +1019,6 @@ export default [
                 "name": "validationID",
                 "type": "bytes32",
                 "internalType": "bytes32"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "getRoleAdmin",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "grantRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "outputs": [],
@@ -1336,30 +1094,6 @@ export default [
             }
         ],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "hasRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -1496,94 +1230,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "renounceRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "callerConfirmation",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "revokeRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setLiquidityBufferBips",
-        "inputs": [
-            {
-                "name": "_liquidityBufferBips",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setMaximumDelegatorStake",
-        "inputs": [
-            {
-                "name": "amount",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setMaximumValidatorStake",
-        "inputs": [
-            {
-                "name": "amount",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setOperatorFeeBips",
-        "inputs": [
-            {
-                "name": "bips",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "setOperatorFeeRecipient",
         "inputs": [
             {
@@ -1594,51 +1240,6 @@ export default [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setProtocolFeeBips",
-        "inputs": [
-            {
-                "name": "bips",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setProtocolFeeRecipient",
-        "inputs": [
-            {
-                "name": "_protocolFeeRecipient",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "supportsInterface",
-        "inputs": [
-            {
-                "name": "interfaceId",
-                "type": "bytes4",
-                "internalType": "bytes4"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",

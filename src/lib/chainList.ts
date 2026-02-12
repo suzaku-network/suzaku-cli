@@ -20,7 +20,7 @@ export const chainList = {
     },
   }),
   custom: defineChain({
-    id: 40899,
+    id: 42775,
     name: 'Custom',
     network: 'fuji',
     testnet: true,
@@ -29,8 +29,14 @@ export const chainList = {
       name: 'AVAX',
       symbol: 'AVAX',
     },
+    contracts: {
+      multicall3: {
+        address: "0xca11bde05977b3631167028862be2a173976ca11",
+        blockCreated: 24,
+      },
+    },
     rpcUrls: {
-      default: { http: ["https://test.ash.center/ext/bc/Ca61g2nYQ4sWr7ZiLeroYHH713xmG88FGuShV2gyfnbG5rLm3/rpc"] },
+      default: { http: ["http://51.159.210.12:9660/ext/bc/S7RP9bonFjat7X5NYa5c8bzNiVz9xGWBhfXqAycu9dcjKifhW/rpc"] },
     },
   })
 }

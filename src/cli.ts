@@ -2993,6 +2993,40 @@ async function main() {
             const allocationBipsBigInt = BigInt(allocationBips);
             await stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
         });
+    
+    stakingVaultCmd
+        .command("info")
+        .description("Get information about the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVaultFull(stakingVaultAddress);
+
+            
+            const [currentEpoch, lastEpochProcessed, liquidityBufferBips, operatorList, totalSupply, symbol, owner, paused, totalPooledStake, decimals] = await stakingVault.multicall(["getCurrentEpoch", "getLastEpochProcessed", "getLiquidityBufferBips", "getOperatorList", "totalSupply", "symbol", "owner", "paused", "getTotalPooledStake", 'decimals'])
+            const todecimals = (amount: bigint) => Number(amount) / (10 ** Number(decimals));
+            logger.log(`StakingVault ${stakingVaultAddress} info:`);
+            logger.log(`  Current Epoch: ${currentEpoch}`);
+            logger.log(`  Last Epoch Processed: ${lastEpochProcessed}`);
+            logger.log(`  Liquidity Buffer (bips): ${liquidityBufferBips}`);
+            logger.log(`  Total Supply (shares): ${todecimals(totalSupply)} ` + symbol);
+            logger.log(`  Total Pooled Stake (wei): ${totalPooledStake}`);
+            logger.log(`  Symbol: ${symbol}`);
+            logger.log(`  Owner: ${owner}`);
+            logger.log(`  Paused: ${paused}`);
+            logger.log(`  Operators:`);
+            for (let i = 0; i < operatorList.length; i++) {
+                const operator = operatorList[i]
+                const [{ active, allocationBips, activeStake, accruedFees, feeRecipient }, balance, validatorIDs] = await stakingVault.multicall([{name: "getOperatorInfo", args: [operator]}, {name: "balanceOf", args: [operator]}, {name: 'getOperatorValidators', args: [operator]}]);
+                logger.log(`    Operator ${operator}: active=${active} allocationBips=${allocationBips} activeStake=${activeStake} feeRecipient=${feeRecipient}`);
+                logger.log(`      Validator IDs: ${validatorIDs.join(", ")}`);
+                logger.log(`      Accrued Fees: ${accruedFees}`);
+                logger.log(`      Balance (stake): ${todecimals(balance)} ` + symbol);
+                
+            }
+        });
 
     /**
      * --------------------------------------------------

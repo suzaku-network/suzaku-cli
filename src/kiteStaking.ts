@@ -61,7 +61,8 @@ export async function initiateValidatorRegistration(
             rewardRecipient
         ],
         {
-            value: initialStake
+            value: initialStake,
+            chain: null
         }
     );
 
@@ -79,17 +80,7 @@ export async function initiateDelegatorRegistration(
     logger.log("Initiating delegator registration...");
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
@@ -102,7 +93,8 @@ export async function initiateDelegatorRegistration(
         validationID,
         rewardRecipient
     ], {
-        value: stakeAmount
+        value: stakeAmount,
+        chain: null
     });
 
     logger.log("initiateDelegatorRegistration executed successfully, tx hash:", txHash);
@@ -132,31 +124,11 @@ export async function initiateDelegatorRemoval(
         }
 
         // Get ValidatorManager from settings
-        const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-            manager: Hex;
-            minimumStakeAmount: bigint;
-            maximumStakeAmount: bigint;
-            minimumStakeDuration: bigint;
-            minimumDelegationFeeBips: number;
-            maximumStakeMultiplier: number;
-            weightToValueFactor: bigint;
-            rewardCalculator: Hex;
-            uptimeBlockchainID: Hex;
-        };
+        const settings = await kiteStakingManager.read.getStakingManagerSettings();
         const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
         // Get delegator info to get validationID
-        const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]) as {
-            status: number;
-            owner: Hex;
-            validationID: Hex;
-            weight: bigint;
-            startTime: bigint;
-            startingNonce: bigint;
-            endingNonce: bigint;
-            lastRewardClaimTime: bigint;
-            lastClaimUptimeSeconds: bigint;
-        };
+        const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]);
         const validationID = delegatorInfo.validationID;
 
         // Get the validator info to get nodeID
@@ -206,17 +178,7 @@ export async function initiateValidatorRemoval(
     logger.log("Initiating validator removal...");
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
@@ -253,17 +215,7 @@ export async function completeDelegatorRegistration(
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse InitiatedDelegatorRegistration event from KiteStakingManager
@@ -278,11 +230,11 @@ export async function completeDelegatorRegistration(
         process.exit(1);
     }
 
-    const delegationID = (initiatedDelegatorRegistration as any).args.delegationID;
-    const validationID = (initiatedDelegatorRegistration as any).args.validationID;
-    const validatorWeight = (initiatedDelegatorRegistration as any).args.validatorWeight;
-    const nonce = (initiatedDelegatorRegistration as any).args.nonce;
-    const setWeightMessageID = (initiatedDelegatorRegistration as any).args.setWeightMessageID;
+    const delegationID = initiatedDelegatorRegistration.args.delegationID;
+    const validationID = initiatedDelegatorRegistration.args.validationID;
+    const validatorWeight = initiatedDelegatorRegistration.args.validatorWeight;
+    const nonce = initiatedDelegatorRegistration.args.nonce;
+    const setWeightMessageID = initiatedDelegatorRegistration.args.setWeightMessageID;
 
     // Get the validator info to get nodeID
     const validator = await validatorManager.read.getValidator([validationID]);
@@ -400,17 +352,7 @@ export async function completeDelegatorRemoval(
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse InitiatedDelegatorRemoval events from KiteStakingManager
@@ -428,7 +370,7 @@ export async function completeDelegatorRemoval(
     // Filter by delegationIDs if provided
     const filteredRemovals = delegationIDs
         ? initiatedDelegatorRemovals.filter((e) => {
-            const delegationID = (e as any).args.delegationID;
+            const delegationID = e.args.delegationID;
             return delegationIDs.includes(delegationID);
         })
         : initiatedDelegatorRemovals;
@@ -450,8 +392,8 @@ export async function completeDelegatorRemoval(
     let lastHash: Hex | undefined;
 
     for (const event of filteredRemovals) {
-        const delegationID = (event as any).args.delegationID;
-        const validationID = (event as any).args.validationID;
+        const delegationID = event.args.delegationID;
+        const validationID = event.args.validationID;
 
         // Get the validator info to get nodeID
         const validator = await validatorManager.read.getValidator([validationID]);
@@ -459,17 +401,7 @@ export async function completeDelegatorRemoval(
         logger.log(`Processing removal for delegation ${delegationID}, node ${nodeID}`);
 
         // Get delegator info to find the registration block number
-        const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]) as {
-            status: number;
-            owner: Hex;
-            validationID: Hex;
-            weight: bigint;
-            startTime: bigint;
-            startingNonce: bigint;
-            endingNonce: bigint;
-            lastRewardClaimTime: bigint;
-            lastClaimUptimeSeconds: bigint;
-        };
+        const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]);
 
         let addNodeBlockNumber = receipt.blockNumber;
 
@@ -484,7 +416,7 @@ export async function completeDelegatorRemoval(
                 eventName: 'InitiatedDelegatorRegistration'
             });
 
-            if (registrationEvents.some((e) => (e as any).args.delegationID === delegationID)) {
+            if (registrationEvents.some((e) => e.args.delegationID === delegationID)) {
                 addNodeBlockNumber = addNodeReceipt.blockNumber;
             }
         }
@@ -604,17 +536,7 @@ export async function completeValidatorRegistration(
     }
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse InitiatedValidatorRegistration event from ValidatorManager
@@ -722,17 +644,7 @@ export async function completeValidatorRemoval(
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
 
     // Get ValidatorManager from settings
-    const settings = await kiteStakingManager.read.getStakingManagerSettings() as {
-        manager: Hex;
-        minimumStakeAmount: bigint;
-        maximumStakeAmount: bigint;
-        minimumStakeDuration: bigint;
-        minimumDelegationFeeBips: number;
-        maximumStakeMultiplier: number;
-        weightToValueFactor: bigint;
-        rewardCalculator: Hex;
-        uptimeBlockchainID: Hex;
-    };
+    const settings = await kiteStakingManager.read.getStakingManagerSettings();
     const validatorManager = await config.contracts.ValidatorManager(settings.manager);
 
     // Parse InitiatedValidatorRemoval events from ValidatorManager
@@ -770,7 +682,8 @@ export async function completeValidatorRemoval(
     });
 
     const subnetIDHex = await validatorManager.read.subnetID();
-    const currentValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)));
+    const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
+    const currentValidators = await getCurrentValidators(client, subnetID);
 
     for (const event of filteredRemovals) {
         const eventIndex = filteredRemovals.indexOf(event);
@@ -831,18 +744,18 @@ export async function completeValidatorRemoval(
         }
 
         // Get justification for original register validator tx
-        const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client, addNodeBlockNumber);
+        const justification = await GetRegistrationJustification(nodeID, validationID, subnetID, client, addNodeBlockNumber);
         if (!justification) {
             throw new Error("Justification not found for validator removal");
         }
 
         // Pack and sign the P-Chain warp message
-        const validationIDBytes = hexToBytes(validationID as Hex);
+        const validationIDBytes = hexToBytes(validationID);
         const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, client.network === 'fuji' ? 5 : 1, pChainChainID);
         const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
         // Aggregate signatures from validators
-        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification));
         logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
         // Convert the signed warp message to bytes and pack into access list
@@ -851,17 +764,18 @@ export async function completeValidatorRemoval(
 
         // messageIndex is always 0 for KiteStakingManager
         const messageIndex = 0;
-
+        console.log(accessList)
         // Execute completeValidatorRemoval transaction
         logger.log("Executing completeValidatorRemoval transaction...");
+        // Checking if the node was only in the vmc or also in the stakingManager
         const completeHash = await kiteStakingManager.safeWrite.completeValidatorRemoval(
-            [messageIndex],
-            {
-                account: client.account!,
-                chain: null,
-                accessList
-            }
-        );
+                [messageIndex],
+                {
+                    account: client.account!,
+                    chain: null,
+                    accessList
+                }
+            );
 
         if (waitValidatorVisible) {
             logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");

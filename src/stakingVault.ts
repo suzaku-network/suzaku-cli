@@ -60,7 +60,7 @@ export async function depositStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__Deposited',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (depositEvents.length > 0) {
             const event = depositEvents[0];
@@ -113,7 +113,7 @@ export async function requestWithdrawalStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__WithdrawalRequested',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (withdrawalRequestedEvents.length > 0) {
             const event = withdrawalRequestedEvents[0];
@@ -163,7 +163,7 @@ export async function claimWithdrawalStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__WithdrawalClaimed',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (withdrawalClaimedEvents.length > 0) {
             const event = withdrawalClaimedEvents[0];
@@ -209,7 +209,7 @@ export async function processEpochStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__EpochProcessed',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (epochProcessedEvents.length > 0) {
             const event = epochProcessedEvents[0];
@@ -289,7 +289,7 @@ export async function initiateValidatorRegistrationStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__ValidatorRegistrationInitiated',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (validatorRegisteredEvents.length > 0) {
             const event = validatorRegisteredEvents[0];
@@ -350,7 +350,7 @@ export async function addOperatorStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__OperatorAdded',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (operatorAddedEvents.length > 0) {
             const event = operatorAddedEvents[0];
@@ -428,7 +428,7 @@ export async function completeValidatorRegistrationStakingVault(
     const warpLogs = parseEventLogs({
         abi: config.abis.IWarpMessenger,
         logs: receipt.logs,
-    }) as any[];
+    });
 
     if (!warpLogs || warpLogs.length === 0) {
         logger.error(color.red("No IWarpMessenger event found in the transaction logs."));
@@ -543,7 +543,7 @@ export async function initiateValidatorRemovalStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__ValidatorRemovalInitiated',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (validatorRemovalInitiatedEvents.length > 0) {
             const event = validatorRemovalInitiatedEvents[0];
@@ -595,7 +595,7 @@ export async function completeValidatorRemovalStakingVault(
         abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__ValidatorRemovalInitiated'
-    }) as any[];
+    });
 
     if (validatorRemovalInitiatedEvents.length === 0) {
         logger.error(color.red("No StakingVault__ValidatorRemovalInitiated event found in the transaction logs, verify the transaction hash."));
@@ -623,7 +623,7 @@ export async function completeValidatorRemovalStakingVault(
     const warpLogs = parseEventLogs({
         abi: config.abis.IWarpMessenger,
         logs: receipt.logs,
-    }) as any[];
+    });
 
     const subnetIDHex = await validatorManager.read.subnetID();
     const currentValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)));
@@ -633,7 +633,7 @@ export async function completeValidatorRemovalStakingVault(
         abi: validatorManager.abi,
         logs: receipt.logs,
         eventName: 'InitiatedValidatorRemoval'
-    }) as any[];
+    });
 
     for (const event of filteredRemovals) {
         const validationID = event.args?.validationID;
@@ -780,15 +780,6 @@ export async function initiateDelegatorRegistrationStakingVault(
     logger.log("Amount in wei:", amountWei.toString());
     logger.log("Vault address:", stakingVault.address);
 
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    // (StakingVault uses delegatecall to forward to operations implementation)
-    // Skip ABI validation since functions are forwarded via fallback
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVault.address,
-        client: config.client,
-    });
-
     // Call initiateDelegatorRegistration
     const hash = await stakingVault.safeWrite.initiateDelegatorRegistration([
         validationID,
@@ -808,7 +799,7 @@ export async function initiateDelegatorRegistrationStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__DelegatorRegistrationInitiated',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (delegatorRegisteredEvents.length > 0) {
             const event = delegatorRegisteredEvents[0];
@@ -867,7 +858,7 @@ export async function completeDelegatorRegistrationStakingVault(
         abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__DelegatorRegistrationInitiated'
-    }) as any[];
+    });
 
     if (!delegatorRegisteredEvents || delegatorRegisteredEvents.length === 0) {
         logger.error(color.red("No StakingVault__DelegatorRegistrationInitiated event found in the transaction logs, verify the transaction hash."));
@@ -892,7 +883,7 @@ export async function completeDelegatorRegistrationStakingVault(
         abi: validatorManager.abi,
         logs: receipt.logs,
         eventName: 'InitiatedValidatorWeightUpdate'
-    }) as any[];
+    });
 
     // Find the weight update event for this validationID
     const weightUpdateEvent = weightUpdateEvents.find((e) => e.args?.validationID === validationID);
@@ -909,7 +900,7 @@ export async function completeDelegatorRegistrationStakingVault(
     const warpLogs = parseEventLogs({
         abi: config.abis.IWarpMessenger,
         logs: receipt.logs,
-    }) as any[];
+    });
 
     const weightWarpLog = warpLogs.find((w) => w.args.messageID === setWeightMessageID);
     if (!weightWarpLog) {
@@ -1037,7 +1028,7 @@ export async function initiateDelegatorRemovalStakingVault(
             abi: stakingVault.abi,
             eventName: 'StakingVault__DelegatorRemovalInitiated',
             logs: receipt.logs,
-        }) as any[];
+        });
 
         if (delegatorRemovalInitiatedEvents.length > 0) {
             const event = delegatorRemovalInitiatedEvents[0];
@@ -1088,7 +1079,7 @@ export async function completeDelegatorRemovalStakingVault(
         abi: stakingVault.abi,
         logs: receipt.logs,
         eventName: 'StakingVault__DelegatorRemovalInitiated'
-    }) as any[];
+    });
 
     if (delegatorRemovalInitiatedEvents.length === 0) {
         logger.error(color.red("No StakingVault__DelegatorRemovalInitiated event found in the transaction logs, verify the transaction hash."));
@@ -1112,10 +1103,10 @@ export async function completeDelegatorRemovalStakingVault(
     const warpLogs = parseEventLogs({
         abi: config.abis.IWarpMessenger,
         logs: receipt.logs,
-    }) as any[];
+    });
 
     const subnetIDHex = await validatorManager.read.subnetID();
-    const currentValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)));
+    const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
 
     let lastHash: Hex | undefined;
 
@@ -1147,7 +1138,7 @@ export async function completeDelegatorRemovalStakingVault(
                 abi: stakingVault.abi,
                 logs: addNodeReceipt.logs,
                 eventName: 'StakingVault__DelegatorRegistrationInitiated'
-            }) as any[];
+            });
 
             if (registrationEvents.some((e) => e.args?.delegationID === delegationID)) {
                 addNodeBlockNumber = addNodeReceipt.blockNumber;
@@ -1159,7 +1150,7 @@ export async function completeDelegatorRemovalStakingVault(
             abi: validatorManager.abi,
             logs: receipt.logs,
             eventName: 'InitiatedValidatorWeightUpdate'
-        }).filter((e) => e.args.validationID === validationID) as any[];
+        }).filter((e) => e.args.validationID === validationID);
 
         if (initiatedValidatorWeightUpdates.length === 0) {
             logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`));
@@ -1200,12 +1191,12 @@ export async function completeDelegatorRemovalStakingVault(
 
         // Pack and sign the P-Chain warp message for weight update
         const validationIDBytes = hexToBytes(validationID as Hex);
-        const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
+        const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, subnetID);
         const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
         // Aggregate signatures from validators for the P-Chain weight message
         logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
+        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
         logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
         // Convert the signed warp message to bytes and pack into access list

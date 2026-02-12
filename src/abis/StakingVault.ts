@@ -190,6 +190,188 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__AccountingMismatchDetected",
+        "inputs": [
+            {
+                "name": "context",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            },
+            {
+                "name": "expected",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "actual",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorExternallySynced",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRegistrationCompleted",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRegistrationInitiated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRemovalAdopted",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRemovalCompleted",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "stakeReturned",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "rewards",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRemovalFailed",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__DelegatorRemovalInitiated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__Deposited",
         "inputs": [
             {
@@ -246,6 +428,214 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__ExitDebtRecorded",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "debtAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "totalDebt",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ExitDebtReduced",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "reducedAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "remainingDebt",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__Harvested",
+        "inputs": [
+            {
+                "name": "totalRewards",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "protocolFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "poolIncrease",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__InFlightExitingUpdated",
+        "inputs": [
+            {
+                "name": "newAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__LiquidityBufferUpdated",
+        "inputs": [
+            {
+                "name": "oldBips",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newBips",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__LiquidityPrepared",
+        "inputs": [
+            {
+                "name": "epoch",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
+            },
+            {
+                "name": "removalsInitiated",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "amountExpected",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__MaxOperatorsUpdated",
+        "inputs": [
+            {
+                "name": "oldMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__MaxValidatorsPerOperatorUpdated",
+        "inputs": [
+            {
+                "name": "oldMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__MaximumDelegatorStakeUpdated",
+        "inputs": [
+            {
+                "name": "oldMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__MaximumValidatorStakeUpdated",
+        "inputs": [
+            {
+                "name": "oldMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__OperationsImplUpdated",
         "inputs": [
             {
@@ -259,6 +649,310 @@ export default [
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorAdded",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "allocationBips",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorAllocationUpdated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldBips",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newBips",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorFeeRecipientUpdated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorFeeUpdated",
+        "inputs": [
+            {
+                "name": "oldFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorFeesClaimed",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__OperatorRemoved",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__PendingProtocolFeesClaimed",
+        "inputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ProtocolFeeEscrowed",
+        "inputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "totalPending",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ProtocolFeeRecipientUpdated",
+        "inputs": [
+            {
+                "name": "oldRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ProtocolFeeUpdated",
+        "inputs": [
+            {
+                "name": "oldFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorExternallySynced",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRegistrationCompleted",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRegistrationInitiated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRemovalCompleted",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "stakeReturned",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "rewards",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRemovalFailed",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRemovalInitiated",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
             }
         ],
         "anonymous": false
@@ -718,6 +1412,11 @@ export default [
     },
     {
         "type": "error",
+        "name": "StakingVault__InvalidFeeRecipient",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "StakingVault__InvalidImplementation",
         "inputs": [
             {
@@ -772,6 +1471,11 @@ export default [
     {
         "type": "error",
         "name": "StakingVault__NoFeesToClaim",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "StakingVault__NonTransferable",
         "inputs": []
     },
     {
@@ -1083,6 +1787,29 @@ export default [
     },
     {
         "type": "function",
+        "name": "addOperator",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "allowance",
         "inputs": [
             {
@@ -1183,7 +1910,34 @@ export default [
     },
     {
         "type": "function",
+        "name": "claimOperatorFees",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "claimPendingProtocolFees",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "claimWithdrawal",
+        "inputs": [
+            {
+                "name": "requestId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "claimWithdrawalFor",
         "inputs": [
             {
                 "name": "requestId",
@@ -1212,6 +1966,85 @@ export default [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "completeDelegatorRegistration",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "completeDelegatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "completeValidatorRegistration",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "completeValidatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -1286,11 +2119,50 @@ export default [
     },
     {
         "type": "function",
+        "name": "forceClaimOperatorFees",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "forceRemoveDelegator",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "forceRemoveValidator",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "getAvailableStake",
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "stake",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1303,7 +2175,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "stake",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1316,7 +2188,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "epoch",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1335,7 +2207,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "info",
                 "type": "tuple",
                 "internalType": "struct IStakingVault.DelegatorInfo",
                 "components": [
@@ -1348,11 +2220,6 @@ export default [
                         "name": "operator",
                         "type": "address",
                         "internalType": "address"
-                    },
-                    {
-                        "name": "pendingRemoval",
-                        "type": "bool",
-                        "internalType": "bool"
                     },
                     {
                         "name": "isVaultOwnedValidator",
@@ -1370,7 +2237,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "duration",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1396,7 +2263,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "amount",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1409,7 +2276,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "epoch",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1422,7 +2289,33 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "bips",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getMaxOperators",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "max",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getMaxValidatorsPerOperator",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "max",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1435,7 +2328,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "maximum",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1448,7 +2341,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "maximum",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1461,7 +2354,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "duration",
                 "type": "uint64",
                 "internalType": "uint64"
             }
@@ -1474,7 +2367,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "impl",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1493,7 +2386,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "amount",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1512,7 +2405,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "delegationIDs",
                 "type": "bytes32[]",
                 "internalType": "bytes32[]"
             }
@@ -1531,7 +2424,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "debt",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1544,7 +2437,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "bips",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1563,7 +2456,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "info",
                 "type": "tuple",
                 "internalType": "struct IStakingVault.Operator",
                 "components": [
@@ -1581,11 +2474,6 @@ export default [
                         "name": "activeStake",
                         "type": "uint256",
                         "internalType": "uint256"
-                    },
-                    {
-                        "name": "validatorIDs",
-                        "type": "bytes32[]",
-                        "internalType": "bytes32[]"
                     },
                     {
                         "name": "accruedFees",
@@ -1608,7 +2496,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "operators",
                 "type": "address[]",
                 "internalType": "address[]"
             }
@@ -1627,7 +2515,39 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getOperatorValidators",
+        "inputs": [
+            {
+                "name": "operatorAddr",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validatorIDs",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getPendingProtocolFees",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "fees",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1640,7 +2560,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "amount",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1653,7 +2573,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "bips",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1666,7 +2586,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "recipient",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1679,7 +2599,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "index",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1711,7 +2631,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "manager",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1724,7 +2644,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "fees",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1737,7 +2657,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "stake",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1750,7 +2670,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "debt",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1763,7 +2683,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "stake",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1776,7 +2696,7 @@ export default [
         "inputs": [],
         "outputs": [
             {
-                "name": "",
+                "name": "stake",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1795,7 +2715,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "amount",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -1814,7 +2734,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "request",
                 "type": "tuple",
                 "internalType": "struct IStakingVault.WithdrawalRequest",
                 "components": [
@@ -1869,6 +2789,77 @@ export default [
             }
         ],
         "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "harvest",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "totalRewards",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "harvestDelegators",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "totalRewards",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "harvestValidators",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "totalRewards",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -1965,6 +2956,119 @@ export default [
     },
     {
         "type": "function",
+        "name": "initiateDelegatorRegistration",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateDelegatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateValidatorRegistration",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "",
+                "type": "tuple",
+                "internalType": "struct PChainOwner",
+                "components": [
+                    {
+                        "name": "threshold",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "addresses",
+                        "type": "address[]",
+                        "internalType": "address[]"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "type": "tuple",
+                "internalType": "struct PChainOwner",
+                "components": [
+                    {
+                        "name": "threshold",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "addresses",
+                        "type": "address[]",
+                        "internalType": "address[]"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "initiateValidatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "isValidatorPendingRemoval",
         "inputs": [
             {
@@ -1975,7 +3079,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "pending",
                 "type": "bool",
                 "internalType": "bool"
             }
@@ -1994,7 +3098,7 @@ export default [
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "claimable",
                 "type": "bool",
                 "internalType": "bool"
             }
@@ -2104,6 +3208,13 @@ export default [
     },
     {
         "type": "function",
+        "name": "prepareWithdrawals",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "processEpoch",
         "inputs": [],
         "outputs": [],
@@ -2121,6 +3232,19 @@ export default [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "removeOperator",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -2186,10 +3310,127 @@ export default [
     },
     {
         "type": "function",
+        "name": "setLiquidityBufferBips",
+        "inputs": [
+            {
+                "name": "_liquidityBufferBips",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setMaxOperators",
+        "inputs": [
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setMaxValidatorsPerOperator",
+        "inputs": [
+            {
+                "name": "newMax",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setMaximumDelegatorStake",
+        "inputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setMaximumValidatorStake",
+        "inputs": [
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setOperationsImpl",
         "inputs": [
             {
                 "name": "_operationsImpl",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setOperatorFeeBips",
+        "inputs": [
+            {
+                "name": "bips",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setOperatorFeeRecipient",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setProtocolFeeBips",
+        "inputs": [
+            {
+                "name": "bips",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setProtocolFeeRecipient",
+        "inputs": [
+            {
+                "name": "_protocolFeeRecipient",
                 "type": "address",
                 "internalType": "address"
             }
@@ -2228,6 +3469,78 @@ export default [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "syncDelegatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "synced",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "syncOperatorRemovals",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "delegationsSynced",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "validatorsSynced",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "syncValidatorRemoval",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "synced",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -2299,6 +3612,24 @@ export default [
         "type": "function",
         "name": "unpause",
         "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateOperatorAllocations",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address[]",
+                "internalType": "address[]"
+            },
+            {
+                "name": "",
+                "type": "uint256[]",
+                "internalType": "uint256[]"
+            }
+        ],
         "outputs": [],
         "stateMutability": "nonpayable"
     },
