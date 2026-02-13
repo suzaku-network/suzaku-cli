@@ -23,7 +23,7 @@ import { pChainChainID } from './config';
  */
 export async function depositStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     amount: string,
     minShares: bigint
 ) {
@@ -84,7 +84,7 @@ export async function depositStakingVault(
  */
 export async function requestWithdrawalStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     shares: string
 ) {
     logger.log("Requesting withdrawal from StakingVault...");
@@ -138,7 +138,7 @@ export async function requestWithdrawalStakingVault(
  */
 export async function claimWithdrawalStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     requestId: bigint
 ) {
     logger.log("Claiming withdrawal from StakingVault...");
@@ -186,7 +186,7 @@ export async function claimWithdrawalStakingVault(
  */
 export async function processEpochStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVaultFull']
+    stakingVault: SafeSuzakuContract['StakingVault']
 ) {
     logger.log("Processing epoch in StakingVault...");
 
@@ -241,7 +241,7 @@ export async function processEpochStakingVault(
 export async function initiateValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     nodeId: NodeId,
     blsKey: Hex,
     remainingBalanceOwner: [number, Hex[]],
@@ -317,7 +317,7 @@ export async function initiateValidatorRegistrationStakingVault(
 export async function addOperatorStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     operator: Hex,
     allocationBips: bigint,
     feeRecipient: Hex
@@ -382,7 +382,7 @@ export async function completeValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     blsProofOfPossession: string,
     initiateTxHash: Hex,
@@ -436,6 +436,7 @@ export async function completeValidatorRegistrationStakingVault(
     }
 
     const warpLog = warpLogs[0];
+    console.log(warpLog.args.message)
 
     // Check if the node is already registered as a validator on the P-Chain
     const subnetIDStr = utils.base58check.encode(hexToBytes(subnetIDHex));
@@ -482,7 +483,7 @@ export async function completeValidatorRegistrationStakingVault(
         [messageIndex],
         {
             account: client.account!,
-            chain: null,
+            chain: client.chain,
             accessList
         }
     );
@@ -508,7 +509,7 @@ export async function completeValidatorRegistrationStakingVault(
 export async function initiateValidatorRemovalStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId
 ) {
@@ -577,7 +578,7 @@ export async function completeValidatorRemovalStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
     waitValidatorVisible: boolean,
@@ -757,7 +758,7 @@ export async function completeValidatorRemovalStakingVault(
 export async function initiateDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId,
     amount: string
@@ -834,7 +835,7 @@ export async function completeDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateTxHash: Hex,
     rpcUrl: string,
@@ -1001,7 +1002,7 @@ export async function completeDelegatorRegistrationStakingVault(
 export async function initiateDelegatorRemovalStakingVault(
     client: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     delegationID: Hex
 ) {
     logger.log("Initiating delegator removal in StakingVault...");
@@ -1061,7 +1062,7 @@ export async function completeDelegatorRemovalStakingVault(
     client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     config: Config,
-    stakingVault: SafeSuzakuContract['StakingVaultFull'],
+    stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
     waitValidatorVisible: boolean,
@@ -1191,7 +1192,7 @@ export async function completeDelegatorRemovalStakingVault(
 
         // Pack and sign the P-Chain warp message for weight update
         const validationIDBytes = hexToBytes(validationID as Hex);
-        const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, subnetID);
+        const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
         const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
         // Aggregate signatures from validators for the P-Chain weight message

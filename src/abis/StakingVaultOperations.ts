@@ -384,6 +384,25 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__OperatorFeesForfeited",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__OperatorRemoved",
         "inputs": [
             {
@@ -827,6 +846,11 @@ export default [
                 "internalType": "uint256"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "StakingVault__StakingManagerCallFailed",
+        "inputs": []
     },
     {
         "type": "error",

@@ -21,11 +21,21 @@ import KiteStakingManager from './KiteStakingManager';
 import StakingVault from './StakingVault';
 import StakingVaultOperations from './StakingVaultOperations';
 
+import { Abi } from 'viem';
+
+type ErrorItem = Extract<Abi[number], { type: 'error' }>;
+type ExtractErrors<T extends Abi> = Extract<T[number], { type: 'error' }>;
+
+export function withErrors<T extends Abi, O extends Abi[]>(base: T, ...others: [...O]): [...T, ...ExtractErrors<O[number]>[]] {
+  const errors = others.flatMap(abi => abi.filter((item): item is ErrorItem => item.type === 'error'));
+  return [...base, ...errors] as [...T, ...ExtractErrors<O[number]>[]];
+}
+
 export const SuzakuABI = {
   L1Registry,
   OperatorRegistry,
   VaultManager,
-  L1Middleware,
+  L1Middleware: withErrors(L1Middleware, L1Registry, OperatorRegistry, VaultManager),
   VaultTokenized,
   L1RestakeDelegator,
   BalancerValidatorManager,
@@ -42,7 +52,6 @@ export const SuzakuABI = {
   RewardsNativeToken,
   Ownable,
   KiteStakingManager,
-  StakingVault,
-  StakingVaultOperations,
-  StakingVaultFull: [...StakingVault, ...StakingVaultOperations]
+  StakingVault: withErrors(StakingVault, StakingVaultOperations, KiteStakingManager, ValidatorManager),
+  StakingVaultOperations
 };

@@ -428,6 +428,31 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__EscrowedWithdrawalClaimed",
+        "inputs": [
+            {
+                "name": "user",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__ExitDebtRecorded",
         "inputs": [
             {
@@ -762,6 +787,25 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__OperatorFeesForfeited",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__OperatorRemoved",
         "inputs": [
             {
@@ -975,6 +1019,31 @@ export default [
             },
             {
                 "name": "stakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__WithdrawalEscrowed",
+        "inputs": [
+            {
+                "name": "user",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "requestId",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "amount",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
@@ -1470,6 +1539,11 @@ export default [
     },
     {
         "type": "error",
+        "name": "StakingVault__NoEscrowedWithdrawal",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "StakingVault__NoFeesToClaim",
         "inputs": []
     },
@@ -1628,6 +1702,11 @@ export default [
                 "internalType": "uint256"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "StakingVault__StakingManagerCallFailed",
+        "inputs": []
     },
     {
         "type": "error",
@@ -1910,6 +1989,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "claimEscrowedWithdrawal",
+        "inputs": [
+            {
+                "name": "recipient",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "claimOperatorFees",
         "inputs": [],
         "outputs": [],
@@ -1943,6 +2035,32 @@ export default [
                 "name": "requestId",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "claimWithdrawals",
+        "inputs": [
+            {
+                "name": "requestIds",
+                "type": "uint256[]",
+                "internalType": "uint256[]"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "claimWithdrawalsFor",
+        "inputs": [
+            {
+                "name": "requestIds",
+                "type": "uint256[]",
+                "internalType": "uint256[]"
             }
         ],
         "outputs": [],
@@ -2716,6 +2834,19 @@ export default [
         "outputs": [
             {
                 "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getWithdrawalQueueLength",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "length",
                 "type": "uint256",
                 "internalType": "uint256"
             }

@@ -83,6 +83,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
 
 - Enable the auto-completion (only available on bash & zsh).
   This will be installed on the default user shell (It can be enforced using `SHELL` env var).
+
   ```bash
   suzaku-cli completion install
   ```
@@ -170,9 +171,11 @@ suzaku-cli vault deposit $VAULT 100 --ledger --network fuji
 ```
 
 **Configuration:**
+
 - `LEDGER_ACCOUNT_INDEX`: Set this environment variable to use a different account index (default: 0)
 
 **Ledger commands:**
+
 ```bash
 # Get addresses from connected Ledger
 suzaku-cli ledger addresses
@@ -185,9 +188,9 @@ suzaku-cli ledger fix-usb
 
 ## Token values
 
-  It's important to notice that all token values to use as cli input are decimal formatted.
-  
-  It means the given value is multiplied by the onchain decimal number or, for AVAX, by 18 for the C-Chain and 9 for the P-Chain.
+It's important to notice that all token values to use as cli input are decimal formatted.
+
+It means the given value is multiplied by the onchain decimal number or, for AVAX, by 18 for the C-Chain and 9 for the P-Chain.
 
 ## Usage on Fuji
 
@@ -234,7 +237,6 @@ suzaku-cli l1-registry register $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://
   ```
 
 - **(Optional) Mint & Approve sAVAX, Then Deposit**
-
   1.  Mint via `cast`:
       ```bash
       cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 5000000000000000000000000 \
@@ -527,6 +529,7 @@ suzaku-cli --help
 - `--safe <address>`: Use Safe smart account for transactions (compatible with Ledger).
 
 **Environment variables:**
+
 - `LogLevel`: Set log verbosity (DEBUG, INFO, WARN, ERROR). Default: INFO.
 - `LEDGER_ACCOUNT_INDEX`: Ledger account index to use. Default: 0.
 
@@ -896,10 +899,10 @@ scripts/update-abis.mjs --help
 
 **Options:**
 
-| Option | Alias | Description |
-|--------|-------|-------------|
-| `--source-dir <path>` | `-s` | Path to the Foundry output directory containing compiled contract ABIs |
-| `--help` | `-h` | Show help message |
+| Option                | Alias | Description                                                            |
+| --------------------- | ----- | ---------------------------------------------------------------------- |
+| `--source-dir <path>` | `-s`  | Path to the Foundry output directory containing compiled contract ABIs |
+| `--help`              | `-h`  | Show help message                                                      |
 
 **What it does:**
 
@@ -911,4 +914,4 @@ scripts/update-abis.mjs --help
 **What next:**
 
 1. Update the index.ts file in `src/abis/` with the new ABIs
-2. If a contract is not a proxy but use the forward and delegate call pattern, add a combined ABI in the index.ts file (like with the StakingVaultFull), and validate only the abi of the targeted contract address (as done in curriedContract function in `src/lib/viemUtils.ts`). Then you can instantiate the contract with the combined abi.
+2. If a contract is not a proxy but use the forward and delegate call pattern, add a combined ABI in the index.ts file (like with the StakingVault), and validate only the abi of the targeted contract address (as done in curriedContract function in `src/lib/viemUtils.ts`). Then you can instantiate the contract with the combined abi.
