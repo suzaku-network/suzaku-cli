@@ -1,7 +1,7 @@
-import { ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { CurriedSuzakuContractMap, SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
-import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex } from 'viem';
+import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError } from './lib/utils';
 import { getContract } from 'viem';
@@ -436,7 +436,6 @@ export async function completeValidatorRegistrationStakingVault(
     }
 
     const warpLog = warpLogs[0];
-    console.log(warpLog.args.message)
 
     // Check if the node is already registered as a validator on the P-Chain
     const subnetIDStr = utils.base58check.encode(hexToBytes(subnetIDHex));
@@ -1231,4 +1230,246 @@ export async function completeDelegatorRemovalStakingVault(
     }
 
     return lastHash;
+}
+
+// ── Info functions ─────────────────────────────────────────────────────
+
+type StakingVaultContract = SafeSuzakuContract['StakingVault'];
+
+function fmt(amount: bigint, decimals: number): string {
+    return formatUnits(amount, decimals);
+}
+
+/**
+ * General overview of the vault
+ */
+export async function getGeneralInfo(stakingVault: StakingVaultContract, client: ExtendedClient) {
+    const [
+        totalPooledStake, totalSupply, exchangeRate, availableStake,
+        totalValidatorStake, totalDelegatedStake, pendingWithdrawals,
+        claimableWithdrawals, inFlightExiting, currentEpoch,
+        lastEpochProcessed, decimals, symbol, owner, paused,
+    ] = await stakingVault.multicall([
+        'getTotalPooledStake', 'totalSupply', 'getExchangeRate', 'getAvailableStake',
+        'getTotalValidatorStake', 'getTotalDelegatedStake', 'getPendingWithdrawals',
+        'getClaimableWithdrawalStake', 'getInFlightExitingAmount', 'getCurrentEpoch',
+        'getLastEpochProcessed', 'decimals', 'symbol', 'owner', 'paused',
+    ]);
+
+    const contractBalance = await client.getBalance({ address: stakingVault.address });
+
+    logger.log(color.bold(`\n═══ General Info ═══`));
+    logger.log(`  Owner:                   ${owner}`);
+    logger.log(`  Paused:                  ${paused}`);
+    logger.log(`  Symbol:                  ${symbol}`);
+    logger.log(`  Total Pooled Stake:      ${fmt(totalPooledStake, decimals)} AVAX`);
+    logger.log(`  Total Supply (LST):      ${fmt(totalSupply, decimals)} ${symbol}`);
+    logger.log(`  Exchange Rate:           ${fmt(exchangeRate, decimals)}`);
+    logger.log(`  Available Stake:         ${fmt(availableStake, decimals)} AVAX`);
+    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} AVAX`);
+    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} AVAX`);
+    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} AVAX`);
+    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} AVAX`);
+    logger.log(`  In-Flight Exiting:       ${fmt(inFlightExiting, decimals)} AVAX`);
+    logger.log(`  Current Epoch:           ${currentEpoch}`);
+    logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
+    logger.log(`  Contract Balance:        ${formatUnits(contractBalance, 18)} AVAX`);
+}
+
+/**
+ * Fees configuration
+ */
+export async function getFeesInfo(stakingVault: StakingVaultContract) {
+    const [
+        protocolFeeBips, protocolFeeRecipient, pendingProtocolFees,
+        operatorFeeBips, totalAccruedOperatorFees, liquidityBufferBips, decimals,
+    ] = await stakingVault.multicall([
+        'getProtocolFeeBips', 'getProtocolFeeRecipient', 'getPendingProtocolFees',
+        'getOperatorFeeBips', 'getTotalAccruedOperatorFees', 'getLiquidityBufferBips', 'decimals',
+    ]);
+
+    logger.log(color.bold(`\n═══ Fees Info ═══`));
+    logger.log(`  Protocol Fee:            ${protocolFeeBips} bips (${Number(protocolFeeBips) / 100}%)`);
+    logger.log(`  Protocol Fee Recipient:  ${protocolFeeRecipient}`);
+    logger.log(`  Pending Protocol Fees:   ${fmt(pendingProtocolFees, decimals)} AVAX`);
+    logger.log(`  Operator Fee:            ${operatorFeeBips} bips (${Number(operatorFeeBips) / 100}%)`);
+    logger.log(`  Total Accrued Op. Fees:  ${fmt(totalAccruedOperatorFees, decimals)} AVAX`);
+    logger.log(`  Liquidity Buffer:        ${liquidityBufferBips} bips (${Number(liquidityBufferBips) / 100}%)`);
+}
+
+/**
+ * Operators overview
+ */
+export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
+    const [operatorList, maxOperators, maxValidatorsPerOp, decimals, symbol] = await stakingVault.multicall([
+        'getOperatorList', 'getMaxOperators', 'getMaxValidatorsPerOperator', 'decimals', 'symbol',
+    ]);
+
+    logger.log(color.bold(`\n═══ Operators Info ═══`));
+    logger.log(`  Max Operators:               ${maxOperators}`);
+    logger.log(`  Max Validators/Operator:     ${maxValidatorsPerOp}`);
+    logger.log(`  Registered Operators:        ${operatorList.length}`);
+
+    let totalActive = 0;
+    let totalAllocationBips = 0n;
+
+    for (const operator of operatorList) {
+        const [info, exitDebt, validators, delegators] = await stakingVault.multicall([
+            { name: 'getOperatorInfo', args: [operator] },
+            { name: 'getOperatorExitDebt', args: [operator] },
+            { name: 'getOperatorValidators', args: [operator] },
+            { name: 'getOperatorDelegators', args: [operator] },
+        ]);
+
+        if (info.active) totalActive++;
+        totalAllocationBips += info.allocationBips;
+
+        logger.log(`\n  ${color.cyan(operator)}:`);
+        logger.log(`    Active:            ${info.active}`);
+        logger.log(`    Allocation:        ${info.allocationBips} bips (${Number(info.allocationBips) / 100}%)`);
+        logger.log(`    Active Stake:      ${fmt(info.activeStake, decimals)} AVAX`);
+        logger.log(`    Accrued Fees:      ${fmt(info.accruedFees, decimals)} AVAX`);
+        logger.log(`    Fee Recipient:     ${info.feeRecipient}`);
+        logger.log(`    Exit Debt:         ${fmt(exitDebt, decimals)} AVAX`);
+        logger.log(`    Validators:        ${validators.length}`);
+        logger.log(`    Delegations:       ${delegators.length}`);
+    }
+
+    logger.log(`\n  ── Summary ──`);
+    logger.log(`    Active / Total:        ${totalActive} / ${operatorList.length}`);
+    logger.log(`    Total Allocation:      ${totalAllocationBips} bips (${Number(totalAllocationBips) / 100}%)`);
+}
+
+/**
+ * Validators details per operator
+ */
+export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
+    const [operatorList, totalValidatorStake, maxValidatorStake, decimals] = await stakingVault.multicall([
+        'getOperatorList', 'getTotalValidatorStake', 'getMaximumValidatorStake', 'decimals',
+    ]);
+
+    logger.log(color.bold(`\n═══ Validators Info ═══`));
+    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} AVAX`);
+    logger.log(`  Max Validator Stake:     ${fmt(maxValidatorStake, decimals)} AVAX`);
+
+    let totalValidators = 0;
+    let totalPendingRemoval = 0;
+
+    for (const operator of operatorList) {
+        const [validatorIDs] = await stakingVault.multicall([
+            { name: 'getOperatorValidators', args: [operator] },
+        ]);
+
+        if (validatorIDs.length === 0) continue;
+
+        logger.log(`\n  Operator ${color.cyan(operator)} (${validatorIDs.length} validators):`);
+
+        // Batch all validator queries in a single multicall
+        const queries = validatorIDs.flatMap(id => [
+            { name: 'getValidatorStakeAmount' as const, args: [id] as const },
+            { name: 'isValidatorPendingRemoval' as const, args: [id] as const },
+        ]);
+        const results = await stakingVault.multicall(queries);
+
+        for (let i = 0; i < validatorIDs.length; i++) {
+            const stakeAmount = results[i * 2] as bigint;
+            const pendingRemoval = results[i * 2 + 1] as boolean;
+            totalValidators++;
+            if (pendingRemoval) totalPendingRemoval++;
+
+            logger.log(`    ${validatorIDs[i]}`);
+            logger.log(`      Stake:           ${fmt(stakeAmount, decimals)} AVAX`);
+            logger.log(`      Pending Removal: ${pendingRemoval}`);
+        }
+    }
+
+    logger.log(`\n  ── Summary ──`);
+    logger.log(`    Total Validators:      ${totalValidators}`);
+    logger.log(`    Pending Removal:       ${totalPendingRemoval}`);
+}
+
+/**
+ * Delegations details per operator
+ */
+export async function getDelegatorsInfo(stakingVault: StakingVaultContract) {
+    const [operatorList, totalDelegatedStake, maxDelegatorStake, decimals] = await stakingVault.multicall([
+        'getOperatorList', 'getTotalDelegatedStake', 'getMaximumDelegatorStake', 'decimals',
+    ]);
+
+    logger.log(color.bold(`\n═══ Delegators Info ═══`));
+    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} AVAX`);
+    logger.log(`  Max Delegator Stake:     ${fmt(maxDelegatorStake, decimals)} AVAX`);
+
+    let totalDelegations = 0;
+
+    for (const operator of operatorList) {
+        const [delegatorIDs] = await stakingVault.multicall([
+            { name: 'getOperatorDelegators', args: [operator] },
+        ]);
+
+        if (delegatorIDs.length === 0) continue;
+
+        logger.log(`\n  Operator ${color.cyan(operator)} (${delegatorIDs.length} delegations):`);
+
+        // Batch all delegator queries
+        const queries = delegatorIDs.map(id => ({
+            name: 'getDelegatorInfo' as const,
+            args: [id] as const,
+        }));
+        const results = await stakingVault.multicall(queries);
+
+        for (let i = 0; i < delegatorIDs.length; i++) {
+            const info = results[i] as { validationID: Hex; isVaultOwnedValidator: boolean; operator: Hex };
+            totalDelegations++;
+
+            logger.log(`    ${delegatorIDs[i]}`);
+            logger.log(`      Target Validator:     ${info.validationID}`);
+            logger.log(`      Vault-Owned Validator: ${info.isVaultOwnedValidator}`);
+            logger.log(`      Operator:             ${info.operator}`);
+        }
+    }
+
+    logger.log(`\n  ── Summary ──`);
+    logger.log(`    Total Delegations:     ${totalDelegations}`);
+}
+
+/**
+ * Withdrawal queue info
+ */
+export async function getWithdrawalsInfo(stakingVault: StakingVaultContract) {
+    const [
+        queueLength, queueHead, pendingWithdrawals, claimableWithdrawals,
+        totalExitDebt, currentEpoch, lastEpochProcessed, epochDuration, decimals,
+    ] = await stakingVault.multicall([
+        'getWithdrawalQueueLength', 'getQueueHead', 'getPendingWithdrawals', 'getClaimableWithdrawalStake',
+        'getTotalExitDebt', 'getCurrentEpoch', 'getLastEpochProcessed', 'getEpochDuration', 'decimals',
+    ]);
+
+    logger.log(color.bold(`\n═══ Withdrawals Info ═══`));
+    logger.log(`  Queue Length:            ${queueLength}`);
+    logger.log(`  Queue Head:              ${queueHead}`);
+    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} AVAX`);
+    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} AVAX`);
+    logger.log(`  Total Exit Debt:         ${fmt(totalExitDebt, decimals)} AVAX`);
+    logger.log(`  Current Epoch:           ${currentEpoch}`);
+    logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
+    logger.log(`  Epoch Duration:          ${epochDuration}s`);
+}
+
+/**
+ * Epoch info
+ */
+export async function getEpochInfo(stakingVault: StakingVaultContract) {
+    const [currentEpoch, epochDuration, lastEpochProcessed, minStakeDuration] = await stakingVault.multicall([
+        'getCurrentEpoch', 'getEpochDuration', 'getLastEpochProcessed', 'getMinimumStakeDuration',
+    ]);
+
+    const epochsBehind = currentEpoch - lastEpochProcessed;
+
+    logger.log(color.bold(`\n═══ Epoch Info ═══`));
+    logger.log(`  Current Epoch:           ${currentEpoch}`);
+    logger.log(`  Epoch Duration:          ${epochDuration}s`);
+    logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
+    logger.log(`  Epochs Behind:           ${epochsBehind}`);
+    logger.log(`  Min Stake Duration:      ${minStakeDuration}s`);
 }

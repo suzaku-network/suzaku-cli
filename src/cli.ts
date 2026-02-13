@@ -128,7 +128,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, completeDelegatorRemovalStakingVault } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -3019,36 +3019,104 @@ async function main() {
 
     stakingVaultCmd
         .command("info")
-        .description("Get information about the StakingVault")
+        .description("Get general overview of the StakingVault")
         .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
         .action(async (stakingVaultAddress) => {
             const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getGeneralInfo(stakingVault, client);
+        });
 
-            const [currentEpoch, lastEpochProcessed, liquidityBufferBips, operatorList, totalSupply, symbol, owner, paused, totalPooledStake, decimals, epochDuration] = await stakingVault.multicall(["getCurrentEpoch", "getLastEpochProcessed", "getLiquidityBufferBips", "getOperatorList", "totalSupply", "symbol", "owner", "paused", "getTotalPooledStake", 'decimals', 'getEpochDuration'])
-            const todecimals = (amount: bigint) => Number(amount) / (10 ** Number(decimals));
-            logger.log(`StakingVault ${stakingVaultAddress} info:`);
-            logger.log(`  Current Epoch: ${currentEpoch}`);
-            logger.log(`  Epoch Duration: ${epochDuration}`);
-            logger.log(`  Last Epoch Processed: ${lastEpochProcessed}`);
-            logger.log(`  Liquidity Buffer (bips): ${liquidityBufferBips}`);
-            logger.log(`  Total Supply (shares): ${todecimals(totalSupply)} ` + symbol);
-            logger.log(`  Total Pooled Stake (wei): ${totalPooledStake}`);
-            logger.log(`  Symbol: ${symbol}`);
-            logger.log(`  Owner: ${owner}`);
-            logger.log(`  Paused: ${paused}`);
-            logger.log(`  Operators:`);
-            for (let i = 0; i < operatorList.length; i++) {
-                const operator = operatorList[i]
-                const [{ active, allocationBips, activeStake, accruedFees, feeRecipient }, balance, validatorIDs] = await stakingVault.multicall([{ name: "getOperatorInfo", args: [operator] }, { name: "balanceOf", args: [operator] }, { name: 'getOperatorValidators', args: [operator] }]);
-                logger.log(`    Operator ${operator}: active=${active} allocationBips=${allocationBips} activeStake=${activeStake} feeRecipient=${feeRecipient}`);
-                logger.log(`      Validator IDs: ${validatorIDs.join(", ")}`);
-                logger.log(`      Accrued Fees: ${accruedFees}`);
-                logger.log(`      Balance (stake): ${todecimals(balance)} ` + symbol);
+    stakingVaultCmd
+        .command("fees-info")
+        .description("Get fees configuration of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getFeesInfo(stakingVault);
+        });
 
-            }
+    stakingVaultCmd
+        .command("operators-info")
+        .description("Get operators details of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getOperatorsInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("validators-info")
+        .description("Get validators details per operator of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getValidatorsInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("delegators-info")
+        .description("Get delegations details per operator of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getDelegatorsInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("withdrawals-info")
+        .description("Get withdrawal queue info of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getWithdrawalsInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("epoch-info")
+        .description("Get epoch info of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getEpochInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("full-info")
+        .description("Get all information about the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await getGeneralInfo(stakingVault, client);
+            await getFeesInfo(stakingVault);
+            await getOperatorsInfo(stakingVault);
+            await getValidatorsInfo(stakingVault);
+            await getDelegatorsInfo(stakingVault);
+            await getWithdrawalsInfo(stakingVault);
+            await getEpochInfo(stakingVault);
         });
 
     /**
