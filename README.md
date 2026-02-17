@@ -392,11 +392,11 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 2. **Allocate Rewards**
 
    ```bash
-   # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable) (1 token in decimal format)
-   suzaku-cli rewards set-amount $REWARDS 99 5 $REWARDS_TOKEN 1 --network fuji --private-key $L1_OWNER
+   # Set rewards amount for the epochs you want to test (1 token in decimal format)
+   suzaku-cli rewards set-amount $REWARDS 99 5 1 --network fuji --private-key $L1_OWNER
 
    # Verify rewards allocation
-   suzaku-cli rewards get-amounts $REWARDS 99 --network fuji
+   suzaku-cli rewards get-epoch-rewards $REWARDS 99 --network fuji
    ```
 
 3. **Distribute Rewards**
@@ -429,16 +429,16 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 
    ```bash
    # Claim operator fees
-   suzaku-cli rewards claim-operator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $OPERATOR_KEY
+   suzaku-cli rewards claim-operator-fee $REWARDS --network fuji --private-key $OPERATOR_KEY
 
    # Claim staker rewards
-   suzaku-cli rewards claim $REWARDS $REWARDS_TOKEN --network fuji --private-key $STAKER_KEY
+   suzaku-cli rewards claim $REWARDS --network fuji --private-key $STAKER_KEY
 
    # Claim curator fees
-   suzaku-cli rewards claim-curator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $CURATOR_KEY
+   suzaku-cli rewards claim-curator-fee $REWARDS --network fuji --private-key $CURATOR_KEY
 
    # Claim protocol fees
-   suzaku-cli rewards claim-protocol-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $PROTOCOL_OWNER
+   suzaku-cli rewards claim-protocol-fee $REWARDS --network fuji --private-key $PROTOCOL_OWNER
    ```
 
 6. **Verify Claim Status**
@@ -452,15 +452,12 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 
    # Check last claimed epoch for curator
    suzaku-cli rewards get-last-claimed-curator $REWARDS $CURATOR $REWARDS_TOKEN --network fuji
-
-   # Check last claimed epoch for protocol owner
-   suzaku-cli rewards get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER $REWARDS_TOKEN --network fuji
    ```
 
 7. **Claim Undistributed Rewards (if applicable)**
    ```bash
    # This should be done after epoch 99+2 to ensure all claims are done
-   suzaku-cli rewards claim-undistributed $REWARDS 99 $REWARDS_TOKEN --network fuji --private-key $L1_OWNER
+   suzaku-cli rewards claim-undistributed $REWARDS 99 --network fuji --private-key $L1_OWNER
    ```
 
 ### Key Store Commands
@@ -572,6 +569,8 @@ suzaku-cli --help
   Get the collateral class ID associated with a vault.
 - **opstakes `<middlewareVaultManager>` `<operatorAddress>`**
   Show operator stakes across L1s, enumerating each L1 the operator is opted into.
+- **l1stakes `<validatorManagerAddress>`**
+  Show L1 stakes for a given validator manager.
 
 ### Vault Commands (`vault`)
 
@@ -660,8 +659,8 @@ suzaku-cli --help
   Top up all operator validators to meet a target continuous fee balance.
 - **get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<collateralClass>`**
   Get operator stake for a specific epoch and collateral class.
-- **get-operator-used-stake-cached-per-epoch `<middlewareAddress>` `<epoch>` `<operator>` `<collateralClass>`**
-  Get operator stake cached per epoch for a specific collateral class.
+- **get-operator-nodes `<middlewareAddress>` `<operator>`**
+  Get all nodes for an operator.
 - **get-current-epoch `<middlewareAddress>`**
   Get current epoch number.
 - **get-epoch-start-ts `<middlewareAddress>` `<epoch>`**
@@ -672,8 +671,6 @@ suzaku-cli --help
   Get current number of nodes for an operator.
 - **get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validationId>`**
   Get node stake cache for a specific epoch and validator.
-- **get-operator-nodes `<middlewareAddress>` `<operator>`**
-  Get all nodes for an operator.
 - **get-operator-validation-ids `<middlewareAddress>` `<operator>`**
   Get all validation IDs for an operator.
 - **get-operator-locked-stake `<middlewareAddress>` `<operator>`**
@@ -693,13 +690,17 @@ suzaku-cli --help
 - **node-logs `<middlewareAddress>` [--node-id `<nodeId>] [--snowscan-api-key `<string>]**
   Get middleware node logs.
 - **get-last-node-validation-id `<middlewareAddress>` `<nodeId>`**
-  Set middleware log level.
+  Get last node validation ID.
 - **to-vault-epoch `<middlewareAddress>` `<vaultAddress>` `<middlewareEpoch>`**
   Convert middleware epoch to a vault epoch.
 - **update-window-ends-ts `<middlewareAddress>`**
   Get the end timestamp of the last completed middleware epoch window.
 - **vault-to-middleware-epoch `<middlewareAddress>` `<vaultAddress>` `<vaultEpoch>`**
   Convert vault epoch to a middleware epoch.
+- **set-vault-manager `<middlewareAddress>` `<vaultManagerAddress>`**
+  Set vault manager.
+- **account-info `<middlewareAddress>` `<account>`**
+  Get account info.
 
 ### Operator Opt-In Commands (`opt-in`)
 
@@ -809,8 +810,8 @@ suzaku-cli --help
   Get vault shares for a specific epoch.
 - **get-curator-shares `<rewardsAddress>` `<epoch>` `<curator>`**
   Get curator shares for a specific epoch.
-- **get-protocol-rewards `<rewardsAddress>`**
-  Get protocol rewards.
+- **get-protocol-rewards `<rewardsAddress>` `<token>`**
+  Get protocol rewards for a token.
 - **get-distribution-batch `<rewardsAddress>` `<epoch>`**
   Get distribution batch status for an epoch.
 - **get-fees-config `<rewardsAddress>`**
@@ -843,8 +844,12 @@ suzaku-cli --help
 
 ### Validator Manager Contract Commands (`vmc`)
 
-- **info `<middlewareAddress>`**
-  Get detailed information about a Validator Manager Contract.
+- **info `<validatorManagerAddress>`**
+  Get summary information about a Validator Manager Contract.
+- **transfer-ownership `<validatorManagerAddress>` `<owner>`**
+  Transfer the ownership of a ValidatorManager contract.
+- **complete-validator-removal `<validatorManagerAddress>` `<removalTxId>`**
+  Complete the removal of a validator that has been pending removal.
 
 ### KiteStakingManager Commands (`kite-staking-manager`)
 
