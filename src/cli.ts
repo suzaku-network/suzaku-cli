@@ -136,7 +136,7 @@ import { ensureRoleHex, getRoleAdmin, getRoles, grantRole, hasRole, isAccessCont
 import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames, setCastMode } from './lib/viemUtils';
 import './lib/commandUtils';
 import { execSync } from 'child_process';
-import { chainList } from './lib/chainList';
+import { chainList, setCustomChainRpcUrl } from './lib/chainList';
 import { readFileSync } from 'fs';
 // import { Command } from '@commander-js/extra-typings';
 
@@ -152,6 +152,7 @@ async function main() {
         .addOption(new Option('-n, --network <network>')
             .choices(Object.keys(chainList) as Chains[])
             .default('mainnet'))
+        .addOption(new Option('-r, --rpc-url <rpcUrl>', 'RPC URL for a custom network (automatically sets --network to custom)'))
         .addOption(new Option('-k, --private-key <privateKey>', 'Private key in Hex format')
             .env('PK').argParser(ParserPrivateKey).conflicts(['secretName', 'ledger']))
         .addOption(new Option('-s, --secret-name <secretName>', 'The keystore secret name containing the private key')
@@ -172,10 +173,18 @@ async function main() {
             writeErr: (str) => { str.includes('Usage: suzaku-cli') ? process.stdout.write(str) : process.stderr.write(str) },
         });
 
-    // Set cast mode globally before any command runs
-    program.hook('preAction', () => {
+    // Set cast mode and handle --rpc-url/custom network before any command runs
+    program.hook('preAction', async (thisCommand) => {
         const opts = program.opts();
         if (opts.cast) setCastMode(true);
+
+        if (opts.rpcUrl) {
+            await setCustomChainRpcUrl(opts.rpcUrl);
+            thisCommand.setOptionValue('network', 'custom');
+        } else if (opts.network === 'custom') {
+            logger.error('Error: --rpc-url is required when using --network custom');
+            process.exit(1);
+        }
     });
 
     program

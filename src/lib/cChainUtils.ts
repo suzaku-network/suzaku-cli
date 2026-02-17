@@ -27,6 +27,23 @@ export type DecodedEvent = {
   timestamp: number;
 }
 
+export async function getChainId(rpcUrl: string): Promise<number> {
+  const ret = await fetch(rpcUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_chainId",
+      params: [],
+      id: 1,
+    }),
+  });
+  const data = await ret.json();
+  return data.result;
+}
+
 // TODO: optimize eventNames filtering it from apis
 export async function GetContractEvents(
   client: ExtendedClient,
