@@ -166,7 +166,11 @@ async function main() {
         .addOption(OptAddress('--safe <address>', 'Use safe smart account for transactions'))
         .addOption(new Option('--skip-abi-validation', 'Skip the ABI validation for used contract'))
         .addOption(new Option('--cast', 'Output equivalent Foundry cast commands instead of executing write transactions').conflicts(['safe']))
-        .version('0.1.0');
+        .version('0.1.0')
+        .configureOutput({
+            writeOut: (str) => process.stdout.write(str),
+            writeErr: (str) => { str.includes('Usage: suzaku-cli') ? process.stdout.write(str) : process.stderr.write(str) },
+        });
 
     // Set cast mode globally before any command runs
     program.hook('preAction', () => {
@@ -1618,7 +1622,7 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
-            logger.log(`Operator ${operator} available stake:\n${availableStake}`);
+            logger.log(`Operator ${operator} available stake: ${availableStake}`);
         });
 
     // getAllOperators (read)

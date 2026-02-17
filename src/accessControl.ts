@@ -58,4 +58,4 @@ export async function isAccessControl(
   }
 }
 
-export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : keccak256(toBytes(role.toUpperCase() + "()"));
+export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : role === 'DEFAULT_ADMIN_ROLE' ? "0x0000000000000000000000000000000000000000000000000000000000000000" : keccak256(toBytes(role.toUpperCase() + "()"));
