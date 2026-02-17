@@ -1,7 +1,7 @@
 import { ExtendedClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { CurriedSuzakuContractMap, SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
-import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
+import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits, toHex } from 'viem';
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
 import { getContract } from 'viem';
@@ -17,8 +17,8 @@ import { pChainChainID } from './config';
 export async function getValidatorManagerAddress(config: Config, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
     const stakingManagerAddress = await stakingVault.read.getStakingManager();
     const stakingManager = await config.contracts.KiteStakingManager(stakingManagerAddress);
-    const stakingManagerStorageLocation = await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION()
-    const validatorManagerAddress = bytes32ToAddress((await config.client.getStorageAt({ address: stakingManagerAddress, slot: stakingManagerStorageLocation })) as Hex);
+    const stakingManagerStorageLocation = toHex(await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION())
+    const validatorManagerAddress = bytes32ToAddress((await config.client.getStorageAt({ address: stakingManagerAddress, slot: stakingManagerStorageLocation })) as Hex) as Hex;
     return { validatorManagerAddress, stakingManager, stakingManagerStorageLocation };
 }
 
