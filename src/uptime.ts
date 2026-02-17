@@ -3,15 +3,16 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import type { Account } from 'viem';
-import { Network } from "./client";
+import { generateClient, Network } from "./client";
 import { logger } from './lib/logger';
+import { validatedBy } from "./lib/pChainUtils";
 
 export async function getValidationUptimeMessage(
   network: Network,
   rpcUrl: string,
   nodeId: string,
   networkID: number,
-  sourceChainID: string,
+  sourceChainID: string
 ) {
   // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
   const response = await fetch(rpcUrl + "/validators", {
@@ -40,7 +41,10 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
+  const client = await generateClient(network)
+  const signingSubnetId = await validatedBy(client, sourceChainID)
+  logger.log("Signing Subnet ID: ", signingSubnetId);
+  const signedValidationUptimeMessage = await collectSignatures({ network, message: unsignedValidationUptimeMessageHex, subnetId: signingSubnetId });
   logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
@@ -71,8 +75,7 @@ export async function reportAndSubmitValidatorUptime(
   nodeId: string,
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  account: Account
+  uptimeTracker: SafeSuzakuContract['UptimeTracker']
 ) {
   logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);

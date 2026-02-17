@@ -1,5 +1,8 @@
 import { defineChain } from "viem";
 import { anvil, avalanche, avalancheFuji } from "viem/chains";
+// Used in client
+avalanche.testnet = false
+avalancheFuji.testnet = true
 
 export const chainList = {
   anvil: anvil,
@@ -20,7 +23,7 @@ export const chainList = {
     },
   }),
   custom: defineChain({
-    id: 42775,
+    id: 13694,
     name: 'Custom',
     network: 'fuji',
     testnet: true,
@@ -32,11 +35,11 @@ export const chainList = {
     contracts: {
       multicall3: {
         address: "0xca11bde05977b3631167028862be2a173976ca11",
-        blockCreated: 24,
+        blockCreated: 0,
       },
     },
     rpcUrls: {
-      default: { http: ["http://51.159.210.12:9660/ext/bc/S7RP9bonFjat7X5NYa5c8bzNiVz9xGWBhfXqAycu9dcjKifhW/rpc"] },
+      default: { http: ["http://51.159.210.12:9660/ext/bc/2mmQkeQ7EyqNXcsEQjw1NVFquBfjHw7GBFuPZW35aCcEXKNSVo/rpc"] },
     },
   })
 }

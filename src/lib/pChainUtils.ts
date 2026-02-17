@@ -256,62 +256,6 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
     return txID;
 }
 
-// export async function convertToL1(params: ConvertToL1Params): Promise<string> {
-//     const rpcUrl = getPchainBaseUrl(params.client);
-//     const pvmApi = new pvm.PVMApi(rpcUrl);
-//     const feeState = await pvmApi.getFeeState();
-//     const context = await Context.getContextFromURI(rpcUrl);
-
-//     const { P: pAddress } = params.client.addresses;
-//     const addressBytes = utils.bech32ToBytes(pAddress);
-
-//     const { utxos } = await pvmApi.getUTXOs({
-//         addresses: [pAddress]
-//     });
-
-//     const pChainOwner = PChainOwner.fromNative([addressBytes], 1);
-
-//     // Create L1Validator instances for each validator
-//     const validators = params.validators.map(v => {
-//         const nodeID = v.nodeID;
-//         const publicKey = utils.hexToBuffer(v.blsPublicKey);
-//         const signature = utils.hexToBuffer(v.blsProofOfPossession);
-
-//         return L1Validator.fromNative(
-//             nodeID,
-//             BigInt(v.weight), // weight
-//             BigInt(v.balance), // balance
-//             new pvmSerial.ProofOfPossession(publicKey, signature),
-//             pChainOwner,
-//             pChainOwner
-//         );
-//     });
-
-//     const managerAddressBytes = utils.hexToBuffer(params.managerAddress.slice(2));
-
-//     const tx = pvm.e.newConvertSubnetToL1Tx(
-//         {
-//             feeState,
-//             fromAddressesBytes: [addressBytes],
-//             subnetId: params.subnetId,
-//             utxos,
-//             chainId: params.chainId,
-//             validators,
-//             subnetAuth: [0],
-//             address: managerAddressBytes,
-//         },
-//         context,
-//     );
-
-//     await addSigToAllCreds(tx, params.client);
-//     const txID = await sendSignedTx(pvmApi, tx);
-
-//     // Sleep for 3 seconds
-//     await waitPChainTx(txID, pvmApi);
-
-//     return txID;
-// }
-
 export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
     const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
@@ -470,6 +414,23 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
     return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
 }
 
+export async function validatedBy(client: ExtendedClient, blockchainId: string): Promise<string | undefined> {
+    const rpcUrl = getPchainBaseUrl(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
+    const currentHeight = await pvmApi.getHeight();
+    logger.log("L1: ", blockchainId, " at height: ", currentHeight.height);
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.validatedBy({
+        blockchainID: blockchainId,
+    });
+
+    if (!response.subnetID) {
+        return undefined;
+    }
+
+    return response.subnetID;
+}
+
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<Result<string, string>> {
     const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
@@ -560,8 +521,7 @@ export async function waitPChainTx(txID: string, pvmApi: pvm.PVMApi, pollingInte
 
 export async function extractWarpMessageFromPChainTx(subnetId: string, txId: string, client: ExtendedClient): Promise<ExtractWarpMessageFromTxResponse> {
     const rpcEndpoint = getPchainBaseUrl(client);
-    const networkId = networkIDs.FujiID;
-
+    const networkId = client.network === 'fuji' ? networkIDs.FujiID : networkIDs.MainnetID;
     //Fixme: here we do a direct call instead of using avalanchejs, because we need to get the raw response from the node
     const response = await fetch(rpcEndpoint + "/ext/bc/P", {
         method: 'POST',
@@ -625,49 +585,52 @@ export async function convertSubnetToL1(params:
     {
         subnetId: string;
         chainId: string;
-        validatorManager: Hex, //SafeSuzakuContract['ValidatorManager'];
+        validatorManager: Hex;
         client: ExtendedWalletClient;
         validators: NodeConfig[];
         validatorManagerBlockchainID: string;
+        convertTx?: Hex;
+        init?: boolean;
+        churnPeriodSeconds?: bigint;
+        maximumChurnPercentage?: number;
     }) {
     const managerAddress = params.validatorManager;
     const { client, validators } = params;
     // 1) convert to L1
-    // const convertTx = await convertToL1({
-    //     client,
-    //     subnetId: params.subnetId,
-    //     chainId: params.validatorManagerBlockchainID,
-    //     managerAddress,
-    //     validators,
-    // });
-    const convertTx = "HVazXbUZomoMwtppWoZ5PdLNei6GrbAtLjGE9iAFhBKmhQLfQ"
+    const convertTx = params.convertTx || await convertToL1({
+        client,
+        subnetId: params.subnetId,
+        chainId: params.validatorManagerBlockchainID,
+        managerAddress,
+        validators,
+    });
     // 2) collect signatures
-    // const signed = await collectSignaturesInitializeValidatorSet({
-    //     network: client.network,
-    //     subnetId: params.subnetId,
-    //     validatorManagerBlockchainID: params.validatorManagerBlockchainID,
-    //     managerAddress,
-    //     validators,
-    // });
+    const signed = await collectSignaturesInitializeValidatorSet({
+        network: client.network,
+        subnetId: params.subnetId,
+        validatorManagerBlockchainID: params.validatorManagerBlockchainID,
+        managerAddress,
+        validators,
+    });
 
     // 3) pack warp → accessList
-    const signedBytes = hexToBytes("0x0000000000050000000000000000000000000000000000000000000000000000000000000000000000340000000000010000000000000026000000000000514d9cd0c9156ed54816f5a2a202400c4161ea5eb4392b02488ed58e0cc5fd0a00000000000000010389a5fc416db5c31fc216f08e97b31544690c9d073364265af8c08dfc6e5e33daa200e4b3a5e4c90431f66b31248f49880e8dceeaf9916a3728df4a0f0451cd2e06fdc6f8287bba532cca94f282ca1560865dd296468bfe6fd7cfda9533588269");
+    const signedBytes = hexToBytes(`0x${signed}`);
     const accessList = packWarpIntoAccessList(signedBytes);
 
     // 4) call initializeValidatorSet
     // client.chain = chain;
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
 
-    const config = await getConfig(client as ExtendedClient, 2, true)
+    const config = await getConfig(client as ExtendedClient, 1, true)
     const validatorManager = await config.contracts.ValidatorManager(params.validatorManager)
-    // const init = {
-    //     admin: client.addresses.C,
-    //     subnetID: args[0].subnetID,
-    //     churnPeriodSeconds: 10n,
-    //     maximumChurnPercentage: 20,
-    // }
-    // await validatorManager.safeWrite.initialize([init])
-    const initHash = await validatorManager.safeWrite.initializeValidatorSet(args, {
+    const init = {
+        admin: client.addresses.C,
+        subnetID: args[0].subnetID,
+        churnPeriodSeconds: params.churnPeriodSeconds || 10n,
+        maximumChurnPercentage: params.maximumChurnPercentage || 20,
+    }
+    if (params.init) await validatorManager.safeWrite.initialize([init])
+    await validatorManager.safeWrite.initializeValidatorSet(args, {
         account: client.account!,
         chain: null,
         accessList

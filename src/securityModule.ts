@@ -46,7 +46,8 @@ export async function completeValidatorRegistration(
   const nodeId = encodeNodeID(InitiatedValidatorRegistration.args.nodeID); // Convert bytes32 to NodeID format by removing the first 12 bytes
   // Check if the node is still registered as a validator on the P-Chain
   const subnetIDHex = await balancer.read.subnetID();
-  const isValidator = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId);
+  const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
+  const isValidator = (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeId);
   if (isValidator) {
     logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
   } else {
@@ -55,7 +56,7 @@ export async function completeValidatorRegistration(
 
     // Collect signatures for the warp message
     logger.log("\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...");
-    const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
+    const signedMessage = await collectSignatures({ network: client.network, message: RegisterL1ValidatorUnsignedWarpMsg, subnetId: subnetID });
 
     // Register validator on P-Chain
     logger.log("\nRegistering validator on P-Chain...");
@@ -79,7 +80,7 @@ export async function completeValidatorRegistration(
 
   // Aggregate signatures from validators
   logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-  const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
+  const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetID });
 
   // Convert the signed warp message to bytes and pack into access list
   const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
@@ -98,7 +99,7 @@ export async function completeValidatorRegistration(
   // Wait until the validator is visible on the P-Chain
   if (waitValidatorVisible) {
     logger.log("Waiting for the validator to be visible on the P-Chain (may take a while)...");
-    await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId), 5000, 180000, (res) => res === true);
+    await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeId), 5000, 180000, (res) => res === true);
   }
 
   logger.log("completeValidatorRegistration executed successfully, tx hash:", hash);
@@ -176,7 +177,8 @@ export async function completeValidatorRemoval(
   })
 
   const subnetIDHex = await balancerValidatorManager.read.subnetID();
-  const currentValidators = (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex))))
+  const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
+  const currentValidators = (await getCurrentValidators(client, subnetID))
 
   for (const event of nodeRemoved) {
     const eventIndex = nodeRemoved.indexOf(event);
@@ -212,7 +214,7 @@ export async function completeValidatorRemoval(
       const unsignedL1ValidatorWeightMessage = warpLog.args.message;
 
       // Aggregate signatures from validators
-      const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+      const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, subnetId: subnetID });
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -252,7 +254,7 @@ export async function completeValidatorRemoval(
 
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+    const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetID, justification: bytesToHex(justification as Uint8Array) });
     logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list
@@ -272,7 +274,7 @@ export async function completeValidatorRemoval(
 
     if (waitValidatorVisible) {// Wait only for the last validator is enough
       logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-      await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
+      await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
     }
 
     logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
@@ -292,11 +294,14 @@ export async function completeWeightUpdate(
   // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
   const receipt = await client.waitForTransactionReceipt({ hash: validatorWeightUpdateTxHash })
 
+  const balancerAddress = await securityModule.read.balancerValidatorManager();
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
+  const subnetIDHex = await balancer.read.subnetID();
+  const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
   // Convert nodeIDs to validationIDs
   let validationIds;
   if (nodeIDs) {
-    const balancerAddress = await securityModule.read.balancerValidatorManager();
-    const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
+    
     validationIds = (await client.multicall({
       contracts: nodeIDs.map((id) => {
         return {
@@ -341,7 +346,7 @@ export async function completeWeightUpdate(
     const unsignedL1ValidatorWeightMessage = warpLog.args.message
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, subnetId: subnetID });
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -366,7 +371,7 @@ export async function completeWeightUpdate(
 
     // Aggregate signatures from validators
     // logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetID });
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
     // Convert the signed warp message to bytes and pack into access list

@@ -3,7 +3,7 @@ import { Config } from './config';
 import { CurriedSuzakuContractMap, SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
 import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
-import { parseNodeID, NodeId, encodeNodeID, retryWhileError } from './lib/utils';
+import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
 import { getContract } from 'viem';
 import { color } from 'console-log-colors';
 import { collectSignatures, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
@@ -13,6 +13,14 @@ import { GetRegistrationJustification } from './lib/justification';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
 import { pChainChainID } from './config';
+
+export async function getValidatorManagerAddress(config: Config, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
+    const stakingManagerAddress = await stakingVault.read.getStakingManager();
+    const stakingManager = await config.contracts.KiteStakingManager(stakingManagerAddress);
+    const stakingManagerStorageLocation = await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION()
+    const validatorManagerAddress = bytes32ToAddress((await config.client.getStorageAt({ address: stakingManagerAddress, slot: stakingManagerStorageLocation })) as Hex);
+    return { validatorManagerAddress, stakingManager, stakingManagerStorageLocation };
+}
 
 /**
  * Deposit native tokens (AVAX) into the StakingVault
@@ -449,7 +457,7 @@ export async function completeValidatorRegistrationStakingVault(
 
         // Collect signatures for the warp message
         logger.log("\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...");
-        const signedMessage = await collectSignatures(client.network, RegisterL1ValidatorUnsignedWarpMsg);
+        const signedMessage = await collectSignatures({ network: client.network, message: RegisterL1ValidatorUnsignedWarpMsg, subnetId: subnetIDStr });
 
         // Register validator on P-Chain
         logger.log("\nRegistering validator on P-Chain...");
@@ -471,18 +479,17 @@ export async function completeValidatorRegistrationStakingVault(
 
     // Aggregate signatures from validators
     logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-    const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex);
+    const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetIDStr });
 
     // Convert the signed warp message to bytes and pack into access list
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
-    logger.log("\nCalling function completeValidatorRegistration...");
+    logger.log("\nCalling function completeValidatorRegistration on the staking vault...");
     const hash = await stakingVault.safeWrite.completeValidatorRegistration(
         [messageIndex],
         {
-            account: client.account!,
-            chain: client.chain,
+            chain: null,
             accessList
         }
     );
@@ -626,7 +633,8 @@ export async function completeValidatorRemovalStakingVault(
     });
 
     const subnetIDHex = await validatorManager.read.subnetID();
-    const currentValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)));
+    const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
+    const currentValidators = await getCurrentValidators(client, subnetID);
 
     // Find InitiatedValidatorRemoval events from ValidatorManager to get weight message info
     const validatorManagerRemovalEvents = parseEventLogs({
@@ -681,7 +689,7 @@ export async function completeValidatorRemovalStakingVault(
 
             // Aggregate signatures from validators
             logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-            const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+            const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, subnetId: subnetID });
             logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
             // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -715,7 +723,7 @@ export async function completeValidatorRemovalStakingVault(
 
         // Aggregate signatures from validators
         logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, bytesToHex(justification as Uint8Array));
+        const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetID, justification: bytesToHex(justification as Uint8Array) });
         logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
         // Convert the signed warp message to bytes and pack into access list
@@ -738,7 +746,7 @@ export async function completeValidatorRemovalStakingVault(
 
         if (waitValidatorVisible) {
             logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-            await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
+            await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
         }
 
         logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
@@ -846,13 +854,6 @@ export async function completeDelegatorRegistrationStakingVault(
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
 
-    // Get StakingVaultOperations contract instance pointing to StakingVault address
-    const stakingVaultOperationsContract = getContract({
-        abi: config.abis.StakingVaultOperations,
-        address: stakingVault.address,
-        client: config.client,
-    });
-
     // Parse StakingVault__DelegatorRegistrationInitiated event from StakingVaultOperations
     const delegatorRegisteredEvents = parseEventLogs({
         abi: stakingVault.abi,
@@ -911,9 +912,12 @@ export async function completeDelegatorRegistrationStakingVault(
     // Get the unsigned L1ValidatorWeightMessage
     const unsignedL1ValidatorWeightMessage = weightWarpLog.args.message;
 
+    const subnetIdHex = await validatorManager.read.subnetID();
+    const subnetId = utils.base58check.encode(hexToBytes(subnetIdHex));
+
     // Aggregate signatures from validators for the weight message
     logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-    const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+    const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, subnetId });
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
     // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -936,10 +940,9 @@ export async function completeDelegatorRegistrationStakingVault(
     const validationIDBytes = hexToBytes(validationID as Hex);
     const unsignedPChainWeightWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(validatorWeight), client.network === 'fuji' ? 5 : 1, pChainChainID);
     const unsignedPChainWeightWarpMsgHex = bytesToHex(unsignedPChainWeightWarpMsg);
-
     // Aggregate signatures from validators for the P-Chain weight message
     logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-    const signedPChainWeightMessage = await collectSignatures(client.network, unsignedPChainWeightWarpMsgHex);
+    const signedPChainWeightMessage = await collectSignatures({ network: client.network, message: unsignedPChainWeightWarpMsgHex, subnetId });
     logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
     // Get the uptime message
@@ -949,7 +952,7 @@ export async function completeDelegatorRegistrationStakingVault(
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client.network,
-        rpcUrl,
+        `${rpcUrl}/ext/bc/${sourceChainID}`,
         nodeId,
         warpNetworkID,
         sourceChainID
@@ -1170,7 +1173,7 @@ export async function completeDelegatorRemovalStakingVault(
 
         // Aggregate signatures from validators for the weight message
         logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-        const signedL1ValidatorWeightMessage = await collectSignatures(client.network, unsignedL1ValidatorWeightMessage);
+        const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, subnetId: subnetID });
         logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
         // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -1196,7 +1199,7 @@ export async function completeDelegatorRemovalStakingVault(
 
         // Aggregate signatures from validators for the P-Chain weight message
         logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-        const signedPChainMessage = await collectSignatures(client.network, unsignedPChainWarpMsgHex, unsignedPChainWarpMsgHex);
+        const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, subnetId: subnetID, justification: unsignedPChainWarpMsgHex });
         logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
 
         // Convert the signed warp message to bytes and pack into access list
@@ -1218,7 +1221,7 @@ export async function completeDelegatorRemovalStakingVault(
 
         if (waitValidatorVisible) {
             logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-            await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
+            await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
         }
 
         logger.log("completeDelegatorRemoval executed successfully, tx hash:", hash);

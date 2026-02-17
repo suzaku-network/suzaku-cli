@@ -7,6 +7,10 @@ import { Network } from '../client';
 import { pChainChainID } from '../config';
 import { logger } from './logger';
 
+interface CollectSignaturesProps {
+    network: Network, message: string, justification?: string, subnetId?: string
+}
+
 export interface PackL1ConversionMessageArgs {
     subnetId: string;
     managerChainID: string;
@@ -261,7 +265,9 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         },
         body: JSON.stringify({
             "message": fromBytes(message, 'hex'),
-            "justification": fromBytes(justification, 'hex')
+            "justification": fromBytes(justification, 'hex'),
+            "signingSubnetId": params.subnetId,
+            "quorumPercentage": 67
         })
     }), 2000, 30000, (result) => result.status !== 500);
 
@@ -274,21 +280,22 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     return signedMessage;
 }
 
-export async function collectSignatures(network: Network, message: string, justification?: string): Promise<string> {
+export async function collectSignatures({ network, message, justification, subnetId }: CollectSignaturesProps): Promise<string> {
+    
 
     // Use the signature aggregation API from Glacier
-    const body: { message: string; justification?: string; signingSubnetId?: string } = { message };
-    if (justification) {
-        body.justification = justification;
-        // body.signingSubnetId = pChainChainID;
-    }
+    const body: { message: string; justification?: string; signingSubnetId?: string, quorumPercentage?: number } = { message };
+    if (justification) body.justification = justification;
+    if (subnetId) body.signingSubnetId = subnetId;
+    body.quorumPercentage = 67;
     // Test every 2 seconds, timeout after 30 seconds
     const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
+            
         },
         body: JSON.stringify(body)
     }), 2000, 30000, (result) => result.status !== 500);
@@ -297,7 +304,6 @@ export async function collectSignatures(network: Network, message: string, justi
         const errorText = await signResponse.text();
         throw new Error(errorText || `HTTP error! status: ${signResponse.status}`);
     }
-
     const { signedMessage } = await signResponse.json() as SignatureResponse;
     return signedMessage;
 }

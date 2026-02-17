@@ -187,13 +187,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
             } else {
               hash = await fn(args, { chain: null, account: client.account!, ...options })
             }
-
-            logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`, hash, options });
+            const sig = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
+            logger.addData('txs', { to: contract.address, invocation: sig, hash, options });
 
             if (!hash) return undefined; // when skipping
 
             const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + JSON.stringify(receipt.logs, bigintReplacer));
+            if (receipt.status === 'reverted') throw new Error(`Transaction ${color.red(sig)} (hash: ${hash}) reverted, pls resend the transaction:\n` + JSON.stringify(receipt.logs, bigintReplacer));
 
             const logs = parseEventLogs({
               abi: SuzakuABI[abi],
@@ -214,7 +214,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
         }
       },
     };
-
+    
     (contract as any).write = new Proxy(contract.write as Record<string, any>, writeHandler);
 
     // Proxy handler for safeWrite methods to simulate the write operation before executing it

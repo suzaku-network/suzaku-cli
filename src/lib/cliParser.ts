@@ -43,7 +43,7 @@ export function parseSecretName(value: string,): Hex {
 
 export const ParserHex = (value: string, bytes?: number, errorMsg?: string) => {
   if (!isValidHex(value, bytes)) {
-    throw new Error(errorMsg ? errorMsg : 'Invalid Hex string');
+    throw new Error(errorMsg ? errorMsg : `Invalid Hex string ${value}`);
   }
   return value as Hex;
 };
