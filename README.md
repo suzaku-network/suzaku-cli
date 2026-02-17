@@ -38,6 +38,8 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [Rewards Commands (`rewards`)](#rewards-commands-rewards)
     - [Key Store Commands (`key`)](#key-store-commands-key)
     - [Validator Manager Contract Commands (`vmc`)](#vmc-commands-vmc)
+    - [KiteStakingManager Commands (`kite-staking-manager`)](#kitestakingmanager-commands-kite-staking-manager)
+    - [StakingVault Commands (`staking-vault`)](#stakingvault-commands-staking-vault)
     - [Ledger Commands (`ledger`)](#ledger-commands-ledger)
     - [Safe Commands (`safe`)](#safe-commands-safe)
     - [Access Control Commands (`access-control`)](#access-control-commands-access-control)
@@ -519,7 +521,8 @@ suzaku-cli --help
 
 ### Global Options
 
-- `-n, --network <network>`: Network to use (fuji, mainnet, anvil). Default: **mainnet**.
+- `-n, --network <network>`: Network to use (fuji, mainnet, anvil, kitetestnet, custom). Default: **mainnet**.
+- `-r, --rpc-url <rpcUrl>`: RPC URL for a custom network. Automatically sets `--network` to `custom`. If `--network custom` is used, this option is **required**.
 - `-k, --private-key <privateKey>`: Private key for signing transactions.
 - `-s, --secret-name <secretName>`: The keystore secret name containing the private key.
 - `-l, --ledger`: Use Ledger hardware wallet for signing (conflicts with `-k` and `-s`).
@@ -527,6 +530,8 @@ suzaku-cli --help
 - `--json`: Output logs in JSON format.
 - `-y, --yes`: Automatic yes to prompts.
 - `--safe <address>`: Use Safe smart account for transactions (compatible with Ledger).
+- `--cast`: Output equivalent Foundry `cast` commands instead of executing write transactions (conflicts with `--safe`).
+- `--skip-abi-validation`: Skip the ABI validation for used contracts.
 
 **Environment variables:**
 
@@ -840,6 +845,78 @@ suzaku-cli --help
 
 - **info `<middlewareAddress>`**
   Get detailed information about a Validator Manager Contract.
+
+### KiteStakingManager Commands (`kite-staking-manager`)
+
+Alias: `ksm`
+
+- **update-staking-config `<kiteStakingManagerAddress>` `<minimumStakeAmount>` `<maximumStakeAmount>` `<minimumStakeDuration>` `<minimumDelegationFeeBips>` `<maximumStakeMultiplier>`**
+  Update staking configuration.
+- **initiate-validator-registration `<kiteStakingManagerAddress>` `<nodeId>` `<blsKey>` `<delegationFeeBips>` `<minStakeDuration>` `<rewardRecipient>` `<stakeAmount>` [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**
+  Initiate validator registration on KiteStakingManager.
+- **complete-validator-registration `<kiteStakingManagerAddress>` `<initiateTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the KiteStakingManager after initiating registration.
+- **initiate-delegator-registration `<kiteStakingManagerAddress>` `<nodeId>` `<rewardRecipient>` `<stakeAmount>`**
+  Initiate delegator registration on KiteStakingManager.
+- **complete-delegator-registration `<kiteStakingManagerAddress>` `<initiateTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**
+  Complete delegator registration on the P-Chain and on the KiteStakingManager after initiating registration.
+- **initiate-delegator-removal `<kiteStakingManagerAddress>` `<delegationID>` [--include-uptime-proof] [--rpc-url `<rpcUrl>`]**
+  Initiate delegator removal on KiteStakingManager.
+- **complete-delegator-removal `<kiteStakingManagerAddress>` `<initiateRemovalTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--delegation-id `<delegationID>`...] [--initiate-tx `<initiateTx>`]**
+  Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal.
+- **initiate-validator-removal `<kiteStakingManagerAddress>` `<nodeId>` [--include-uptime-proof]**
+  Initiate validator removal on KiteStakingManager.
+- **complete-validator-removal `<kiteStakingManagerAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--node-id `<nodeId>`...] [--initiate-tx `<initiateTx>`...]**
+  Complete validator removal on the P-Chain and on the KiteStakingManager after initiating removal.
+
+### StakingVault Commands (`staking-vault`)
+
+Alias: `sv`
+
+- **deposit `<stakingVaultAddress>` `<amount>` `<minShares>`**
+  Deposit native tokens (AVAX) into the StakingVault. `minShares` provides slippage protection.
+- **request-withdrawal `<stakingVaultAddress>` `<shares>`**
+  Request withdrawal from the StakingVault.
+- **claim-withdrawal `<stakingVaultAddress>` `<requestId>`**
+  Claim a withdrawal from the StakingVault.
+- **process-epoch `<stakingVaultAddress>`**
+  Process the current epoch in the StakingVault.
+- **add-operator `<stakingVaultAddress>` `<operator>` `<allocationBips>` `<feeRecipient>`**
+  Add an operator to the StakingVault. `allocationBips` is in basis points (1 bips = 0.01%).
+- **update-operator-allocations `<stakingVaultAddress>` `<operator>` `<allocationBips>`**
+  Update operator allocations in the StakingVault.
+- **initiate-validator-registration `<stakingVaultAddress>` `<nodeId>` `<blsKey>` `<stakeAmount>` [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**
+  Initiate validator registration in the StakingVault.
+- **complete-validator-registration `<stakingVaultAddress>` `<initiateTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the StakingVault after initiating registration.
+- **initiate-validator-removal `<stakingVaultAddress>` `<nodeId>`**
+  Initiate validator removal in the StakingVault.
+- **complete-validator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--node-id `<nodeId>`...] [--initiate-tx `<initiateTx>`]**
+  Complete validator removal on the P-Chain and on the StakingVault after initiating removal.
+- **initiate-delegator-registration `<stakingVaultAddress>` `<nodeId>` `<amount>`**
+  Initiate delegator registration in the StakingVault.
+- **complete-delegator-registration `<stakingVaultAddress>` `<initiateTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**
+  Complete delegator registration on the P-Chain and on the StakingVault after initiating registration.
+- **initiate-delegator-removal `<stakingVaultAddress>` `<delegationID>`**
+  Initiate delegator removal in the StakingVault.
+- **complete-delegator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--delegation-id `<delegationID>`...] [--initiate-tx `<initiateTx>`]**
+  Complete delegator removal on the P-Chain and on the StakingVault after initiating removal.
+- **info `<stakingVaultAddress>`**
+  Get general overview of the StakingVault.
+- **fees-info `<stakingVaultAddress>`**
+  Get fees configuration of the StakingVault.
+- **operators-info `<stakingVaultAddress>`**
+  Get operators details of the StakingVault.
+- **validators-info `<stakingVaultAddress>`**
+  Get validators details per operator of the StakingVault.
+- **delegators-info `<stakingVaultAddress>`**
+  Get delegations details per operator of the StakingVault.
+- **withdrawals-info `<stakingVaultAddress>`**
+  Get withdrawal queue info of the StakingVault.
+- **epoch-info `<stakingVaultAddress>`**
+  Get epoch info of the StakingVault.
+- **full-info `<stakingVaultAddress>`**
+  Get all information about the StakingVault (combines all info commands above).
 
 ### Ledger Commands (`ledger`)
 
