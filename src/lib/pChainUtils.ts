@@ -383,7 +383,6 @@ export async function getValidatorsAt(client: ExtendedClient, subnetId: string):
     const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const currentHeight = await pvmApi.getHeight();
-    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,
@@ -400,8 +399,6 @@ export async function getValidatorsAt(client: ExtendedClient, subnetId: string):
 export async function validates(client: ExtendedClient, subnetId: string): Promise<string | undefined> {
     const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-    const currentHeight = await pvmApi.getHeight();
-    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.validates({
         subnetID: subnetId,
@@ -417,8 +414,6 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
 export async function validatedBy(client: ExtendedClient, blockchainId: string): Promise<string | undefined> {
     const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-    const currentHeight = await pvmApi.getHeight();
-    logger.log("L1: ", blockchainId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.validatedBy({
         blockchainID: blockchainId,
@@ -605,10 +600,16 @@ export async function convertSubnetToL1(params:
         validators,
     });
     // 2) collect signatures
+
+    const signingSubnetId = await validatedBy(client, params.validatorManagerBlockchainID);
+    if (!signingSubnetId) {
+        throw new Error("Could not get signing subnet ID");
+    }
     const signed = await collectSignaturesInitializeValidatorSet({
         network: client.network,
         subnetId: params.subnetId,
         validatorManagerBlockchainID: params.validatorManagerBlockchainID,
+        validatorManagerSubnetID: signingSubnetId,
         managerAddress,
         validators,
     });

@@ -2,13 +2,12 @@ import { packValidationUptimeMessage, collectSignatures, packWarpIntoAccessList 
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Account } from 'viem';
-import { generateClient, Network } from "./client";
+import { ExtendedClient, Network } from "./client";
 import { logger } from './lib/logger';
 import { validatedBy } from "./lib/pChainUtils";
 
 export async function getValidationUptimeMessage(
-  network: Network,
+  client: ExtendedClient,
   rpcUrl: string,
   nodeId: string,
   networkID: number,
@@ -41,10 +40,8 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const client = await generateClient(network)
   const signingSubnetId = await validatedBy(client, sourceChainID)
-  logger.log("Signing Subnet ID: ", signingSubnetId);
-  const signedValidationUptimeMessage = await collectSignatures({ network, message: unsignedValidationUptimeMessageHex, subnetId: signingSubnetId });
+  const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
   logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
@@ -70,7 +67,7 @@ export async function computeValidatorUptime(
 // New orchestrator function
 export async function reportAndSubmitValidatorUptime(
   // Parameters for getting the uptime message
-  network: Network,
+  client: ExtendedClient,
   rpcUrl: string,
   nodeId: string,
   sourceChainID: string, // The chain ID for which uptime is being reported
@@ -80,11 +77,11 @@ export async function reportAndSubmitValidatorUptime(
   logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
-  const warpNetworkID = network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
+  const warpNetworkID = client.network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
 
   // Step 1: Get the signed validation uptime message
   let signedUptimeHex = await getValidationUptimeMessage(
-    network,
+    client,
     rpcUrl,
     nodeId,
     warpNetworkID,

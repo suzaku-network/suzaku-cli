@@ -3264,7 +3264,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             await getValidationUptimeMessage(
-                client.network,
+                client,
                 rpcUrl,
                 nodeId,
                 client.network === "fuji" ? 5 : 1,
@@ -3306,7 +3306,7 @@ async function main() {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
-                client.network,
+                client,
                 rpcUrl,
                 nodeId,
                 blockchainId,
