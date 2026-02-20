@@ -12,7 +12,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com:suzaku-network/suzaku-cli.git"
+    "url": "https://github.com/suzaku-network/suzaku-cli"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

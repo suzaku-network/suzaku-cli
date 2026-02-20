@@ -166,9 +166,11 @@ export async function getValidatorUptimeForEpoch(
   validationID: Hex,
   epoch: number
 ) {
-  return await uptimeTracker.read.validatorUptimePerEpoch(
+  const uptime = await uptimeTracker.read.validatorUptimePerEpoch(
     [epoch, validationID]
   );
+  logger.addData('validatorUptime', uptime.toString());
+  return uptime;
 }
 
 /**
@@ -179,9 +181,11 @@ export async function isValidatorUptimeSetForEpoch(
   validationID: Hex,
   epoch: number
 ) {
-  return await uptimeTracker.read.isValidatorUptimeSet(
+  const isSet = await uptimeTracker.read.isValidatorUptimeSet(
     [epoch, validationID]
   );
+  logger.addData('isValidatorUptimeSet', isSet);
+  return isSet;
 }
 
 /**
@@ -192,9 +196,11 @@ export async function getOperatorUptimeForEpoch(
   operator: Hex,
   epoch: number
 ) {
-  return await uptimeTracker.read.operatorUptimePerEpoch(
+  const uptime = await uptimeTracker.read.operatorUptimePerEpoch(
     [epoch, operator]
   );
+  logger.addData('operatorUptime', uptime.toString());
+  return uptime;
 }
 
 /**
@@ -205,9 +211,11 @@ export async function isOperatorUptimeSetForEpoch(
   operator: Hex,
   epoch: number
 ) {
-  return await uptimeTracker.read.isOperatorUptimeSet(
+  const isSet = await uptimeTracker.read.isOperatorUptimeSet(
     [epoch, operator]
   );
+  logger.addData('isOperatorUptimeSet', isSet);
+  return isSet;
 }
 
 /**

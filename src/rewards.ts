@@ -193,6 +193,7 @@ export async function getEpochRewards(
     [epoch]
   ) as bigint;
   logger.log(`Rewards amount at epoch ${epoch}: ${amount.toString()}`);
+  logger.addData('epochRewards', amount.toString());
   return amount;
 }
 
@@ -209,6 +210,7 @@ export async function getOperatorShares(
   ) as bigint;
 
   logger.log(`Operator ${operator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.addData('operatorShares', share.toString());
   return share;
 }
 
@@ -274,6 +276,7 @@ export async function getDistributionBatch(
   logger.log(`  Last processed operator: ${lastProcessedOperator.toString()}`);
   logger.log(`  Is complete: ${isComplete}`);
 
+  logger.addData('distributionBatch', { lastProcessedOperator: lastProcessedOperator.toString(), isComplete });
   return { lastProcessedOperator, isComplete };
 }
 
@@ -292,6 +295,7 @@ export async function getFeesConfiguration(
   logger.log(`  Operator fee: ${operatorFee}`);
   logger.log(`  Curator fee: ${curatorFee}`);
 
+  logger.addData('feesConfig', { protocolFee: Number(protocolFee), operatorFee: Number(operatorFee), curatorFee: Number(curatorFee) });
   return { protocolFee, operatorFee, curatorFee };
 }
 
@@ -307,6 +311,7 @@ export async function getRewardsBipsForCollateralClass(
   );
 
   logger.log(`Rewards bips for collateral class ${collateralClass}: ${bips}`);
+  logger.addData('rewardsBips', Number(bips));
   return bips;
 }
 
@@ -319,6 +324,7 @@ export async function getMinRequiredUptime(
   const minUptime = await rewards.read.minRequiredUptime();
 
   logger.log(`Minimum required uptime: ${minUptime.toString()}`);
+  logger.addData('minRequiredUptime', minUptime.toString());
   return minUptime;
 }
 
