@@ -128,6 +128,7 @@ export async function middlewareGetOperatorStake(
     [operator, epoch, collateralClass]
   );
   logger.log(val);
+  logger.addData('operatorStake', val.toString());
 }
 
 // getCurrentEpoch
@@ -137,6 +138,7 @@ export async function middlewareGetCurrentEpoch(
   logger.log("Reading current epoch...");
   const val = await middleware.read.getCurrentEpoch();
   logger.log(val);
+  logger.addData('epoch', Number(val));
 }
 
 // getEpochStartTs
@@ -150,6 +152,7 @@ export async function middlewareGetEpochStartTs(
     [epoch]
   );
   logger.log(val);
+  logger.addData('epochStartTs', Number(val));
 }
 
 // getActiveNodesForEpoch
@@ -176,7 +179,7 @@ export async function middlewareGetOperatorNodesLength(
 
   const length = await middleware.read.getOperatorNodesLength([operator]);
   logger.log(length);
-
+  logger.addData('nodesLength', Number(length));
 }
 
 // nodeStakeCache
@@ -189,7 +192,7 @@ export async function middlewareGetNodeStakeCache(
 
   const val = await middleware.read.nodeStakeCache([epoch, validationId]);
   logger.log(val);
-
+  logger.addData('nodeStakeCache', val.toString());
 }
 
 // operatorLockedStake
@@ -201,7 +204,7 @@ export async function middlewareGetOperatorLockedStake(
 
   const val = await middleware.read.operatorLockedStake([operator]);
   logger.log(val);
-
+  logger.addData('lockedStake', val.toString());
 }
 
 // nodePendingRemoval
@@ -213,7 +216,7 @@ export async function middlewareNodePendingRemoval(
 
   const val = await middleware.read.nodePendingRemoval([validatorId]);
   logger.log(val);
-
+  logger.addData('pendingRemoval', val);
 }
 
 // nodePendingUpdate - Note: This function is not available in the current contract
@@ -235,7 +238,7 @@ export async function middlewareGetOperatorUsedStake(
 
   const val = await middleware.read.getOperatorUsedStakeCached([operator]);
   logger.log(val);
-
+  logger.addData('usedStake', val.toString());
 }
 
 // getOperatorUsedStakeCachedPerEpoch
@@ -260,7 +263,7 @@ export async function middlewareGetAllOperators(
 
   const operators = await middleware.read.getAllOperators();
   logger.log(operators);
-
+  logger.addData('operators', operators);
 }
 
 /**
@@ -282,6 +285,7 @@ export async function getCollateralClassIds(
 ) {
   const collateralClassIds = await middleware.read.getCollateralClassIds();
   logger.log("Collateral class IDs:", collateralClassIds);
+  logger.addData('collateralClassIds', collateralClassIds.map(id => id.toString()));
   return collateralClassIds;
 }
 
@@ -293,6 +297,7 @@ export async function getActiveCollateralClasses(
 ) {
   const result = await middleware.read.getActiveCollateralClasses();
   logger.log("Active collateral classes - Primary:", result[0], "Secondaries:", result[1]);
+  logger.addData('activeCollateralClasses', { primary: result[0].toString(), secondaries: result[1].map((s: bigint) => s.toString()) });
   return result;
 }
 
@@ -353,6 +358,14 @@ export async function middlewareGetNodeLogs(
     return logs;
   }
   // Human readable addresses and structured logs
+  logger.addData('nodeLogs', logs.map((log: DecodedEvent) => ({
+    blockNumber: log.blockNumber.toString(),
+    transactionHash: log.transactionHash,
+    eventName: log.eventName,
+    address: log.address,
+    args: Object.fromEntries(Object.entries(log.args).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v])),
+    timestamp: log.timestamp,
+  })));
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
     log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
     return log;

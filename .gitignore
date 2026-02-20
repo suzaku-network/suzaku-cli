@@ -2,3 +2,19 @@
 .venv
 node_modules
 dist
+
+# Claude Code tooling (personal, not project)
+/.claude/
+/.claude-backup/
+/CLAUDE.md
+/.mcp.json
+
+# Backup/sandbox artifacts
+*.broken.backup
+
+# IDE
+/.idea
+/.vscode
+
+# Misc sandbox artifacts
+/.gitmodules
