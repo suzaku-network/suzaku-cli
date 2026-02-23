@@ -166,7 +166,7 @@ server.tool(
     network: Network.optional(),
     rpcUrl: RpcUrl,
   },
-  { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+  { readOnlyHint: true, idempotentHint: true },
   async ({ network, rpcUrl }) => {
     const status: Record<string, unknown> = { server: 'ok', version: '0.1.0' };
 
@@ -190,7 +190,6 @@ server.tool(
       status.pchainSigner = 'configured';
     }
 
-    // Check CLI accessibility by running a lightweight read command
     // Use operator-registry get-all as a connectivity + CLI health probe
     if (network || rpcUrl) {
       const probe = await runCli(
@@ -205,8 +204,8 @@ server.tool(
     } else {
       // Without a network, just verify the CLI binary is reachable by invoking --help
       const probe = await runCli(['--help'], {});
-      status.cli = probe.success || probe.data !== null ? 'ok' : 'unreachable';
-      if (!probe.success && probe.data === null) {
+      status.cli = probe.success ? 'ok' : 'unreachable';
+      if (!probe.success) {
         status.cliError = probe.error;
       }
     }
@@ -240,6 +239,5 @@ registerStakingVaultTools(server);
 registerBalancerTools(server);
 registerPoaSecurityModuleTools(server);
 
-// Start the server with stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

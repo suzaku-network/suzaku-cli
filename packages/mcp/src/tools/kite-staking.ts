@@ -1,11 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
-
-/** Timeout for cross-chain warp operations (5 minutes) */
-const WARP_TIMEOUT = 300_000;
 
 export function registerKiteStakingTools(server: McpServer) {
   // ── Config ──
@@ -214,7 +211,7 @@ export function registerKiteStakingTools(server: McpServer) {
     { destructiveHint: true },
     async ({ kiteStakingManagerAddress, delegationId, includeUptimeProof, uptimeRpcUrl, network, rpcUrl }) => {
       if (uptimeRpcUrl && rpcUrl) {
-        return { content: [{ type: 'text' as const, text: 'Error: Cannot set both rpcUrl and uptimeRpcUrl — the CLI uses a single --rpc-url flag. Use uptimeRpcUrl for uptime proof, or rpcUrl for the network endpoint.' }], isError: true };
+        return formatGuardError('Cannot set both rpcUrl and uptimeRpcUrl — the CLI uses a single --rpc-url flag. Use uptimeRpcUrl for uptime proof, or rpcUrl for the network endpoint.');
       }
       const pkErr = requireSigner();
       if (pkErr) return pkErr;

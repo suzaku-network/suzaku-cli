@@ -71,7 +71,6 @@ export async function confirmWriteOperation(
   if (process.env.SUZAKU_MCP_SUGGEST === 'true') return null;
 
   // Testnet: existing REQUIRE_CONFIRM behavior
-  if (requireConfirm === 'false') return null;
   if (requireConfirm !== 'true') return null;
 
   if (!guardServer) return null;

@@ -21,7 +21,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-all-operators', middlewareAddress],
@@ -41,7 +41,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, epoch, collateralClass, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-operator-stake', middlewareAddress, operator, epoch, collateralClass],
@@ -60,7 +60,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, epoch, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-active-nodes-for-epoch', middlewareAddress, operator, epoch],
@@ -77,7 +77,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-current-epoch', middlewareAddress],
@@ -95,7 +95,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-operator-locked-stake', middlewareAddress, operator],
@@ -113,7 +113,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'get-operator-available-stake', middlewareAddress, operator],
@@ -132,7 +132,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, nodeId, snowscanApiKey, network, rpcUrl }) => {
       const args = ['middleware', 'node-logs', middlewareAddress];
       if (nodeId) args.push('--node-id', nodeId);
@@ -151,7 +151,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, account, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['middleware', 'account-info', middlewareAddress, account],
@@ -174,7 +174,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, epoch, rewardsAddress, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
 
@@ -200,7 +200,6 @@ export function registerMiddlewareTools(server: McpServer) {
         ),
       ];
 
-      // Optional rewards
       if (rewardsAddress) {
         phase2Calls.push(
           runCli(['rewards', 'get-epoch-rewards', rewardsAddress, currentEpoch], opts),
@@ -208,7 +207,6 @@ export function registerMiddlewareTools(server: McpServer) {
         );
       }
 
-      // Optional uptime
       if (uptimeAddress) {
         phase2Calls.push(
           runCli(['uptime', 'get-operator-uptime', uptimeAddress, operator, currentEpoch], opts),
@@ -251,7 +249,7 @@ export function registerMiddlewareTools(server: McpServer) {
           locked: extractData(lockedResult).lockedStake ?? null,
           byClass,
         },
-        nodes: nodes,
+        nodes,
         activeNodes: activeNodesData.nodeIds ?? [],
         ...(rewards ? { rewards } : {}),
         ...(uptime ? { uptime } : {}),
@@ -270,7 +268,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, vaultManagerAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
 
@@ -297,7 +295,6 @@ export function registerMiddlewareTools(server: McpServer) {
           : []),
       ]);
 
-      // Optional vault data
       let vaultCountCall: Promise<CliResult> | undefined;
       if (vaultManagerAddress) {
         vaultCountCall = runCli(['vault-manager', 'get-vault-count', vaultManagerAddress], opts);
@@ -320,7 +317,6 @@ export function registerMiddlewareTools(server: McpServer) {
         };
       });
 
-      // Phase 3: vault listing (if vault manager provided and count > 0)
       let vaults: Record<string, unknown>[] | undefined;
       if (vaultCountResult) {
         const count = (extractData(vaultCountResult).vaultCount as number) ?? 0;
@@ -338,7 +334,7 @@ export function registerMiddlewareTools(server: McpServer) {
         collateralClasses: classIds,
         activeCollateralClasses: activeClasses,
         operators: operatorSummaries,
-        totals: { operatorCount: operators.length, vaultCount: vaults?.length },
+        totals: { operatorCount: operators.length, vaultCount: vaults?.length ?? 0 },
         ...(vaults ? { vaults } : {}),
       };
 
@@ -358,8 +354,8 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
-    async ({ middlewareAddress, rewardsAddress, startEpoch: epoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, rewardsAddress, startEpoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
       const numEpochs = Math.min(epochCount ?? 1, 10);
 
@@ -376,8 +372,8 @@ export function registerMiddlewareTools(server: McpServer) {
       const feesConfig = extractData(feesResult).feesConfig;
       const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
 
-      const startEpoch = epoch ? Number(epoch) : Math.max(currentEpoch - 1, 0);
-      const epochRange = Array.from({ length: numEpochs }, (_, i) => startEpoch - i).filter(e => e >= 0);
+      const start = startEpoch ? Number(startEpoch) : Math.max(currentEpoch - 1, 0);
+      const epochRange = Array.from({ length: numEpochs }, (_, i) => start - i).filter(e => e >= 0);
 
       // Phase 2: per-class reward bips + min uptime
       const configCalls = [
@@ -417,13 +413,13 @@ export function registerMiddlewareTools(server: McpServer) {
 
         const operatorData = operators.map(op => {
           const shares = extractData(results[ridx++]).operatorShares;
-          return { address: op, shares };
+          return { address: op, shares, uptime: undefined as unknown, uptimeSet: undefined as unknown };
         });
 
         if (uptimeAddress) {
           operatorData.forEach(od => {
-            (od as Record<string, unknown>).uptime = extractData(results[ridx++]).operatorUptime;
-            (od as Record<string, unknown>).uptimeSet = extractData(results[ridx++]).isOperatorUptimeSet;
+            od.uptime = extractData(results[ridx++]).operatorUptime;
+            od.uptimeSet = extractData(results[ridx++]).isOperatorUptimeSet;
           });
         }
 
@@ -455,7 +451,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, epoch, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
 
@@ -518,7 +514,7 @@ export function registerMiddlewareTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, uptimeAddress, epochs: epochCount, startEpoch, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
       const numEpochs = Math.min(epochCount ?? 5, 10);
@@ -694,4 +690,3 @@ export function registerMiddlewareTools(server: McpServer) {
     },
   );
 }
-
