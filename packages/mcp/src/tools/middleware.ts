@@ -179,12 +179,13 @@ export function registerMiddlewareTools(server: McpServer) {
       const opts = { network, rpcUrl };
 
       // Phase 1: independent reads in parallel
-      const [epochResult, classIdsResult, usedResult, lockedResult, nodesResult] = await Promise.all([
+      const [epochResult, classIdsResult, usedResult, lockedResult, nodesResult, epochConfigResult] = await Promise.all([
         epoch ? Promise.resolve({ success: true, data: { epoch: Number(epoch) } } as CliResult) : runCli(['middleware', 'get-current-epoch', middlewareAddress], opts),
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
         runCli(['middleware', 'get-operator-used-stake', middlewareAddress, operator], opts),
         runCli(['middleware', 'get-operator-locked-stake', middlewareAddress, operator], opts),
         runCli(['middleware', 'get-operator-nodes', middlewareAddress, operator], opts),
+        runCli(['middleware', 'get-epoch-config', middlewareAddress], opts),
       ]);
 
       const currentEpoch = String(extractData(epochResult).epoch ?? epoch ?? 0);
@@ -198,6 +199,8 @@ export function registerMiddlewareTools(server: McpServer) {
         ...classIds.map(classId =>
           runCli(['middleware', 'get-operator-stake', middlewareAddress, operator, currentEpoch, classId], opts)
         ),
+        runCli(['middleware', 'get-epoch-start-ts', middlewareAddress, currentEpoch], opts),
+        runCli(['middleware', 'get-cache-status', middlewareAddress, '--epoch', currentEpoch], opts),
       ];
 
       if (rewardsAddress) {
@@ -224,6 +227,14 @@ export function registerMiddlewareTools(server: McpServer) {
         byClass[classId] = (extractData(phase2Results[idx++]).operatorStake as string) ?? 'unknown';
       }
 
+      const epochStartTs = Number(extractData(phase2Results[idx++]).epochStartTs ?? 0);
+      const cacheStatusData = extractData(phase2Results[idx++]).cacheStatus as {
+        epoch: number;
+        cacheByClass: Record<string, boolean>;
+        rebalanceByOperator: Record<string, boolean>;
+        allClassesCached: boolean;
+      } | undefined;
+
       let rewards: Record<string, unknown> | undefined;
       if (rewardsAddress) {
         rewards = {
@@ -240,6 +251,31 @@ export function registerMiddlewareTools(server: McpServer) {
         };
       }
 
+      // Compute epoch timing from epochConfig + epochStartTs
+      const epochConfigData = extractData(epochConfigResult).epochConfig as {
+        epochDuration: number;
+        updateWindow: number;
+        epoch: number;
+        lastNodeStakeUpdateEpoch: number;
+      } | undefined;
+
+      let epochTiming: Record<string, unknown> | undefined;
+      if (epochConfigData && epochStartTs) {
+        const nextEpochStartTs = epochStartTs + epochConfigData.epochDuration;
+        const updateWindowDeadlineTs = epochStartTs + epochConfigData.updateWindow;
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        epochTiming = {
+          currentEpochStartTs: epochStartTs,
+          nextEpochStartTs,
+          updateWindowDeadlineTs,
+          updateWindowOpen: nowSeconds < updateWindowDeadlineTs,
+          secondsUntilNextEpoch: Math.max(0, nextEpochStartTs - nowSeconds),
+        };
+      }
+
+      // Per-operator rebalance flag
+      const rebalancedThisEpoch = cacheStatusData?.rebalanceByOperator?.[operator] ?? null;
+
       const dashboard = {
         operator,
         epoch: currentEpoch,
@@ -251,6 +287,8 @@ export function registerMiddlewareTools(server: McpServer) {
         },
         nodes,
         activeNodes: activeNodesData.nodeIds ?? [],
+        ...(epochTiming ? { epochTiming } : {}),
+        rebalancedThisEpoch,
         ...(rewards ? { rewards } : {}),
         ...(uptime ? { uptime } : {}),
       };
@@ -273,11 +311,13 @@ export function registerMiddlewareTools(server: McpServer) {
       const opts = { network, rpcUrl };
 
       // Phase 1: global state
-      const [epochResult, operatorsResult, classIdsResult, activeClassesResult] = await Promise.all([
+      const [epochResult, operatorsResult, classIdsResult, activeClassesResult, epochConfigResult, cacheStatusResult] = await Promise.all([
         runCli(['middleware', 'get-current-epoch', middlewareAddress], opts),
         runCli(['middleware', 'get-all-operators', middlewareAddress], opts),
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
         runCli(['middleware', 'get-active-collateral-classes', middlewareAddress], opts),
+        runCli(['middleware', 'get-epoch-config', middlewareAddress], opts),
+        runCli(['middleware', 'get-cache-status', middlewareAddress], opts),
       ]);
 
       const currentEpoch = String(extractData(epochResult).epoch ?? 0);
@@ -329,12 +369,41 @@ export function registerMiddlewareTools(server: McpServer) {
         }
       }
 
+      // Extract epoch config and cache status
+      const epochConfigData = extractData(epochConfigResult).epochConfig as {
+        epochDuration: number;
+        updateWindow: number;
+        epoch: number;
+        lastNodeStakeUpdateEpoch: number;
+      } | undefined;
+
+      const cacheStatusData = extractData(cacheStatusResult).cacheStatus as {
+        epoch: number;
+        cacheByClass: Record<string, boolean>;
+        rebalanceByOperator: Record<string, boolean>;
+        allClassesCached: boolean;
+      } | undefined;
+
       const overview = {
         epoch: currentEpoch,
         collateralClasses: classIds,
         activeCollateralClasses: activeClasses,
         operators: operatorSummaries,
         totals: { operatorCount: operators.length, vaultCount: vaults?.length ?? 0 },
+        ...(epochConfigData ? {
+          epochConfig: {
+            epochDuration: epochConfigData.epochDuration,
+            updateWindow: epochConfigData.updateWindow,
+            nodeStakeCacheLag: epochConfigData.epoch - epochConfigData.lastNodeStakeUpdateEpoch,
+          },
+        } : {}),
+        ...(cacheStatusData ? {
+          cacheStatus: {
+            byClass: cacheStatusData.cacheByClass,
+            allClassesCached: cacheStatusData.allClassesCached,
+            rebalanceByOperator: cacheStatusData.rebalanceByOperator,
+          },
+        } : {}),
         ...(vaults ? { vaults } : {}),
       };
 
@@ -582,6 +651,88 @@ export function registerMiddlewareTools(server: McpServer) {
       };
 
       return formatResult({ success: true, data: report });
+    },
+  );
+
+  server.tool(
+    'middleware_epoch_status',
+    'Epoch operational readiness dashboard: timing (epoch start/end, seconds until next epoch), update window status (open/closed, deadline), stake cache completeness, and per-operator rebalance flags. Pure MCP-layer arithmetic over read-only CLI calls.',
+    {
+      middlewareAddress: Address.describe('L1Middleware contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, network, rpcUrl }) => {
+      const opts = { network, rpcUrl };
+
+      // Phase 1: epoch config
+      const epochConfigResult = await runCli(
+        ['middleware', 'get-epoch-config', middlewareAddress],
+        opts,
+      );
+      const epochConfig = extractData(epochConfigResult).epochConfig as {
+        epochDuration: number;
+        updateWindow: number;
+        epoch: number;
+        lastNodeStakeUpdateEpoch: number;
+      } | undefined;
+
+      if (!epochConfig) {
+        return formatResult(epochConfigResult);
+      }
+
+      const currentEpoch = epochConfig.epoch;
+
+      // Phase 2: epoch start timestamp + cache status (parallel)
+      const [epochStartResult, cacheStatusResult] = await Promise.all([
+        runCli(['middleware', 'get-epoch-start-ts', middlewareAddress, String(currentEpoch)], opts),
+        runCli(['middleware', 'get-cache-status', middlewareAddress, '--epoch', String(currentEpoch)], opts),
+      ]);
+
+      const epochStartTs = Number(extractData(epochStartResult).epochStartTs ?? 0);
+      const cacheStatus = extractData(cacheStatusResult).cacheStatus as {
+        epoch: number;
+        cacheByClass: Record<string, boolean>;
+        rebalanceByOperator: Record<string, boolean>;
+        allClassesCached: boolean;
+      } | undefined;
+
+      // MCP-layer arithmetic
+      const epochEndTs = epochStartTs + epochConfig.epochDuration;
+      const updateWindowDeadlineTs = epochStartTs + epochConfig.updateWindow;
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const secondsUntilNextEpoch = Math.max(0, epochEndTs - nowSeconds);
+      const updateWindowOpen = nowSeconds < updateWindowDeadlineTs;
+      const secondsUntilWindowClose = updateWindowOpen ? updateWindowDeadlineTs - nowSeconds : 0;
+      const nodeStakeCacheLag = currentEpoch - epochConfig.lastNodeStakeUpdateEpoch;
+
+      const result = {
+        epoch: {
+          current: currentEpoch,
+          startTs: epochStartTs,
+          endTs: epochEndTs,
+          durationSeconds: epochConfig.epochDuration,
+          secondsUntilNextEpoch,
+        },
+        updateWindow: {
+          durationSeconds: epochConfig.updateWindow,
+          deadlineTs: updateWindowDeadlineTs,
+          open: updateWindowOpen,
+          secondsUntilClose: secondsUntilWindowClose,
+        },
+        stakeCache: {
+          nodeStakeCacheLag,
+          cacheUpToDate: nodeStakeCacheLag === 0,
+          byClass: cacheStatus?.cacheByClass ?? {},
+          allClassesCached: cacheStatus?.allClassesCached ?? false,
+        },
+        rebalance: {
+          byOperator: cacheStatus?.rebalanceByOperator ?? {},
+        },
+      };
+
+      return formatResult({ success: true, data: result });
     },
   );
 
