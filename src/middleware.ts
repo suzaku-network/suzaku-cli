@@ -587,3 +587,78 @@ export async function predictForceUpdateImpact(
 
   return predictions;
 }
+
+// getEpochConfig — multicall for epoch timing parameters
+export async function middlewareGetEpochConfig(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  logger.log("Reading epoch config...");
+
+  const [epochDuration, updateWindow, epoch, lastNodeStakeUpdateEpoch] = await middleware.multicall([
+    'EPOCH_DURATION',
+    'UPDATE_WINDOW',
+    'getCurrentEpoch',
+    'lastGlobalNodeStakeUpdateEpoch',
+  ]);
+
+  const result = {
+    epochDuration: Number(epochDuration),
+    updateWindow: Number(updateWindow),
+    epoch: Number(epoch),
+    lastNodeStakeUpdateEpoch: Number(lastNodeStakeUpdateEpoch),
+  };
+
+  logger.log(result);
+  logger.addData('epochConfig', result);
+}
+
+// getCacheStatus — totalStakeCached per class + rebalancedThisEpoch per operator
+export async function middlewareGetCacheStatus(
+  middleware: SafeSuzakuContract['L1Middleware'],
+  epochOverride?: number
+) {
+  logger.log("Reading cache status...");
+
+  const [currentEpoch, classIds, operators] = await middleware.multicall([
+    'getCurrentEpoch',
+    'getCollateralClassIds',
+    'getAllOperators',
+  ]);
+
+  const epoch = epochOverride ?? Number(currentEpoch);
+
+  // Parameterized reads in parallel
+  const cachePromises = (classIds as bigint[]).map(classId =>
+    middleware.read.totalStakeCached([epoch, classId])
+  );
+  const rebalancePromises = (operators as Hex[]).map(op =>
+    middleware.read.rebalancedThisEpoch([op, epoch])
+  );
+
+  const [cacheResults, rebalanceResults] = await Promise.all([
+    Promise.all(cachePromises),
+    Promise.all(rebalancePromises),
+  ]);
+
+  const cacheByClass: Record<string, boolean> = {};
+  (classIds as bigint[]).forEach((classId, i) => {
+    cacheByClass[classId.toString()] = cacheResults[i] as boolean;
+  });
+
+  const rebalanceByOperator: Record<string, boolean> = {};
+  (operators as Hex[]).forEach((op, i) => {
+    rebalanceByOperator[op] = rebalanceResults[i] as boolean;
+  });
+
+  const allClassesCached = Object.values(cacheByClass).every(v => v === true);
+
+  const result = {
+    epoch,
+    cacheByClass,
+    rebalanceByOperator,
+    allClassesCached,
+  };
+
+  logger.log(result);
+  logger.addData('cacheStatus', result);
+}

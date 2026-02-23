@@ -58,7 +58,9 @@ import {
     middlewareGetNodeLogs,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
-    weightWatcher
+    weightWatcher,
+    middlewareGetEpochConfig,
+    middlewareGetCacheStatus
 } from "./middleware";
 
 import {
@@ -1632,6 +1634,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
             logger.log(`Operator ${operator} available stake: ${availableStake}`);
+            logger.addData('availableStake', availableStake.toString());
         });
 
     // getAllOperators (read)
@@ -1677,6 +1680,33 @@ async function main() {
             await getActiveCollateralClasses(
                 middlewareSvc
             );
+        });
+
+    // getEpochConfig (read)
+    middlewareCmd
+        .command("get-epoch-config")
+        .description("Get epoch timing configuration (duration, update window, current epoch, last node stake update epoch)")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .action(async (middlewareAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetEpochConfig(middlewareSvc);
+        });
+
+    // getCacheStatus (read)
+    middlewareCmd
+        .command("get-cache-status")
+        .description("Get stake cache and rebalance status for current or specified epoch")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addOption(new Option('--epoch <epoch>', 'Epoch number (defaults to current)').argParser(ParserNumber))
+        .action(async (middlewareAddress, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetCacheStatus(middlewareSvc, options.epoch);
         });
 
     middlewareCmd
