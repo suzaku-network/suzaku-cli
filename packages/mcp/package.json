@@ -35,6 +35,7 @@
   "scripts": {
     "build": "tsc",
     "postbuild": "chmod +x dist/server.js",
+    "prepare": "pnpm build",
     "prepublishOnly": "pnpm build",
     "dev": "tsc --watch"
   },

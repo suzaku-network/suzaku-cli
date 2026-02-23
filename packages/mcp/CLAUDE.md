@@ -1,6 +1,6 @@
 # @suzaku/mcp
 
-MCP server exposing 62 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 67 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ src/
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
 ├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl
 ├── tools/
-│   ├── middleware.ts    # 12 tools — L1Middleware contract (8 read, 4 write)
+│   ├── middleware.ts    # 17 tools — L1Middleware contract (13 read: 8 atomic + 5 composite, 4 write)
 │   ├── vault.ts         # 8 tools — Symbiotic vault (5 read, 3 write)
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
@@ -101,15 +101,15 @@ Testnet networks: `fuji`, `anvil`, `kitetestnet`. The `Network` schema defaults 
 
 ### Child Process Env (allowlist)
 
-Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SUZAKU_MCP_DEBUG`.
+Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SUZAKU_MCP_DEBUG`, `SNOWSCAN_API_KEY`.
 
 ## Tool Catalog
 
-62 tools total (24 read, 38 write):
+67 tools total (29 read, 38 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
-| `middleware.ts` | 8 | 4 | `middleware_get_all_operators`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_watcher` |
+| `middleware.ts` | 13 | 4 | `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_watcher` |
 | `vault.ts` | 5 | 3 | `vault_get_balance`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
@@ -166,7 +166,7 @@ server.tool(
     if (pkErr) return pkErr;
 
     const guardErr = await guardWriteOperation('my_write_tool', { network, amount }, 'amount');
-    if (guardErr) return formatResult({ success: false, error: guardErr });
+    if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
 
     const result = await runCli(
       ['my-command', 'write-sub', '--address', address, '--amount', amount, '--network', network],
@@ -211,7 +211,7 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 
 1. **Mainnet-safe-by-default** — Write tools on mainnet never auto-execute. Default behavior is suggest mode. Opting out (`SUZAKU_MCP_SUGGEST=false`) still requires elicitation confirmation.
 2. **No PK on command line** — Private keys pass only via child process env (`PK`, `PK_PCHAIN`). `sanitizeOutput()` redacts 64-char hex strings from all outputs.
-3. **Restricted child env** — Subprocess inherits only 8 explicitly allowlisted variables. No ambient env leakage.
+3. **Restricted child env** — Subprocess inherits only 9 explicitly allowlisted variables. No ambient env leakage.
 4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
 6. **Dedup is write-agnostic** — Cache key is args+network. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.

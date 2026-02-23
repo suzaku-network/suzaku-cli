@@ -50,7 +50,7 @@ server.resource(
         mainnet: { chainId: 43114, name: 'Avalanche Mainnet', rpcUrl: 'https://api.avax.network/ext/bc/C/rpc' },
         fuji: { chainId: 43113, name: 'Avalanche Fuji Testnet', rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc' },
         anvil: { name: 'Local Anvil (development)', rpcUrl: 'http://127.0.0.1:8545' },
-        kitetestnet: { name: 'Kite Testnet' },
+        kitetestnet: { chainId: 2368, name: 'Kite Testnet', rpcUrl: 'https://rpc-testnet.gokite.ai/' },
       }, null, 2),
       mimeType: 'application/json',
     }],
