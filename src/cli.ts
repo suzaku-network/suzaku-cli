@@ -60,7 +60,8 @@ import {
     middlewareLastValidationId,
     weightWatcher,
     middlewareGetEpochConfig,
-    middlewareGetCacheStatus
+    middlewareGetCacheStatus,
+    middlewareGetLinkedAddresses
 } from "./middleware";
 
 import {
@@ -317,6 +318,7 @@ async function main() {
                 })
             }
             logger.logJsonTree(data)
+            logger.addData('l1s', data)
         });
 
     l1RegistryCmd
@@ -1707,6 +1709,18 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCacheStatus(middlewareSvc, options.epoch);
+        });
+
+    middlewareCmd
+        .command("get-linked-addresses")
+        .description("Get all linked contract addresses from the middleware (balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn)")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .action(async (middlewareAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetLinkedAddresses(middlewareSvc);
         });
 
     middlewareCmd

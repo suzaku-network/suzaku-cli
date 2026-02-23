@@ -1,6 +1,6 @@
 # @suzaku/mcp
 
-MCP server exposing 81 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 85 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ src/
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
 ├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl
 ├── tools/
-│   ├── middleware.ts    # 17 tools — L1Middleware contract (13 read: 8 atomic + 5 composite, 4 write)
+│   ├── middleware.ts    # 20 tools — L1Middleware contract (16 read: 9 atomic + 7 composite, 4 write)
 │   ├── vault.ts         # 8 tools — Symbiotic vault (5 read, 3 write)
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
@@ -106,11 +106,11 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 ## Tool Catalog
 
-81 tools total (33 read, 48 write):
+85 tools total (36 read, 49 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
-| `middleware.ts` | 13 | 4 | `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_watcher` |
+| `middleware.ts` | 16 | 4 | `discover_network`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_watcher` |
 | `vault.ts` | 5 | 3 | `vault_get_balance`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
@@ -190,15 +190,15 @@ For cross-chain warp tools, add `pchainPrivateKey: true` and `timeout: 300_000` 
 | URI | Contents |
 |---|---|
 | `config://networks` | Supported networks + RPC endpoints (mainnet, fuji, anvil, kitetestnet) |
-| `config://contracts` | Note that addresses are deployment-specific; directs to registry tools for live discovery |
+| `config://contracts` | Discovery guide: entry point (`discover_network`), auto-resolve paths, manual tools, and non-discoverable contracts |
 
 ### Prompts (3)
 
 | Name | Purpose | Key params |
 |---|---|---|
-| `check-operator-health` | Run 5 read tools to assess operator health | `middlewareAddress`, `operatorAddress` |
-| `register-new-operator` | Step-by-step 5-phase registration workflow | `network?` |
-| `validator-lifecycle` | Two-phase validator/delegator registration or removal guide | `operation` (`register`/`remove`), `manager?` (`kite`/`vault`) |
+| `check-operator-health` | Run 5 read tools to assess operator health; suggests `discover_network` if middleware unknown | `middlewareAddress`, `operatorAddress` |
+| `register-new-operator` | Step-by-step 5-phase registration; starts with `discover_network` for address discovery | `network?` |
+| `validator-lifecycle` | Two-phase validator/delegator registration or removal; suggests `discover_network` + `middleware_operator_dashboard` for address resolution | `operation` (`register`/`remove`), `manager?` (`kite`/`vault`) |
 
 ## Build & Verify
 

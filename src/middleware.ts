@@ -588,6 +588,32 @@ export async function predictForceUpdateImpact(
   return predictions;
 }
 
+// getLinkedAddresses — multicall for all address-returning view functions
+export async function middlewareGetLinkedAddresses(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  logger.log("Reading linked addresses...");
+
+  const [balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn] = await middleware.multicall([
+    'BALANCER',
+    'getVaultManager',
+    'PRIMARY_ASSET',
+    'OPERATOR_REGISTRY',
+    'OPERATOR_L1_OPTIN',
+  ]);
+
+  const result = {
+    balancer: balancer as Hex,
+    vaultManager: vaultManager as Hex,
+    primaryAsset: primaryAsset as Hex,
+    operatorRegistry: operatorRegistry as Hex,
+    operatorL1OptIn: operatorL1OptIn as Hex,
+  };
+
+  logger.log(result);
+  logger.addData('linkedAddresses', result);
+}
+
 // getEpochConfig — multicall for epoch timing parameters
 export async function middlewareGetEpochConfig(
   middleware: SafeSuzakuContract['L1Middleware']
