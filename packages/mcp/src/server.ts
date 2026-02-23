@@ -73,11 +73,23 @@ server.resource(
     contents: [{
       uri: uri.href,
       text: JSON.stringify({
-        _note: 'Contract addresses are deployment-specific. Use the registry tools (operator_registry_get_all, l1_registry_get_all) to discover live addresses, or pass addresses directly when calling tools.',
-        registries: {
-          operatorRegistry: 'Use operator_registry_get_all to list registered operators',
-          l1Registry: 'Use l1_registry_get_all to list registered L1s',
+        _note: 'Contract addresses are deployment-specific. Use discovery tools to find live addresses.',
+        discovery: {
+          entryPoint: 'discover_network — returns all addresses for a network (no address input needed)',
+          fromMiddleware: 'middleware_operator_dashboard or middleware_network_overview — resolves linked addresses automatically',
+          manual: {
+            l1Registry: 'l1_registry_get_all — lists all (balancer, middleware, metadataUrl) tuples',
+            operatorRegistry: 'operator_registry_get_all — lists all global operators',
+            balancer: 'balancer_get_security_modules — lists security modules from a balancer address',
+            middleware: 'Use get-linked-addresses (via discover_network) to find balancer, vaultManager, primaryAsset',
+          },
         },
+        notDiscoverable: [
+          'UptimeTracker — pass explicitly to middleware_operator_dashboard/middleware_uptime_report',
+          'RewardsNativeToken — pass explicitly to middleware_epoch_rewards_report',
+          'KiteStakingManager — no registry, must be known out-of-band',
+          'StakingVault — may appear in VaultManager listing, but address must be provided to staking_vault_* tools',
+        ],
       }, null, 2),
       mimeType: 'application/json',
     }],
@@ -99,7 +111,7 @@ server.prompt(
       role: 'user' as const,
       content: {
         type: 'text' as const,
-        text: `Check the health of operator ${operatorAddress} on middleware ${middlewareAddress}${network ? ` (network: ${network})` : ''}. Please:\n1. Get the current epoch using middleware_get_current_epoch\n2. Get the operator's account info using middleware_account_info\n3. Get locked stake using middleware_get_operator_locked_stake\n4. Get available stake using middleware_get_operator_available_stake\n5. Get active nodes for the current epoch using middleware_get_active_nodes\nSummarize the operator's health status.`,
+        text: `Check the health of operator ${operatorAddress} on middleware ${middlewareAddress}${network ? ` (network: ${network})` : ''}. Please:\n0. If you don't have the middlewareAddress, call discover_network first to list all L1s and their middleware addresses.\n1. Get the current epoch using middleware_get_current_epoch\n2. Get the operator's account info using middleware_account_info\n3. Get locked stake using middleware_get_operator_locked_stake\n4. Get available stake using middleware_get_operator_available_stake\n5. Get active nodes for the current epoch using middleware_get_active_nodes\nSummarize the operator's health status.`,
       },
     }],
   }),
@@ -116,7 +128,7 @@ server.prompt(
       role: 'user' as const,
       content: {
         type: 'text' as const,
-        text: `Guide me through registering a new operator on the Suzaku protocol${network ? ` on ${network}` : ''}. The steps are:\n1. Register in the OperatorRegistry using operator_registry_register (requires a metadata URL)\n2. Opt into an L1 using opt_in_l1 (required before participating in that L1's validator set)\n3. Opt into a vault using opt_in_vault (required before receiving delegated stake)\n4. Register as an operator in the L1Middleware using middleware_register_operator\n5. Add validator nodes using middleware_add_node\nFor each step, ask me for the required parameters before proceeding.`,
+        text: `Guide me through registering a new operator on the Suzaku protocol${network ? ` on ${network}` : ''}. The steps are:\n0. Start by calling discover_network to discover the operatorRegistry, L1Middleware, and available vaults for the target network.\n1. Register in the OperatorRegistry using operator_registry_register (requires a metadata URL)\n2. Opt into an L1 using opt_in_l1 (required before participating in that L1's validator set)\n3. Opt into a vault using opt_in_vault (required before receiving delegated stake)\n4. Register as an operator in the L1Middleware using middleware_register_operator\n5. Add validator nodes using middleware_add_node\nFor each step, ask me for the required parameters before proceeding.`,
       },
     }],
   }),
@@ -139,7 +151,7 @@ server.prompt(
           role: 'user' as const,
           content: {
             type: 'text' as const,
-            text: `Guide me through removing a validator via ${mgr}. This is a two-phase process:\n\nPhase 1 — Initiate removal:\n- Use ${prefix}_initiate_validator_removal with the contract address and nodeId\n- Save the transaction hash from the response\n\nPhase 2 — Complete removal:\n- Use ${prefix}_complete_validator_removal with the contract address and the initiate tx hash\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
+            text: `Guide me through removing a validator via ${mgr}. If you don't have the contract address, call discover_network to find the middleware, then use middleware_operator_dashboard to get the operator's linked addresses.\n\nThis is a two-phase process:\n\nPhase 1 — Initiate removal:\n- Use ${prefix}_initiate_validator_removal with the contract address and nodeId\n- Save the transaction hash from the response\n\nPhase 2 — Complete removal:\n- Use ${prefix}_complete_validator_removal with the contract address and the initiate tx hash\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
           },
         }],
       };
@@ -150,7 +162,7 @@ server.prompt(
         role: 'user' as const,
         content: {
           type: 'text' as const,
-          text: `Guide me through registering a new validator via ${mgr}. This is a two-phase process:\n\nPhase 1 — Initiate registration:\n- Use ${prefix}_initiate_validator_registration with the contract address, nodeId, BLS key, and stake amount\n- Save the transaction hash from the response\n\nPhase 2 — Complete registration:\n- Use ${prefix}_complete_validator_registration with the contract address, initiate tx hash, and BLS proof of possession\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
+          text: `Guide me through registering a new validator via ${mgr}. If you don't have the contract address, call discover_network to find the middleware, then use middleware_operator_dashboard to get the operator's linked addresses.\n\nThis is a two-phase process:\n\nPhase 1 — Initiate registration:\n- Use ${prefix}_initiate_validator_registration with the contract address, nodeId, BLS key, and stake amount\n- Save the transaction hash from the response\n\nPhase 2 — Complete registration:\n- Use ${prefix}_complete_validator_registration with the contract address, initiate tx hash, and BLS proof of possession\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
         },
       }],
     };

@@ -1,6 +1,6 @@
 # @suzaku-network/mcp
 
-MCP server for the Suzaku restaking protocol on Avalanche — 83 tools wrapping `suzaku-cli`.
+MCP server for the Suzaku restaking protocol on Avalanche — 85 tools wrapping `suzaku-cli`.
 
 Mainnet writes never auto-execute. Testnet writes run immediately.
 
@@ -22,46 +22,16 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 }
 ```
 
-This gives you all 34 read tools immediately. Add a signing method (see [Example configs](#example-configs)) when you need writes.
+This gives you all 36 read tools immediately. Add a signing method (see [Example configs](#example-configs)) when you need writes.
 
 ## Playbooks
 
-### Check operator health
-
-> "Check the health of operator 0xABC on middleware 0xDEF on fuji"
-
-Uses `check-operator-health` prompt — runs 5 read tools (epoch, account info, locked/available stake, active nodes) and summarizes.
-
-### Register a new operator
-
-> "Register a new operator on fuji"
-
-Uses `register-new-operator` prompt — guides through 5 steps:
-1. Register in OperatorRegistry
-2. Opt into L1
-3. Opt into vault
-4. Register in L1Middleware
-5. Add validator nodes
-
-### Register / remove a validator (two-phase)
-
-> "Register a validator on my staking vault on fuji"
-
-Uses `validator-lifecycle` prompt. Two phases:
-1. **Initiate** — C-Chain transaction
-2. **Complete** — cross-chain warp message to P-Chain (needs `SUZAKU_PCHAIN_PK`, takes up to 5 min)
-
-### Monitor network state
-
-> "Show me the network overview for middleware 0xDEF on fuji"
-
-Calls `middleware_network_overview` — returns operators, nodes, stakes, and epoch status in one shot.
-
-### Deposit into a vault
-
-> "Deposit 100 AVAX into vault 0xABC on fuji"
-
-Calls `vault_deposit`. On mainnet this returns the CLI command to run manually (suggest mode).
+- **Discover network**: `discover_network` — returns all L1s, middlewares, operators, and linked addresses for a network (no address input needed).
+- **Check operator health**: `check-operator-health` prompt — runs 5 read tools and summarizes operator status.
+- **Register a new operator**: `register-new-operator` prompt — guides through registry, opt-ins, middleware registration, and node addition.
+- **Register / remove a validator**: `validator-lifecycle` prompt — two-phase C-Chain + P-Chain lifecycle (needs `SUZAKU_PCHAIN_PK`).
+- **Monitor network state**: `middleware_network_overview` — operators, nodes, stakes, epoch config, and vault listing in one call.
+- **Deposit into a vault**: `vault_deposit` — on mainnet returns the CLI command to run manually (suggest mode).
 
 ## Security
 

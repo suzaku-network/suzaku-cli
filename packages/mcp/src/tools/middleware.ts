@@ -160,7 +160,74 @@ export function registerMiddlewareTools(server: McpServer) {
     },
   );
 
+  server.tool(
+    'middleware_get_linked_addresses',
+    'Get all linked contract addresses from a middleware (balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn)',
+    {
+      middlewareAddress: Address.describe('L1Middleware contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['middleware', 'get-linked-addresses', middlewareAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
   // ── Composite Reads (dashboard / report tools) ──
+
+  server.tool(
+    'discover_network',
+    'Top-level discovery: given only a network, returns the complete address map of all L1s (with their middleware, balancer, and linked addresses) and all global operators. No address inputs required.',
+    {
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ network, rpcUrl }) => {
+      const opts = { network, rpcUrl };
+
+      // Phase 1: parallel registry reads
+      const [l1sResult, operatorsResult] = await Promise.all([
+        runCli(['l1-registry', 'get-all'], opts),
+        runCli(['operator-registry', 'get-all'], opts),
+      ]);
+
+      const l1s = (extractData(l1sResult).l1s ?? []) as { MetadataUrl: string; Balancer: string; Middleware: string }[];
+      const globalOperators = (extractData(operatorsResult).operators ?? []) as { address: string; metadataUrl: string }[];
+
+      // Phase 2: for each middleware, get linked addresses (parallel)
+      const uniqueMiddlewares = [...new Set(l1s.map(l1 => l1.Middleware).filter(Boolean))];
+      const linkedResults = await Promise.all(
+        uniqueMiddlewares.map(mw =>
+          runCli(['middleware', 'get-linked-addresses', mw], opts)
+        )
+      );
+
+      const linkedByMiddleware: Record<string, Record<string, unknown>> = {};
+      uniqueMiddlewares.forEach((mw, i) => {
+        linkedByMiddleware[mw] = extractData(linkedResults[i]).linkedAddresses as Record<string, unknown> ?? {};
+      });
+
+      // Assemble output
+      const enrichedL1s = l1s.map(l1 => ({
+        metadataUrl: l1.MetadataUrl,
+        balancer: l1.Balancer,
+        middleware: l1.Middleware,
+        linkedAddresses: linkedByMiddleware[l1.Middleware] ?? {},
+      }));
+
+      const result = {
+        l1s: enrichedL1s,
+        globalOperators,
+      };
+
+      return formatResult({ success: true, data: result });
+    },
+  );
 
   server.tool(
     'middleware_operator_dashboard',
@@ -178,19 +245,21 @@ export function registerMiddlewareTools(server: McpServer) {
     async ({ middlewareAddress, operator, epoch, rewardsAddress, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
 
-      // Phase 1: independent reads in parallel
-      const [epochResult, classIdsResult, usedResult, lockedResult, nodesResult, epochConfigResult] = await Promise.all([
+      // Phase 1: independent reads in parallel (includes linked addresses for auto-resolve)
+      const [epochResult, classIdsResult, usedResult, lockedResult, nodesResult, epochConfigResult, linkedResult] = await Promise.all([
         epoch ? Promise.resolve({ success: true, data: { epoch: Number(epoch) } } as CliResult) : runCli(['middleware', 'get-current-epoch', middlewareAddress], opts),
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
         runCli(['middleware', 'get-operator-used-stake', middlewareAddress, operator], opts),
         runCli(['middleware', 'get-operator-locked-stake', middlewareAddress, operator], opts),
         runCli(['middleware', 'get-operator-nodes', middlewareAddress, operator], opts),
         runCli(['middleware', 'get-epoch-config', middlewareAddress], opts),
+        runCli(['middleware', 'get-linked-addresses', middlewareAddress], opts),
       ]);
 
       const currentEpoch = String(extractData(epochResult).epoch ?? epoch ?? 0);
       const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
       const nodes = (extractData(nodesResult).nodes ?? []) as string[];
+      const linkedAddresses = extractData(linkedResult).linkedAddresses as Record<string, string> | undefined;
 
       // Phase 2: epoch-dependent reads in parallel
       const phase2Calls: Promise<CliResult>[] = [
@@ -287,6 +356,7 @@ export function registerMiddlewareTools(server: McpServer) {
         },
         nodes,
         activeNodes: activeNodesData.nodeIds ?? [],
+        ...(linkedAddresses ? { linkedAddresses } : {}),
         ...(epochTiming ? { epochTiming } : {}),
         rebalancedThisEpoch,
         ...(rewards ? { rewards } : {}),
@@ -307,18 +377,31 @@ export function registerMiddlewareTools(server: McpServer) {
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
-    async ({ middlewareAddress, vaultManagerAddress, network, rpcUrl }) => {
+    async ({ middlewareAddress, vaultManagerAddress: vaultManagerInput, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
 
-      // Phase 1: global state
-      const [epochResult, operatorsResult, classIdsResult, activeClassesResult, epochConfigResult, cacheStatusResult] = await Promise.all([
+      // Phase 1: global state + optional linked addresses for auto-resolve
+      const phase1Calls: Promise<CliResult>[] = [
         runCli(['middleware', 'get-current-epoch', middlewareAddress], opts),
         runCli(['middleware', 'get-all-operators', middlewareAddress], opts),
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
         runCli(['middleware', 'get-active-collateral-classes', middlewareAddress], opts),
         runCli(['middleware', 'get-epoch-config', middlewareAddress], opts),
         runCli(['middleware', 'get-cache-status', middlewareAddress], opts),
-      ]);
+      ];
+      if (!vaultManagerInput) {
+        phase1Calls.push(runCli(['middleware', 'get-linked-addresses', middlewareAddress], opts));
+      }
+
+      const phase1Results = await Promise.all(phase1Calls);
+      const [epochResult, operatorsResult, classIdsResult, activeClassesResult, epochConfigResult, cacheStatusResult] = phase1Results;
+
+      // Auto-resolve vaultManagerAddress from linked addresses if not provided
+      let vaultManagerAddress = vaultManagerInput;
+      if (!vaultManagerAddress && phase1Results[6]) {
+        const linked = extractData(phase1Results[6]).linkedAddresses as Record<string, string> | undefined;
+        if (linked?.vaultManager) vaultManagerAddress = linked.vaultManager;
+      }
 
       const currentEpoch = String(extractData(epochResult).epoch ?? 0);
       const operators = (extractData(operatorsResult).operators ?? []) as string[];
