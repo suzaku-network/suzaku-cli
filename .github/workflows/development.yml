@@ -16,6 +16,7 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile # the install command trigger the build through the prepare script
+      - run: pnpm --filter @suzaku-network/mcp build
 
       - name: test
         run: pnpm suzaku-cli --help

@@ -26,6 +26,7 @@ jobs:
       - name: Build and Test
         run: |
           pnpm install --frozen-lockfile
+          pnpm --filter @suzaku-network/mcp build
           pnpm suzaku-cli --help
 
       - uses: ncipollo/release-action@v1
