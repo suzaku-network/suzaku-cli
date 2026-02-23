@@ -13,24 +13,29 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-import { setMcpServer } from './cli-runner.js';
+import { setMcpServer, runCli, formatResult } from './cli-runner.js';
 import { setGuardServer } from './guard.js';
+import { Network, RpcUrl } from './schemas.js';
 import { registerMiddlewareTools } from './tools/middleware.js';
 import { registerVaultTools } from './tools/vault.js';
 import { registerOperatorTools } from './tools/operator.js';
 import { registerL1RegistryTools } from './tools/l1-registry.js';
 import { registerOptInTools } from './tools/opt-in.js';
 import { registerRewardsTools } from './tools/rewards.js';
-import { registerBalancerTools } from './tools/balancer.js';
 import { registerKiteStakingTools } from './tools/kite-staking.js';
 import { registerStakingVaultTools } from './tools/staking-vault.js';
+import { registerBalancerTools } from './tools/balancer.js';
+import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
 
 const server = new McpServer({
   name: 'suzaku',
   version: '0.1.0',
 });
 
-// Wire up MCP protocol logging
+// Wire up MCP server references.
+// Both modules hold a reference to the same server instance for different purposes:
+// cli-runner uses it for protocol logging + mainnet elicitation; guard uses it for
+// testnet write confirmation elicitation. Kept separate to avoid coupling these concerns.
 setMcpServer(server);
 setGuardServer(server);
 
@@ -152,6 +157,76 @@ server.prompt(
   },
 );
 
+// ── Health Check ──
+
+server.tool(
+  'health_check',
+  'Verify MCP server setup: CLI reachable, signing method configured, optional network connectivity test',
+  {
+    network: Network.optional(),
+    rpcUrl: RpcUrl,
+  },
+  { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+  async ({ network, rpcUrl }) => {
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0' };
+
+    // Check signing method
+    if (process.env.SUZAKU_MCP_LEDGER === 'true') {
+      status.signer = 'ledger';
+    } else if (process.env.SUZAKU_SECRET_NAME) {
+      status.signer = 'gpg-keystore';
+      status.secretName = process.env.SUZAKU_SECRET_NAME;
+    } else if (process.env.SUZAKU_PK) {
+      status.signer = 'private-key';
+    } else {
+      status.signer = 'none';
+      status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
+    }
+
+    if (process.env.SUZAKU_SAFE_ADDRESS) {
+      status.safeAddress = process.env.SUZAKU_SAFE_ADDRESS;
+    }
+    if (process.env.SUZAKU_PCHAIN_PK) {
+      status.pchainSigner = 'configured';
+    }
+
+    // Check CLI accessibility by running a lightweight read command
+    // Use operator-registry get-all as a connectivity + CLI health probe
+    if (network || rpcUrl) {
+      const probe = await runCli(
+        ['operator-registry', 'get-all'],
+        { network: network ?? undefined, rpcUrl },
+      );
+      status.cli = probe.success ? 'ok' : 'error';
+      if (!probe.success) {
+        status.cliError = probe.error;
+      }
+      status.network = network ?? 'mainnet';
+    } else {
+      // Without a network, just verify the CLI binary is reachable by invoking --help
+      const probe = await runCli(['--help'], {});
+      status.cli = probe.success || probe.data !== null ? 'ok' : 'unreachable';
+      if (!probe.success && probe.data === null) {
+        status.cliError = probe.error;
+      }
+    }
+
+    // Report guard config
+    const guardConfig: Record<string, string> = {};
+    if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = process.env.SUZAKU_MCP_SUGGEST;
+    if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+    if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
+    if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = process.env.SUZAKU_MCP_ALLOW_TOOLS;
+    if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = process.env.SUZAKU_MCP_DENY_TOOLS;
+    if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = process.env.SUZAKU_MCP_DRY_RUN;
+    if (Object.keys(guardConfig).length > 0) {
+      status.guardConfig = guardConfig;
+    }
+
+    return formatResult({ success: true, data: status });
+  },
+);
+
 // ── Tool Groups ──
 
 registerMiddlewareTools(server);
@@ -160,9 +235,10 @@ registerOperatorTools(server);
 registerL1RegistryTools(server);
 registerOptInTools(server);
 registerRewardsTools(server);
-registerBalancerTools(server);
 registerKiteStakingTools(server);
 registerStakingVaultTools(server);
+registerBalancerTools(server);
+registerPoaSecurityModuleTools(server);
 
 // Start the server with stdio transport
 const transport = new StdioServerTransport();

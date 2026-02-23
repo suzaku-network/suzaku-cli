@@ -1,6 +1,6 @@
 # @suzaku/mcp
 
-MCP server exposing 67 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 81 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
 
 ## Architecture
 
@@ -19,7 +19,8 @@ src/
 │   ├── rewards.ts       # 3 tools — Rewards contract (1 read, 2 write)
 │   ├── kite-staking.ts  # 9 tools — KiteStakingManager (all write, two-phase lifecycle)
 │   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
-│   └── balancer.ts      # Stub — reserved for BalancerValidatorManager
+│   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
+│   └── poa-security-module.ts # 6 tools — PoASecurityModule (all write, two-phase lifecycle)
 ```
 
 **Data flow** (write tool):
@@ -97,15 +98,15 @@ Testnet networks: `fuji`, `anvil`, `kitetestnet`. The `Network` schema defaults 
 |---|---|---|
 | `SUZAKU_CLI_PATH` | Override CLI binary path. Falls back to `../../../bin/cli.js` then `which suzaku-cli` | — |
 | `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (ms). Identical calls within window return cached result | `60000` |
-| `SUZAKU_MCP_DEBUG` | Forwards subprocess stderr to server stderr in real time | — |
+| `SUZAKU_MCP_DEBUG` | Forwards subprocess stderr to server stderr in real time (server-side only — not passed to child process) | — |
 
 ### Child Process Env (allowlist)
 
-Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SUZAKU_MCP_DEBUG`, `SNOWSCAN_API_KEY`.
+Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`.
 
 ## Tool Catalog
 
-67 tools total (29 read, 38 write):
+81 tools total (33 read, 48 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
@@ -117,6 +118,9 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 | `rewards.ts` | 1 | 2 | `rewards_get_epoch_rewards`, `rewards_distribute`, `rewards_claim` |
 | `kite-staking.ts` | 0 | 9 | `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
 | `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
+| `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
+| `poa-security-module.ts` | 0 | 6 | `poa_add_node`, `poa_complete_validator_registration`, `poa_remove_node`, `poa_complete_validator_removal`, `poa_init_weight_update`, `poa_complete_weight_update` |
+| `server.ts` | 1 | 0 | `health_check` — verifies CLI path, signer config, optional network connectivity |
 
 ## Signing Methods
 
@@ -166,7 +170,7 @@ server.tool(
     if (pkErr) return pkErr;
 
     const guardErr = await guardWriteOperation('my_write_tool', { network, amount }, 'amount');
-    if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+    if (guardErr) return formatGuardError(guardErr);
 
     const result = await runCli(
       ['my-command', 'write-sub', '--address', address, '--amount', amount, '--network', network],
@@ -211,9 +215,9 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 
 1. **Mainnet-safe-by-default** — Write tools on mainnet never auto-execute. Default behavior is suggest mode. Opting out (`SUZAKU_MCP_SUGGEST=false`) still requires elicitation confirmation.
 2. **No PK on command line** — Private keys pass only via child process env (`PK`, `PK_PCHAIN`). `sanitizeOutput()` redacts 64-char hex strings from all outputs.
-3. **Restricted child env** — Subprocess inherits only 9 explicitly allowlisted variables. No ambient env leakage.
+3. **Restricted child env** — Subprocess inherits only 8 explicitly allowlisted variables. No ambient env leakage.
 4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
-6. **Dedup is write-agnostic** — Cache key is args+network. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
+6. **Dedup is write-agnostic** — Cache key is args+network+rpcUrl. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
 7. **Two-phase lifecycle needs P-Chain key** — `complete_*` tools require `SUZAKU_PCHAIN_PK` and use 5-minute timeout.
 8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` via non-blocking `appendFile`. Failures are silently ignored.

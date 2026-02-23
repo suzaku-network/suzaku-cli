@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
@@ -36,7 +36,7 @@ export function registerL1RegistryTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('l1_registry_register', { balancerAddress, l1Middleware, metadataUrl, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['l1-registry', 'register', balancerAddress, l1Middleware, metadataUrl],
         { network, rpcUrl, privateKey: true },

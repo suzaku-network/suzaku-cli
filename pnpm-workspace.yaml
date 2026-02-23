@@ -2,5 +2,3 @@ packages:
   - 'packages/*'
 onlyBuiltDependencies:
   - node-hid
-packages:
-  - 'packages/*'
