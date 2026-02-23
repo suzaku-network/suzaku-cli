@@ -18,6 +18,33 @@ export function setMcpServer(server: McpServer) {
   mcpServer = server;
 }
 
+// ── SDK typed wrappers ──
+// McpServer in SDK 1.12.0 does not expose `elicitInput` or `server.sendLoggingMessage`
+// on its public type surface. These wrappers centralise the `as any` casts so tool code
+// stays type-safe. When upgrading to SDK v2 these can be replaced with ctx.mcpReq methods.
+
+interface ElicitResult {
+  action: string;
+  content?: Record<string, unknown>;
+}
+
+/** Elicit user input via the MCP server. Throws if the client does not support elicitation. */
+export async function elicitInput(
+  server: McpServer,
+  params: { message: string; requestedSchema: Record<string, unknown> },
+): Promise<ElicitResult> {
+  return (server as any).elicitInput(params);
+}
+
+/** Send a structured log message to connected MCP clients. */
+export function sendLogMessage(
+  server: McpServer,
+  message: { level: string; logger: string; data: Record<string, unknown> },
+): void {
+  (server as unknown as { server: { sendLoggingMessage(m: typeof message): Promise<void> } })
+    .server.sendLoggingMessage(message).catch(() => {});
+}
+
 /** Resolve the CLI entry point — checks SUZAKU_CLI_PATH, then relative path, then npm dependency, then PATH */
 function resolveCliPath(): string {
   if (process.env.SUZAKU_CLI_PATH) {
@@ -53,12 +80,12 @@ const CLI_PATH = resolveCliPath();
 const SIGKILL_GRACE_MS = 5_000;
 
 /** Strip private key material (64-char hex strings) from output to prevent leakage */
-function sanitizeOutput(text: string): string {
+export function sanitizeOutput(text: string): string {
   return text.replace(/0x[0-9a-fA-F]{64}/g, '0x[REDACTED]');
 }
 
 /** Sanitize an args array by redacting private key material in each element */
-function sanitizeArgs(args: string[]): string[] {
+export function sanitizeArgs(args: string[]): string[] {
   return args.map((a) => sanitizeOutput(a));
 }
 
@@ -92,6 +119,28 @@ export interface RunCliOptions {
 /** Deduplication cache: key -> { ts, result } */
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
 
+/** Maximum number of entries in the dedup cache */
+export const DEDUP_CACHE_MAX = 500;
+
+/** Evict expired and oldest entries from the dedup cache */
+function evictDedupCache(windowMs: number): void {
+  const now = Date.now();
+  // First pass: remove expired entries
+  for (const [key, entry] of dedupCache) {
+    if (now - entry.ts >= windowMs) {
+      dedupCache.delete(key);
+    }
+  }
+  // Second pass: if still over cap, remove oldest entries
+  if (dedupCache.size > DEDUP_CACHE_MAX) {
+    const entries = [...dedupCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const toRemove = entries.slice(0, dedupCache.size - DEDUP_CACHE_MAX);
+    for (const [key] of toRemove) {
+      dedupCache.delete(key);
+    }
+  }
+}
+
 /**
  * Spawns `suzaku-cli <args> --json --yes` as a subprocess and captures JSON output.
  * Each tool call gets a clean, isolated process — avoids logger singleton and process.exit issues.
@@ -109,7 +158,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
   // Deduplication: return cached result if same call was made within the window
   const dedupWindowMs = Number(process.env.SUZAKU_MCP_DEDUP_WINDOW_MS ?? 60_000);
-  const dedupKey = `${args.slice(0, 2).join(' ')}|${JSON.stringify(args)}|${options.network ?? ''}`;
+  const dedupKey = `${args.slice(0, 2).join(' ')}|${JSON.stringify(args)}|${options.network ?? ''}|${options.rpcUrl ?? ''}`;
   const cached = dedupCache.get(dedupKey);
   if (cached && Date.now() - cached.ts < dedupWindowMs) {
     const cachedResult: CliResult = {
@@ -122,7 +171,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     return cachedResult;
   }
 
-  // Build restricted child environment — only pass what the CLI needs (Fix 5)
+  // Build restricted child environment — only pass what the CLI needs
   const childEnv: Record<string, string | undefined> = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
@@ -131,7 +180,6 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     GNUPGHOME: process.env.GNUPGHOME,
     SIG_AGG_URL: process.env.SIG_AGG_URL,
     LogLevel: process.env.LogLevel,
-    SUZAKU_MCP_DEBUG: process.env.SUZAKU_MCP_DEBUG,
     SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
   };
 
@@ -195,7 +243,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     if (!isTestnet && mcpServer) {
       const command = buildUserCommand(cliArgs, childEnv);
       try {
-        const result = await (mcpServer as any).elicitInput({
+        const result = await elicitInput(mcpServer, {
           message: `About to execute:\n\n${command}`,
           requestedSchema: {
             type: 'object' as const,
@@ -302,11 +350,12 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
   // Cache result for deduplication
   dedupCache.set(dedupKey, { ts: Date.now(), result });
+  evictDedupCache(dedupWindowMs);
 
   // Send structured log to MCP clients
   const durationMs = Math.round(performance.now() - startTime);
   if (mcpServer) {
-    mcpServer.server.sendLoggingMessage({
+    sendLogMessage(mcpServer, {
       level: result.success ? 'info' : 'error',
       logger: 'cli-runner',
       data: {
@@ -315,7 +364,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
         success: result.success,
         ...(result.error ? { error: sanitizeOutput(result.error) } : {}),
       },
-    }).catch(() => {}); // Don't let logging errors affect tool execution
+    });
   }
 
   // Audit logging — non-blocking append to ~/.suzaku-cli/mcp-audit.log
@@ -356,6 +405,11 @@ export function formatResult(result: CliResult) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
   };
+}
+
+/** Format a guard error into an MCP error response */
+export function formatGuardError(err: string) {
+  return { content: [{ type: 'text' as const, text: `Error: ${err}` }], isError: true as const };
 }
 
 /** Require a valid signing method, returning an error response if none is configured */

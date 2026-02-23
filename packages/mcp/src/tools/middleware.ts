@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner, CliResult } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, CliResult } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
-import { Address, Network, RpcUrl } from '../schemas.js';
+import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
 
 /** Extract data from a CliResult, returning empty object on failure */
 function extractData(result: CliResult): Record<string, unknown> {
@@ -352,14 +352,14 @@ export function registerMiddlewareTools(server: McpServer) {
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       rewardsAddress: Address.describe('RewardsNativeToken contract address'),
-      epoch: z.string().optional().describe('Epoch number (defaults to current - 1)'),
+      startEpoch: z.string().optional().describe('Start epoch for backwards iteration (defaults to current - 1)'),
       epochs: z.number().optional().describe('Number of epochs to report (default 1, max 10)'),
       uptimeAddress: Address.optional().describe('UptimeTracker address (enables uptime data)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
-    async ({ middlewareAddress, rewardsAddress, epoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
+    async ({ middlewareAddress, rewardsAddress, startEpoch: epoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
       const numEpochs = Math.min(epochCount ?? 1, 10);
 
@@ -605,7 +605,7 @@ export function registerMiddlewareTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('middleware_register_operator', { middlewareAddress, operator, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['middleware', 'register-operator', middlewareAddress, operator],
         { network, rpcUrl, privateKey: true },
@@ -618,7 +618,7 @@ export function registerMiddlewareTools(server: McpServer) {
     'Add a validator node to the middleware (requires SUZAKU_PK)',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
-      nodeId: z.string().describe('NodeID in CB58 format (e.g. NodeID-xxx)'),
+      nodeId: NodeID,
       blsKey: z.string().describe('BLS public key (hex)'),
       initialStake: z.string().optional().describe('Initial stake amount (default: 0)'),
       registrationExpiry: z.string().optional().describe('Registration expiry timestamp'),
@@ -634,7 +634,7 @@ export function registerMiddlewareTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('middleware_add_node', { middlewareAddress, nodeId, blsKey, initialStake, registrationExpiry, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['middleware', 'add-node', middlewareAddress, nodeId, blsKey];
       if (initialStake) args.push('--initial-stake', initialStake);
       if (registrationExpiry) args.push('--registration-expiry', registrationExpiry);
@@ -651,7 +651,7 @@ export function registerMiddlewareTools(server: McpServer) {
     'Initialize a stake weight change for a validator node (requires SUZAKU_PK)',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
-      nodeId: z.string().describe('NodeID in CB58 format'),
+      nodeId: NodeID,
       newStake: z.string().describe('New stake weight amount'),
       network: Network,
       rpcUrl: RpcUrl,
@@ -661,7 +661,7 @@ export function registerMiddlewareTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('middleware_init_stake_update', { middlewareAddress, nodeId, newStake, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['middleware', 'init-stake-update', middlewareAddress, nodeId, newStake],
         { network, rpcUrl, privateKey: true },
@@ -686,7 +686,7 @@ export function registerMiddlewareTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('middleware_weight_watcher', { middlewareAddress, epochs, loopEpochs, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['middleware', 'weight-watcher', middlewareAddress];
       if (epochs !== undefined) args.push('-e', String(epochs));
       if (loopEpochs !== undefined) args.push('-l', String(loopEpochs));

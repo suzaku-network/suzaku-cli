@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
@@ -42,7 +42,7 @@ export function registerRewardsTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('rewards_distribute', { rewardsAddress, epoch, batchSize, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['rewards', 'distribute', rewardsAddress, epoch, batchSize],
         { network, rpcUrl, privateKey: true },
@@ -64,7 +64,7 @@ export function registerRewardsTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('rewards_claim', { rewardsAddress, recipient, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['rewards', 'claim', rewardsAddress];
       if (recipient) args.push('--recipient', recipient);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
@@ -18,7 +18,7 @@ export function registerOptInTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('opt_in_l1', { l1Address, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['opt-in', 'l1-in', l1Address],
         { network, rpcUrl, privateKey: true },
@@ -39,7 +39,7 @@ export function registerOptInTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('opt_out_l1', { l1Address, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['opt-in', 'l1-out', l1Address],
         { network, rpcUrl, privateKey: true },
@@ -60,7 +60,7 @@ export function registerOptInTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('opt_in_vault', { vaultAddress, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['opt-in', 'vault-in', vaultAddress],
         { network, rpcUrl, privateKey: true },
@@ -81,7 +81,7 @@ export function registerOptInTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('opt_out_vault', { vaultAddress, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['opt-in', 'vault-out', vaultAddress],
         { network, rpcUrl, privateKey: true },

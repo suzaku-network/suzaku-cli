@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
@@ -110,7 +110,7 @@ export function registerVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('vault_deposit', { vaultAddress, amount, onBehalfOf, network, rpcUrl }, 'amount');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['vault', 'deposit', vaultAddress, amount];
       if (onBehalfOf) args.push('--onBehalfOf', onBehalfOf);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));
@@ -132,7 +132,7 @@ export function registerVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('vault_withdraw', { vaultAddress, amount, claimer, network, rpcUrl }, 'amount');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['vault', 'withdraw', vaultAddress, amount];
       if (claimer) args.push('--claimer', claimer);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));
@@ -154,7 +154,7 @@ export function registerVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('vault_claim', { vaultAddress, epoch, recipient, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['vault', 'claim', vaultAddress, epoch];
       if (recipient) args.push('--recipient', recipient);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));

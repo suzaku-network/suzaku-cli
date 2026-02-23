@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { elicitInput } from './cli-runner.js';
 
 let guardServer: McpServer | null = null;
 
@@ -87,7 +88,7 @@ export async function confirmWriteOperation(
   }
 
   try {
-    const result = await (guardServer as any).elicitInput({
+    const result = await elicitInput(guardServer, {
       message: `Confirm write operation: ${toolName}`,
       requestedSchema: {
         type: 'object' as const,

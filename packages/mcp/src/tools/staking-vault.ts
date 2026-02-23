@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
 
@@ -163,7 +163,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_deposit', { stakingVaultAddress, amount, minShares, network, rpcUrl }, 'amount');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'deposit', stakingVaultAddress, amount, minShares],
         { network, rpcUrl, privateKey: true },
@@ -185,7 +185,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_request_withdrawal', { stakingVaultAddress, shares, network, rpcUrl }, 'shares');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'request-withdrawal', stakingVaultAddress, shares],
         { network, rpcUrl, privateKey: true },
@@ -207,7 +207,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_claim_withdrawal', { stakingVaultAddress, requestId, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'claim-withdrawal', stakingVaultAddress, requestId],
         { network, rpcUrl, privateKey: true },
@@ -228,7 +228,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_process_epoch', { stakingVaultAddress, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'process-epoch', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
@@ -254,7 +254,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_add_operator', { stakingVaultAddress, operator, allocationBips, feeRecipient, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'add-operator', stakingVaultAddress, operator, allocationBips, feeRecipient],
         { network, rpcUrl, privateKey: true },
@@ -277,7 +277,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_update_operator_allocations', { stakingVaultAddress, operator, allocationBips, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'update-operator-allocations', stakingVaultAddress, operator, allocationBips],
         { network, rpcUrl, privateKey: true },
@@ -307,7 +307,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_initiate_validator_registration', { stakingVaultAddress, nodeId, blsKey, stakeAmount, network, rpcUrl }, 'stakeAmount');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'initiate-validator-registration',
         stakingVaultAddress, nodeId, blsKey, stakeAmount];
       if (pchainRemainingBalanceOwnerThreshold !== undefined) args.push('--pchain-remaining-balance-owner-threshold', String(pchainRemainingBalanceOwnerThreshold));
@@ -335,7 +335,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_validator_registration', { stakingVaultAddress, initiateTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-validator-registration',
         stakingVaultAddress, initiateTxHash, blsProofOfPossession];
       if (initialBalance) args.push('--initial-balance', initialBalance);
@@ -360,7 +360,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_initiate_validator_removal', { stakingVaultAddress, nodeId, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'initiate-validator-removal', stakingVaultAddress, nodeId],
         { network, rpcUrl, privateKey: true },
@@ -376,7 +376,7 @@ export function registerStakingVaultTools(server: McpServer) {
       initiateRemovalTxHash: Hex.describe('Transaction hash from initiate-validator-removal'),
       skipWaitApi: z.boolean().optional().describe('Skip waiting for validator removal on P-Chain API'),
       nodeIds: z.array(z.string()).optional().describe('Filter which validators to process (NodeID format)'),
-      initiateTx: z.string().optional().describe('Initiate validator registration tx hash (for justification)'),
+      initiateTx: z.string().optional().describe('Initiate validator registration tx hash for justification (single value — StakingVault processes one validator at a time)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
@@ -385,7 +385,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_validator_removal', { stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-validator-removal', stakingVaultAddress, initiateRemovalTxHash];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const nid of nodeIds ?? []) args.push('--node-id', nid);
@@ -411,7 +411,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_initiate_delegator_registration', { stakingVaultAddress, nodeId, amount, network, rpcUrl }, 'amount');
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'initiate-delegator-registration', stakingVaultAddress, nodeId, amount],
         { network, rpcUrl, privateKey: true },
@@ -434,7 +434,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_delegator_registration', { stakingVaultAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-delegator-registration',
         stakingVaultAddress, initiateTxHash, uptimeRpcUrl];
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
@@ -457,7 +457,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_initiate_delegator_removal', { stakingVaultAddress, delegationId, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['staking-vault', 'initiate-delegator-removal', stakingVaultAddress, delegationId],
         { network, rpcUrl, privateKey: true },
@@ -473,7 +473,7 @@ export function registerStakingVaultTools(server: McpServer) {
       initiateRemovalTxHash: Hex.describe('Transaction hash from initiate-delegator-removal'),
       skipWaitApi: z.boolean().optional().describe('Skip waiting for weight update on P-Chain API'),
       delegationIds: z.array(z.string()).optional().describe('Filter which delegations to process (hex IDs)'),
-      initiateTx: z.string().optional().describe('Initiate delegator registration tx hash (for justification)'),
+      initiateTx: z.string().optional().describe('Initiate delegator registration tx hash for justification (single value — one delegation at a time)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
@@ -482,7 +482,7 @@ export function registerStakingVaultTools(server: McpServer) {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_delegator_removal', { stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, network, rpcUrl });
-      if (guardErr) return { content: [{ type: 'text' as const, text: `Error: ${guardErr}` }], isError: true };
+      if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-delegator-removal', stakingVaultAddress, initiateRemovalTxHash];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const did of delegationIds ?? []) args.push('--delegation-id', did);
