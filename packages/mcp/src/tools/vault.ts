@@ -16,7 +16,7 @@ export function registerVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, account, network, rpcUrl }) => {
       const args = ['vault', 'get-balance', vaultAddress];
       if (account) args.push('--account', account);
@@ -33,7 +33,7 @@ export function registerVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, account, network, rpcUrl }) => {
       const args = ['vault', 'get-active-balance', vaultAddress];
       if (account) args.push('--account', account);
@@ -49,7 +49,7 @@ export function registerVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['vault', 'get-total-supply', vaultAddress],
@@ -66,7 +66,7 @@ export function registerVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['vault', 'get-deposit-limit', vaultAddress],
@@ -85,7 +85,7 @@ export function registerVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, epoch, account, network, rpcUrl }) => {
       const args = ['vault', 'get-withdrawals', vaultAddress, epoch];
       if (account) args.push('--account', account);

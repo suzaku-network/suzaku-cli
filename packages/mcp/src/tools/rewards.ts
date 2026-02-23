@@ -16,7 +16,7 @@ export function registerRewardsTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ rewardsAddress, epoch, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['rewards', 'get-epoch-rewards', rewardsAddress, epoch],

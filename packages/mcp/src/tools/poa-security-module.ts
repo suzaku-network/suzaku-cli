@@ -1,15 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
 
-/** Timeout for cross-chain warp operations (5 minutes) */
-const WARP_TIMEOUT = 300_000;
-
 export function registerPoaSecurityModuleTools(server: McpServer) {
-  // ── Writes ──
-
   server.tool(
     'poa_add_node',
     'Add a new validator node to an L1 via PoA Security Module — initiates validator registration (requires SUZAKU_PK)',

@@ -12,7 +12,7 @@ export function registerOperatorTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ network, rpcUrl }) => {
       return formatResult(await runCli(
         ['operator-registry', 'get-all'],

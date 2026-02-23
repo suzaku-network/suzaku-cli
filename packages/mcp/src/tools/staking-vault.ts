@@ -1,11 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
-
-/** Timeout for cross-chain warp operations (5 minutes) */
-const WARP_TIMEOUT = 300_000;
 
 export function registerStakingVaultTools(server: McpServer) {
   // ── Read / Info ──
@@ -18,7 +15,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'info', stakingVaultAddress],
@@ -35,7 +32,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'fees-info', stakingVaultAddress],
@@ -52,7 +49,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'operators-info', stakingVaultAddress],
@@ -69,7 +66,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'validators-info', stakingVaultAddress],
@@ -86,7 +83,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'delegators-info', stakingVaultAddress],
@@ -103,7 +100,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'withdrawals-info', stakingVaultAddress],
@@ -120,7 +117,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'epoch-info', stakingVaultAddress],
@@ -137,7 +134,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['staking-vault', 'full-info', stakingVaultAddress],

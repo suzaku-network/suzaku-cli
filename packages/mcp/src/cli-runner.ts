@@ -1,19 +1,14 @@
-import { spawn } from 'node:child_process';
-import { execFileSync } from 'node:child_process';
-import { resolve, dirname } from 'node:path';
+import { spawn, execFileSync } from 'node:child_process';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import { existsSync, mkdir, appendFile } from 'node:fs';
+import { homedir } from 'node:os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Module-level MCP server reference for protocol logging */
 let mcpServer: McpServer | null = null;
 
-/** Set the MCP server instance for protocol logging */
 export function setMcpServer(server: McpServer) {
   mcpServer = server;
 }
@@ -33,7 +28,7 @@ export async function elicitInput(
   server: McpServer,
   params: { message: string; requestedSchema: Record<string, unknown> },
 ): Promise<ElicitResult> {
-  return (server as any).elicitInput(params);
+  return (server as unknown as { elicitInput(p: typeof params): Promise<ElicitResult> }).elicitInput(params);
 }
 
 /** Send a structured log message to connected MCP clients. */
@@ -84,7 +79,6 @@ export function sanitizeOutput(text: string): string {
   return text.replace(/0x[0-9a-fA-F]{64}/g, '0x[REDACTED]');
 }
 
-/** Sanitize an args array by redacting private key material in each element */
 export function sanitizeArgs(args: string[]): string[] {
   return args.map((a) => sanitizeOutput(a));
 }
@@ -116,22 +110,20 @@ export interface RunCliOptions {
   timeout?: number;
 }
 
-/** Deduplication cache: key -> { ts, result } */
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
 
 /** Maximum number of entries in the dedup cache */
 export const DEDUP_CACHE_MAX = 500;
 
-/** Evict expired and oldest entries from the dedup cache */
+export const WARP_TIMEOUT = 300_000;
+
 function evictDedupCache(windowMs: number): void {
   const now = Date.now();
-  // First pass: remove expired entries
   for (const [key, entry] of dedupCache) {
     if (now - entry.ts >= windowMs) {
       dedupCache.delete(key);
     }
   }
-  // Second pass: if still over cap, remove oldest entries
   if (dedupCache.size > DEDUP_CACHE_MAX) {
     const entries = [...dedupCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
     const toRemove = entries.slice(0, dedupCache.size - DEDUP_CACHE_MAX);
@@ -147,6 +139,7 @@ function evictDedupCache(windowMs: number): void {
  */
 export async function runCli(args: string[], options: RunCliOptions = {}): Promise<CliResult> {
   const startTime = performance.now();
+  const toolName = args.slice(0, 2).join(' ');
   const cliArgs = [...args];
 
   if (options.network) {
@@ -156,9 +149,8 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     cliArgs.push('--rpc-url', options.rpcUrl);
   }
 
-  // Deduplication: return cached result if same call was made within the window
   const dedupWindowMs = Number(process.env.SUZAKU_MCP_DEDUP_WINDOW_MS ?? 60_000);
-  const dedupKey = `${args.slice(0, 2).join(' ')}|${JSON.stringify(args)}|${options.network ?? ''}|${options.rpcUrl ?? ''}`;
+  const dedupKey = `${JSON.stringify(args)}|${options.network ?? ''}|${options.rpcUrl ?? ''}`;
   const cached = dedupCache.get(dedupKey);
   if (cached && Date.now() - cached.ts < dedupWindowMs) {
     const cachedResult: CliResult = {
@@ -171,7 +163,6 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     return cachedResult;
   }
 
-  // Build restricted child environment — only pass what the CLI needs
   const childEnv: Record<string, string | undefined> = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
@@ -183,7 +174,6 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
   };
 
-  // Determine signing method
   let signerMethod: string | undefined;
 
   // Ledger wiring — check before PK/secret-name logic
@@ -276,7 +266,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   const defaultTimeout = process.env.SUZAKU_MCP_LEDGER === 'true' ? 180_000 : 120_000;
   const timeout = options.timeout ?? defaultTimeout;
 
-  const result = await new Promise<CliResult>((resolvePromise) => {
+  const result = await new Promise<CliResult>((resolve) => {
     let exited = false;
 
     const child = spawn('node', [CLI_PATH, ...cliArgs], {
@@ -318,10 +308,10 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
         try {
           const data = JSON.parse(trimmed);
           if (code !== 0 && data.error) {
-            resolvePromise({ success: false, data, error: sanitizeOutput(String(data.error)) });
+            resolve({ success: false, data, error: sanitizeOutput(String(data.error)) });
             return;
           }
-          resolvePromise({ success: code === 0, data, error: code !== 0 ? sanitizeOutput(stderr) || undefined : undefined });
+          resolve({ success: code === 0, data, error: code !== 0 ? sanitizeOutput(stderr) || undefined : undefined });
           return;
         } catch {
           // stdout wasn't valid JSON — fall through
@@ -329,7 +319,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       }
 
       if (code !== 0) {
-        resolvePromise({
+        resolve({
           success: false,
           data: null,
           error: sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
@@ -338,28 +328,26 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       }
 
       // Success exit code but no parseable JSON
-      resolvePromise({ success: true, data: null, error: undefined });
+      resolve({ success: true, data: null, error: undefined });
     });
 
     child.on('error', (err) => {
       exited = true;
       clearTimeout(killTimer);
-      resolvePromise({ success: false, data: null, error: err.message });
+      resolve({ success: false, data: null, error: err.message });
     });
   });
 
-  // Cache result for deduplication
   dedupCache.set(dedupKey, { ts: Date.now(), result });
   evictDedupCache(dedupWindowMs);
 
-  // Send structured log to MCP clients
   const durationMs = Math.round(performance.now() - startTime);
   if (mcpServer) {
     sendLogMessage(mcpServer, {
       level: result.success ? 'info' : 'error',
       logger: 'cli-runner',
       data: {
-        tool: args.slice(0, 2).join(' '),
+        tool: toolName,
         duration_ms: durationMs,
         success: result.success,
         ...(result.error ? { error: sanitizeOutput(result.error) } : {}),
@@ -367,27 +355,26 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     });
   }
 
-  // Audit logging — non-blocking append to ~/.suzaku-cli/mcp-audit.log
-  const auditDir = path.join(os.homedir(), '.suzaku-cli');
-  const auditLog = path.join(auditDir, 'mcp-audit.log');
+  // ~/.suzaku-cli/mcp-audit.log (best-effort, non-blocking)
+  const auditDir = join(homedir(), '.suzaku-cli');
+  const auditLog = join(auditDir, 'mcp-audit.log');
   const auditEntry = JSON.stringify({
     ts: new Date().toISOString(),
-    tool: args.slice(0, 2).join(' '),
+    tool: toolName,
     args: sanitizeArgs(args),
     network: options.network,
     success: result.success,
     duration_ms: durationMs,
     signerMethod,
   }) + '\n';
-  fs.mkdir(auditDir, { recursive: true }, (mkdirErr) => {
+  mkdir(auditDir, { recursive: true }, (mkdirErr) => {
     if (mkdirErr) return;
-    fs.appendFile(auditLog, auditEntry, () => {}); // Ignore errors — audit is best-effort
+    appendFile(auditLog, auditEntry, () => {});
   });
 
   return result;
 }
 
-/** Format a CliResult into an MCP tool response */
 export function formatResult(result: CliResult) {
   if (!result.success) {
     return {
@@ -395,7 +382,6 @@ export function formatResult(result: CliResult) {
       isError: true,
     };
   }
-  // Include structuredContent for machine-parseable responses when data is an object
   if (result.data != null && typeof result.data === 'object' && !Array.isArray(result.data)) {
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
@@ -407,12 +393,10 @@ export function formatResult(result: CliResult) {
   };
 }
 
-/** Format a guard error into an MCP error response */
 export function formatGuardError(err: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${err}` }], isError: true as const };
 }
 
-/** Require a valid signing method, returning an error response if none is configured */
 export function requireSigner(): ReturnType<typeof formatResult> | null {
   if (
     !process.env.SUZAKU_PK &&

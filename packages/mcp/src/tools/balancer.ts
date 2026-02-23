@@ -15,7 +15,7 @@ export function registerBalancerTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ balancerAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['balancer', 'get-security-modules', balancerAddress],
@@ -33,7 +33,7 @@ export function registerBalancerTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ balancerAddress, securityModule, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['balancer', 'get-security-module-weights', balancerAddress, securityModule],
@@ -51,7 +51,7 @@ export function registerBalancerTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { readOnlyHint: true, idempotentHint: true, destructiveHint: false },
+    { readOnlyHint: true, idempotentHint: true },
     async ({ balancerAddress, nodeId, network, rpcUrl }) => {
       return formatResult(await runCli(
         ['balancer', 'get-validator-status', balancerAddress, nodeId],
