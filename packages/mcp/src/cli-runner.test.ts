@@ -5,6 +5,9 @@ import {
   formatResult,
   formatGuardError,
   requireSigner,
+  getActiveSubprocesses,
+  resetActiveSubprocesses,
+  resetRateLimiter,
   DEDUP_CACHE_MAX,
   type CliResult,
 } from './cli-runner.js';
@@ -71,6 +74,30 @@ describe('sanitizeArgs', () => {
 
   it('handles empty array', () => {
     expect(sanitizeArgs([])).toEqual([]);
+  });
+
+  it('redacts value following --snowscan-api-key by flag name', () => {
+    const args = ['middleware', 'node-logs', '0xabc', '--snowscan-api-key', 'REAL_API_KEY_123'];
+    const result = sanitizeArgs(args);
+    expect(result).toEqual(['middleware', 'node-logs', '0xabc', '--snowscan-api-key', '[REDACTED]']);
+  });
+
+  it('redacts value following --private-key by flag name', () => {
+    const args = ['--private-key', 'deadbeef1234'];
+    const result = sanitizeArgs(args);
+    expect(result).toEqual(['--private-key', '[REDACTED]']);
+  });
+
+  it('redacts value following -k by flag name', () => {
+    const args = ['-k', 'somekey'];
+    const result = sanitizeArgs(args);
+    expect(result).toEqual(['-k', '[REDACTED]']);
+  });
+
+  it('does not redact flag without following value', () => {
+    const args = ['--snowscan-api-key'];
+    const result = sanitizeArgs(args);
+    expect(result).toEqual(['--snowscan-api-key']);
   });
 });
 
@@ -182,5 +209,32 @@ describe('requireSigner', () => {
 describe('DEDUP_CACHE_MAX', () => {
   it('is set to 500', () => {
     expect(DEDUP_CACHE_MAX).toBe(500);
+  });
+});
+
+describe('concurrency limiter', () => {
+  beforeEach(() => {
+    resetActiveSubprocesses();
+  });
+
+  it('starts with 0 active subprocesses', () => {
+    expect(getActiveSubprocesses()).toBe(0);
+  });
+
+  it('resetActiveSubprocesses resets to 0', () => {
+    // We can only test the exported helper directly
+    resetActiveSubprocesses();
+    expect(getActiveSubprocesses()).toBe(0);
+  });
+});
+
+describe('rate limiter', () => {
+  beforeEach(() => {
+    resetRateLimiter();
+  });
+
+  it('resetRateLimiter clears the window', () => {
+    // Verify reset doesn't throw and state is clean
+    resetRateLimiter();
   });
 });

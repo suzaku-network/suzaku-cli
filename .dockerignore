@@ -1,0 +1,9 @@
+.env
+.git/
+node_modules/
+dist/
+packages/*/node_modules/
+packages/*/dist/
+*.log
+*.md
+!packages/mcp/deploy/openclaw/SOUL.md

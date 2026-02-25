@@ -74,8 +74,9 @@ The bot should now respond to messages in Telegram.
 | Field | Value | Purpose |
 |---|---|---|
 | `agents.defaults.model.primary` | `anthropic/claude-sonnet-4-6` | Cost-effective model for read queries |
-| `channels.telegram.dmPolicy` | `open` | Anyone can DM the bot |
-| `channels.telegram.groups.*.requireMention` | `true` | Bot only responds when @-mentioned in groups |
+| `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
+| `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
+| `channels.telegram.groups.<id>.requireMention` | `true` | Bot only responds when @-mentioned in groups |
 | `plugins.entries.mcp-adapter.config.servers[0].args` | `["<path>", "--read-only"]` | MCP server path + read-only flag |
 
 ### Restricting access
@@ -111,7 +112,39 @@ Set environment variables in the MCP server config to default to a different net
 
 Users can still specify `network: "fuji"` in their queries — the MCP tools accept a network parameter.
 
-## Docker deployment
+## Docker Compose deployment (recommended)
+
+The `docker-compose.yml` in this directory builds the MCP server and runs it alongside OpenClaw with hardened container settings.
+
+### Required environment variables
+
+Create a `.env` file in this directory (or export them):
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...         # Anthropic API key for Claude
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF... # Telegram bot token from @BotFather
+TELEGRAM_ADMIN_USER_ID=123456789     # Your Telegram user ID
+TELEGRAM_GROUP_ID=-100123456789      # Telegram group ID (optional)
+```
+
+### Start
+
+```bash
+cd packages/mcp/deploy/openclaw
+docker compose up -d --build
+```
+
+### Network-level SSRF backstop
+
+For defense-in-depth against DNS rebinding, run `iptables-setup.sh` on the Docker host:
+
+```bash
+sudo bash iptables-setup.sh
+```
+
+This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918 and link-local ranges.
+
+## Docker deployment (standalone)
 
 ```bash
 docker run -d \

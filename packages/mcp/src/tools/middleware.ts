@@ -1,10 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, formatGuardError, requireSigner, CliResult } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, CliResult, RunCliOptions } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
 import { extractL1s } from './l1-registry.js';
 import { extractOperators } from './operator.js';
+
+/** Maximum number of operators processed by composite tools. Configurable via SUZAKU_MCP_MAX_OPERATORS. */
+const MAX_OPERATORS = Number(process.env.SUZAKU_MCP_MAX_OPERATORS ?? 50);
 
 /** Extract data from a CliResult, returning empty object on failure.
  *  When label and warnings are provided, records failed sub-calls for surfacing to the caller. */
@@ -130,19 +133,17 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'middleware_get_node_logs',
-    'Get correlated on-chain events for a node from the middleware',
+    'Get correlated on-chain events for a node from the middleware. Uses SNOWSCAN_API_KEY env var for API access.',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       nodeId: z.string().optional().describe('NodeID (CB58 format, e.g. NodeID-xxx) to filter logs for a specific node'),
-      snowscanApiKey: z.string().optional().describe('Snowscan API key for fetching event logs'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
-    async ({ middlewareAddress, nodeId, snowscanApiKey, network, rpcUrl }) => {
+    async ({ middlewareAddress, nodeId, network, rpcUrl }) => {
       const args = ['middleware', 'node-logs', middlewareAddress];
       if (nodeId) args.push('--node-id', nodeId);
-      if (snowscanApiKey) args.push('--snowscan-api-key', snowscanApiKey);
       return formatResult(await runCli(args, { network, rpcUrl }));
     },
   );
@@ -193,7 +194,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
 
       // Phase 1: parallel registry reads
@@ -251,7 +252,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, epoch, rewardsAddress, uptimeAddress, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
 
       // Phase 1: independent reads in parallel (includes linked addresses for auto-resolve)
@@ -395,7 +396,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, vaultManagerAddress: vaultManagerInput, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
 
       // Phase 1: global state + optional linked addresses for auto-resolve
@@ -422,9 +423,15 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       }
 
       const currentEpoch = String(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
-      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      let operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
       const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
       const activeClasses = extractData(activeClassesResult, 'activeClasses', _warnings).activeCollateralClasses;
+
+      const totalOperatorCount = operators.length;
+      if (operators.length > MAX_OPERATORS) {
+        _warnings.push(`Operator list truncated from ${operators.length} to ${MAX_OPERATORS} (SUZAKU_MCP_MAX_OPERATORS)`);
+        operators = operators.slice(0, MAX_OPERATORS);
+      }
 
       // Phase 2: per-operator metrics (parallel)
       const operatorCalls = operators.flatMap(op => [
@@ -490,7 +497,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
         collateralClasses: classIds,
         activeCollateralClasses: activeClasses,
         operators: operatorSummaries,
-        totals: { operatorCount: operators.length, vaultCount: vaults?.length ?? 0 },
+        totals: { operatorCount: totalOperatorCount, vaultCount: vaults?.length ?? 0 },
         ...(epochConfigData ? {
           epochConfig: {
             epochDuration: epochConfigData.epochDuration,
@@ -527,7 +534,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, rewardsAddress, startEpoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
       const numEpochs = Math.min(epochCount ?? 1, 10);
 
@@ -540,7 +547,11 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       ]);
 
       const currentEpoch = Number(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
-      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      let operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      if (operators.length > MAX_OPERATORS) {
+        _warnings.push(`Operator list truncated from ${operators.length} to ${MAX_OPERATORS} (SUZAKU_MCP_MAX_OPERATORS)`);
+        operators = operators.slice(0, MAX_OPERATORS);
+      }
       const feesConfig = extractData(feesResult, 'feesConfig', _warnings).feesConfig;
       const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
 
@@ -626,7 +637,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, epoch, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
 
       // Phase 1: dimensions
@@ -637,7 +648,11 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       ]);
 
       const currentEpoch = String(extractData(epochResult, 'epoch', _warnings).epoch ?? epoch ?? 0);
-      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      let operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      if (operators.length > MAX_OPERATORS) {
+        _warnings.push(`Operator list truncated from ${operators.length} to ${MAX_OPERATORS} (SUZAKU_MCP_MAX_OPERATORS)`);
+        operators = operators.slice(0, MAX_OPERATORS);
+      }
       const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
 
       // Phase 2: operator x class matrix + per-operator totals (all parallel)
@@ -691,7 +706,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, uptimeAddress, epochs: epochCount, startEpoch, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
       const numEpochs = Math.min(epochCount ?? 5, 10);
 
@@ -702,7 +717,11 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       ]);
 
       const currentEpoch = Number(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
-      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      let operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      if (operators.length > MAX_OPERATORS) {
+        _warnings.push(`Operator list truncated from ${operators.length} to ${MAX_OPERATORS} (SUZAKU_MCP_MAX_OPERATORS)`);
+        operators = operators.slice(0, MAX_OPERATORS);
+      }
 
       const start = startEpoch ? Number(startEpoch) : currentEpoch;
       const epochRange = Array.from({ length: numEpochs }, (_, i) => start - i).filter(e => e >= 0);
@@ -772,7 +791,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, network, rpcUrl }) => {
-      const opts = { network, rpcUrl };
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const _warnings: string[] = [];
 
       // Phase 1: epoch config

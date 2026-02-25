@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdir, appendFile } from 'node:fs';
+import { existsSync, mkdir, appendFile, stat, rename } from 'node:fs';
 import { homedir } from 'node:os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -88,8 +88,21 @@ export function sanitizeOutput(text: string): string {
     .replace(/\b[0-9a-fA-F]{64}\b/g, '[REDACTED]');
 }
 
+/** Flags whose following value should be redacted in audit logs */
+const REDACT_FLAGS = new Set(['--snowscan-api-key', '--private-key', '-k']);
+
 export function sanitizeArgs(args: string[]): string[] {
-  return args.map((a) => sanitizeOutput(a));
+  const result: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (REDACT_FLAGS.has(a) && i + 1 < args.length) {
+      result.push(a, '[REDACTED]');
+      i++; // skip the value
+    } else {
+      result.push(sanitizeOutput(a));
+    }
+  }
+  return result;
 }
 
 /** Build user-facing command string (no raw key material) */
@@ -117,6 +130,8 @@ export interface RunCliOptions {
   privateKey?: boolean;
   pchainPrivateKey?: boolean;
   timeout?: number;
+  /** Skip rate limiter for internal composite fan-out calls (concurrency limiter still applies) */
+  skipLimiter?: boolean;
 }
 
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
@@ -125,6 +140,62 @@ const dedupCache = new Map<string, { ts: number; result: CliResult }>();
 export const DEDUP_CACHE_MAX = 500;
 
 export const WARP_TIMEOUT = 300_000;
+
+// ── Concurrency limiter ──
+
+const MAX_CONCURRENT = Number(process.env.SUZAKU_MCP_MAX_CONCURRENT ?? 10);
+let activeSubprocesses = 0;
+
+/** Exported for testing */
+export function getActiveSubprocesses(): number {
+  return activeSubprocesses;
+}
+
+/** Exported for testing */
+export function resetActiveSubprocesses(): void {
+  activeSubprocesses = 0;
+}
+
+// ── Rate limiter (sliding window) ──
+
+const RATE_MAX_CALLS = Number(process.env.SUZAKU_MCP_RATE_MAX_CALLS ?? 60);
+const RATE_WINDOW_MS = Number(process.env.SUZAKU_MCP_RATE_WINDOW_MS ?? 60_000);
+const rateTimestamps: number[] = [];
+
+/** Exported for testing */
+export function resetRateLimiter(): void {
+  rateTimestamps.length = 0;
+}
+
+function checkRateLimit(): boolean {
+  const now = Date.now();
+  // Evict expired timestamps
+  while (rateTimestamps.length > 0 && now - rateTimestamps[0] >= RATE_WINDOW_MS) {
+    rateTimestamps.shift();
+  }
+  return rateTimestamps.length < RATE_MAX_CALLS;
+}
+
+function recordRateCall(): void {
+  rateTimestamps.push(Date.now());
+}
+
+// ── Audit log rotation ──
+
+const AUDIT_MAX_BYTES = Number(process.env.SUZAKU_MCP_AUDIT_MAX_MB ?? 50) * 1024 * 1024;
+
+function rotateAuditLog(logPath: string, callback: () => void): void {
+  stat(logPath, (err, stats) => {
+    if (err || stats.size < AUDIT_MAX_BYTES) {
+      callback();
+      return;
+    }
+    // Rotate: rename current to .1 (overwrites previous .1)
+    rename(logPath, logPath + '.1', () => {
+      callback();
+    });
+  });
+}
 
 function evictDedupCache(windowMs: number): void {
   const now = Date.now();
@@ -175,6 +246,14 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
           : cached.result.data,
     };
     return cachedResult;
+  }
+
+  // ── Concurrency + rate limit checks ──
+  if (activeSubprocesses >= MAX_CONCURRENT) {
+    return { success: false, data: null, error: `Concurrency limit reached (${MAX_CONCURRENT} active subprocesses). Try again shortly.` };
+  }
+  if (!options.skipLimiter && !checkRateLimit()) {
+    return { success: false, data: null, error: `Rate limit exceeded (${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS / 1000}s). Try again shortly.` };
   }
 
   const childEnv: Record<string, string | undefined> = {
@@ -280,6 +359,9 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   const defaultTimeout = process.env.SUZAKU_MCP_LEDGER === 'true' ? 180_000 : 120_000;
   const timeout = options.timeout ?? defaultTimeout;
 
+  activeSubprocesses++;
+  if (!options.skipLimiter) recordRateCall();
+
   const result = await new Promise<CliResult>((resolve) => {
     let exited = false;
 
@@ -313,6 +395,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
     child.on('close', (code) => {
       exited = true;
+      activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
 
       // Try to parse JSON from stdout regardless of exit code —
@@ -347,6 +430,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
     child.on('error', (err) => {
       exited = true;
+      activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
       resolve({ success: false, data: null, error: err.message });
     });
@@ -371,21 +455,24 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     });
   }
 
-  // ~/.suzaku-cli/mcp-audit.log (best-effort, non-blocking)
-  const auditDir = join(homedir(), '.suzaku-cli');
+  // Audit log (best-effort, non-blocking) — supports SUZAKU_MCP_AUDIT_DIR override
+  const auditDir = process.env.SUZAKU_MCP_AUDIT_DIR || join(homedir(), '.suzaku-cli');
   const auditLog = join(auditDir, 'mcp-audit.log');
   const auditEntry = JSON.stringify({
     ts: new Date().toISOString(),
     tool: toolName,
     args: sanitizeArgs(args),
     network: options.network,
+    rpcUrl: options.rpcUrl,
     success: result.success,
     duration_ms: durationMs,
     signerMethod,
   }) + '\n';
   mkdir(auditDir, { recursive: true }, (mkdirErr) => {
     if (mkdirErr) return;
-    appendFile(auditLog, auditEntry, () => {});
+    rotateAuditLog(auditLog, () => {
+      appendFile(auditLog, auditEntry, () => {});
+    });
   });
 
   return result;
