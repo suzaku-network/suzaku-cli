@@ -43,6 +43,17 @@ describe('checkToolAccess', () => {
     expect(checkToolAccess('vault_deposit')).toContain('blocked');
     expect(checkToolAccess('vault_withdraw')).toContain('blocked');
   });
+
+  it('empty ALLOW_TOOLS string allows all tools', () => {
+    process.env.SUZAKU_MCP_ALLOW_TOOLS = '';
+    expect(checkToolAccess('vault_deposit')).toBeNull();
+    expect(checkToolAccess('anything')).toBeNull();
+  });
+
+  it('empty DENY_TOOLS string denies nothing', () => {
+    process.env.SUZAKU_MCP_DENY_TOOLS = '';
+    expect(checkToolAccess('vault_deposit')).toBeNull();
+  });
 });
 
 describe('checkValueLimit', () => {
@@ -75,12 +86,32 @@ describe('checkValueLimit', () => {
     expect(checkValueLimit('100')).toContain('exceeds');
   });
 
-  it('handles NaN values gracefully', () => {
+  it('rejects non-decimal amounts (fail closed)', () => {
     process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = 'not-a-number';
-    expect(checkValueLimit('10')).toBeNull();
+    expect(checkValueLimit('10')).toContain('Unparseable');
 
     process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = '10';
-    expect(checkValueLimit('not-a-number')).toBeNull();
+    expect(checkValueLimit('not-a-number')).toContain('Unparseable');
+  });
+
+  it('rejects amounts with trailing text like "10 AVAX"', () => {
+    process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = '10';
+    expect(checkValueLimit('10 AVAX')).toContain('Unparseable');
+  });
+
+  it('rejects scientific notation', () => {
+    process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = '10';
+    expect(checkValueLimit('1e3')).toContain('Unparseable');
+  });
+
+  it('rejects negative amounts', () => {
+    process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = '10';
+    expect(checkValueLimit('-5')).toContain('Unparseable');
+  });
+
+  it('rejects Infinity', () => {
+    process.env.SUZAKU_MCP_MAX_AVAX_PER_TX = '10';
+    expect(checkValueLimit('Infinity')).toContain('Unparseable');
   });
 
   it('handles decimal amounts', () => {
@@ -88,6 +119,36 @@ describe('checkValueLimit', () => {
     expect(checkValueLimit('1.4')).toBeNull();
     expect(checkValueLimit('1.5')).toBeNull();
     expect(checkValueLimit('1.6')).toContain('exceeds');
+  });
+});
+
+describe('confirmWriteOperation', () => {
+  beforeEach(() => {
+    delete process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+    delete process.env.SUZAKU_MCP_SUGGEST;
+  });
+
+  afterEach(() => {
+    delete process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+    delete process.env.SUZAKU_MCP_SUGGEST;
+  });
+
+  it('returns null for mainnet (handled by cli-runner)', async () => {
+    process.env.SUZAKU_MCP_REQUIRE_CONFIRM = 'true';
+    const { confirmWriteOperation } = await import('./guard.js');
+    expect(await confirmWriteOperation('vault_deposit', { network: 'mainnet' })).toBeNull();
+  });
+
+  it('returns null when REQUIRE_CONFIRM is not true', async () => {
+    const { confirmWriteOperation } = await import('./guard.js');
+    expect(await confirmWriteOperation('vault_deposit', { network: 'fuji' })).toBeNull();
+  });
+
+  it('fails closed when guardServer is null and REQUIRE_CONFIRM=true', async () => {
+    process.env.SUZAKU_MCP_REQUIRE_CONFIRM = 'true';
+    const { confirmWriteOperation } = await import('./guard.js');
+    const result = await confirmWriteOperation('vault_deposit', { network: 'fuji' });
+    expect(result).toContain('MCP server not initialized');
   });
 });
 

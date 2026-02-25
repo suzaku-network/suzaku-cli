@@ -160,7 +160,7 @@ export function registerBalancerTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ balancerAddress, newOwner, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;

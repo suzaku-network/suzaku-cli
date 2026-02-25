@@ -52,6 +52,7 @@ server.resource(
     contents: [{
       uri: uri.href,
       text: JSON.stringify({
+        _note: 'Static values mirrored from src/lib/chainList.ts. Use --rpc-url with network=custom to override.',
         mainnet: { chainId: 43114, name: 'Avalanche Mainnet', rpcUrl: 'https://api.avax.network/ext/bc/C/rpc' },
         fuji: { chainId: 43113, name: 'Avalanche Fuji Testnet', rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc' },
         anvil: { name: 'Local Anvil (development)', rpcUrl: 'http://127.0.0.1:8545' },
@@ -187,7 +188,7 @@ server.tool(
       status.signer = 'ledger';
     } else if (process.env.SUZAKU_SECRET_NAME) {
       status.signer = 'gpg-keystore';
-      status.secretName = process.env.SUZAKU_SECRET_NAME;
+      status.secretName = '[configured]';
     } else if (process.env.SUZAKU_PK) {
       status.signer = 'private-key';
     } else {

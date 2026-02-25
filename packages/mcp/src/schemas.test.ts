@@ -38,13 +38,19 @@ describe('Hex schema', () => {
 });
 
 describe('NodeID schema', () => {
-  it('accepts NodeID strings', () => {
+  it('accepts valid NodeID strings in CB58 format', () => {
     expect(NodeID.parse('NodeID-P7oB2McjBGgW2NXXWVYjV8JEDFoW9xDE5')).toBeTruthy();
   });
 
-  it('accepts any string (no strict validation regex)', () => {
-    // NodeID schema uses z.string() with .describe(), no regex constraint
-    expect(NodeID.parse('some-node-id')).toBe('some-node-id');
+  it('rejects strings without NodeID- prefix', () => {
+    expect(() => NodeID.parse('some-node-id')).toThrow();
+    expect(() => NodeID.parse('P7oB2McjBGgW2NXXWVYjV8JEDFoW9xDE5')).toThrow();
+  });
+
+  it('rejects NodeID with invalid CB58 characters (0, O, I, l)', () => {
+    expect(() => NodeID.parse('NodeID-000000')).toThrow();
+    expect(() => NodeID.parse('NodeID-OOOIII')).toThrow();
+    expect(() => NodeID.parse('NodeID-lllll')).toThrow();
   });
 });
 
@@ -60,6 +66,10 @@ describe('Network schema', () => {
     expect(Network.parse(undefined)).toBe('mainnet');
   });
 
+  it('accepts custom network', () => {
+    expect(Network.parse('custom')).toBe('custom');
+  });
+
   it('rejects invalid network names', () => {
     expect(() => Network.parse('invalid')).toThrow();
     expect(() => Network.parse('testnet')).toThrow();
@@ -70,9 +80,20 @@ describe('RpcUrl schema', () => {
   it('accepts valid RPC URLs', () => {
     expect(RpcUrl.parse('https://api.avax.network/ext/bc/C/rpc')).toBeTruthy();
     expect(RpcUrl.parse('http://localhost:8545')).toBeTruthy();
+    expect(RpcUrl.parse('wss://ws.example.com')).toBeTruthy();
+    expect(RpcUrl.parse('ws://localhost:8546')).toBeTruthy();
   });
 
   it('accepts undefined (optional)', () => {
     expect(RpcUrl.parse(undefined)).toBeUndefined();
+  });
+
+  it('rejects URLs without protocol', () => {
+    expect(() => RpcUrl.parse('localhost:8545')).toThrow();
+    expect(() => RpcUrl.parse('api.avax.network/ext/bc/C/rpc')).toThrow();
+  });
+
+  it('rejects non-URL strings', () => {
+    expect(() => RpcUrl.parse('not-a-url')).toThrow();
   });
 });

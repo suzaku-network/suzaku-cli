@@ -43,7 +43,14 @@ export function sendLogMessage(
 /** Resolve the CLI entry point — checks SUZAKU_CLI_PATH, then relative path, then npm dependency, then PATH */
 function resolveCliPath(): string {
   if (process.env.SUZAKU_CLI_PATH) {
-    return process.env.SUZAKU_CLI_PATH;
+    const p = process.env.SUZAKU_CLI_PATH;
+    if (!p.startsWith('/')) {
+      throw new Error(`SUZAKU_CLI_PATH must be an absolute path, got: "${p}"`);
+    }
+    if (!existsSync(p)) {
+      throw new Error(`SUZAKU_CLI_PATH does not exist: "${p}"`);
+    }
+    return p;
   }
 
   // In-repo development: relative path from packages/mcp/dist/ to repo root bin/
@@ -76,7 +83,9 @@ const SIGKILL_GRACE_MS = 5_000;
 
 /** Strip private key material (64-char hex strings) from output to prevent leakage */
 export function sanitizeOutput(text: string): string {
-  return text.replace(/0x[0-9a-fA-F]{64}/g, '0x[REDACTED]');
+  return text
+    .replace(/0x[0-9a-fA-F]{64}/g, '0x[REDACTED]')
+    .replace(/\b[0-9a-fA-F]{64}\b/g, '[REDACTED]');
 }
 
 export function sanitizeArgs(args: string[]): string[] {
@@ -88,7 +97,7 @@ function buildUserCommand(
   cliArgs: string[],
   childEnv: Record<string, string | undefined>,
 ): string {
-  const userArgs = cliArgs.filter(a => a !== '--json' && a !== '--yes');
+  const userArgs = cliArgs.filter(a => a !== '--json' && a !== '--yes' && a !== '--cast');
   const parts: string[] = [];
   if (childEnv.PK) parts.push('PK=$SUZAKU_PK');
   if (childEnv.PK_PCHAIN) parts.push('PK_PCHAIN=$SUZAKU_PCHAIN_PK');
@@ -142,6 +151,10 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   const toolName = args.slice(0, 2).join(' ');
   const cliArgs = [...args];
 
+  if (options.network === 'custom' && !options.rpcUrl) {
+    return { success: false, data: null, error: 'network "custom" requires rpcUrl to be set' };
+  }
+
   if (options.network) {
     cliArgs.push('--network', options.network);
   }
@@ -150,8 +163,9 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   }
 
   const dedupWindowMs = Number(process.env.SUZAKU_MCP_DEDUP_WINDOW_MS ?? 60_000);
+  const isWrite = options.privateKey === true;
   const dedupKey = `${JSON.stringify(args)}|${options.network ?? ''}|${options.rpcUrl ?? ''}`;
-  const cached = dedupCache.get(dedupKey);
+  const cached = !isWrite ? dedupCache.get(dedupKey) : undefined;
   if (cached && Date.now() - cached.ts < dedupWindowMs) {
     const cachedResult: CliResult = {
       ...cached.result,
@@ -338,8 +352,10 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     });
   });
 
-  dedupCache.set(dedupKey, { ts: Date.now(), result });
-  evictDedupCache(dedupWindowMs);
+  if (result.success) {
+    dedupCache.set(dedupKey, { ts: Date.now(), result });
+    evictDedupCache(dedupWindowMs);
+  }
 
   const durationMs = Math.round(performance.now() - startTime);
   if (mcpServer) {
@@ -399,8 +415,8 @@ export function formatGuardError(err: string) {
 
 export function requireSigner(): ReturnType<typeof formatResult> | null {
   if (
-    !process.env.SUZAKU_PK &&
-    !process.env.SUZAKU_SECRET_NAME &&
+    !process.env.SUZAKU_PK?.trim() &&
+    !process.env.SUZAKU_SECRET_NAME?.trim() &&
     process.env.SUZAKU_MCP_LEDGER !== 'true'
   ) {
     return {

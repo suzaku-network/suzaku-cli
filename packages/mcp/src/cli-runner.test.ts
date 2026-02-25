@@ -33,6 +33,16 @@ describe('sanitizeOutput', () => {
     expect(sanitizeOutput(longHex)).toBe('0x[REDACTED]a');
   });
 
+  it('redacts bare 64-char hex without 0x prefix', () => {
+    const bare = 'a'.repeat(64);
+    expect(sanitizeOutput(`key: ${bare}`)).toBe('key: [REDACTED]');
+  });
+
+  it('redacts bare hex case-insensitive', () => {
+    const bare = 'A'.repeat(64);
+    expect(sanitizeOutput(bare)).toBe('[REDACTED]');
+  });
+
   it('preserves non-hex strings', () => {
     expect(sanitizeOutput('hello world')).toBe('hello world');
   });
@@ -154,6 +164,17 @@ describe('requireSigner', () => {
 
   it('returns error when SUZAKU_MCP_LEDGER is set but not true', () => {
     process.env.SUZAKU_MCP_LEDGER = 'false';
+    expect(requireSigner()).not.toBeNull();
+  });
+
+  it('returns error when SUZAKU_PK is whitespace only', () => {
+    process.env.SUZAKU_PK = '   ';
+    expect(requireSigner()).not.toBeNull();
+    expect(requireSigner()!.isError).toBe(true);
+  });
+
+  it('returns error when SUZAKU_SECRET_NAME is whitespace only', () => {
+    process.env.SUZAKU_SECRET_NAME = ' ';
     expect(requireSigner()).not.toBeNull();
   });
 });
