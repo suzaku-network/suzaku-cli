@@ -1,23 +1,52 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, CliResult } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
+
+export function extractL1s(result: CliResult): { balancer: string; middleware: string; metadataUrl: string }[] {
+  if (!result.success || result.data == null || typeof result.data !== 'object') return [];
+  const data = result.data as Record<string, unknown>;
+
+  // Prefer labeled data if present
+  if (Array.isArray(data.l1s) && data.l1s.length > 0) {
+    return (data.l1s as { Balancer: string; Middleware: string; MetadataUrl: string }[]).map(l1 => ({
+      balancer: l1.Balancer,
+      middleware: l1.Middleware,
+      metadataUrl: l1.MetadataUrl,
+    }));
+  }
+
+  // Fallback: parse from receipt arrays — order matches registerL1(l1/balancer, middleware, metadataURL)
+  const receipt = data.receipt as { result?: unknown[] } | undefined;
+  if (receipt?.result && Array.isArray(receipt.result) && receipt.result.length >= 3) {
+    const [balancers, middlewares, urls] = receipt.result as [string[], string[], string[]];
+    return balancers.map((b, i) => ({
+      balancer: b,
+      middleware: middlewares[i],
+      metadataUrl: urls[i],
+    }));
+  }
+
+  return [];
+}
 
 export function registerL1RegistryTools(server: McpServer) {
   server.tool(
     'l1_registry_get_all',
-    'List all registered L1s from the L1Registry',
+    'List all registered L1s from the L1Registry. Returns labeled entries: balancer (BalancerValidatorManager address), middleware (L1Middleware address), and metadataUrl.',
     {
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ network, rpcUrl }) => {
-      return formatResult(await runCli(
+      const result = await runCli(
         ['l1-registry', 'get-all'],
         { network, rpcUrl },
-      ));
+      );
+      const l1s = extractL1s(result);
+      return formatResult({ success: result.success, data: { l1s }, error: result.error });
     },
   );
 

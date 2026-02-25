@@ -49,7 +49,7 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -96,7 +96,7 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ poaSecurityModuleAddress, removeNodeTxHash, skipWaitApi, nodeIds, addNodeTxHashes, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -144,7 +144,7 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ poaSecurityModuleAddress, weightUpdateTxHash, skipWaitApi, nodeIds, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;

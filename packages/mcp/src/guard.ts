@@ -16,15 +16,15 @@ export function checkToolAccess(toolName: string): string | null {
   const deny = process.env.SUZAKU_MCP_DENY_TOOLS;
 
   if (deny) {
-    const denyList = deny.split(',').map(s => s.trim());
+    const denyList = deny.split(',').map(s => s.trim()).filter(Boolean);
     if (denyList.includes(toolName)) {
       return `Tool "${toolName}" is blocked by SUZAKU_MCP_DENY_TOOLS`;
     }
   }
 
   if (allow) {
-    const allowList = allow.split(',').map(s => s.trim());
-    if (!allowList.includes(toolName)) {
+    const allowList = allow.split(',').map(s => s.trim()).filter(Boolean);
+    if (allowList.length > 0 && !allowList.includes(toolName)) {
       return `Tool "${toolName}" is not in SUZAKU_MCP_ALLOW_TOOLS allowlist`;
     }
   }
@@ -32,18 +32,24 @@ export function checkToolAccess(toolName: string): string | null {
   return null;
 }
 
+/** Strict decimal: digits with optional single decimal point, no trailing text */
+const STRICT_DECIMAL = /^\d+(\.\d+)?$/;
+
 /**
  * Check if a transaction value exceeds the configured limit.
- * Returns an error string if exceeded, null if within limits.
+ * Returns an error string if exceeded or unparseable, null if within limits.
+ * Fails closed: rejects scientific notation, trailing text, and other non-decimal formats.
  */
 export function checkValueLimit(amount: string | undefined): string | null {
   const maxAvax = process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
   if (!maxAvax || !amount) return null;
 
-  const limit = parseFloat(maxAvax);
-  const value = parseFloat(amount);
+  if (!STRICT_DECIMAL.test(maxAvax) || !STRICT_DECIMAL.test(amount)) {
+    return `Unparseable amount or limit — amount: "${amount}", limit: "${maxAvax}". Both must be decimal numbers (e.g. "10" or "1.5").`;
+  }
 
-  if (isNaN(limit) || isNaN(value)) return null;
+  const limit = Number(maxAvax);
+  const value = Number(amount);
 
   if (value > limit) {
     return `Transaction value ${amount} AVAX exceeds SUZAKU_MCP_MAX_AVAX_PER_TX limit of ${maxAvax} AVAX`;
@@ -73,7 +79,9 @@ export async function confirmWriteOperation(
   // Testnet: existing REQUIRE_CONFIRM behavior
   if (requireConfirm !== 'true') return null;
 
-  if (!guardServer) return null;
+  if (!guardServer) {
+    return 'Write confirmation required (SUZAKU_MCP_REQUIRE_CONFIRM=true) but MCP server not initialized. Cannot elicit confirmation.';
+  }
 
   const description: Record<string, string> = {
     tool: toolName,
@@ -108,9 +116,8 @@ export async function confirmWriteOperation(
 
     return null;
   } catch {
-    // If elicitation is not supported by the client, proceed.
-    // The destructiveHint already provides a confirmation layer in supported clients.
-    return null;
+    // Elicitation not supported — fail closed when confirmation is required
+    return `Write confirmation required (SUZAKU_MCP_REQUIRE_CONFIRM=true) but MCP client does not support elicitation. Cannot confirm ${toolName}.`;
   }
 }
 
@@ -126,6 +133,9 @@ export async function guardWriteOperation(
   if (accessErr) return accessErr;
 
   const amount = amountField ? (params[amountField] as string | undefined) : undefined;
+  if (amountField && !(amountField in params)) {
+    process.stderr.write(`[suzaku-mcp] warning: amountField "${amountField}" not found in params for ${toolName}\n`);
+  }
   const limitErr = checkValueLimit(amount);
   if (limitErr) return limitErr;
 

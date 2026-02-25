@@ -3,10 +3,16 @@ import { z } from 'zod';
 import { runCli, formatResult, formatGuardError, requireSigner, CliResult } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
+import { extractL1s } from './l1-registry.js';
+import { extractOperators } from './operator.js';
 
-/** Extract data from a CliResult, returning empty object on failure */
-function extractData(result: CliResult): Record<string, unknown> {
-  if (!result.success || result.data == null || typeof result.data !== 'object') return {};
+/** Extract data from a CliResult, returning empty object on failure.
+ *  When label and warnings are provided, records failed sub-calls for surfacing to the caller. */
+function extractData(result: CliResult, label?: string, warnings?: string[]): Record<string, unknown> {
+  if (!result.success || result.data == null || typeof result.data !== 'object') {
+    if (label && warnings) warnings.push(`${label}: ${result.error ?? 'no data'}`);
+    return {};
+  }
   return result.data as Record<string, unknown>;
 }
 
@@ -136,8 +142,7 @@ export function registerMiddlewareTools(server: McpServer) {
     async ({ middlewareAddress, nodeId, snowscanApiKey, network, rpcUrl }) => {
       const args = ['middleware', 'node-logs', middlewareAddress];
       if (nodeId) args.push('--node-id', nodeId);
-      const apiKey = snowscanApiKey || process.env.SNOWSCAN_API_KEY;
-      if (apiKey) args.push('--snowscan-api-key', apiKey);
+      if (snowscanApiKey) args.push('--snowscan-api-key', snowscanApiKey);
       return formatResult(await runCli(args, { network, rpcUrl }));
     },
   );
@@ -189,6 +194,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
 
       // Phase 1: parallel registry reads
       const [l1sResult, operatorsResult] = await Promise.all([
@@ -196,11 +202,14 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['operator-registry', 'get-all'], opts),
       ]);
 
-      const l1s = (extractData(l1sResult).l1s ?? []) as { MetadataUrl: string; Balancer: string; Middleware: string }[];
-      const globalOperators = (extractData(operatorsResult).operators ?? []) as { address: string; metadataUrl: string }[];
+      if (!l1sResult.success) _warnings.push(`l1Registry: ${l1sResult.error ?? 'no data'}`);
+      if (!operatorsResult.success) _warnings.push(`operatorRegistry: ${operatorsResult.error ?? 'no data'}`);
+
+      const l1s = extractL1s(l1sResult);
+      const globalOperators = extractOperators(operatorsResult);
 
       // Phase 2: for each middleware, get linked addresses (parallel)
-      const uniqueMiddlewares = [...new Set(l1s.map(l1 => l1.Middleware).filter(Boolean))];
+      const uniqueMiddlewares = [...new Set(l1s.map(l1 => l1.middleware).filter(Boolean))];
       const linkedResults = await Promise.all(
         uniqueMiddlewares.map(mw =>
           runCli(['middleware', 'get-linked-addresses', mw], opts)
@@ -209,20 +218,19 @@ export function registerMiddlewareTools(server: McpServer) {
 
       const linkedByMiddleware: Record<string, Record<string, unknown>> = {};
       uniqueMiddlewares.forEach((mw, i) => {
-        linkedByMiddleware[mw] = extractData(linkedResults[i]).linkedAddresses as Record<string, unknown> ?? {};
+        linkedByMiddleware[mw] = extractData(linkedResults[i], `linked-${mw}`, _warnings).linkedAddresses as Record<string, unknown> ?? {};
       });
 
       // Assemble output
       const enrichedL1s = l1s.map(l1 => ({
-        metadataUrl: l1.MetadataUrl,
-        balancer: l1.Balancer,
-        middleware: l1.Middleware,
-        linkedAddresses: linkedByMiddleware[l1.Middleware] ?? {},
+        ...l1,
+        linkedAddresses: linkedByMiddleware[l1.middleware] ?? {},
       }));
 
       const result = {
         l1s: enrichedL1s,
         globalOperators,
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: result });
@@ -244,6 +252,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, operator, epoch, rewardsAddress, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
 
       // Phase 1: independent reads in parallel (includes linked addresses for auto-resolve)
       const [epochResult, classIdsResult, usedResult, lockedResult, nodesResult, epochConfigResult, linkedResult] = await Promise.all([
@@ -256,10 +265,10 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['middleware', 'get-linked-addresses', middlewareAddress], opts),
       ]);
 
-      const currentEpoch = String(extractData(epochResult).epoch ?? epoch ?? 0);
-      const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
-      const nodes = (extractData(nodesResult).nodes ?? []) as string[];
-      const linkedAddresses = extractData(linkedResult).linkedAddresses as Record<string, string> | undefined;
+      const currentEpoch = String(extractData(epochResult, 'epoch', _warnings).epoch ?? epoch ?? 0);
+      const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
+      const nodes = (extractData(nodesResult, 'nodes', _warnings).nodes ?? []) as string[];
+      const linkedAddresses = extractData(linkedResult, 'linked', _warnings).linkedAddresses as Record<string, string> | undefined;
 
       // Phase 2: epoch-dependent reads in parallel
       const phase2Calls: Promise<CliResult>[] = [
@@ -287,41 +296,48 @@ export function registerMiddlewareTools(server: McpServer) {
       }
 
       const phase2Results = await Promise.all(phase2Calls);
-      let idx = 0;
-      const activeNodesData = extractData(phase2Results[idx++]);
-      const availableData = extractData(phase2Results[idx++]);
 
+      // Fixed-position results
+      const activeNodesData = extractData(phase2Results[0], 'activeNodes', _warnings);
+      const availableData = extractData(phase2Results[1], 'available', _warnings);
+
+      // Variable-length per-class results
       const byClass: Record<string, string> = {};
-      for (const classId of classIds) {
-        byClass[classId] = (extractData(phase2Results[idx++]).operatorStake as string) ?? 'unknown';
+      for (let i = 0; i < classIds.length; i++) {
+        byClass[classIds[i]] = (extractData(phase2Results[2 + i], `class-${classIds[i]}`, _warnings).operatorStake as string) ?? 'unknown';
       }
 
-      const epochStartTs = Number(extractData(phase2Results[idx++]).epochStartTs ?? 0);
-      const cacheStatusData = extractData(phase2Results[idx++]).cacheStatus as {
+      // Remaining fixed-position results after class section
+      const tailOffset = 2 + classIds.length;
+      const epochStartTs = Number(extractData(phase2Results[tailOffset], 'epochStartTs', _warnings).epochStartTs ?? 0);
+      const cacheStatusData = extractData(phase2Results[tailOffset + 1], 'cacheStatus', _warnings).cacheStatus as {
         epoch: number;
         cacheByClass: Record<string, boolean>;
         rebalanceByOperator: Record<string, boolean>;
         allClassesCached: boolean;
       } | undefined;
 
+      let nextOffset = tailOffset + 2;
+
       let rewards: Record<string, unknown> | undefined;
       if (rewardsAddress) {
         rewards = {
-          epochRewards: extractData(phase2Results[idx++]).epochRewards,
-          operatorShares: extractData(phase2Results[idx++]).operatorShares,
+          epochRewards: extractData(phase2Results[nextOffset], 'epochRewards', _warnings).epochRewards,
+          operatorShares: extractData(phase2Results[nextOffset + 1], 'operatorShares', _warnings).operatorShares,
         };
+        nextOffset += 2;
       }
 
       let uptime: Record<string, unknown> | undefined;
       if (uptimeAddress) {
         uptime = {
-          operatorUptime: extractData(phase2Results[idx++]).operatorUptime,
-          isOperatorUptimeSet: extractData(phase2Results[idx++]).isOperatorUptimeSet,
+          operatorUptime: extractData(phase2Results[nextOffset], 'operatorUptime', _warnings).operatorUptime,
+          isOperatorUptimeSet: extractData(phase2Results[nextOffset + 1], 'uptimeSet', _warnings).isOperatorUptimeSet,
         };
       }
 
       // Compute epoch timing from epochConfig + epochStartTs
-      const epochConfigData = extractData(epochConfigResult).epochConfig as {
+      const epochConfigData = extractData(epochConfigResult, 'epochConfig', _warnings).epochConfig as {
         epochDuration: number;
         updateWindow: number;
         epoch: number;
@@ -350,8 +366,8 @@ export function registerMiddlewareTools(server: McpServer) {
         epoch: currentEpoch,
         stake: {
           available: availableData.availableStake ?? null,
-          used: extractData(usedResult).usedStake ?? null,
-          locked: extractData(lockedResult).lockedStake ?? null,
+          used: extractData(usedResult, 'used', _warnings).usedStake ?? null,
+          locked: extractData(lockedResult, 'locked', _warnings).lockedStake ?? null,
           byClass,
         },
         nodes,
@@ -361,6 +377,7 @@ export function registerMiddlewareTools(server: McpServer) {
         rebalancedThisEpoch,
         ...(rewards ? { rewards } : {}),
         ...(uptime ? { uptime } : {}),
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: dashboard });
@@ -379,6 +396,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, vaultManagerAddress: vaultManagerInput, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
 
       // Phase 1: global state + optional linked addresses for auto-resolve
       const phase1Calls: Promise<CliResult>[] = [
@@ -394,19 +412,19 @@ export function registerMiddlewareTools(server: McpServer) {
       }
 
       const phase1Results = await Promise.all(phase1Calls);
-      const [epochResult, operatorsResult, classIdsResult, activeClassesResult, epochConfigResult, cacheStatusResult] = phase1Results;
+      const [epochResult, operatorsResult, classIdsResult, activeClassesResult, epochConfigResult, cacheStatusResult, linkedResult] = phase1Results;
 
       // Auto-resolve vaultManagerAddress from linked addresses if not provided
       let vaultManagerAddress = vaultManagerInput;
-      if (!vaultManagerAddress && phase1Results[6]) {
-        const linked = extractData(phase1Results[6]).linkedAddresses as Record<string, string> | undefined;
+      if (!vaultManagerAddress && linkedResult) {
+        const linked = extractData(linkedResult, 'linked', _warnings).linkedAddresses as Record<string, string> | undefined;
         if (linked?.vaultManager) vaultManagerAddress = linked.vaultManager;
       }
 
-      const currentEpoch = String(extractData(epochResult).epoch ?? 0);
-      const operators = (extractData(operatorsResult).operators ?? []) as string[];
-      const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
-      const activeClasses = extractData(activeClassesResult).activeCollateralClasses;
+      const currentEpoch = String(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
+      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
+      const activeClasses = extractData(activeClassesResult, 'activeClasses', _warnings).activeCollateralClasses;
 
       // Phase 2: per-operator metrics (parallel)
       const operatorCalls = operators.flatMap(op => [
@@ -433,34 +451,34 @@ export function registerMiddlewareTools(server: McpServer) {
         const base = i * fieldsPerOp;
         return {
           address: op,
-          usedStake: extractData(operatorResults[base]).usedStake ?? null,
-          lockedStake: extractData(operatorResults[base + 1]).lockedStake ?? null,
-          nodesLength: extractData(operatorResults[base + 2]).nodesLength ?? null,
-          ...(classIds.length > 0 ? { primaryClassStake: extractData(operatorResults[base + 3]).operatorStake ?? null } : {}),
+          usedStake: extractData(operatorResults[base], `op-${op}-used`, _warnings).usedStake ?? null,
+          lockedStake: extractData(operatorResults[base + 1], `op-${op}-locked`, _warnings).lockedStake ?? null,
+          nodesLength: extractData(operatorResults[base + 2], `op-${op}-nodes`, _warnings).nodesLength ?? null,
+          ...(classIds.length > 0 ? { primaryClassStake: extractData(operatorResults[base + 3], `op-${op}-stake`, _warnings).operatorStake ?? null } : {}),
         };
       });
 
       let vaults: Record<string, unknown>[] | undefined;
       if (vaultCountResult) {
-        const count = (extractData(vaultCountResult).vaultCount as number) ?? 0;
+        const count = (extractData(vaultCountResult, 'vaultCount', _warnings).vaultCount as number) ?? 0;
         if (count > 0) {
           const vaultCalls = Array.from({ length: count }, (_, i) =>
             runCli(['vault-manager', 'get-vault-at-with-times', vaultManagerAddress!, String(i)], opts)
           );
           const vaultResults = await Promise.all(vaultCalls);
-          vaults = vaultResults.map(r => extractData(r).vault as Record<string, unknown> ?? {});
+          vaults = vaultResults.map((r, i) => extractData(r, `vault-${i}`, _warnings).vault as Record<string, unknown> ?? {});
         }
       }
 
       // Extract epoch config and cache status
-      const epochConfigData = extractData(epochConfigResult).epochConfig as {
+      const epochConfigData = extractData(epochConfigResult, 'epochConfig', _warnings).epochConfig as {
         epochDuration: number;
         updateWindow: number;
         epoch: number;
         lastNodeStakeUpdateEpoch: number;
       } | undefined;
 
-      const cacheStatusData = extractData(cacheStatusResult).cacheStatus as {
+      const cacheStatusData = extractData(cacheStatusResult, 'cacheStatus', _warnings).cacheStatus as {
         epoch: number;
         cacheByClass: Record<string, boolean>;
         rebalanceByOperator: Record<string, boolean>;
@@ -488,6 +506,7 @@ export function registerMiddlewareTools(server: McpServer) {
           },
         } : {}),
         ...(vaults ? { vaults } : {}),
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: overview });
@@ -509,6 +528,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, rewardsAddress, startEpoch, epochs: epochCount, uptimeAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
       const numEpochs = Math.min(epochCount ?? 1, 10);
 
       // Phase 1: global config
@@ -519,10 +539,10 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
       ]);
 
-      const currentEpoch = Number(extractData(epochResult).epoch ?? 0);
-      const operators = (extractData(operatorsResult).operators ?? []) as string[];
-      const feesConfig = extractData(feesResult).feesConfig;
-      const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
+      const currentEpoch = Number(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
+      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      const feesConfig = extractData(feesResult, 'feesConfig', _warnings).feesConfig;
+      const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
 
       const start = startEpoch ? Number(startEpoch) : Math.max(currentEpoch - 1, 0);
       const epochRange = Array.from({ length: numEpochs }, (_, i) => start - i).filter(e => e >= 0);
@@ -536,9 +556,9 @@ export function registerMiddlewareTools(server: McpServer) {
 
       const rewardsBipsByClass: Record<string, unknown> = {};
       classIds.forEach((classId, i) => {
-        rewardsBipsByClass[classId] = extractData(configResults[i]).rewardsBips ?? null;
+        rewardsBipsByClass[classId] = extractData(configResults[i], `bips-${classId}`, _warnings).rewardsBips ?? null;
       });
-      const minRequiredUptime = extractData(configResults[configResults.length - 1]).minRequiredUptime;
+      const minRequiredUptime = extractData(configResults[configResults.length - 1], 'minUptime', _warnings).minRequiredUptime;
 
       // Phase 3: per-epoch data (rewards, distribution, operator shares, optional uptime)
       const epochReports = [];
@@ -560,18 +580,18 @@ export function registerMiddlewareTools(server: McpServer) {
 
         const results = await Promise.all(epochCalls);
         let ridx = 0;
-        const epochRewards = extractData(results[ridx++]).epochRewards;
-        const distributionBatch = extractData(results[ridx++]).distributionBatch;
+        const epochRewards = extractData(results[ridx++], `ep-${ep}-rewards`, _warnings).epochRewards;
+        const distributionBatch = extractData(results[ridx++], `ep-${ep}-distribution`, _warnings).distributionBatch;
 
         const operatorData = operators.map(op => {
-          const shares = extractData(results[ridx++]).operatorShares;
+          const shares = extractData(results[ridx++], `ep-${ep}-shares-${op}`, _warnings).operatorShares;
           return { address: op, shares, uptime: undefined as unknown, uptimeSet: undefined as unknown };
         });
 
         if (uptimeAddress) {
           operatorData.forEach(od => {
-            od.uptime = extractData(results[ridx++]).operatorUptime;
-            od.uptimeSet = extractData(results[ridx++]).isOperatorUptimeSet;
+            od.uptime = extractData(results[ridx++], `ep-${ep}-uptime-${od.address}`, _warnings).operatorUptime;
+            od.uptimeSet = extractData(results[ridx++], `ep-${ep}-uptimeSet-${od.address}`, _warnings).isOperatorUptimeSet;
           });
         }
 
@@ -588,6 +608,7 @@ export function registerMiddlewareTools(server: McpServer) {
         minRequiredUptime,
         rewardsBipsByClass,
         epochs: epochReports,
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: report });
@@ -606,6 +627,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, epoch, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
 
       // Phase 1: dimensions
       const [epochResult, operatorsResult, classIdsResult] = await Promise.all([
@@ -614,9 +636,9 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['middleware', 'get-collateral-class-ids', middlewareAddress], opts),
       ]);
 
-      const currentEpoch = String(extractData(epochResult).epoch ?? epoch ?? 0);
-      const operators = (extractData(operatorsResult).operators ?? []) as string[];
-      const classIds = (extractData(classIdsResult).collateralClassIds ?? []) as string[];
+      const currentEpoch = String(extractData(epochResult, 'epoch', _warnings).epoch ?? epoch ?? 0);
+      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
+      const classIds = (extractData(classIdsResult, 'classIds', _warnings).collateralClassIds ?? []) as string[];
 
       // Phase 2: operator x class matrix + per-operator totals (all parallel)
       const matrixCalls = operators.flatMap(op => [
@@ -635,11 +657,11 @@ export function registerMiddlewareTools(server: McpServer) {
         const base = i * fieldsPerOp;
         const byClass: Record<string, string> = {};
         classIds.forEach((classId, ci) => {
-          byClass[classId] = (extractData(matrixResults[base + 2 + ci]).operatorStake as string) ?? 'unknown';
+          byClass[classId] = (extractData(matrixResults[base + 2 + ci], `op-${op}-class-${classId}`, _warnings).operatorStake as string) ?? 'unknown';
         });
         matrix[op] = {
-          usedStake: extractData(matrixResults[base]).usedStake ?? null,
-          lockedStake: extractData(matrixResults[base + 1]).lockedStake ?? null,
+          usedStake: extractData(matrixResults[base], `op-${op}-used`, _warnings).usedStake ?? null,
+          lockedStake: extractData(matrixResults[base + 1], `op-${op}-locked`, _warnings).lockedStake ?? null,
           byClass,
         };
       });
@@ -649,6 +671,7 @@ export function registerMiddlewareTools(server: McpServer) {
         operators,
         collateralClasses: classIds,
         matrix,
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: result });
@@ -669,6 +692,7 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, uptimeAddress, epochs: epochCount, startEpoch, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
       const numEpochs = Math.min(epochCount ?? 5, 10);
 
       // Phase 1: epoch + operators
@@ -677,8 +701,8 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['middleware', 'get-all-operators', middlewareAddress], opts),
       ]);
 
-      const currentEpoch = Number(extractData(epochResult).epoch ?? 0);
-      const operators = (extractData(operatorsResult).operators ?? []) as string[];
+      const currentEpoch = Number(extractData(epochResult, 'epoch', _warnings).epoch ?? 0);
+      const operators = (extractData(operatorsResult, 'operators', _warnings).operators ?? []) as string[];
 
       const start = startEpoch ? Number(startEpoch) : currentEpoch;
       const epochRange = Array.from({ length: numEpochs }, (_, i) => start - i).filter(e => e >= 0);
@@ -704,13 +728,13 @@ export function registerMiddlewareTools(server: McpServer) {
 
       // Assemble per-operator data
       const operatorData = operators.map((op, oi) => {
-        const nodes = (extractData(nodesResults[oi]).nodes ?? []) as string[];
+        const nodes = (extractData(nodesResults[oi], `nodes-${op}`, _warnings).nodes ?? []) as string[];
         const uptimeByEpoch = epochRange.map((ep, ei) => {
           const base = (ei * operators.length + oi) * 2;
           return {
             epoch: ep,
-            operatorUptime: extractData(uptimeResults[base]).operatorUptime ?? null,
-            isUptimeSet: extractData(uptimeResults[base + 1]).isOperatorUptimeSet ?? null,
+            operatorUptime: extractData(uptimeResults[base], `ep-${ep}-uptime-${op}`, _warnings).operatorUptime ?? null,
+            isUptimeSet: extractData(uptimeResults[base + 1], `ep-${ep}-uptimeSet-${op}`, _warnings).isOperatorUptimeSet ?? null,
           };
         });
 
@@ -731,6 +755,7 @@ export function registerMiddlewareTools(server: McpServer) {
         epochRange,
         currentEpoch,
         operators: operatorData,
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: report });
@@ -748,13 +773,14 @@ export function registerMiddlewareTools(server: McpServer) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, network, rpcUrl }) => {
       const opts = { network, rpcUrl };
+      const _warnings: string[] = [];
 
       // Phase 1: epoch config
       const epochConfigResult = await runCli(
         ['middleware', 'get-epoch-config', middlewareAddress],
         opts,
       );
-      const epochConfig = extractData(epochConfigResult).epochConfig as {
+      const epochConfig = extractData(epochConfigResult, 'epochConfig', _warnings).epochConfig as {
         epochDuration: number;
         updateWindow: number;
         epoch: number;
@@ -773,8 +799,8 @@ export function registerMiddlewareTools(server: McpServer) {
         runCli(['middleware', 'get-cache-status', middlewareAddress, '--epoch', String(currentEpoch)], opts),
       ]);
 
-      const epochStartTs = Number(extractData(epochStartResult).epochStartTs ?? 0);
-      const cacheStatus = extractData(cacheStatusResult).cacheStatus as {
+      const epochStartTs = Number(extractData(epochStartResult, 'epochStartTs', _warnings).epochStartTs ?? 0);
+      const cacheStatus = extractData(cacheStatusResult, 'cacheStatus', _warnings).cacheStatus as {
         epoch: number;
         cacheByClass: Record<string, boolean>;
         rebalanceByOperator: Record<string, boolean>;
@@ -813,6 +839,7 @@ export function registerMiddlewareTools(server: McpServer) {
         rebalance: {
           byOperator: cacheStatus?.rebalanceByOperator ?? {},
         },
+        ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
       return formatResult({ success: true, data: result });
@@ -845,7 +872,7 @@ export function registerMiddlewareTools(server: McpServer) {
 
   server.tool(
     'middleware_add_node',
-    'Add a validator node to the middleware (requires SUZAKU_PK)',
+    'Add a validator node to the middleware — phase 1 of two-phase registration (requires SUZAKU_PK)',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       nodeId: NodeID,

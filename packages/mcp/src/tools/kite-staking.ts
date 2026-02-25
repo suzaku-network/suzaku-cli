@@ -82,7 +82,7 @@ export function registerKiteStakingTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ kiteStakingManagerAddress, initiateTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -132,7 +132,7 @@ export function registerKiteStakingTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ kiteStakingManagerAddress, initiateRemovalTxHash, skipWaitApi, nodeIds, initiateTxHashes, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -183,7 +183,7 @@ export function registerKiteStakingTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ kiteStakingManagerAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -237,8 +237,11 @@ export function registerKiteStakingTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ kiteStakingManagerAddress, initiateRemovalTxHash, uptimeRpcUrl, skipWaitApi, delegationIds, initiateTx, network, rpcUrl }) => {
+      if (uptimeRpcUrl && rpcUrl) {
+        return formatGuardError('Cannot set both rpcUrl and uptimeRpcUrl — the CLI uses a single --rpc-url flag. Use uptimeRpcUrl for uptime proof, or rpcUrl for the network endpoint.');
+      }
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('kite_complete_delegator_removal', { kiteStakingManagerAddress, initiateRemovalTxHash, uptimeRpcUrl, skipWaitApi, network, rpcUrl });

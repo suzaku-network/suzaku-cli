@@ -327,7 +327,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ stakingVaultAddress, initiateTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -377,7 +377,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, nodeIds, initiateTx, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
@@ -426,8 +426,11 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ stakingVaultAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl }) => {
+      if (uptimeRpcUrl && rpcUrl) {
+        return formatGuardError('Cannot set both rpcUrl and uptimeRpcUrl — the CLI uses a single --rpc-url flag. Use uptimeRpcUrl for uptime proof, or rpcUrl for the network endpoint.');
+      }
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_delegator_registration', { stakingVaultAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl });
@@ -474,7 +477,7 @@ export function registerStakingVaultTools(server: McpServer) {
       network: Network,
       rpcUrl: RpcUrl,
     },
-    { destructiveHint: true },
+    { destructiveHint: true, openWorldHint: true },
     async ({ stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, delegationIds, initiateTx, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
