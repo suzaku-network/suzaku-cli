@@ -1,0 +1,48 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "open",
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "mcp-adapter": {
+        "enabled": true,
+        "config": {
+          "servers": [
+            {
+              "name": "suzaku",
+              "transport": "stdio",
+              "command": "node",
+              "args": ["${SUZAKU_MCP_PATH}", "--read-only"],
+              "env": {
+                "SUZAKU_MCP_DEDUP_WINDOW_MS": "30000"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "tools": {
+    "sandbox": {
+      "tools": {
+        "allow": ["mcp-adapter"]
+      }
+    }
+  }
+}
