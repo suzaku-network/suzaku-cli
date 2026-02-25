@@ -35,7 +35,7 @@ export const SuzakuABI = {
   L1Registry,
   OperatorRegistry,
   VaultManager,
-  L1Middleware: withErrors(L1Middleware, L1Registry, OperatorRegistry, VaultManager),
+  L1Middleware: withErrors(L1Middleware, L1Registry, OperatorRegistry, VaultManager, BalancerValidatorManager, ValidatorManager),
   VaultTokenized,
   L1RestakeDelegator,
   BalancerValidatorManager,

@@ -381,8 +381,9 @@ export async function completeWeightUpdate(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
     // TODO: Find a way to use the proper signature of the method
     const method = securityModule.safeWrite.completeValidatorWeightUpdate as any;
-    const hash = await method([0]);
+    const hash = await method([0],
+      {chain: client.chain, accessList}
+    );
     logger.log("completeStakeUpdate done, tx hash:", hash);
   }
 }
-

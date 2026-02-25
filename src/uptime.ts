@@ -221,3 +221,127 @@ export async function getLastUptimeCheckpoint(
     [validationID]
   );
 }
+
+/**
+ * Check if all validators from all operators have reported uptime for the epoch
+ */
+export async function checkAllValidatorsUptimeReported(
+  client: ExtendedClient,
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  epoch?: number
+) {
+  const targetEpoch = epoch ?? Number(await middleware.read.getCurrentEpoch());
+  logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
+
+  const operators = await middleware.read.getAllOperators();
+  if (operators.length === 0) {
+    logger.log("No operators found.");
+    return;
+  }
+
+  const operatorValidationIds = await middleware.multicall(
+    operators.map(op => ({ name: 'getOperatorValidationIDs', args: [op] }))
+  );
+
+  const allValidationIds = operatorValidationIds.flatMap(ids => ids as Hex[]);
+  const uniqueValidationIds = [...new Set(allValidationIds)];
+
+  if (uniqueValidationIds.length === 0) {
+    logger.log("No validators found for any operator.");
+    return;
+  }
+
+  // Check uptime status and get validator details in parallel structure
+  const [uptimeStatus, validators] = await Promise.all([
+    uptimeTracker.multicall(
+      uniqueValidationIds.map(vid => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, vid] }))
+    ),
+    balancer.multicall(
+      uniqueValidationIds.map(vid => ({ name: 'getValidator', args: [vid] }))
+    )
+  ]);
+
+  const missingUptimes: {
+    validationID: Hex;
+    nodeID: Hex;
+  }[] = [];
+  const reportedUptimes: {
+    validationID: Hex;
+    nodeID: Hex;
+  }[] = [];
+
+  // uniqueAValidationIds
+
+  uniqueValidationIds.forEach((vid, index) => {
+    // getValidator returns the Validator struct, we can extract nodeID if it exists 
+    const validator = validators[index];
+    const status = uptimeStatus[index];
+    const nodeIDHex = validator?.nodeID as Hex;
+    let nodeIDStr = vid;
+    if (nodeIDHex) {
+      // encodeNodeID is not imported in uptime.ts, let's just return the hex or we can import it in cli.js.
+      // Actually we can just keep the raw hex nodeID here and format it in the CLI if needed, or we just log it.
+      // We'll just return the relevant data.
+      nodeIDStr = nodeIDHex;
+    }
+
+    const info = { validationID: vid, nodeID: nodeIDStr };
+
+    if (status) {
+      reportedUptimes.push(info);
+    } else {
+      missingUptimes.push(info);
+    }
+  });
+
+  logger.log(`\nUptime Report for Epoch ${targetEpoch}:`);
+  logger.log(`Total active validators: ${uniqueValidationIds.length}`);
+  logger.log(`Reported: ${reportedUptimes.length}`);
+  logger.log(`Missing: ${missingUptimes.length}`);
+
+  if (missingUptimes.length > 0) {
+    logger.log(`\nValidators missing uptime report:`);
+    missingUptimes.forEach((info, index) => logger.log(`  ${index + 1}. ValidationID: ${info.validationID} (NodeID Hex: ${info.nodeID})`));
+
+    logger.log(`\nAttempting to report and submit uptime for missing validators...`);
+    const rpcUrl = "https://api.avax.network/ext/bc/P";
+    const sourceChainID = "11111111111111111111111111111111LpoYY";
+
+    for (const info of missingUptimes) {
+      if (info.nodeID && info.nodeID.startsWith('0x')) {
+        // We need to convert the hex NodeID back to CB58 string to query the API
+        const { encodeNodeID } = require('./lib/utils');
+        const nodeIDString = encodeNodeID(info.nodeID);
+        try {
+          await reportAndSubmitValidatorUptime(
+            client,
+            rpcUrl,
+            nodeIDString,
+            sourceChainID,
+            uptimeTracker
+          );
+        } catch (error: any) {
+          logger.error(`Failed to report uptime for validator ${info.validationID} (NodeID: ${nodeIDString}):`, error.message);
+        }
+      } else {
+        logger.error(`Cannot report uptime for validationID ${info.validationID} because NodeID is missing or invalid.`);
+      }
+    }
+    logger.log(`\nFinished attempting to report missing uptimes.`);
+  } else {
+    logger.log(`\nAll validators have reported uptime for epoch ${targetEpoch}!`);
+  }
+
+  logger.addData('uptimeReport', {
+    epoch: targetEpoch,
+    total: uniqueValidationIds.length,
+    reportedCount: reportedUptimes.length,
+    missingCount: missingUptimes.length,
+    reported: reportedUptimes,
+    missing: missingUptimes
+  });
+
+  return { reportedUptimes, missingUptimes };
+}

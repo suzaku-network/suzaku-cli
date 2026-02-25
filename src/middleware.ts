@@ -426,9 +426,9 @@ export async function weightWatcher(
     loopEpochs?: number;
   }
 ) {
-
+  
   // middlewareManualProcessNodeStakeCache configuration
-  const [lastGlobalNodeStakeUpdateEpoch, currentEpoch] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch']);
+  const [lastGlobalNodeStakeUpdateEpoch, currentEpoch, updateWindow] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch', 'UPDATE_WINDOW']);
   let epochsPerCall;
   let loopCount;
   if (options.epochs || options.loopEpochs) { // Fully specified by user
@@ -438,6 +438,13 @@ export async function weightWatcher(
     epochsPerCall = currentEpoch - lastGlobalNodeStakeUpdateEpoch;
     loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1; // Limit number of epochs processed in a single call to avoid gas issues
     epochsPerCall = Math.ceil(epochsPerCall / loopCount);
+  }
+
+  const startEpoch = await middleware.read.getEpochStartTs([currentEpoch]);
+  const now = Date.now() / 1000;
+
+  if (now < startEpoch + updateWindow) {
+    throw new Error(`Not enough time has passed since the start of the current epoch. Please wait until the update window has passed(${startEpoch + updateWindow - now} seconds)`);
   }
 
   logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
@@ -472,6 +479,8 @@ export async function weightWatcher(
       logger.log(`Stake deficit: ${prediction.stakeDeficit}`);
       logger.log(`Active nodes count: ${prediction.activeNodesCount}`);
       await middleware.safeWrite.forceUpdateNodes([prediction.operator, 0n]);
+    } else {
+      logger.log(`Operator ${prediction.operator} will not lose weight`);
     }
   }
 }
@@ -491,6 +500,7 @@ export async function predictForceUpdateImpact(
   middleware: SafeSuzakuContract['L1Middleware'],
   operators: Hex[]
 ): Promise<OperatorForceUpdatePrediction[]> {
+  // Replicate the calculation in the smart contract
   if (operators.length === 0) return [];
 
   const [
@@ -544,6 +554,7 @@ export async function predictForceUpdateImpact(
     const activeNodes = results[baseIndex + 3] as readonly `0x${string}`[];
 
     let cappedStake = theoreticalStake;
+    // If the stake is above the max cap, cap it
     if (cappedStake > maxStakeCap) {
       cappedStake = maxStakeCap;
     }
@@ -551,9 +562,11 @@ export async function predictForceUpdateImpact(
     const registeredStake = usedStake + lockedStake;
     let stakeDeficit = 0n;
     let willLoseWeight = false;
+    // If the stake is below the registered stake, check if the operator will lose weight
     if (cappedStake < registeredStake) {
       stakeDeficit = registeredStake - cappedStake;
 
+      // If the stake deficit is behind the weight scale factor, the operator will lose weight
       if (stakeDeficit >= weightScaleFactor) {
         if (activeNodes.length > 0) {
           willLoseWeight = true;
@@ -573,4 +586,45 @@ export async function predictForceUpdateImpact(
   }
 
   return predictions;
+}
+
+export async function middlewareInfo(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  logger.log("Fetching middleware information...");
+
+  const results = await middleware.multicall([
+    'owner',
+    'BALANCER',
+    'PRIMARY_ASSET_CLASS',
+    'PRIMARY_ASSET',
+    'WEIGHT_SCALE_FACTOR',
+    'UPDATE_WINDOW',
+    'START_TIME',
+    'getCurrentEpoch',
+    'getAllOperators',
+    'getCollateralClassIds',
+    'lastGlobalNodeStakeUpdateEpoch',
+    'getVaultManager'
+  ]);
+
+  const info = {
+    middlewareAddress: middleware.address,
+    owner: results[0] as Hex,
+    balancerValidatorManager: results[1] as Hex,
+    primaryAssetClass: results[2]?.toString(),
+    primaryAsset: results[3] as Hex,
+    weightScaleFactor: results[4]?.toString(),
+    updateWindow: results[5]?.toString(),
+    startTime: new Date(Number(results[6]) * 1000).toLocaleString(),
+    currentEpoch: results[7]?.toString(),
+    operatorsCount: (results[8] as Hex[]).length,
+    collateralClassIds: (results[9] as bigint[])?.map(id => id.toString()),
+    lastGlobalNodeStakeUpdateEpoch: results[10]?.toString(),
+    vaultManager: results[11] as Hex,
+  };
+
+  logger.logJsonTree(info);
+  logger.addData('middlewareInfo', info);
+  return info;
 }

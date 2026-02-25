@@ -58,7 +58,8 @@ import {
     middlewareGetNodeLogs,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
-    weightWatcher
+    weightWatcher,
+    middlewareInfo
 } from "./middleware";
 
 import {
@@ -87,7 +88,9 @@ import {
     getValidatorUptimeForEpoch,
     isValidatorUptimeSetForEpoch,
     getOperatorUptimeForEpoch,
-    isOperatorUptimeSetForEpoch
+    isOperatorUptimeSetForEpoch,
+    getLastUptimeCheckpoint,
+    checkAllValidatorsUptimeReported
 } from "./uptime";
 
 import {
@@ -1842,6 +1845,18 @@ async function main() {
         });
 
     middlewareCmd
+        .command("info")
+        .description("Get general information about the middleware")
+        .addArgument(ArgAddress("middlewareAddress", "Middleware address"))
+        .action(async (middlewareAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareInfo(middlewareSvc);
+        });
+
+    middlewareCmd
         .command('weight-watcher')
         .description('Watch for operators weight changes')
         .addArgument(ArgAddress('middlewareAddress', 'Middleware address'))
@@ -3436,6 +3451,31 @@ async function main() {
                 epoch
             );
             logger.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+        });
+
+    uptimeCmd
+        .command("check-uptime-reported")
+        .description("Check if all validators from all operators have reported their uptime for a specific epoch")
+        .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
+        .addArgument(ArgAddress("middlewareAddress", "Address of the Middleware contract"))
+        .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
+        .action(async (uptimeTrackerAddress, middlewareAddress, options) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+
+            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
+            const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
+
+            await checkAllValidatorsUptimeReported(
+                client,
+                uptimeTracker,
+                middlewareSvc,
+                balancerSvc,
+                options.epoch
+            );
         });
 
     /* --------------------------------------------------
