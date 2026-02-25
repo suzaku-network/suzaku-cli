@@ -38,6 +38,8 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [Rewards Commands (`rewards`)](#rewards-commands-rewards)
     - [Key Store Commands (`key`)](#key-store-commands-key)
     - [Validator Manager Contract Commands (`vmc`)](#vmc-commands-vmc)
+    - [KiteStakingManager Commands (`kite-staking-manager`)](#kitestakingmanager-commands-kite-staking-manager)
+    - [StakingVault Commands (`staking-vault`)](#stakingvault-commands-staking-vault)
     - [Ledger Commands (`ledger`)](#ledger-commands-ledger)
     - [Safe Commands (`safe`)](#safe-commands-safe)
     - [Access Control Commands (`access-control`)](#access-control-commands-access-control)
@@ -83,6 +85,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
 
 - Enable the auto-completion (only available on bash & zsh).
   This will be installed on the default user shell (It can be enforced using `SHELL` env var).
+
   ```bash
   suzaku-cli completion install
   ```
@@ -170,9 +173,11 @@ suzaku-cli vault deposit $VAULT 100 --ledger --network fuji
 ```
 
 **Configuration:**
+
 - `LEDGER_ACCOUNT_INDEX`: Set this environment variable to use a different account index (default: 0)
 
 **Ledger commands:**
+
 ```bash
 # Get addresses from connected Ledger
 suzaku-cli ledger addresses
@@ -185,9 +190,9 @@ suzaku-cli ledger fix-usb
 
 ## Token values
 
-  It's important to notice that all token values to use as cli input are decimal formatted.
-  
-  It means the given value is multiplied by the onchain decimal number or, for AVAX, by 18 for the C-Chain and 9 for the P-Chain.
+It's important to notice that all token values to use as cli input are decimal formatted.
+
+It means the given value is multiplied by the onchain decimal number or, for AVAX, by 18 for the C-Chain and 9 for the P-Chain.
 
 ## Usage on Fuji
 
@@ -234,7 +239,6 @@ suzaku-cli l1-registry register $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://
   ```
 
 - **(Optional) Mint & Approve sAVAX, Then Deposit**
-
   1.  Mint via `cast`:
       ```bash
       cast send "$SAVAX" "mint(address,uint256)" "$STAKER" 5000000000000000000000000 \
@@ -388,11 +392,11 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 2. **Allocate Rewards**
 
    ```bash
-   # Set rewards amount for the epochs you want to test (using REWARDS_TOKEN variable) (1 token in decimal format)
-   suzaku-cli rewards set-amount $REWARDS 99 5 $REWARDS_TOKEN 1 --network fuji --private-key $L1_OWNER
+   # Set rewards amount for the epochs you want to test (1 token in decimal format)
+   suzaku-cli rewards set-amount $REWARDS 99 5 1 --network fuji --private-key $L1_OWNER
 
    # Verify rewards allocation
-   suzaku-cli rewards get-amounts $REWARDS 99 --network fuji
+   suzaku-cli rewards get-epoch-rewards $REWARDS 99 --network fuji
    ```
 
 3. **Distribute Rewards**
@@ -425,16 +429,16 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 
    ```bash
    # Claim operator fees
-   suzaku-cli rewards claim-operator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $OPERATOR_KEY
+   suzaku-cli rewards claim-operator-fee $REWARDS --network fuji --private-key $OPERATOR_KEY
 
    # Claim staker rewards
-   suzaku-cli rewards claim $REWARDS $REWARDS_TOKEN --network fuji --private-key $STAKER_KEY
+   suzaku-cli rewards claim $REWARDS --network fuji --private-key $STAKER_KEY
 
    # Claim curator fees
-   suzaku-cli rewards claim-curator-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $CURATOR_KEY
+   suzaku-cli rewards claim-curator-fee $REWARDS --network fuji --private-key $CURATOR_KEY
 
    # Claim protocol fees
-   suzaku-cli rewards claim-protocol-fee $REWARDS $REWARDS_TOKEN --network fuji --private-key $PROTOCOL_OWNER
+   suzaku-cli rewards claim-protocol-fee $REWARDS --network fuji --private-key $PROTOCOL_OWNER
    ```
 
 6. **Verify Claim Status**
@@ -448,15 +452,12 @@ cast send "$SAVAX" "approve(address,uint256)" "$REWARDS" 10000000000000000000000
 
    # Check last claimed epoch for curator
    suzaku-cli rewards get-last-claimed-curator $REWARDS $CURATOR $REWARDS_TOKEN --network fuji
-
-   # Check last claimed epoch for protocol owner
-   suzaku-cli rewards get-last-claimed-protocol $REWARDS $PROTOCOL_OWNER $REWARDS_TOKEN --network fuji
    ```
 
 7. **Claim Undistributed Rewards (if applicable)**
    ```bash
    # This should be done after epoch 99+2 to ensure all claims are done
-   suzaku-cli rewards claim-undistributed $REWARDS 99 $REWARDS_TOKEN --network fuji --private-key $L1_OWNER
+   suzaku-cli rewards claim-undistributed $REWARDS 99 --network fuji --private-key $L1_OWNER
    ```
 
 ### Key Store Commands
@@ -517,7 +518,8 @@ suzaku-cli --help
 
 ### Global Options
 
-- `-n, --network <network>`: Network to use (fuji, mainnet, anvil). Default: **mainnet**.
+- `-n, --network <network>`: Network to use (fuji, mainnet, anvil, kitetestnet, custom). Default: **mainnet**.
+- `-r, --rpc-url <rpcUrl>`: RPC URL for a custom network. Automatically sets `--network` to `custom`. If `--network custom` is used, this option is **required**.
 - `-k, --private-key <privateKey>`: Private key for signing transactions.
 - `-s, --secret-name <secretName>`: The keystore secret name containing the private key.
 - `-l, --ledger`: Use Ledger hardware wallet for signing (conflicts with `-k` and `-s`).
@@ -525,8 +527,11 @@ suzaku-cli --help
 - `--json`: Output logs in JSON format.
 - `-y, --yes`: Automatic yes to prompts.
 - `--safe <address>`: Use Safe smart account for transactions (compatible with Ledger).
+- `--cast`: Output equivalent Foundry `cast` commands instead of executing write transactions (conflicts with `--safe`).
+- `--skip-abi-validation`: Skip the ABI validation for used contracts.
 
 **Environment variables:**
+
 - `LogLevel`: Set log verbosity (DEBUG, INFO, WARN, ERROR). Default: INFO.
 - `LEDGER_ACCOUNT_INDEX`: Ledger account index to use. Default: 0.
 
@@ -564,6 +569,8 @@ suzaku-cli --help
   Get the collateral class ID associated with a vault.
 - **opstakes `<middlewareVaultManager>` `<operatorAddress>`**
   Show operator stakes across L1s, enumerating each L1 the operator is opted into.
+- **l1stakes `<validatorManagerAddress>`**
+  Show L1 stakes for a given validator manager.
 
 ### Vault Commands (`vault`)
 
@@ -652,8 +659,8 @@ suzaku-cli --help
   Top up all operator validators to meet a target continuous fee balance.
 - **get-operator-stake `<middlewareAddress>` `<operator>` `<epoch>` `<collateralClass>`**
   Get operator stake for a specific epoch and collateral class.
-- **get-operator-used-stake-cached-per-epoch `<middlewareAddress>` `<epoch>` `<operator>` `<collateralClass>`**
-  Get operator stake cached per epoch for a specific collateral class.
+- **get-operator-nodes `<middlewareAddress>` `<operator>`**
+  Get all nodes for an operator.
 - **get-current-epoch `<middlewareAddress>`**
   Get current epoch number.
 - **get-epoch-start-ts `<middlewareAddress>` `<epoch>`**
@@ -664,8 +671,6 @@ suzaku-cli --help
   Get current number of nodes for an operator.
 - **get-node-stake-cache `<middlewareAddress>` `<epoch>` `<validationId>`**
   Get node stake cache for a specific epoch and validator.
-- **get-operator-nodes `<middlewareAddress>` `<operator>`**
-  Get all nodes for an operator.
 - **get-operator-validation-ids `<middlewareAddress>` `<operator>`**
   Get all validation IDs for an operator.
 - **get-operator-locked-stake `<middlewareAddress>` `<operator>`**
@@ -685,13 +690,17 @@ suzaku-cli --help
 - **node-logs `<middlewareAddress>` [--node-id `<nodeId>] [--snowscan-api-key `<string>]**
   Get middleware node logs.
 - **get-last-node-validation-id `<middlewareAddress>` `<nodeId>`**
-  Set middleware log level.
+  Get last node validation ID.
 - **to-vault-epoch `<middlewareAddress>` `<vaultAddress>` `<middlewareEpoch>`**
   Convert middleware epoch to a vault epoch.
 - **update-window-ends-ts `<middlewareAddress>`**
   Get the end timestamp of the last completed middleware epoch window.
 - **vault-to-middleware-epoch `<middlewareAddress>` `<vaultAddress>` `<vaultEpoch>`**
   Convert vault epoch to a middleware epoch.
+- **set-vault-manager `<middlewareAddress>` `<vaultManagerAddress>`**
+  Set vault manager.
+- **account-info `<middlewareAddress>` `<account>`**
+  Get account info.
 
 ### Operator Opt-In Commands (`opt-in`)
 
@@ -801,8 +810,8 @@ suzaku-cli --help
   Get vault shares for a specific epoch.
 - **get-curator-shares `<rewardsAddress>` `<epoch>` `<curator>`**
   Get curator shares for a specific epoch.
-- **get-protocol-rewards `<rewardsAddress>`**
-  Get protocol rewards.
+- **get-protocol-rewards `<rewardsAddress>` `<token>`**
+  Get protocol rewards for a token.
 - **get-distribution-batch `<rewardsAddress>` `<epoch>`**
   Get distribution batch status for an epoch.
 - **get-fees-config `<rewardsAddress>`**
@@ -835,8 +844,84 @@ suzaku-cli --help
 
 ### Validator Manager Contract Commands (`vmc`)
 
-- **info `<middlewareAddress>`**
-  Get detailed information about a Validator Manager Contract.
+- **info `<validatorManagerAddress>`**
+  Get summary information about a Validator Manager Contract.
+- **transfer-ownership `<validatorManagerAddress>` `<owner>`**
+  Transfer the ownership of a ValidatorManager contract.
+- **complete-validator-removal `<validatorManagerAddress>` `<removalTxId>`**
+  Complete the removal of a validator that has been pending removal.
+
+### KiteStakingManager Commands (`kite-staking-manager`)
+
+Alias: `ksm`
+
+- **update-staking-config `<kiteStakingManagerAddress>` `<minimumStakeAmount>` `<maximumStakeAmount>` `<minimumStakeDuration>` `<minimumDelegationFeeBips>` `<maximumStakeMultiplier>`**
+  Update staking configuration.
+- **initiate-validator-registration `<kiteStakingManagerAddress>` `<nodeId>` `<blsKey>` `<delegationFeeBips>` `<minStakeDuration>` `<rewardRecipient>` `<stakeAmount>` [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**
+  Initiate validator registration on KiteStakingManager.
+- **complete-validator-registration `<kiteStakingManagerAddress>` `<initiateTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the KiteStakingManager after initiating registration.
+- **initiate-delegator-registration `<kiteStakingManagerAddress>` `<nodeId>` `<rewardRecipient>` `<stakeAmount>`**
+  Initiate delegator registration on KiteStakingManager.
+- **complete-delegator-registration `<kiteStakingManagerAddress>` `<initiateTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**
+  Complete delegator registration on the P-Chain and on the KiteStakingManager after initiating registration.
+- **initiate-delegator-removal `<kiteStakingManagerAddress>` `<delegationID>` [--include-uptime-proof] [--rpc-url `<rpcUrl>`]**
+  Initiate delegator removal on KiteStakingManager.
+- **complete-delegator-removal `<kiteStakingManagerAddress>` `<initiateRemovalTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--delegation-id `<delegationID>`...] [--initiate-tx `<initiateTx>`]**
+  Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal.
+- **initiate-validator-removal `<kiteStakingManagerAddress>` `<nodeId>` [--include-uptime-proof]**
+  Initiate validator removal on KiteStakingManager.
+- **complete-validator-removal `<kiteStakingManagerAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--node-id `<nodeId>`...] [--initiate-tx `<initiateTx>`...]**
+  Complete validator removal on the P-Chain and on the KiteStakingManager after initiating removal.
+
+### StakingVault Commands (`staking-vault`)
+
+Alias: `sv`
+
+- **deposit `<stakingVaultAddress>` `<amount>` `<minShares>`**
+  Deposit native tokens (AVAX) into the StakingVault. `minShares` provides slippage protection.
+- **request-withdrawal `<stakingVaultAddress>` `<shares>`**
+  Request withdrawal from the StakingVault.
+- **claim-withdrawal `<stakingVaultAddress>` `<requestId>`**
+  Claim a withdrawal from the StakingVault.
+- **process-epoch `<stakingVaultAddress>`**
+  Process the current epoch in the StakingVault.
+- **add-operator `<stakingVaultAddress>` `<operator>` `<allocationBips>` `<feeRecipient>`**
+  Add an operator to the StakingVault. `allocationBips` is in basis points (1 bips = 0.01%).
+- **update-operator-allocations `<stakingVaultAddress>` `<operator>` `<allocationBips>`**
+  Update operator allocations in the StakingVault.
+- **initiate-validator-registration `<stakingVaultAddress>` `<nodeId>` `<blsKey>` `<stakeAmount>` [--pchain-remaining-balance-owner-threshold `<threshold>`] [--pchain-disable-owner-threshold `<threshold>`] [--pchain-remaining-balance-owner-address `<address>`...] [--pchain-disable-owner-address `<address>`...]**
+  Initiate validator registration in the StakingVault.
+- **complete-validator-registration `<stakingVaultAddress>` `<initiateTxHash>` `<blsProofOfPossession>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--initial-balance `<initialBalance>`] [--skip-wait-api]**
+  Complete validator registration on the P-Chain and on the StakingVault after initiating registration.
+- **initiate-validator-removal `<stakingVaultAddress>` `<nodeId>`**
+  Initiate validator removal in the StakingVault.
+- **complete-validator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--node-id `<nodeId>`...] [--initiate-tx `<initiateTx>`]**
+  Complete validator removal on the P-Chain and on the StakingVault after initiating removal.
+- **initiate-delegator-registration `<stakingVaultAddress>` `<nodeId>` `<amount>`**
+  Initiate delegator registration in the StakingVault.
+- **complete-delegator-registration `<stakingVaultAddress>` `<initiateTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**
+  Complete delegator registration on the P-Chain and on the StakingVault after initiating registration.
+- **initiate-delegator-removal `<stakingVaultAddress>` `<delegationID>`**
+  Initiate delegator removal in the StakingVault.
+- **complete-delegator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--delegation-id `<delegationID>`...] [--initiate-tx `<initiateTx>`]**
+  Complete delegator removal on the P-Chain and on the StakingVault after initiating removal.
+- **info `<stakingVaultAddress>`**
+  Get general overview of the StakingVault.
+- **fees-info `<stakingVaultAddress>`**
+  Get fees configuration of the StakingVault.
+- **operators-info `<stakingVaultAddress>`**
+  Get operators details of the StakingVault.
+- **validators-info `<stakingVaultAddress>`**
+  Get validators details per operator of the StakingVault.
+- **delegators-info `<stakingVaultAddress>`**
+  Get delegations details per operator of the StakingVault.
+- **withdrawals-info `<stakingVaultAddress>`**
+  Get withdrawal queue info of the StakingVault.
+- **epoch-info `<stakingVaultAddress>`**
+  Get epoch info of the StakingVault.
+- **full-info `<stakingVaultAddress>`**
+  Get all information about the StakingVault (combines all info commands above).
 
 ### Ledger Commands (`ledger`)
 
@@ -871,3 +956,44 @@ suzaku-cli --help
   Top up all/selected l1 validators to meet a target continuous fee balance.
 - **help-all**
   Display help for all commands and sub-commands.
+
+---
+
+## Development Scripts
+
+### Update ABIs (`scripts/update-abis.mjs`)
+
+This script updates the ABI files in `src/abis/` from a Foundry output directory. It extracts ABIs from compiled contract JSON files, deduplicates overloaded functions, and generates TypeScript files.
+
+**Usage:**
+
+```bash
+# Use the default source directory
+scripts/update-abis.mjs
+
+# Specify a custom source directory
+scripts/update-abis.mjs --source-dir /path/to/foundry/out
+scripts/update-abis.mjs -s /path/to/foundry/out
+
+# Show help
+scripts/update-abis.mjs --help
+```
+
+**Options:**
+
+| Option                | Alias | Description                                                            |
+| --------------------- | ----- | ---------------------------------------------------------------------- |
+| `--source-dir <path>` | `-s`  | Path to the Foundry output directory containing compiled contract ABIs |
+| `--help`              | `-h`  | Show help message                                                      |
+
+**What it does:**
+
+1. Reads contract ABIs from the Foundry `out/` directory
+2. Deduplicates overloaded functions (keeps the version with the fewest parameters)
+3. Generates TypeScript files in `src/abis/`
+4. Updates `abi-selectors.json` with function selectors for ABI validation
+
+**What next:**
+
+1. Update the index.ts file in `src/abis/` with the new ABIs
+2. If a contract is not a proxy but use the forward and delegate call pattern, add a combined ABI in the index.ts file (like with the StakingVault), and validate only the abi of the targeted contract address (as done in curriedContract function in `src/lib/viemUtils.ts`). Then you can instantiate the contract with the combined abi.

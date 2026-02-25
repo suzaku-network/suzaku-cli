@@ -11,7 +11,7 @@ type ExtractRoleNames<T extends SuzakuABINames> = TSuzakuABI[T][number] extends 
   : never;
 
 export function getRoles<T extends SuzakuABINames>(contract: SafeSuzakuContract[T]): ExtractRoleNames<T>[] {
-  return contract.abi.filter((item) => item.type === 'function' && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
+  return contract.abi.filter((item) => item.type === 'function' && item.name && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
 }
 
 export async function grantRole(
@@ -58,4 +58,4 @@ export async function isAccessControl(
   }
 }
 
-export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : keccak256(toBytes(role.toUpperCase() + "()"));
+export const ensureRoleHex = (role: string): Hex => role.startsWith("0x") ? role as Hex : role === 'DEFAULT_ADMIN_ROLE' ? "0x0000000000000000000000000000000000000000000000000000000000000000" : keccak256(toBytes(role.toUpperCase() + "()"));

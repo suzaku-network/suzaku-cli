@@ -3,9 +3,14 @@ import { sha256 } from '@noble/hashes/sha256';
 import { cb58ToBytes, retryWhileError, cb58ToHex } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
-import { Network } from '../client';
+import { ExtendedClient, Network } from '../client';
 import { pChainChainID } from '../config';
 import { logger } from './logger';
+import { validatedBy } from './pChainUtils';
+
+interface CollectSignaturesProps {
+    network: Network, message: string, justification?: string, signingSubnetId?: string
+}
 
 export interface PackL1ConversionMessageArgs {
     subnetId: string;
@@ -223,6 +228,7 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     network: Network,
     subnetId: string;
     validatorManagerBlockchainID: string;
+    validatorManagerSubnetID: string;
     managerAddress: Hex;
     validators: {
         nodeID: string;
@@ -261,7 +267,9 @@ export async function collectSignaturesInitializeValidatorSet(params: {
         },
         body: JSON.stringify({
             "message": fromBytes(message, 'hex'),
-            "justification": fromBytes(justification, 'hex')
+            "justification": fromBytes(justification, 'hex'),
+            "signingSubnetId": params.validatorManagerSubnetID,
+            // "quorumPercentage": 67
         })
     }), 2000, 30000, (result) => result.status !== 500);
 
@@ -274,21 +282,28 @@ export async function collectSignaturesInitializeValidatorSet(params: {
     return signedMessage;
 }
 
-export async function collectSignatures(network: Network, message: string, justification?: string): Promise<string> {
+export async function getSigningSubnetIdFromWarpMessage(client: ExtendedClient, message: string): Promise<string> {
+    const signingChainIdHex = "0x" + message.slice(14, 78);
+    const signingChainId = utils.base58check.encode(hexToBytes(signingChainIdHex as Hex));
+    const signingSubnetId = await validatedBy(client, signingChainId);
+    if (!signingSubnetId) throw new Error("Could not find signing subnet ID");
+    return signingSubnetId;
+}
 
+export async function collectSignatures({ network, message, justification, signingSubnetId }: CollectSignaturesProps): Promise<string> {
     // Use the signature aggregation API from Glacier
-    const body: { message: string; justification?: string; signingSubnetId?: string } = { message };
-    if (justification) {
-        body.justification = justification;
-        // body.signingSubnetId = pChainChainID;
-    }
+    const body: { message: string; justification?: string; signingSubnetId?: string, quorumPercentage?: number } = { message };
+    if (justification) body.justification = justification;
+    body.signingSubnetId = signingSubnetId;
+    body.quorumPercentage = 67;
     // Test every 2 seconds, timeout after 30 seconds
     const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {
         method: 'POST',
         headers: {
             'accept': 'application/json',
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
+            
         },
         body: JSON.stringify(body)
     }), 2000, 30000, (result) => result.status !== 500);
@@ -297,7 +312,6 @@ export async function collectSignatures(network: Network, message: string, justi
         const errorText = await signResponse.text();
         throw new Error(errorText || `HTTP error! status: ${signResponse.status}`);
     }
-
     const { signedMessage } = await signResponse.json() as SignatureResponse;
     return signedMessage;
 }

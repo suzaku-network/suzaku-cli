@@ -124,6 +124,7 @@ export async function middlewareGetOperatorStake(
     [operator, epoch, collateralClass]
   );
   logger.log(val);
+  logger.addData('operatorStake', val.toString());
 }
 
 // getCurrentEpoch
@@ -133,6 +134,7 @@ export async function middlewareGetCurrentEpoch(
   logger.log("Reading current epoch...");
   const val = await middleware.read.getCurrentEpoch();
   logger.log(val);
+  logger.addData('epoch', Number(val));
 }
 
 // getEpochStartTs
@@ -146,6 +148,7 @@ export async function middlewareGetEpochStartTs(
     [epoch]
   );
   logger.log(val);
+  logger.addData('epochStartTs', Number(val));
 }
 
 // getActiveNodesForEpoch
@@ -172,7 +175,7 @@ export async function middlewareGetOperatorNodesLength(
 
   const length = await middleware.read.getOperatorNodesLength([operator]);
   logger.log(length);
-
+  logger.addData('nodesLength', Number(length));
 }
 
 // nodeStakeCache
@@ -185,7 +188,7 @@ export async function middlewareGetNodeStakeCache(
 
   const val = await middleware.read.nodeStakeCache([epoch, validationId]);
   logger.log(val);
-
+  logger.addData('nodeStakeCache', val.toString());
 }
 
 // operatorLockedStake
@@ -197,7 +200,7 @@ export async function middlewareGetOperatorLockedStake(
 
   const val = await middleware.read.operatorLockedStake([operator]);
   logger.log(val);
-
+  logger.addData('lockedStake', val.toString());
 }
 
 // nodePendingRemoval
@@ -209,7 +212,7 @@ export async function middlewareNodePendingRemoval(
 
   const val = await middleware.read.nodePendingRemoval([validatorId]);
   logger.log(val);
-
+  logger.addData('pendingRemoval', val);
 }
 
 // nodePendingUpdate - Note: This function is not available in the current contract
@@ -231,7 +234,7 @@ export async function middlewareGetOperatorUsedStake(
 
   const val = await middleware.read.getOperatorUsedStakeCached([operator]);
   logger.log(val);
-
+  logger.addData('usedStake', val.toString());
 }
 
 // getAllOperators
@@ -242,7 +245,7 @@ export async function middlewareGetAllOperators(
 
   const operators = await middleware.read.getAllOperators();
   logger.log(operators);
-
+  logger.addData('operators', operators);
 }
 
 /**
@@ -264,6 +267,7 @@ export async function getCollateralClassIds(
 ) {
   const collateralClassIds = await middleware.read.getCollateralClassIds();
   logger.log("Collateral class IDs:", collateralClassIds);
+  logger.addData('collateralClassIds', collateralClassIds.map(id => id.toString()));
   return collateralClassIds;
 }
 
@@ -275,6 +279,7 @@ export async function getActiveCollateralClasses(
 ) {
   const result = await middleware.read.getActiveCollateralClasses();
   logger.log("Active collateral classes - Primary:", result[0], "Secondaries:", result[1]);
+  logger.addData('activeCollateralClasses', { primary: result[0].toString(), secondaries: result[1].map((s: bigint) => s.toString()) });
   return result;
 }
 
@@ -335,6 +340,14 @@ export async function middlewareGetNodeLogs(
     return logs;
   }
   // Human readable addresses and structured logs
+  logger.addData('nodeLogs', logs.map((log: DecodedEvent) => ({
+    blockNumber: log.blockNumber.toString(),
+    transactionHash: log.transactionHash,
+    eventName: log.eventName,
+    address: log.address,
+    args: Object.fromEntries(Object.entries(log.args).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v])),
+    timestamp: log.timestamp,
+  })));
   const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
     log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
     return log;
@@ -573,4 +586,105 @@ export async function predictForceUpdateImpact(
   }
 
   return predictions;
+}
+
+// getLinkedAddresses — multicall for all address-returning view functions
+export async function middlewareGetLinkedAddresses(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  logger.log("Reading linked addresses...");
+
+  const [balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn] = await middleware.multicall([
+    'BALANCER',
+    'getVaultManager',
+    'PRIMARY_ASSET',
+    'OPERATOR_REGISTRY',
+    'OPERATOR_L1_OPTIN',
+  ]);
+
+  const result = {
+    balancer: balancer as Hex,
+    vaultManager: vaultManager as Hex,
+    primaryAsset: primaryAsset as Hex,
+    operatorRegistry: operatorRegistry as Hex,
+    operatorL1OptIn: operatorL1OptIn as Hex,
+  };
+
+  logger.log(result);
+  logger.addData('linkedAddresses', result);
+}
+
+// getEpochConfig — multicall for epoch timing parameters
+export async function middlewareGetEpochConfig(
+  middleware: SafeSuzakuContract['L1Middleware']
+) {
+  logger.log("Reading epoch config...");
+
+  const [epochDuration, updateWindow, epoch, lastNodeStakeUpdateEpoch] = await middleware.multicall([
+    'EPOCH_DURATION',
+    'UPDATE_WINDOW',
+    'getCurrentEpoch',
+    'lastGlobalNodeStakeUpdateEpoch',
+  ]);
+
+  const result = {
+    epochDuration: Number(epochDuration),
+    updateWindow: Number(updateWindow),
+    epoch: Number(epoch),
+    lastNodeStakeUpdateEpoch: Number(lastNodeStakeUpdateEpoch),
+  };
+
+  logger.log(result);
+  logger.addData('epochConfig', result);
+}
+
+// getCacheStatus — totalStakeCached per class + rebalancedThisEpoch per operator
+export async function middlewareGetCacheStatus(
+  middleware: SafeSuzakuContract['L1Middleware'],
+  epochOverride?: number
+) {
+  logger.log("Reading cache status...");
+
+  const [currentEpoch, classIds, operators] = await middleware.multicall([
+    'getCurrentEpoch',
+    'getCollateralClassIds',
+    'getAllOperators',
+  ]);
+
+  const epoch = epochOverride ?? Number(currentEpoch);
+
+  // Parameterized reads in parallel
+  const cachePromises = (classIds as bigint[]).map(classId =>
+    middleware.read.totalStakeCached([epoch, classId])
+  );
+  const rebalancePromises = (operators as Hex[]).map(op =>
+    middleware.read.rebalancedThisEpoch([op, epoch])
+  );
+
+  const [cacheResults, rebalanceResults] = await Promise.all([
+    Promise.all(cachePromises),
+    Promise.all(rebalancePromises),
+  ]);
+
+  const cacheByClass: Record<string, boolean> = {};
+  (classIds as bigint[]).forEach((classId, i) => {
+    cacheByClass[classId.toString()] = cacheResults[i] as boolean;
+  });
+
+  const rebalanceByOperator: Record<string, boolean> = {};
+  (operators as Hex[]).forEach((op, i) => {
+    rebalanceByOperator[op] = rebalanceResults[i] as boolean;
+  });
+
+  const allClassesCached = Object.values(cacheByClass).every(v => v === true);
+
+  const result = {
+    epoch,
+    cacheByClass,
+    rebalanceByOperator,
+    allClassesCached,
+  };
+
+  logger.log(result);
+  logger.addData('cacheStatus', result);
 }
