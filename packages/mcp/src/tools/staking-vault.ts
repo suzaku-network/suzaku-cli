@@ -4,7 +4,7 @@ import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } f
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
 
-export function registerStakingVaultTools(server: McpServer) {
+export function registerStakingVaultTools(server: McpServer, readOnly?: boolean) {
   // ── Read / Info ──
 
   server.tool(
@@ -142,6 +142,8 @@ export function registerStakingVaultTools(server: McpServer) {
       ));
     },
   );
+
+  if (readOnly) return;
 
   // ── Deposit / Withdrawal ──
 

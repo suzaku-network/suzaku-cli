@@ -31,7 +31,7 @@ export function extractL1s(result: CliResult): { balancer: string; middleware: s
   return [];
 }
 
-export function registerL1RegistryTools(server: McpServer) {
+export function registerL1RegistryTools(server: McpServer, readOnly?: boolean) {
   server.tool(
     'l1_registry_get_all',
     'List all registered L1s from the L1Registry. Returns labeled entries: balancer (BalancerValidatorManager address), middleware (L1Middleware address), and metadataUrl.',
@@ -49,6 +49,8 @@ export function registerL1RegistryTools(server: McpServer) {
       return formatResult({ success: result.success, data: { l1s }, error: result.error });
     },
   );
+
+  if (readOnly) return;
 
   server.tool(
     'l1_registry_register',

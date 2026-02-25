@@ -27,6 +27,8 @@ import { registerStakingVaultTools } from './tools/staking-vault.js';
 import { registerBalancerTools } from './tools/balancer.js';
 import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
 
+const readOnly = process.argv.includes('--read-only');
+
 const server = new McpServer({
   name: 'suzaku',
   version: '0.1.0',
@@ -181,7 +183,7 @@ server.tool(
   },
   { readOnlyHint: true, idempotentHint: true },
   async ({ network, rpcUrl }) => {
-    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0' };
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly };
 
     // Check signing method
     if (process.env.SUZAKU_MCP_LEDGER === 'true') {
@@ -241,16 +243,16 @@ server.tool(
 
 // ── Tool Groups ──
 
-registerMiddlewareTools(server);
-registerVaultTools(server);
-registerOperatorTools(server);
-registerL1RegistryTools(server);
-registerOptInTools(server);
-registerRewardsTools(server);
-registerKiteStakingTools(server);
-registerStakingVaultTools(server);
-registerBalancerTools(server);
-registerPoaSecurityModuleTools(server);
+registerMiddlewareTools(server, readOnly);
+registerVaultTools(server, readOnly);
+registerOperatorTools(server, readOnly);
+registerL1RegistryTools(server, readOnly);
+if (!readOnly) registerOptInTools(server);
+registerRewardsTools(server, readOnly);
+if (!readOnly) registerKiteStakingTools(server);
+registerStakingVaultTools(server, readOnly);
+registerBalancerTools(server, readOnly);
+if (!readOnly) registerPoaSecurityModuleTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -16,7 +16,7 @@ function extractData(result: CliResult, label?: string, warnings?: string[]): Re
   return result.data as Record<string, unknown>;
 }
 
-export function registerMiddlewareTools(server: McpServer) {
+export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
 
   server.tool(
@@ -845,6 +845,8 @@ export function registerMiddlewareTools(server: McpServer) {
       return formatResult({ success: true, data: result });
     },
   );
+
+  if (readOnly) return;
 
   // ── Writes ──
 

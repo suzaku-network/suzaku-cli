@@ -4,7 +4,7 @@ import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-ru
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
-export function registerRewardsTools(server: McpServer) {
+export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
 
   server.tool(
@@ -24,6 +24,8 @@ export function registerRewardsTools(server: McpServer) {
       ));
     },
   );
+
+  if (readOnly) return;
 
   // ── Writes ──
 

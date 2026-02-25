@@ -4,7 +4,7 @@ import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-ru
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
-export function registerVaultTools(server: McpServer) {
+export function registerVaultTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
 
   server.tool(
@@ -92,6 +92,8 @@ export function registerVaultTools(server: McpServer) {
       return formatResult(await runCli(args, { network, rpcUrl }));
     },
   );
+
+  if (readOnly) return;
 
   // ── Writes ──
 

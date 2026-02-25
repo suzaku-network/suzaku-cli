@@ -4,7 +4,7 @@ import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-ru
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
 
-export function registerBalancerTools(server: McpServer) {
+export function registerBalancerTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
 
   server.tool(
@@ -59,6 +59,8 @@ export function registerBalancerTools(server: McpServer) {
       ));
     },
   );
+
+  if (readOnly) return;
 
   // ── Writes ──
 

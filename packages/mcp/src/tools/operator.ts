@@ -26,7 +26,7 @@ export function extractOperators(result: CliResult): { address: string; metadata
   return [];
 }
 
-export function registerOperatorTools(server: McpServer) {
+export function registerOperatorTools(server: McpServer, readOnly?: boolean) {
   server.tool(
     'operator_registry_get_all',
     'List all registered operators from the OperatorRegistry. Returns labeled entries: address (operator address) and metadataUrl.',
@@ -44,6 +44,8 @@ export function registerOperatorTools(server: McpServer) {
       return formatResult({ success: result.success, data: { operators }, error: result.error });
     },
   );
+
+  if (readOnly) return;
 
   server.tool(
     'operator_registry_register',
