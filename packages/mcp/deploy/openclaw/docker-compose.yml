@@ -1,45 +1,11 @@
 services:
-  suzaku-mcp:
+  suzaku-bot:
     build:
       context: ../../../..
       dockerfile: packages/mcp/deploy/openclaw/Dockerfile
+      target: bot
+    restart: unless-stopped
     read_only: true
-    tmpfs:
-      - /tmp:size=64m
-    pids_limit: 50
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    mem_limit: 512m
-    cpus: 1.0
-    volumes:
-      - audit-data:/data/audit
-    environment:
-      - SUZAKU_MCP_PUBLIC_HEALTH=true
-      - SUZAKU_MCP_MAX_CONCURRENT=8
-      - SUZAKU_MCP_RATE_MAX_CALLS=60
-      - SUZAKU_MCP_RATE_WINDOW_MS=60000
-      - SUZAKU_MCP_AUDIT_MAX_MB=50
-      - SUZAKU_MCP_AUDIT_DIR=/data/audit
-      - SUZAKU_MCP_DEDUP_WINDOW_MS=30000
-    healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - suzaku-net
-
-  openclaw:
-    image: openclaw/openclaw:0.8
-    depends_on:
-      suzaku-mcp:
-        condition: service_healthy
-    read_only: true
-    tmpfs:
-      - /tmp:size=128m
     pids_limit: 100
     cap_drop:
       - ALL
@@ -47,14 +13,18 @@ services:
       - no-new-privileges:true
     mem_limit: 1g
     cpus: 1.0
+    tmpfs:
+      - /tmp:size=128m
+      - /root/.openclaw:size=64m
+    volumes:
+      - audit-data:/data/audit
+      - ./openclaw.json:/root/.openclaw/openclaw.json:ro
+      - ./SOUL.md:/root/.openclaw/workspace/SOUL.md:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_ADMIN_USER_ID=${TELEGRAM_ADMIN_USER_ID}
-      - SUZAKU_MCP_PATH=/app/packages/mcp/dist/server.js
-    volumes:
-      - ./openclaw.json:/app/openclaw.json:ro
-      - ./SOUL.md:/app/SOUL.md:ro
+      - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
     networks:
       - suzaku-net
 
@@ -64,7 +34,6 @@ volumes:
 networks:
   suzaku-net:
     driver: bridge
-    internal: false
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "true"
       com.docker.network.bridge.name: br-suzaku

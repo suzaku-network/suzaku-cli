@@ -29,8 +29,9 @@
               "name": "suzaku",
               "transport": "stdio",
               "command": "node",
-              "args": ["${SUZAKU_MCP_PATH}", "--read-only"],
+              "args": ["/mcp/packages/mcp/dist/server.js", "--read-only"],
               "env": {
+                "SUZAKU_CLI_PATH": "/mcp/bin/cli.js",
                 "SUZAKU_MCP_DEDUP_WINDOW_MS": "30000",
                 "SUZAKU_MCP_PUBLIC_HEALTH": "true",
                 "SUZAKU_MCP_MAX_CONCURRENT": "8",

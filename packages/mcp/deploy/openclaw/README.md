@@ -2,72 +2,121 @@
 
 Read-only Telegram bot for Suzaku deployment monitoring, powered by [OpenClaw](https://github.com/openclaw/openclaw) + the Suzaku MCP server.
 
-## Prerequisites
+## Quick Start (Local Testing)
 
-- Node.js >= 18
-- [OpenClaw](https://github.com/openclaw/openclaw) installed (`npm i -g openclaw` or Docker)
-- An Anthropic API key
-- A Telegram bot token (from [@BotFather](https://t.me/BotFather))
-- The `suzaku-mcp` binary (built from this repo)
+### 1. Create a Telegram bot
 
-## Setup
-
-### 1. Build the MCP server
-
-```bash
-cd packages/mcp
-pnpm install && pnpm build
-```
-
-### 2. Create a Telegram bot
-
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot`, follow the prompts to name it (e.g., "Suzaku Monitor")
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/newbot`, follow the prompts (e.g., "Suzaku Monitor")
 3. Save the bot token
+4. Get your user ID: message [@userinfobot](https://t.me/userinfobot) and note the `Id` field
 
-### 3. Configure OpenClaw
+### 2. Create `.env`
 
 ```bash
-# Initialize OpenClaw (if first time)
-openclaw onboard --anthropic-api-key "$ANTHROPIC_API_KEY"
+cd packages/mcp/deploy/openclaw
 
-# Copy config files into OpenClaw's workspace
-cp openclaw.json ~/.openclaw/openclaw.json
-cp SOUL.md ~/.openclaw/workspace/SOUL.md
-```
-
-Edit `~/.openclaw/openclaw.json`:
-- Replace `${TELEGRAM_BOT_TOKEN}` with your bot token
-- Replace `${SUZAKU_MCP_PATH}` with the absolute path to `packages/mcp/dist/server.js`
-
-Or set them in `~/.openclaw/.env`:
-```bash
+cat > .env <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-SUZAKU_MCP_PATH=/path/to/packages/mcp/dist/server.js
+TELEGRAM_ADMIN_USER_ID=123456789
+TELEGRAM_GROUP_ID=-100123456789
+EOF
 ```
 
-### 4. Install the MCP adapter plugin
+### 3. Build and run
 
 ```bash
-openclaw plugins install mcp-adapter
-openclaw gateway restart
+docker compose up --build -d
+docker compose logs -f
 ```
 
-### 5. Start OpenClaw
+### 4. Test it
+
+DM the bot from your Telegram account, or @-mention it in your group. Only your user ID can DM; in the group, anyone can interact by mentioning the bot.
+
+### 5. Stop
 
 ```bash
-openclaw up
+docker compose down
 ```
 
-The bot should now respond to messages in Telegram.
+## VPS Deployment (Production)
 
-### 6. Add the bot to a group (optional)
+For production, deploy on a dedicated VPS to minimize blast radius. A compromised container on your local PC could reach dev servers, wallets, and browser sessions. On a VPS, it can only reach two API keys.
 
-1. Add the bot to your Telegram group
-2. The config sets `requireMention: true` for groups — users must @-mention the bot to trigger a response
-3. In DMs, the bot responds to all messages
+### Recommended providers
 
-## Configuration reference
+| Provider | Plan | Specs | Cost |
+|---|---|---|---|
+| Hetzner | CAX11 (ARM) | 2 vCPU, 4 GB RAM | ~$4/mo |
+| Hetzner | CX22 (x86) | 2 vCPU, 4 GB RAM | ~$5/mo |
+
+### VPS setup
+
+```bash
+# 1. SSH in (key-only auth — disable password auth in /etc/ssh/sshd_config)
+ssh root@<vps-ip>
+
+# 2. Firewall: allow only SSH
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow ssh
+ufw enable
+
+# 3. Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# 4. Clone and deploy
+git clone <your-repo-url> /opt/suzaku
+cd /opt/suzaku/packages/mcp/deploy/openclaw
+
+# 5. Create .env (same as local testing)
+cat > .env <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM_ADMIN_USER_ID=123456789
+TELEGRAM_GROUP_ID=-100123456789
+EOF
+chmod 600 .env
+
+# 6. Build and start
+docker compose up --build -d
+```
+
+### iptables SSRF backstop
+
+After `docker compose up`, run the iptables rules on the Docker host to block container-to-private-network traffic (defense-in-depth against DNS rebinding):
+
+```bash
+sudo bash iptables-setup.sh
+```
+
+This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918 and link-local ranges.
+
+### Set Anthropic spending limits
+
+Go to [console.anthropic.com](https://console.anthropic.com) and set a monthly billing cap. The bot uses `claude-sonnet-4-6` — a runaway conversation loop could burn through credits.
+
+## Architecture
+
+```
+docker-compose.yml
+  └── suzaku-bot (single container)
+        ├── OpenClaw (Telegram bot framework)
+        │     └── mcp-adapter plugin
+        │           └── Suzaku MCP server (stdio subprocess)
+        │                 └── CLI subprocess (per tool call)
+        └── Security layers:
+              read_only: true + tmpfs (/tmp, /root/.openclaw)
+              cap_drop: ALL, no-new-privileges
+              pids_limit: 100, mem_limit: 1g
+              restart: unless-stopped
+```
+
+The MCP server runs in `--read-only` mode (no write tools registered). It spawns CLI subprocesses with a restricted 8-variable environment allowlist — `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` do NOT propagate to CLI subprocesses.
+
+## Configuration Reference
 
 ### `openclaw.json`
 
@@ -76,92 +125,46 @@ The bot should now respond to messages in Telegram.
 | `agents.defaults.model.primary` | `anthropic/claude-sonnet-4-6` | Cost-effective model for read queries |
 | `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
 | `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
-| `channels.telegram.groups.<id>.requireMention` | `true` | Bot only responds when @-mentioned in groups |
-| `plugins.entries.mcp-adapter.config.servers[0].args` | `["<path>", "--read-only"]` | MCP server path + read-only flag |
+| `plugins.entries.mcp-adapter` | stdio transport | MCP server spawned as subprocess |
 
-### Restricting access
+### Access control
 
-To limit who can use the bot, change `dmPolicy` to `"allowlist"` and add Telegram user IDs:
+**DMs**: Only user IDs in the `allowFrom` array can DM the bot. To add more authorized users:
 
 ```json
-{
-  "channels": {
-    "telegram": {
-      "dmPolicy": "allowlist",
-      "allowFrom": ["tg:123456789", "tg:987654321"]
-    }
-  }
-}
+"allowFrom": ["tg:123456789", "tg:987654321"]
 ```
+
+**Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. Anyone in that group can ask — access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to.
+
+### Container hardening
+
+| Setting | Purpose |
+|---|---|
+| `read_only: true` | Filesystem is immutable; prevents malicious writes |
+| `tmpfs: /tmp, /root/.openclaw` | Writable scratch space (non-persistent) for OpenClaw runtime |
+| `cap_drop: ALL` | No Linux capabilities |
+| `no-new-privileges` | Prevents privilege escalation |
+| `pids_limit: 100` | Prevents fork bombs |
+| `mem_limit: 1g` | Prevents OOM from affecting host |
+| `restart: unless-stopped` | Auto-restart on crash; stays down on manual `docker compose down` |
+
+### Environment variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for the bot |
+| `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
+| `TELEGRAM_ADMIN_USER_ID` | Yes | Your Telegram user ID for DM allowlist |
+| `TELEGRAM_GROUP_ID` | Yes | Telegram group ID (e.g. `-100123456789`) — the one group the bot responds in |
 
 ### Using a different network
 
-Set environment variables in the MCP server config to default to a different network:
+Users can specify `network: "fuji"` in their queries — the MCP tools accept a network parameter. The default is mainnet.
 
-```json
-{
-  "name": "suzaku",
-  "transport": "stdio",
-  "command": "node",
-  "args": ["${SUZAKU_MCP_PATH}", "--read-only"],
-  "env": {
-    "SUZAKU_MCP_DEDUP_WINDOW_MS": "30000"
-  }
-}
-```
+## Example Queries
 
-Users can still specify `network: "fuji"` in their queries — the MCP tools accept a network parameter.
-
-## Docker Compose deployment (recommended)
-
-The `docker-compose.yml` in this directory builds the MCP server and runs it alongside OpenClaw with hardened container settings.
-
-### Required environment variables
-
-Create a `.env` file in this directory (or export them):
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...         # Anthropic API key for Claude
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF... # Telegram bot token from @BotFather
-TELEGRAM_ADMIN_USER_ID=123456789     # Your Telegram user ID
-TELEGRAM_GROUP_ID=-100123456789      # Telegram group ID (optional)
-```
-
-### Start
-
-```bash
-cd packages/mcp/deploy/openclaw
-docker compose up -d --build
-```
-
-### Network-level SSRF backstop
-
-For defense-in-depth against DNS rebinding, run `iptables-setup.sh` on the Docker host:
-
-```bash
-sudo bash iptables-setup.sh
-```
-
-This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918 and link-local ranges.
-
-## Docker deployment (standalone)
-
-```bash
-docker run -d \
-  --name suzaku-bot \
-  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
-  -v $(pwd)/openclaw.json:/root/.openclaw/openclaw.json \
-  -v $(pwd)/SOUL.md:/root/.openclaw/workspace/SOUL.md \
-  -v /path/to/packages/mcp/dist:/mcp \
-  openclaw/openclaw
-```
-
-Adjust the MCP path in `openclaw.json` to `/mcp/server.js`.
-
-## Example queries
-
-Once the bot is running, try these in Telegram:
+Once the bot is running, try these in a DM:
 
 - "What operators are registered on mainnet?"
 - "Show me the health status of operator 0x1234... on middleware 0xabcd..."
@@ -173,7 +176,9 @@ Once the bot is running, try these in Telegram:
 
 | Issue | Fix |
 |---|---|
-| Bot doesn't respond | Check `openclaw logs` — verify Telegram plugin is enabled and token is valid |
-| "Plugin not available" | Run `openclaw plugins enable telegram && openclaw gateway restart` |
-| MCP tools not found | Run `openclaw plugins list` — verify `mcp-adapter` is enabled |
-| Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query per session is slower due to cache miss |
+| Bot doesn't respond to DM | Check `docker compose logs` — verify Telegram token is valid |
+| Bot responds in wrong group | Verify `TELEGRAM_GROUP_ID` in `.env` matches your group; rebuild with `docker compose up --build` |
+| Container crash-loops | Check logs; if `read_only` causes issues, remove it temporarily and file a bug |
+| `docker inspect` shows API keys | Expected — Docker env vars are visible to host root. This is why VPS isolation matters |
+| Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower |
+| High API costs | Set a billing cap at console.anthropic.com; consider switching to `claude-haiku-4-5` in `openclaw.json` |
