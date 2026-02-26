@@ -26,7 +26,7 @@ export default [
     },
     {
         "type": "event",
-        "name": "StakingVault__DelegatorExternallySynced",
+        "name": "StakingVault__DelegatorRegistrationAborted",
         "inputs": [
             {
                 "name": "delegationID",
@@ -426,25 +426,6 @@ export default [
             },
             {
                 "name": "totalPending",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "StakingVault__ValidatorExternallySynced",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "amount",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
@@ -1263,78 +1244,6 @@ export default [
             }
         ],
         "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "syncDelegatorRemoval",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "synced",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "syncOperatorRemovals",
-        "inputs": [
-            {
-                "name": "operator",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "maxDelegations",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "maxValidators",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "delegationsSynced",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "validatorsSynced",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "syncValidatorRemoval",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "synced",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
         "stateMutability": "nonpayable"
     },
     {
