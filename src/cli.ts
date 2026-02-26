@@ -2963,7 +2963,7 @@ async function main() {
             const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
 
             const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } = await getValidatorManagerAddress(config, stakingVault);
-            const uptimeBlockchainID = await config.client.getStorageAt({ address: stakingManager.address, slot: `0x${(Number(stakingManagerStorageLocation) + 6).toString(16)}` })
+            const uptimeBlockchainID = await config.client.getStorageAt({ address: stakingManager.address, slot: `0x${(BigInt(stakingManagerStorageLocation) + 6n).toString(16).padStart(64, '0')}` })
             if (!uptimeBlockchainID || uptimeBlockchainID === "0x0") {
                 throw new Error("Could not get uptime blockchain ID");
             }
