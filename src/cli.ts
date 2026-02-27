@@ -131,7 +131,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -2925,6 +2925,27 @@ async function main() {
         });
 
     stakingVaultCmd
+        .command("force-remove-validator")
+        .description("Force remove a validator from the StakingVault (admin/emergency operation)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgNodeID())
+        .action(async (stakingVaultAddress, nodeId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
+            const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
+
+            await forceRemoveValidatorStakingVault(
+                client,
+                stakingVault,
+                validatorManager,
+                nodeId
+            );
+        });
+
+    stakingVaultCmd
         .command("initiate-delegator-registration")
         .description("Initiate delegator registration in the StakingVault")
         .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
@@ -2995,6 +3016,24 @@ async function main() {
             await initiateDelegatorRemovalStakingVault(
                 client,
                 config,
+                stakingVault,
+                delegationID
+            );
+        });
+
+    stakingVaultCmd
+        .command("force-remove-delegator")
+        .description("Force remove a delegator from the StakingVault (admin/emergency operation)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgHex("delegationID", "Delegation ID"))
+        .action(async (stakingVaultAddress, delegationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            await forceRemoveDelegatorStakingVault(
+                client,
                 stakingVault,
                 delegationID
             );

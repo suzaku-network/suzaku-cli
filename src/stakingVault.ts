@@ -570,6 +570,43 @@ export async function initiateValidatorRemovalStakingVault(
 }
 
 /**
+ * Force remove a validator from the StakingVault (admin/emergency operation).
+ * @param client - The wallet client
+ * @param stakingVault - The StakingVault contract instance
+ * @param validatorManager - The ValidatorManager contract instance
+ * @param nodeId - The node ID of the validator to force remove
+ */
+export async function forceRemoveValidatorStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    validatorManager: SafeSuzakuContract['ValidatorManager'],
+    nodeId: NodeId
+) {
+    logger.log("Force removing validator from StakingVault...");
+
+    // Parse NodeID to bytes format (20 bytes, no padding)
+    const nodeIdBytes = parseNodeID(nodeId, false);
+
+    // Get validationID from ValidatorManager
+    const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
+
+    logger.log("\n=== Force Remove Validator Details ===");
+    logger.log("Node ID:", nodeId);
+    logger.log("Validation ID:", validationID);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.forceRemoveValidator([validationID]);
+
+    logger.log("Force remove validator tx hash:", hash);
+
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+    logger.log("✅ Validator force-removed successfully!");
+    return hash;
+}
+
+/**
  * Complete validator removal in the StakingVault
  * @param client - The wallet client
  * @param pchainClient - The P-Chain wallet client
@@ -1047,6 +1084,34 @@ export async function initiateDelegatorRemovalStakingVault(
         logger.log("Note: Could not parse delegator removal initiated event");
     }
 
+    return hash;
+}
+
+/**
+ * Force remove a delegator from the StakingVault (admin/emergency operation).
+ * @param client - The wallet client
+ * @param stakingVault - The StakingVault contract instance
+ * @param delegationID - The delegation ID to force remove
+ */
+export async function forceRemoveDelegatorStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    delegationID: Hex
+) {
+    logger.log("Force removing delegator from StakingVault...");
+
+    logger.log("\n=== Force Remove Delegator Details ===");
+    logger.log("Delegation ID:", delegationID);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.forceRemoveDelegator([delegationID]);
+
+    logger.log("Force remove delegator tx hash:", hash);
+
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+    logger.log("✅ Delegator force-removed successfully!");
     return hash;
 }
 

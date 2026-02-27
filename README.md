@@ -905,6 +905,8 @@ Alias: `sv`
   Initiate validator removal in the StakingVault.
 - **complete-validator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--node-id `<nodeId>`...] [--initiate-tx `<initiateTx>`]**
   Complete validator removal on the P-Chain and on the StakingVault after initiating removal.
+- **force-remove-validator `<stakingVaultAddress>` `<nodeId>`**
+  Force remove a validator from the StakingVault (admin/emergency operation).
 - **initiate-delegator-registration `<stakingVaultAddress>` `<nodeId>` `<amount>`**
   Initiate delegator registration in the StakingVault.
 - **complete-delegator-registration `<stakingVaultAddress>` `<initiateTxHash>` `<rpcUrl>` [--pchain-tx-private-key `<pchainTxPrivateKey>`]**
@@ -913,6 +915,8 @@ Alias: `sv`
   Initiate delegator removal in the StakingVault.
 - **complete-delegator-removal `<stakingVaultAddress>` `<initiateRemovalTxHash>` [--pchain-tx-private-key `<pchainTxPrivateKey>`] [--skip-wait-api] [--delegation-id `<delegationID>`...] [--initiate-tx `<initiateTx>`]**
   Complete delegator removal on the P-Chain and on the StakingVault after initiating removal.
+- **force-remove-delegator `<stakingVaultAddress>` `<delegationID>`**
+  Force remove a delegator from the StakingVault (admin/emergency operation).
 - **info `<stakingVaultAddress>`**
   Get general overview of the StakingVault.
 - **fees-info `<stakingVaultAddress>`**
