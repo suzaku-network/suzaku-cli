@@ -4,16 +4,28 @@ import { hexToBytes, Hex } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, Network } from "./client";
 import { logger } from './lib/logger';
-import { validatedBy } from "./lib/pChainUtils";
+import { getCurrentValidators, validatedBy } from "./lib/pChainUtils";
+import { utils } from "@avalabs/avalanchejs";
+import { cb58ToHex } from "./lib/utils";
 
-export async function getValidationUptimeMessage(
-  client: ExtendedClient,
-  rpcUrl: string,
-  nodeId: string,
-  networkID: number,
-  sourceChainID: string
-) {
-  // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
+type getCurrentValidatorsRpcResponse = {
+  result: {
+    "validators": {
+    "validationID": string,
+    "nodeID": string,
+    "weight": number,
+    "startTimestamp": number,
+    "isActive": boolean,
+    "isL1Validator": boolean,
+    "isConnected": boolean,
+    "uptimePercentage": number,
+    "uptimeSeconds": number
+    }[],
+  }
+  error?: any
+}
+
+export async function getCurrentValidatorsFromNode(rpcUrl: string) {
   const response = await fetch(rpcUrl + "/validators", {
     method: "POST",
     headers: {
@@ -23,15 +35,27 @@ export async function getValidationUptimeMessage(
       jsonrpc: "2.0",
       method: "validators.getCurrentValidators",
       params: {
-        nodeIDs: [nodeId],
+        nodeIDs: [],
       },
       id: 1,
     }),
   });
-  const data = await response.json();
+  const data = await response.json() as getCurrentValidatorsRpcResponse;
   if (data.error) logger.exitError(["Error from validators.getCurrentValidators:", data.error])
-  if (!data.result.validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
-  const validator = data.result.validators[0];
+  return data.result.validators;
+}
+
+export async function getValidationUptimeMessage(
+  client: ExtendedClient,
+  rpcUrl: string,
+  nodeId: string,
+  networkID: number,
+  sourceChainID: string
+) {
+  // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
+  const validators = await getCurrentValidatorsFromNode(rpcUrl);
+  if (!validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
+  const validator = validators[0];
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;
   logger.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
@@ -57,7 +81,7 @@ export async function computeValidatorUptime(
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
 
-  const txHash = await uptimeTracker.write.computeValidatorUptime([0]);
+  const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
 
   logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;
@@ -225,14 +249,15 @@ export async function getLastUptimeCheckpoint(
 /**
  * Check if all validators from all operators have reported uptime for the epoch
  */
-export async function checkAllValidatorsUptimeReported(
+export async function reportAllValidatorsUptime(
   client: ExtendedClient,
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   middleware: SafeSuzakuContract['L1Middleware'],
-  balancer: SafeSuzakuContract['BalancerValidatorManager'],
-  epoch?: number
+  rpcUrl: string,
+  sourceChainID: string
 ) {
-  const targetEpoch = epoch ?? Number(await middleware.read.getCurrentEpoch());
+
+  const targetEpoch = Number(await middleware.read.getCurrentEpoch());
   logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
 
   const operators = await middleware.read.getAllOperators();
@@ -240,108 +265,40 @@ export async function checkAllValidatorsUptimeReported(
     logger.log("No operators found.");
     return;
   }
+  const currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
 
-  const operatorValidationIds = await middleware.multicall(
-    operators.map(op => ({ name: 'getOperatorValidationIDs', args: [op] }))
-  );
-
-  const allValidationIds = operatorValidationIds.flatMap(ids => ids as Hex[]);
-  const uniqueValidationIds = [...new Set(allValidationIds)];
-
-  if (uniqueValidationIds.length === 0) {
+  if (currentValidators.length === 0) {
     logger.log("No validators found for any operator.");
     return;
   }
 
   // Check uptime status and get validator details in parallel structure
-  const [uptimeStatus, validators] = await Promise.all([
-    uptimeTracker.multicall(
-      uniqueValidationIds.map(vid => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, vid] }))
-    ),
-    balancer.multicall(
-      uniqueValidationIds.map(vid => ({ name: 'getValidator', args: [vid] }))
+  const uptimeStatus = await uptimeTracker.multicall(
+      currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
     )
-  ]);
 
-  const missingUptimes: {
-    validationID: Hex;
-    nodeID: Hex;
-  }[] = [];
-  const reportedUptimes: {
-    validationID: Hex;
-    nodeID: Hex;
-  }[] = [];
+  const signingSubnetId = await validatedBy(client, sourceChainID);
+  const networkID = client.network === 'mainnet' ? 1 : 5;
 
-  // uniqueAValidationIds
-
-  uniqueValidationIds.forEach((vid, index) => {
-    // getValidator returns the Validator struct, we can extract nodeID if it exists 
-    const validator = validators[index];
+  for (const [index, validator] of currentValidators.entries()) {
+    const { validationID, nodeID, uptimeSeconds } = validator;
     const status = uptimeStatus[index];
-    const nodeIDHex = validator?.nodeID as Hex;
-    let nodeIDStr = vid;
-    if (nodeIDHex) {
-      // encodeNodeID is not imported in uptime.ts, let's just return the hex or we can import it in cli.js.
-      // Actually we can just keep the raw hex nodeID here and format it in the CLI if needed, or we just log it.
-      // We'll just return the relevant data.
-      nodeIDStr = nodeIDHex;
+
+    if (!status) {
+      // get validator uptime
+      logger.log(`Reporting uptime for validator ${validationID} (${nodeID})...`);
+      const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
+      const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
+      const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
+      // compute validator uptime
+      const warpBytes = hexToBytes(signedValidationUptimeMessage);
+      const accessList = packWarpIntoAccessList(warpBytes);
+
+      const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
+      logger.log(`computeValidatorUptime done, tx hash: ${txHash}`);
+      logger.addData('computeValidatorUptime', { validationID, nodeID, txHash });
     }
+  };
 
-    const info = { validationID: vid, nodeID: nodeIDStr };
-
-    if (status) {
-      reportedUptimes.push(info);
-    } else {
-      missingUptimes.push(info);
-    }
-  });
-
-  logger.log(`\nUptime Report for Epoch ${targetEpoch}:`);
-  logger.log(`Total active validators: ${uniqueValidationIds.length}`);
-  logger.log(`Reported: ${reportedUptimes.length}`);
-  logger.log(`Missing: ${missingUptimes.length}`);
-
-  if (missingUptimes.length > 0) {
-    logger.log(`\nValidators missing uptime report:`);
-    missingUptimes.forEach((info, index) => logger.log(`  ${index + 1}. ValidationID: ${info.validationID} (NodeID Hex: ${info.nodeID})`));
-
-    logger.log(`\nAttempting to report and submit uptime for missing validators...`);
-    const rpcUrl = "https://api.avax.network/ext/bc/P";
-    const sourceChainID = "11111111111111111111111111111111LpoYY";
-
-    for (const info of missingUptimes) {
-      if (info.nodeID && info.nodeID.startsWith('0x')) {
-        // We need to convert the hex NodeID back to CB58 string to query the API
-        const { encodeNodeID } = require('./lib/utils');
-        const nodeIDString = encodeNodeID(info.nodeID);
-        try {
-          await reportAndSubmitValidatorUptime(
-            client,
-            rpcUrl,
-            nodeIDString,
-            sourceChainID,
-            uptimeTracker
-          );
-        } catch (error: any) {
-          logger.error(`Failed to report uptime for validator ${info.validationID} (NodeID: ${nodeIDString}):`, error.message);
-        }
-      } else {
-        logger.error(`Cannot report uptime for validationID ${info.validationID} because NodeID is missing or invalid.`);
-      }
-    }
-    logger.log(`\nFinished attempting to report missing uptimes.`);
-  } else {
-    logger.log(`\nAll validators have reported uptime for epoch ${targetEpoch}!`);
-  }
-
-  logger.addData('uptimeReport', {
-    epoch: targetEpoch,
-    total: uniqueValidationIds.length,
-    reportedCount: reportedUptimes.length,
-    missingCount: missingUptimes.length,
-    reported: reportedUptimes,
-    missing: missingUptimes
-  });
-
-  return { reportedUptimes, missingUptimes };
+  logger.log("All validators have reported their uptime for epoch " + targetEpoch);
 }

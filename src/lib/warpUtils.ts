@@ -290,7 +290,7 @@ export async function getSigningSubnetIdFromWarpMessage(client: ExtendedClient, 
     return signingSubnetId;
 }
 
-export async function collectSignatures({ network, message, justification, signingSubnetId }: CollectSignaturesProps): Promise<string> {
+export async function collectSignatures({ network, message, justification, signingSubnetId }: CollectSignaturesProps): Promise<Hex> {
     // Use the signature aggregation API from Glacier
     const body: { message: string; justification?: string; signingSubnetId?: string, quorumPercentage?: number } = { message };
     if (justification) body.justification = justification;
@@ -313,7 +313,7 @@ export async function collectSignatures({ network, message, justification, signi
         throw new Error(errorText || `HTTP error! status: ${signResponse.status}`);
     }
     const { signedMessage } = await signResponse.json() as SignatureResponse;
-    return signedMessage;
+    return signedMessage as Hex;
 }
 
 // Add new function to pack L1 validator registration message
@@ -573,7 +573,7 @@ export function packValidationUptimeMessage(validationId: string, uptimeSeconds:
 
     // Convert validationId to hex
     const validationIdHex = cb58ToHex(validationId);
-    const validationIdBytes = hexToBytes(validationIdHex as Hex);
+    const validationIdBytes = hexToBytes(validationIdHex);
 
     // Create the message payload with the proper format
     const messagePayload = concatenateUint8Arrays(

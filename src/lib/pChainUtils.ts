@@ -78,14 +78,14 @@ interface Validator {
 }
 
 export type ExtractWarpMessageFromTxResponse = {
-    message: string;
-    justification: string;
+    message: Hex;
+    justification: Hex;
     subnetId: string;
     signingSubnetId: string;
     networkId: typeof networkIDs.FujiID | typeof networkIDs.MainnetID;
     validators: Validator[];
     chainId: string;
-    managerAddress: string;
+    managerAddress: Hex;
 }
 
 interface OutputObject {
@@ -557,14 +557,14 @@ export async function extractWarpMessageFromPChainTx(subnetId: string, txId: str
 
     const [message, justification] = packL1ConversionMessage(conversionArgs, networkId, data.result.tx.unsignedTx.blockchainID);
     return {
-        message: utils.bufferToHex(message),
-        justification: utils.bufferToHex(justification),
+        message: utils.bufferToHex(message) as Hex,
+        justification: utils.bufferToHex(justification) as Hex,
         subnetId: data.result.tx.unsignedTx.subnetID,
         signingSubnetId: subnetId,
         networkId,
         validators: data.result.tx.unsignedTx.validators,
         chainId: data.result.tx.unsignedTx.chainID,
-        managerAddress: data.result.tx.unsignedTx.address,
+        managerAddress: data.result.tx.unsignedTx.address as Hex,
     }
 }
 
@@ -646,9 +646,9 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     // Prepare transaction arguments
     return [
         {
-            subnetID: cb58ToHex(subnetId) as Hex,
-            validatorManagerBlockchainID: cb58ToHex(chainId) as Hex,
-            validatorManagerAddress: managerAddress as Hex,
+            subnetID: cb58ToHex(subnetId),
+            validatorManagerBlockchainID: cb58ToHex(chainId),
+            validatorManagerAddress: managerAddress,
             initialValidators: validators
                 .map(({ nodeID, weight, signer }: { nodeID: string, weight: number, signer: { publicKey: string } }) => {
                     // Ensure nodeID and blsPublicKey are properly formatted

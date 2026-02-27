@@ -90,7 +90,7 @@ import {
     getOperatorUptimeForEpoch,
     isOperatorUptimeSetForEpoch,
     getLastUptimeCheckpoint,
-    checkAllValidatorsUptimeReported
+    reportAllValidatorsUptime
 } from "./uptime";
 
 import {
@@ -3454,27 +3454,26 @@ async function main() {
         });
 
     uptimeCmd
-        .command("check-uptime-reported")
-        .description("Check if all validators from all operators have reported their uptime for a specific epoch")
+        .command("report-all-validators-uptime")
+        .description("Report uptime for all validators")
         .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
         .addArgument(ArgAddress("middlewareAddress", "Address of the Middleware contract"))
+        .argument("rpcUrl", "RPC URL of the network")
+        .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
-        .action(async (uptimeTrackerAddress, middlewareAddress, options) => {
+        .action(async (uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
             const opts = program.opts();
-            const client = await generateClient(opts.network);
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
-            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
-            const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
-
-            await checkAllValidatorsUptimeReported(
+            await reportAllValidatorsUptime(
                 client,
                 uptimeTracker,
                 middlewareSvc,
-                balancerSvc,
-                options.epoch
+                rpcUrl,
+                blockchainId
             );
         });
 
