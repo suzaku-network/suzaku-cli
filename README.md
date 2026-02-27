@@ -43,6 +43,7 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [Ledger Commands (`ledger`)](#ledger-commands-ledger)
     - [Safe Commands (`safe`)](#safe-commands-safe)
     - [Access Control Commands (`access-control`)](#access-control-commands-access-control)
+    - [Completion](#completion)
     - [Other Commands](#other-commands)
 
 ## Requirements
@@ -183,10 +184,10 @@ suzaku-cli vault deposit $VAULT 100 --ledger --network fuji
 suzaku-cli ledger addresses
 
 # Fix USB rules on Linux (if Ledger is not detected)
-suzaku-cli ledger fix-usb
+suzaku-cli ledger fix-usb-rules
 ```
 
-> **Note:** On Linux, you may need to run `suzaku-cli ledger fix-usb` with sudo privileges if the device is not detected. It will use the official Ledger script to add `/etc/udev/rules.d/20-hw1.rules` to identify Ledger devices.
+> **Note:** On Linux, you may need to run `suzaku-cli ledger fix-usb-rules` with sudo privileges if the device is not detected. It will use the official Ledger script to add `/etc/udev/rules.d/20-hw1.rules` to identify Ledger devices.
 
 ## Token values
 
@@ -233,9 +234,9 @@ suzaku-cli l1-registry register $BALANCER_VALIDATOR_MANAGER $MIDDLEWARE https://
 
   ```bash
   # Set the limit of the L1 in this vault to 1M tokens (use decimal format)
-  suzaku-cli vault set-l1-limit $DELEGATOR $BALANCER_VALIDATOR_MANAGER 1000000 1 --network fuji --private-key $L1_OWNER
+  suzaku-cli vault set-l1-limit $VAULT $BALANCER_VALIDATOR_MANAGER 1000000 1 --network fuji --private-key $L1_OWNER
   # Operator will be able to use 10.5 tokens (use decimal format)
-  suzaku-cli vault set-operator-l1-shares $DELEGATOR $BALANCER_VALIDATOR_MANAGER $OPERATOR 10.5 1 --network fuji --private-key $L1_OWNER
+  suzaku-cli vault set-operator-l1-shares $VAULT $BALANCER_VALIDATOR_MANAGER $OPERATOR 10.5 1 --network fuji --private-key $L1_OWNER
   ```
 
 - **(Optional) Mint & Approve sAVAX, Then Deposit**
@@ -361,8 +362,8 @@ Here's a recommended sequence of commands to test the rewards functionality:
    suzaku-cli rewards get-min-uptime $REWARDS --network fuji
    suzaku-cli rewards set-min-uptime $REWARDS 3000 --network fuji --private-key $CURATOR_OWNER
 
-   # Set rewards share for collateral classes
-   suzaku-cli rewards set-share-collateral-class $REWARDS 1 5000 --network fuji --private-key $CURATOR_OWNER
+   # Set rewards bips for collateral class
+   suzaku-cli rewards set-bips-collateral-class $REWARDS 1 5000 --network fuji --private-key $CURATOR_OWNER
    ```
 
 1.1. **Mint & Approve Reward Tokens**
@@ -523,7 +524,7 @@ suzaku-cli --help
 - `-k, --private-key <privateKey>`: Private key for signing transactions.
 - `-s, --secret-name <secretName>`: The keystore secret name containing the private key.
 - `-l, --ledger`: Use Ledger hardware wallet for signing (conflicts with `-k` and `-s`).
-- `-w, --wait <confirmations>`: Number of confirmations to wait after a write transaction. Default: 0.
+- `-w, --wait <confirmations>`: Number of confirmations to wait after a write transaction. Default: 2.
 - `--json`: Output logs in JSON format.
 - `-y, --yes`: Automatic yes to prompts.
 - `--safe <address>`: Use Safe smart account for transactions (compatible with Ledger).
@@ -701,6 +702,10 @@ suzaku-cli --help
   Set vault manager.
 - **account-info `<middlewareAddress>` `<account>`**
   Get account info.
+- **info `<middlewareAddress>`**
+  Get general information about the middleware.
+- **weight-watcher `<middlewareAddress>` [--epochs `<number>`] [--loop-epochs `<number>`]**
+  Watch for operators weight changes.
 
 ### Operator Opt-In Commands (`opt-in`)
 
@@ -753,12 +758,14 @@ suzaku-cli --help
 
 ### Uptime Commands (`uptime`)
 
-- **get-validation-uptime-message `<rpcUrl>` `<chainId>` `<nodeId>`**
+- **get-validation-uptime-message `<rpcUrl>` `<blockchainId>` `<nodeId>`**
   Get the validation uptime message for a given validator in the given L1 RPC.
 - **compute-validator-uptime `<uptimeTrackerAddress>` `<signedUptimeHex>`**
   Compute validator uptime based on the signed uptime message.
-- **report-uptime-validator `<rpcUrl>` `<sourceChainId>` `<nodeId>` `<uptimeTrackerAddress>`**
+- **report-uptime-validator `<rpcUrl>` `<blockchainId>` `<nodeId>` `<uptimeTrackerAddress>`**
   Gets a validator's signed uptime message and submits it to the UptimeTracker contract.
+- **report-all-validators-uptime `<uptimeTrackerAddress>` `<middlewareAddress>` `<rpcUrl>` `<blockchainId>`** [--epoch `<epoch>`]
+  Report uptime for all validators (optional `--epoch` defaults to current epoch).
 - **compute-operator-uptime `<uptimeTrackerAddress>` `<operator>` `<epoch>`**
   Compute uptime for an operator at a specific epoch.
 - **compute-operator-uptime-range `<uptimeTrackerAddress>` `<operator>` `<startEpoch>` `<endEpoch>`**
@@ -833,11 +840,11 @@ suzaku-cli --help
   List available gpg key ids installed on the system.
 - **init `<gpgKeyIds...>`**
   Initialize the keystore.
-- **create `<name>` [--clip] [--value `<value>]**
-  Create a new encrypted secret.
+- **create `<name>`** (requires one of: **-c/--clip**, **-v/--value `<value>`**, or **-p/--prompt**)
+  Create a new encrypted secret (clipboard, value, or prompt for value).
 - **rm `<name>`**
   Remove an encrypted secret.
-- **list**
+- **list** [--hide-addresses]
   List all encrypted secrets.
 - **addresses `<name>`**
   Show the address of an encrypted private key.
@@ -934,8 +941,8 @@ Alias: `sv`
 
 - **nonce `<safeAddress>`**
   Get the current nonce of a Safe.
-- **get-role `<safeAddress>` `<role>`**
-  Get role information for a Safe.
+- **get-role** [--account `<account>`]
+  Get user role in the Safe (Owner, Delegate, or No role). Uses global `--safe` for the Safe address; optionally check a specific account with `--account`, otherwise uses the signer.
 
 ### Access Control Commands (`access-control`)
 
@@ -947,6 +954,11 @@ Alias: `sv`
   Check if an account has a specific role.
 - **get-role-admin `<contractAddress>` `<role>`**
   Get the admin role that controls a specific role.
+
+### Completion
+
+- **completion install**
+  Install shell autocompletion for Bash and Zsh (uses default user shell; set `SHELL` to override).
 
 ### Other Commands
 
