@@ -125,7 +125,7 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 | `agents.defaults.model.primary` | `anthropic/claude-sonnet-4-6` | Cost-effective model for read queries |
 | `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
 | `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
-| `plugins.entries.mcp-adapter` | stdio transport | MCP server spawned as subprocess |
+| `skills.entries.mcporter` | enabled | MCP tools via mcporter CLI bridge |
 
 ### Access control
 
@@ -141,12 +141,10 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 
 | Setting | Purpose |
 |---|---|
-| `read_only: true` | Filesystem is immutable; prevents malicious writes |
-| `tmpfs: /tmp, /root/.openclaw` | Writable scratch space (non-persistent) for OpenClaw runtime |
 | `cap_drop: ALL` | No Linux capabilities |
 | `no-new-privileges` | Prevents privilege escalation |
 | `pids_limit: 100` | Prevents fork bombs |
-| `mem_limit: 1g` | Prevents OOM from affecting host |
+| `mem_limit: 2g` | Prevents OOM from affecting host |
 | `restart: unless-stopped` | Auto-restart on crash; stays down on manual `docker compose down` |
 
 ### Environment variables

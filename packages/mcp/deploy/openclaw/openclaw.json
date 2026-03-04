@@ -12,6 +12,7 @@
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "dmPolicy": "allowlist",
       "allowFrom": ["tg:${TELEGRAM_ADMIN_USER_ID}"],
+      "groupPolicy": "allowlist",
       "groups": {
         "${TELEGRAM_GROUP_ID}": {
           "requireMention": true
@@ -19,37 +20,10 @@
       }
     }
   },
-  "plugins": {
+  "skills": {
     "entries": {
-      "mcp-adapter": {
-        "enabled": true,
-        "config": {
-          "servers": [
-            {
-              "name": "suzaku",
-              "transport": "stdio",
-              "command": "node",
-              "args": ["/mcp/packages/mcp/dist/server.js", "--read-only"],
-              "env": {
-                "SUZAKU_CLI_PATH": "/mcp/bin/cli.js",
-                "SUZAKU_MCP_DEDUP_WINDOW_MS": "30000",
-                "SUZAKU_MCP_PUBLIC_HEALTH": "true",
-                "SUZAKU_MCP_MAX_CONCURRENT": "8",
-                "SUZAKU_MCP_RATE_MAX_CALLS": "60",
-                "SUZAKU_MCP_RATE_WINDOW_MS": "60000",
-                "SUZAKU_MCP_AUDIT_MAX_MB": "50",
-                "SUZAKU_MCP_AUDIT_DIR": "/data/audit"
-              }
-            }
-          ]
-        }
-      }
-    }
-  },
-  "tools": {
-    "sandbox": {
-      "tools": {
-        "allow": ["mcp-adapter"]
+      "mcporter": {
+        "enabled": true
       }
     }
   }

@@ -5,21 +5,20 @@ services:
       dockerfile: packages/mcp/deploy/openclaw/Dockerfile
       target: bot
     restart: unless-stopped
-    read_only: true
     pids_limit: 100
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    mem_limit: 1g
+    mem_limit: 2g
     cpus: 1.0
     tmpfs:
       - /tmp:size=128m
-      - /root/.openclaw:size=64m
     volumes:
       - audit-data:/data/audit
-      - ./openclaw.json:/root/.openclaw/openclaw.json:ro
-      - ./SOUL.md:/root/.openclaw/workspace/SOUL.md:ro
+      - ./openclaw.json:/home/node/.openclaw/openclaw.json.tpl:ro
+      - ./SOUL.md:/home/node/.openclaw/workspace/SOUL.md
+      - ./mcporter.json:/home/node/.openclaw/workspace/config/mcporter.json:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
