@@ -585,25 +585,6 @@ export default [
     },
     {
         "type": "event",
-        "name": "StakingVault__MaxDelegatorsPerOperatorUpdated",
-        "inputs": [
-            {
-                "name": "oldMax",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "newMax",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
         "name": "StakingVault__MaxOperatorsUpdated",
         "inputs": [
             {
@@ -1044,6 +1025,25 @@ export default [
             },
             {
                 "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__WithdrawalRequestFeeUpdated",
+        "inputs": [
+            {
+                "name": "oldFee",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "newFee",
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
@@ -1665,11 +1665,6 @@ export default [
                 "internalType": "address"
             }
         ]
-    },
-    {
-        "type": "error",
-        "name": "StakingVault__QueueFull",
-        "inputs": []
     },
     {
         "type": "error",
@@ -2426,19 +2421,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "getMaxDelegatorsPerOperator",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "max",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "getMaxOperators",
         "inputs": [],
         "outputs": [
@@ -2926,16 +2908,24 @@ export default [
                         "internalType": "uint256"
                     },
                     {
-                        "name": "requestTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
                         "name": "fulfilled",
                         "type": "bool",
                         "internalType": "bool"
                     }
                 ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getWithdrawalRequestFee",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "fee",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "stateMutability": "view"
@@ -3403,7 +3393,13 @@ export default [
         "type": "function",
         "name": "processEpoch",
         "inputs": [],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "finished",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -3500,19 +3496,6 @@ export default [
         "inputs": [
             {
                 "name": "_liquidityBufferBips",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "setMaxDelegatorsPerOperator",
-        "inputs": [
-            {
-                "name": "newMax",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -3632,6 +3615,19 @@ export default [
                 "name": "_protocolFeeRecipient",
                 "type": "address",
                 "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setWithdrawalRequestFee",
+        "inputs": [
+            {
+                "name": "fee",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "outputs": [],
