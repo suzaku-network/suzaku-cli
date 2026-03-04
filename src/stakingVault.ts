@@ -195,14 +195,16 @@ export async function claimWithdrawalStakingVault(
 export async function processEpochStakingVault(
     client: ExtendedWalletClient,
     stakingVault: SafeSuzakuContract['StakingVault']
-) {
+): Promise<{ finished: boolean; requestsRemaining: bigint } | undefined> {
     logger.log("Processing epoch in StakingVault...");
 
     logger.log("\n=== Process Epoch Details ===");
     logger.log("Vault address:", stakingVault.address);
 
-    // Call processEpoch
+    // Call processEpoch (ABI returns bool finished, but safeWrite returns tx hash)
     const hash = await stakingVault.safeWrite.processEpoch([]);
+
+    if (!hash) return undefined; // skipped (Safe propose / cast mode)
 
     logger.log("Process epoch tx hash:", hash);
 
@@ -211,7 +213,14 @@ export async function processEpochStakingVault(
     const receipt = await client.waitForTransactionReceipt({ hash });
     logger.log("Transaction confirmed in block:", receipt.blockNumber);
 
+    // Determine finished by checking if lastEpochProcessed caught up
+    const [currentEpoch, lastEpochProcessed] = await stakingVault.multicall([
+        'getCurrentEpoch', 'getLastEpochProcessed',
+    ]);
+    const finished = lastEpochProcessed >= currentEpoch;
+
     // Parse the epoch processed event
+    let requestsRemaining = 0n;
     try {
         const epochProcessedEvents = parseEventLogs({
             abi: stakingVault.abi,
@@ -221,11 +230,13 @@ export async function processEpochStakingVault(
 
         if (epochProcessedEvents.length > 0) {
             const event = epochProcessedEvents[0];
+            requestsRemaining = event.args?.requestsRemaining ?? 0n;
             logger.log("✅ Epoch processed successfully!");
             logger.log("Epoch:", event.args?.epoch?.toString() || 'N/A');
             logger.log("Withdrawals fulfilled:", event.args?.withdrawalsFulfilled?.toString() || 'N/A');
             logger.log("Stake released:", event.args?.stakeReleased?.toString() || 'N/A');
-            logger.log("Requests remaining:", event.args?.requestsRemaining?.toString() || 'N/A');
+            logger.log("Requests remaining:", requestsRemaining.toString());
+            logger.log("Finished:", finished);
         } else {
             logger.log("✅ Epoch processed successfully!");
         }
@@ -233,6 +244,8 @@ export async function processEpochStakingVault(
         logger.log("✅ Epoch processed successfully!");
         logger.log("Note: Could not parse epoch processed event");
     }
+
+    return { finished, requestsRemaining };
 }
 
 /**
