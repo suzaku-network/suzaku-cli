@@ -7,9 +7,9 @@ MCP server exposing 85 tools for the Suzaku protocol (Avalanche restaking) — w
 ```
 src/
 ├── server.ts            # Entry point: creates McpServer, registers tools/resources/prompts, starts stdio transport
-├── cli-runner.ts        # Subprocess engine: resolves CLI path, builds restricted env, applies signing + suggest/confirm matrix, spawns child process, dedup cache, audit log
+├── cli-runner.ts        # Subprocess engine: resolves CLI path, builds restricted env, applies signing + suggest/confirm matrix, spawns child process, dedup cache, audit log, concurrency/rate limiter
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
-├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl
+├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl (with SSRF blocklist)
 ├── tools/
 │   ├── middleware.ts    # 20 tools — L1Middleware contract (16 read: 9 atomic + 7 composite, 4 write)
 │   ├── vault.ts         # 8 tools — Symbiotic vault (5 read, 3 write)
@@ -99,6 +99,12 @@ Testnet networks: `fuji`, `anvil`, `kitetestnet`. The `Network` schema defaults 
 | `SUZAKU_CLI_PATH` | Override CLI binary path. Falls back to `../../../bin/cli.js` then `which suzaku-cli` | — |
 | `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (ms). Identical calls within window return cached result | `60000` |
 | `SUZAKU_MCP_DEBUG` | Forwards subprocess stderr to server stderr in real time (server-side only — not passed to child process) | — |
+| `SUZAKU_MCP_MAX_CONCURRENT` | Max parallel CLI subprocesses. Rejects with error when exceeded | `10` |
+| `SUZAKU_MCP_RATE_MAX_CALLS` | Max CLI calls per sliding window. Rejects with error when exceeded | `60` |
+| `SUZAKU_MCP_RATE_WINDOW_MS` | Sliding window duration (ms) for rate limiter | `60000` |
+| `SUZAKU_MCP_AUDIT_DIR` | Override audit log directory (for Docker volume mount) | `~/.suzaku-cli` |
+| `SUZAKU_MCP_AUDIT_MAX_MB` | Max audit log size (MB) before rotation. Keeps max 2 files (~2x this value) | `50` |
+| `SUZAKU_MCP_PUBLIC_HEALTH` | `'true'` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output | — |
 
 ### Child Process Env (allowlist)
 
@@ -220,4 +226,7 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
 6. **Dedup is write-agnostic** — Cache key is args+network+rpcUrl. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
 7. **Two-phase lifecycle needs P-Chain key** — `complete_*` tools require `SUZAKU_PCHAIN_PK` and use 5-minute timeout.
-8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` via non-blocking `appendFile`. Failures are silently ignored.
+8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` (or `SUZAKU_MCP_AUDIT_DIR`) via non-blocking `appendFile`. Auto-rotates at `SUZAKU_MCP_AUDIT_MAX_MB` (default 50 MB), keeping max 2 files. Failures are silently ignored.
+9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All 37 read tools inherit this via shared schema.
+10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
+11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.

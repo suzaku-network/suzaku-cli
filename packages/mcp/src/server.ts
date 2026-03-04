@@ -183,26 +183,30 @@ server.tool(
   },
   { readOnlyHint: true, idempotentHint: true },
   async ({ network, rpcUrl }) => {
+    const publicHealth = process.env.SUZAKU_MCP_PUBLIC_HEALTH === 'true';
     const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly };
 
-    // Check signing method
-    if (process.env.SUZAKU_MCP_LEDGER === 'true') {
-      status.signer = 'ledger';
-    } else if (process.env.SUZAKU_SECRET_NAME) {
-      status.signer = 'gpg-keystore';
-      status.secretName = '[configured]';
-    } else if (process.env.SUZAKU_PK) {
-      status.signer = 'private-key';
-    } else {
-      status.signer = 'none';
-      status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
-    }
+    // In public health mode, suppress internal config details (signer type, Safe, guard config)
+    if (!publicHealth) {
+      // Check signing method
+      if (process.env.SUZAKU_MCP_LEDGER === 'true') {
+        status.signer = 'ledger';
+      } else if (process.env.SUZAKU_SECRET_NAME) {
+        status.signer = 'gpg-keystore';
+        status.secretName = '[configured]';
+      } else if (process.env.SUZAKU_PK) {
+        status.signer = 'private-key';
+      } else {
+        status.signer = 'none';
+        status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
+      }
 
-    if (process.env.SUZAKU_SAFE_ADDRESS) {
-      status.safeAddress = process.env.SUZAKU_SAFE_ADDRESS;
-    }
-    if (process.env.SUZAKU_PCHAIN_PK) {
-      status.pchainSigner = 'configured';
+      if (process.env.SUZAKU_SAFE_ADDRESS) {
+        status.safeAddress = process.env.SUZAKU_SAFE_ADDRESS;
+      }
+      if (process.env.SUZAKU_PCHAIN_PK) {
+        status.pchainSigner = 'configured';
+      }
     }
 
     // Use operator-registry get-all as a connectivity + CLI health probe
@@ -225,16 +229,18 @@ server.tool(
       }
     }
 
-    // Report guard config
-    const guardConfig: Record<string, string> = {};
-    if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = process.env.SUZAKU_MCP_SUGGEST;
-    if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
-    if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
-    if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = process.env.SUZAKU_MCP_ALLOW_TOOLS;
-    if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = process.env.SUZAKU_MCP_DENY_TOOLS;
-    if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = process.env.SUZAKU_MCP_DRY_RUN;
-    if (Object.keys(guardConfig).length > 0) {
-      status.guardConfig = guardConfig;
+    // Report guard config (suppressed in public health mode)
+    if (!publicHealth) {
+      const guardConfig: Record<string, string> = {};
+      if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = process.env.SUZAKU_MCP_SUGGEST;
+      if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+      if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
+      if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = process.env.SUZAKU_MCP_ALLOW_TOOLS;
+      if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = process.env.SUZAKU_MCP_DENY_TOOLS;
+      if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = process.env.SUZAKU_MCP_DRY_RUN;
+      if (Object.keys(guardConfig).length > 0) {
+        status.guardConfig = guardConfig;
+      }
     }
 
     return formatResult({ success: true, data: status });
