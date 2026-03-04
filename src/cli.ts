@@ -131,7 +131,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, prepareWithdrawalsStakingVault, harvestStakingVault, harvestValidatorsStakingVault, harvestDelegatorsStakingVault, claimWithdrawalForStakingVault, claimWithdrawalsStakingVault, claimWithdrawalsForStakingVault, claimPendingProtocolFeesStakingVault, claimOperatorFeesStakingVault, setOperatorFeeRecipientStakingVault, claimEscrowedWithdrawalStakingVault, removeOperatorStakingVault, forceClaimOperatorFeesStakingVault, setProtocolFeeBipsStakingVault, setOperatorFeeBipsStakingVault, setProtocolFeeRecipientStakingVault, setLiquidityBufferBipsStakingVault, setMaximumValidatorStakeStakingVault, setMaximumDelegatorStakeStakingVault, setMaxOperatorsStakingVault, setMaxValidatorsPerOperatorStakingVault, setWithdrawalRequestFeeStakingVault, pauseStakingVault, unpauseStakingVault, setOperationsImplStakingVault, upgradeToAndCallStakingVault, beginDefaultAdminTransferStakingVault, acceptDefaultAdminTransferStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -3229,6 +3229,380 @@ async function main() {
             await getDelegatorsInfo(stakingVault);
             await getWithdrawalsInfo(stakingVault);
             await getEpochInfo(stakingVault);
+        });
+
+    // ── Keeper/Bot Commands ───────────────────────────────────────────
+
+    stakingVaultCmd
+        .command("prepare-withdrawals")
+        .description("Prepare withdrawals in the StakingVault (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await prepareWithdrawalsStakingVault(client, stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("harvest")
+        .description("Harvest rewards in the StakingVault (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await harvestStakingVault(client, stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("harvest-validators")
+        .description("Harvest validator rewards in the StakingVault (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("operatorIndex", "Operator index"))
+        .addArgument(ArgBigInt("start", "Start index"))
+        .addArgument(ArgBigInt("batchSize", "Batch size"))
+        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await harvestValidatorsStakingVault(client, stakingVault, operatorIndex, start, batchSize);
+        });
+
+    stakingVaultCmd
+        .command("harvest-delegators")
+        .description("Harvest delegator rewards in the StakingVault (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("operatorIndex", "Operator index"))
+        .addArgument(ArgBigInt("start", "Start index"))
+        .addArgument(ArgBigInt("batchSize", "Batch size"))
+        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await harvestDelegatorsStakingVault(client, stakingVault, operatorIndex, start, batchSize);
+        });
+
+    stakingVaultCmd
+        .command("claim-withdrawal-for")
+        .description("Claim a withdrawal on behalf of another user (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("requestId", "Withdrawal request ID"))
+        .action(async (stakingVaultAddress, requestId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await claimWithdrawalForStakingVault(client, stakingVault, requestId);
+        });
+
+    stakingVaultCmd
+        .command("claim-withdrawals")
+        .description("Claim multiple withdrawals from the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("requestIds", "Comma-separated list of withdrawal request IDs")
+        .action(async (stakingVaultAddress, requestIdsStr) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const requestIds = requestIdsStr.split(',').map((id: string) => BigInt(id.trim()));
+            await claimWithdrawalsStakingVault(client, stakingVault, requestIds);
+        });
+
+    stakingVaultCmd
+        .command("claim-withdrawals-for")
+        .description("Claim multiple withdrawals on behalf of others (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("requestIds", "Comma-separated list of withdrawal request IDs")
+        .action(async (stakingVaultAddress, requestIdsStr) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const requestIds = requestIdsStr.split(',').map((id: string) => BigInt(id.trim()));
+            await claimWithdrawalsForStakingVault(client, stakingVault, requestIds);
+        });
+
+    stakingVaultCmd
+        .command("claim-pending-protocol-fees")
+        .description("Claim pending protocol fees (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await claimPendingProtocolFeesStakingVault(client, stakingVault);
+        });
+
+    // ── Operator Commands ─────────────────────────────────────────────
+
+    stakingVaultCmd
+        .command("claim-operator-fees")
+        .description("Claim operator fees from the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await claimOperatorFeesStakingVault(client, stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("set-operator-fee-recipient")
+        .description("Set the operator fee recipient address")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("recipient", "New fee recipient address"))
+        .action(async (stakingVaultAddress, recipient) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setOperatorFeeRecipientStakingVault(client, stakingVault, recipient);
+        });
+
+    stakingVaultCmd
+        .command("claim-escrowed-withdrawal")
+        .description("Claim escrowed withdrawal for a recipient")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("recipient", "Recipient address"))
+        .action(async (stakingVaultAddress, recipient) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await claimEscrowedWithdrawalStakingVault(client, stakingVault, recipient);
+        });
+
+    // ── OPERATOR_MANAGER_ROLE Commands ────────────────────────────────
+
+    stakingVaultCmd
+        .command("remove-operator")
+        .description("Remove an operator from the StakingVault (OPERATOR_MANAGER_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address to remove"))
+        .action(async (stakingVaultAddress, operator) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await removeOperatorStakingVault(client, stakingVault, operator);
+        });
+
+    stakingVaultCmd
+        .command("force-claim-operator-fees")
+        .description("Force claim operator fees for an operator (OPERATOR_MANAGER_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .action(async (stakingVaultAddress, operator) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await forceClaimOperatorFeesStakingVault(client, stakingVault, operator);
+        });
+
+    // ── VAULT_ADMIN_ROLE Commands ─────────────────────────────────────
+
+    stakingVaultCmd
+        .command("set-protocol-fee-bips")
+        .description("Set protocol fee in basis points (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("bips", "Protocol fee in basis points"))
+        .action(async (stakingVaultAddress, bips) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setProtocolFeeBipsStakingVault(client, stakingVault, bips);
+        });
+
+    stakingVaultCmd
+        .command("set-operator-fee-bips")
+        .description("Set operator fee in basis points (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("bips", "Operator fee in basis points"))
+        .action(async (stakingVaultAddress, bips) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setOperatorFeeBipsStakingVault(client, stakingVault, bips);
+        });
+
+    stakingVaultCmd
+        .command("set-protocol-fee-recipient")
+        .description("Set protocol fee recipient address (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("recipient", "Protocol fee recipient address"))
+        .action(async (stakingVaultAddress, recipient) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setProtocolFeeRecipientStakingVault(client, stakingVault, recipient);
+        });
+
+    stakingVaultCmd
+        .command("set-liquidity-buffer-bips")
+        .description("Set liquidity buffer in basis points (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("bips", "Liquidity buffer in basis points"))
+        .action(async (stakingVaultAddress, bips) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setLiquidityBufferBipsStakingVault(client, stakingVault, bips);
+        });
+
+    stakingVaultCmd
+        .command("set-maximum-validator-stake")
+        .description("Set maximum validator stake amount (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("amount", "Maximum stake amount in KITE")
+        .action(async (stakingVaultAddress, amount) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setMaximumValidatorStakeStakingVault(client, stakingVault, amount);
+        });
+
+    stakingVaultCmd
+        .command("set-maximum-delegator-stake")
+        .description("Set maximum delegator stake amount (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("amount", "Maximum stake amount in KITE")
+        .action(async (stakingVaultAddress, amount) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setMaximumDelegatorStakeStakingVault(client, stakingVault, amount);
+        });
+
+    stakingVaultCmd
+        .command("set-max-operators")
+        .description("Set maximum number of operators (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("max", "Maximum number of operators"))
+        .action(async (stakingVaultAddress, max) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setMaxOperatorsStakingVault(client, stakingVault, max);
+        });
+
+    stakingVaultCmd
+        .command("set-max-validators-per-operator")
+        .description("Set maximum validators per operator (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("max", "Maximum validators per operator"))
+        .action(async (stakingVaultAddress, max) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setMaxValidatorsPerOperatorStakingVault(client, stakingVault, max);
+        });
+
+    stakingVaultCmd
+        .command("set-withdrawal-request-fee")
+        .description("Set withdrawal request fee (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("fee", "Withdrawal request fee in KITE")
+        .action(async (stakingVaultAddress, fee) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setWithdrawalRequestFeeStakingVault(client, stakingVault, fee);
+        });
+
+    stakingVaultCmd
+        .command("pause")
+        .description("Pause the StakingVault (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await pauseStakingVault(client, stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("unpause")
+        .description("Unpause the StakingVault (VAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await unpauseStakingVault(client, stakingVault);
+        });
+
+    // ── DEFAULT_ADMIN_ROLE Commands ───────────────────────────────────
+
+    stakingVaultCmd
+        .command("set-operations-impl")
+        .description("Set the operations implementation address (DEFAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("impl", "New operations implementation address"))
+        .action(async (stakingVaultAddress, impl) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await setOperationsImplStakingVault(client, stakingVault, impl);
+        });
+
+    stakingVaultCmd
+        .command("upgrade-to-and-call")
+        .description("Upgrade the StakingVault implementation (DEFAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("newImpl", "New implementation address"))
+        .addArgument(ArgHex("data", "Call data for the upgrade"))
+        .action(async (stakingVaultAddress, newImpl, data) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await upgradeToAndCallStakingVault(client, stakingVault, newImpl, data);
+        });
+
+    stakingVaultCmd
+        .command("begin-default-admin-transfer")
+        .description("Begin transfer of the default admin role (DEFAULT_ADMIN_ROLE)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("newAdmin", "New admin address"))
+        .action(async (stakingVaultAddress, newAdmin) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await beginDefaultAdminTransferStakingVault(client, stakingVault, newAdmin);
+        });
+
+    stakingVaultCmd
+        .command("accept-default-admin-transfer")
+        .description("Accept the default admin role transfer (called by new admin)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            await acceptDefaultAdminTransferStakingVault(client, stakingVault);
         });
 
     /**

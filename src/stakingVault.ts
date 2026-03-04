@@ -1303,6 +1303,509 @@ export async function completeDelegatorRemovalStakingVault(
     return lastHash;
 }
 
+// ── Keeper/Bot Commands ───────────────────────────────────────────────
+
+export async function prepareWithdrawalsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Preparing withdrawals in StakingVault...");
+    logger.log("\n=== Prepare Withdrawals ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function harvestStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Harvesting in StakingVault...");
+    logger.log("\n=== Harvest ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.harvest([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function harvestValidatorsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operatorIndex: bigint,
+    start: bigint,
+    batchSize: bigint
+) {
+    logger.log("Harvesting validators in StakingVault...");
+    logger.log("\n=== Harvest Validators ===");
+    logger.log("Operator index:", operatorIndex.toString());
+    logger.log("Start:", start.toString());
+    logger.log("Batch size:", batchSize.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function harvestDelegatorsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operatorIndex: bigint,
+    start: bigint,
+    batchSize: bigint
+) {
+    logger.log("Harvesting delegators in StakingVault...");
+    logger.log("\n=== Harvest Delegators ===");
+    logger.log("Operator index:", operatorIndex.toString());
+    logger.log("Start:", start.toString());
+    logger.log("Batch size:", batchSize.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function claimWithdrawalForStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    requestId: bigint
+) {
+    logger.log("Claiming withdrawal for requestId in StakingVault...");
+    logger.log("\n=== Claim Withdrawal For ===");
+    logger.log("Request ID:", requestId.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimWithdrawalFor([requestId]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+
+    try {
+        const events = parseEventLogs({ abi: stakingVault.abi, eventName: 'StakingVault__WithdrawalClaimed', logs: receipt.logs });
+        if (events.length > 0) {
+            logger.log("Request ID:", events[0].args?.requestId?.toString() || 'N/A');
+            logger.log("Stake amount claimed:", events[0].args?.stakeAmount?.toString() || 'N/A');
+        }
+    } catch { logger.log("Note: Could not parse withdrawal claimed event"); }
+}
+
+export async function claimWithdrawalsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    requestIds: bigint[]
+) {
+    logger.log("Claiming multiple withdrawals in StakingVault...");
+    logger.log("\n=== Claim Withdrawals ===");
+    logger.log("Request IDs:", requestIds.map(id => id.toString()).join(', '));
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimWithdrawals([requestIds]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function claimWithdrawalsForStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    requestIds: bigint[]
+) {
+    logger.log("Claiming multiple withdrawals for others in StakingVault...");
+    logger.log("\n=== Claim Withdrawals For ===");
+    logger.log("Request IDs:", requestIds.map(id => id.toString()).join(', '));
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimWithdrawalsFor([requestIds]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function claimPendingProtocolFeesStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Claiming pending protocol fees in StakingVault...");
+    logger.log("\n=== Claim Pending Protocol Fees ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimPendingProtocolFees([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+// ── Operator Commands ─────────────────────────────────────────────────
+
+export async function claimOperatorFeesStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Claiming operator fees in StakingVault...");
+    logger.log("\n=== Claim Operator Fees ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimOperatorFees([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setOperatorFeeRecipientStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    recipient: Hex
+) {
+    logger.log("Setting operator fee recipient in StakingVault...");
+    logger.log("\n=== Set Operator Fee Recipient ===");
+    logger.log("Recipient:", recipient);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setOperatorFeeRecipient([recipient]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function claimEscrowedWithdrawalStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    recipient: Hex
+) {
+    logger.log("Claiming escrowed withdrawal in StakingVault...");
+    logger.log("\n=== Claim Escrowed Withdrawal ===");
+    logger.log("Recipient:", recipient);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+// ── OPERATOR_MANAGER_ROLE Commands ────────────────────────────────────
+
+export async function removeOperatorStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operator: Hex
+) {
+    logger.log("Removing operator from StakingVault...");
+    logger.log("\n=== Remove Operator ===");
+    logger.log("Operator:", operator);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.removeOperator([operator]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+
+    try {
+        const events = parseEventLogs({ abi: stakingVault.abi, eventName: 'StakingVault__OperatorRemoved', logs: receipt.logs });
+        if (events.length > 0) {
+            logger.log("Operator removed:", events[0].args?.operator || 'N/A');
+        }
+    } catch { logger.log("Note: Could not parse operator removed event"); }
+}
+
+export async function forceClaimOperatorFeesStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operator: Hex
+) {
+    logger.log("Force claiming operator fees in StakingVault...");
+    logger.log("\n=== Force Claim Operator Fees ===");
+    logger.log("Operator:", operator);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.forceClaimOperatorFees([operator]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+// ── VAULT_ADMIN_ROLE Commands ─────────────────────────────────────────
+
+export async function setProtocolFeeBipsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    bips: bigint
+) {
+    logger.log("Setting protocol fee bips in StakingVault...");
+    logger.log("\n=== Set Protocol Fee Bips ===");
+    logger.log("Bips:", bips.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setProtocolFeeBips([bips]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setOperatorFeeBipsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    bips: bigint
+) {
+    logger.log("Setting operator fee bips in StakingVault...");
+    logger.log("\n=== Set Operator Fee Bips ===");
+    logger.log("Bips:", bips.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setOperatorFeeBips([bips]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setProtocolFeeRecipientStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    recipient: Hex
+) {
+    logger.log("Setting protocol fee recipient in StakingVault...");
+    logger.log("\n=== Set Protocol Fee Recipient ===");
+    logger.log("Recipient:", recipient);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setProtocolFeeRecipient([recipient]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setLiquidityBufferBipsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    bips: bigint
+) {
+    logger.log("Setting liquidity buffer bips in StakingVault...");
+    logger.log("\n=== Set Liquidity Buffer Bips ===");
+    logger.log("Bips:", bips.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setLiquidityBufferBips([bips]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setMaximumValidatorStakeStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    amount: string
+) {
+    logger.log("Setting maximum validator stake in StakingVault...");
+    const amountWei = parseUnits(amount, 18);
+    logger.log("\n=== Set Maximum Validator Stake ===");
+    logger.log("Amount:", amount, "KITE");
+    logger.log("Amount in wei:", amountWei.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setMaximumValidatorStake([amountWei]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setMaximumDelegatorStakeStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    amount: string
+) {
+    logger.log("Setting maximum delegator stake in StakingVault...");
+    const amountWei = parseUnits(amount, 18);
+    logger.log("\n=== Set Maximum Delegator Stake ===");
+    logger.log("Amount:", amount, "KITE");
+    logger.log("Amount in wei:", amountWei.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setMaximumDelegatorStake([amountWei]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setMaxOperatorsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    max: bigint
+) {
+    logger.log("Setting max operators in StakingVault...");
+    logger.log("\n=== Set Max Operators ===");
+    logger.log("Max operators:", max.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setMaxOperators([max]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setMaxValidatorsPerOperatorStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    max: bigint
+) {
+    logger.log("Setting max validators per operator in StakingVault...");
+    logger.log("\n=== Set Max Validators Per Operator ===");
+    logger.log("Max validators per operator:", max.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setMaxValidatorsPerOperator([max]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function setWithdrawalRequestFeeStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    fee: string
+) {
+    logger.log("Setting withdrawal request fee in StakingVault...");
+    const feeWei = parseUnits(fee, 18);
+    logger.log("\n=== Set Withdrawal Request Fee ===");
+    logger.log("Fee:", fee, "KITE");
+    logger.log("Fee in wei:", feeWei.toString());
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setWithdrawalRequestFee([feeWei]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function pauseStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Pausing StakingVault...");
+    logger.log("\n=== Pause ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.pause([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function unpauseStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Unpausing StakingVault...");
+    logger.log("\n=== Unpause ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.unpause([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+// ── DEFAULT_ADMIN_ROLE Commands ───────────────────────────────────────
+
+export async function setOperationsImplStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    impl: Hex
+) {
+    logger.log("Setting operations implementation in StakingVault...");
+    logger.log("\n=== Set Operations Implementation ===");
+    logger.log("Implementation address:", impl);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.setOperationsImpl([impl]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function upgradeToAndCallStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    newImpl: Hex,
+    data: Hex
+) {
+    logger.log("Upgrading StakingVault implementation...");
+    logger.log("\n=== Upgrade To And Call ===");
+    logger.log("New implementation:", newImpl);
+    logger.log("Call data:", data);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.upgradeToAndCall([newImpl, data]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function beginDefaultAdminTransferStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    newAdmin: Hex
+) {
+    logger.log("Beginning default admin transfer in StakingVault...");
+    logger.log("\n=== Begin Default Admin Transfer ===");
+    logger.log("New admin:", newAdmin);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.beginDefaultAdminTransfer([newAdmin]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function acceptDefaultAdminTransferStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    logger.log("Accepting default admin transfer in StakingVault...");
+    logger.log("\n=== Accept Default Admin Transfer ===");
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.acceptDefaultAdminTransfer([]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
 // ── Info functions ─────────────────────────────────────────────────────
 
 type StakingVaultContract = SafeSuzakuContract['StakingVault'];
