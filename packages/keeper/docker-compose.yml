@@ -1,0 +1,11 @@
+services:
+  keeper:
+    build:
+      context: ../..
+      dockerfile: packages/keeper/Dockerfile
+    environment:
+      - PK=${PK}
+      - NETWORK=${NETWORK:-fuji}
+      - PCHAIN_TX_PRIVATE_KEY=${PCHAIN_TX_PRIVATE_KEY:-}
+    command: ["watch", "${VAULT_ADDRESS}"]
+    restart: unless-stopped
