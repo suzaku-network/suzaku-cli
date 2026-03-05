@@ -1,11 +1,23 @@
 services:
-  keeper:
+  keeper-core:
     build:
       context: ../..
       dockerfile: packages/keeper/Dockerfile
     environment:
       - PK=${PK}
       - NETWORK=${NETWORK:-fuji}
-      - PCHAIN_TX_PRIVATE_KEY=${PCHAIN_TX_PRIVATE_KEY:-}
-    command: ["watch", "${VAULT_ADDRESS}"]
+    command: ["watch", "${VAULT_ADDRESS}", "--skip-completions"]
+    restart: unless-stopped
+
+  keeper-completions:
+    build:
+      context: ../..
+      dockerfile: packages/keeper/Dockerfile
+    environment:
+      - PK=${PK_COMPLETIONS:-${PK}}
+      - NETWORK=${NETWORK:-fuji}
+      - PCHAIN_TX_PRIVATE_KEY=${PCHAIN_TX_PRIVATE_KEY}
+      - RPC_URL=${RPC_URL:-}
+      - UPTIME_BLOCKCHAIN_ID=${UPTIME_BLOCKCHAIN_ID:-}
+    command: ["watch", "${VAULT_ADDRESS}", "--completions-only"]
     restart: unless-stopped
