@@ -6,7 +6,7 @@ services:
     environment:
       - PK=${PK}
       - NETWORK=${NETWORK:-fuji}
-    command: ["watch", "${VAULT_ADDRESS}", "--skip-completions"]
+    command: ["watch", "${VAULT_ADDRESS}", "--core"]
     restart: unless-stopped
 
   keeper-completions:
@@ -19,5 +19,5 @@ services:
       - PCHAIN_TX_PRIVATE_KEY=${PCHAIN_TX_PRIVATE_KEY}
       - RPC_URL=${RPC_URL:-}
       - UPTIME_BLOCKCHAIN_ID=${UPTIME_BLOCKCHAIN_ID:-}
-    command: ["watch", "${VAULT_ADDRESS}", "--completions-only"]
+    command: ["watch", "${VAULT_ADDRESS}", "--completions"]
     restart: unless-stopped

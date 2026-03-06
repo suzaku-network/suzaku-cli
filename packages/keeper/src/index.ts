@@ -26,8 +26,8 @@ program
     .addArgument(ArgAddress('stakingVaultAddress', 'StakingVault contract address'))
     .addOption(new Option('--harvest', 'Also run harvest this invocation'))
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
-    .addOption(new Option('--skip-completions', 'Skip P-Chain completion steps (registrations and removals)').conflicts('completionsOnly'))
-    .addOption(new Option('--completions-only', 'Only run completion steps (skip epoch, harvest, withdrawals, cleanup)').conflicts('skipCompletions'))
+    .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
+    .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
     .addOption(new Option('--rpc-url <rpcUrl>', 'RPC URL for uptime queries (delegator registration completion)').env('RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
     .action(async (stakingVaultAddress, options) => {
@@ -42,8 +42,8 @@ program
 
         await keeperRun(client, pchainClient, config, stakingVault, {
             harvest: options.harvest,
-            skipCompletions: options.skipCompletions,
-            completionsOnly: options.completionsOnly,
+            coreOnly: options.core,
+            completionsOnly: options.completions,
             rpcUrl: options.rpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
         });
@@ -56,8 +56,8 @@ program
     .addOption(new Option('--poll-interval <seconds>', 'Poll interval in seconds').default(1800).argParser(ParserNumber))
     .addOption(new Option('--harvest-interval <seconds>', 'Harvest interval in seconds').default(43200).argParser(ParserNumber))
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
-    .addOption(new Option('--skip-completions', 'Skip P-Chain completion steps (registrations and removals)').conflicts('completionsOnly'))
-    .addOption(new Option('--completions-only', 'Only run completion steps (skip epoch, harvest, withdrawals, cleanup)').conflicts('skipCompletions'))
+    .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
+    .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
     .addOption(new Option('--rpc-url <rpcUrl>', 'RPC URL for uptime queries (delegator registration completion)').env('RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
     .action(async (stakingVaultAddress, options) => {
@@ -73,8 +73,8 @@ program
         await keeperWatch(client, pchainClient, config, stakingVault, {
             pollInterval: options.pollInterval,
             harvestInterval: options.harvestInterval,
-            skipCompletions: options.skipCompletions,
-            completionsOnly: options.completionsOnly,
+            coreOnly: options.core,
+            completionsOnly: options.completions,
             rpcUrl: options.rpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
         });

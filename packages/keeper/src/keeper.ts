@@ -82,7 +82,7 @@ export async function keeperRun(
     stakingVault: SafeSuzakuContract['StakingVault'],
     options: {
         harvest?: boolean;
-        skipCompletions?: boolean;
+        coreOnly?: boolean;
         completionsOnly?: boolean;
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
@@ -154,7 +154,7 @@ export async function keeperRun(
     }
 
     // ── Step 3: Complete pending operations (P-Chain) ──────────────
-    if (pchainClient && !options.skipCompletions) {
+    if (pchainClient && !options.coreOnly) {
         // 3a: Complete pending registrations
         try {
             const registrations = await completePendingRegistrations(
@@ -178,6 +178,8 @@ export async function keeperRun(
             logger.error(msg);
             result.errors.push(msg);
         }
+    } else if (!pchainClient && options.completionsOnly) {
+        throw new Error("--completions requires --pchain-tx-private-key or PCHAIN_TX_PRIVATE_KEY");
     } else if (!pchainClient) {
         logger.log("\nNo P-Chain key provided — skipping completions");
     }
@@ -640,7 +642,7 @@ export async function keeperWatch(
     options: {
         pollInterval: number;      // seconds
         harvestInterval: number;   // seconds
-        skipCompletions?: boolean;
+        coreOnly?: boolean;
         completionsOnly?: boolean;
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
@@ -650,7 +652,7 @@ export async function keeperWatch(
     logger.log(color.bold("  Keeper Watch — StakingVault"));
     logger.log(color.bold("══════════════════════════════════════"));
     logger.log("Vault:", stakingVault.address);
-    logger.log("Mode:", options.completionsOnly ? "completions-only" : options.skipCompletions ? "skip-completions" : "full");
+    logger.log("Mode:", options.completionsOnly ? "completions" : options.coreOnly ? "core" : "full");
     logger.log("Poll interval:", options.pollInterval, "seconds");
     logger.log("Harvest interval:", options.harvestInterval, "seconds");
     logger.log("P-Chain completions:", pchainClient ? "enabled" : "disabled");
@@ -676,7 +678,7 @@ export async function keeperWatch(
 
             const result = await keeperRun(client, pchainClient, config, stakingVault, {
                 harvest: shouldHarvest,
-                skipCompletions: options.skipCompletions,
+                coreOnly: options.coreOnly,
                 completionsOnly: options.completionsOnly,
                 rpcUrl: options.rpcUrl,
                 uptimeBlockchainID: options.uptimeBlockchainID,

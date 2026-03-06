@@ -1,107 +1,168 @@
 # suzaku-keeper
 
-Keeper bot for Suzaku StakingVault. Runs permissionless maintenance operations that keep the vault healthy.
+Keeper bot for Suzaku StakingVault contracts. Runs permissionless maintenance operations — epoch processing, withdrawal preparation, harvest, and validator/delegator lifecycle completions — that keep a vault healthy and its withdrawal queue moving.
 
-## What it does
+The keeper has two categories of work:
 
-Each tick runs these steps in order:
+- **Core operations** (L1 key only) — epoch processing, withdrawal preparation, harvest, queue cleanup. These are pure L1 transactions.
+- **P-Chain operations** (L1 key + P-Chain key) — completing two-phase validator/delegator registrations and removals. These require signing P-Chain transactions via warp messages.
 
-1. **Process epoch** — calls `processEpoch()` in a loop until caught up
-2. **Prepare withdrawals** — calls `prepareWithdrawals()` when pending withdrawals exist and liquid balance is insufficient
-3. **Complete pending registrations** — scans for PendingAdded validators/delegators and completes them on L1 _(requires P-Chain key)_
-4. **Complete pending removals** — scans for initiated validator/delegator removals and completes them on P-Chain _(requires P-Chain key)_
-5. **Batched harvest** — calls `harvestValidators`/`harvestDelegators` per operator in batches of 50 to stay within gas limits
-6. **Queue head cleanup** — claims fulfilled withdrawals blocking the queue head (`claimWithdrawalsFor`)
-7. **Protocol fee warning** — logs a warning if escrowed protocol fees exist (claiming requires `VAULT_ADMIN_ROLE`)
+## Requirements
 
-## Two-container architecture
+- Node.js 18+
+- pnpm
+- Docker + Docker Compose (optional, for containerized deployment)
+- A deployed StakingVault contract address
+- An L1 private key (`PK`) for signing transactions on the chain where the StakingVault lives
+- A P-Chain private key (`PCHAIN_TX_PRIVATE_KEY`) if you want to run completion operations
 
-The keeper is designed to run as two separate containers for security isolation:
-
-- **keeper-core** (lower privilege) — runs steps 1, 2, 5, 6, 7. Only needs the L1 key (`PK`). Uses `--skip-completions`.
-- **keeper-completions** (higher privilege) — runs steps 3, 4. Needs L1 key + P-Chain key. Uses `--completions-only`. Can use a separate `PK_COMPLETIONS` for the L1 key.
-
-This split minimizes the blast radius of the P-Chain key — only the completions container has access to it.
-
-## Environment variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PK` | **yes** | Private key (hex) for signing transactions on the L1 where the StakingVault is deployed (e.g. Kite L1). This is **not** a C-Chain key. |
-| `NETWORK` | no | Chain selector: `fuji`, `mainnet`, `kitetestnet`, `anvil`, `custom` (default: `mainnet`) |
-| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key for completing two-phase validator/delegator registrations and removals. If omitted, the keeper skips completions and logs a notice. |
-| `VAULT_ADDRESS` | **yes** | StakingVault contract address (passed as positional arg via docker-compose) |
-| `PK_COMPLETIONS` | no | Separate L1 private key for the completions container (defaults to `PK`) |
-| `RPC_URL` | no | RPC URL for uptime queries during delegator registration completion. Auto-derived from chain config if omitted. |
-| `UPTIME_BLOCKCHAIN_ID` | no | Blockchain ID (hex) for uptime proofs. Auto-read from staking manager storage if omitted. |
-
-## Usage
-
-### Docker Compose (recommended)
+## Quick Start
 
 ```bash
-# .env
+# packages/keeper/.env
 PK=0x...
 NETWORK=kitetestnet
 VAULT_ADDRESS=0x...
 PCHAIN_TX_PRIVATE_KEY=0x...
-# PK_COMPLETIONS=0x...  # optional: separate key for completions container
-# RPC_URL=https://...    # optional: auto-derived from chain config
-# UPTIME_BLOCKCHAIN_ID=0x...  # optional: auto-read from storage
+
+cd packages/keeper
+docker compose up -d
+```
+
+This starts two containers (`keeper-core` and `keeper-completions`) that together cover all maintenance operations. See [Architecture](#architecture) for why the split exists.
+
+## Architecture
+
+Docker Compose runs two containers to isolate the P-Chain key:
+
+| Container | What it runs | Keys needed |
+|-----------|-------------|-------------|
+| `keeper-core` | Core operations (epochs, withdrawals, harvest, cleanup) | L1 key only (`PK`) |
+| `keeper-completions` | P-Chain operations (registration + removal completions) | L1 key (`PK_COMPLETIONS` or `PK`) + P-Chain key |
+
+Only the completions container ever sees the P-Chain key. If key isolation isn't a concern, you can run everything in a single process (omit both `--core` and `--completions`).
+
+## Operations
+
+### Epoch processing
+
+Calls `processEpoch()` in a loop until the vault is caught up to the current epoch. This is the most frequent operation — epochs must be processed before other vault state transitions can proceed.
+
+### Withdrawal preparation
+
+When pending withdrawals exist, calls `prepareWithdrawals()` to earmark liquid balance for withdrawal claims. Gracefully handles `StakingVault__NoEligibleStake` (nothing eligible to unstake).
+
+### P-Chain completions (registrations + removals)
+
+Validator and delegator lifecycle operations are two-phase: first you *initiate* on the L1 (C-Chain tx), then you *complete* on the P-Chain (warp message + P-Chain tx). The keeper automates the second step.
+
+It scans all operators' validators and delegators for pending operations:
+
+- **Registration completions** — finds validators/delegators in `PendingAdded` status, locates the initiation tx via event logs, and calls `completeValidatorRegistration` / `completeDelegatorRegistration`.
+- **Removal completions** — finds validators/delegators with pending removals and calls `completeValidatorRemoval` / `completeDelegatorRemoval`.
+
+Requires `PCHAIN_TX_PRIVATE_KEY`. If omitted, the keeper skips these entirely.
+
+### Harvest
+
+Calls `harvestValidators` and `harvestDelegators` per operator in batches of 50 to stay within gas limits. In `watch` mode, harvest runs on a separate interval (default: 12 hours) rather than every tick.
+
+### Queue cleanup
+
+Scans the withdrawal queue head for claimable entries and calls `claimWithdrawalsFor` to unblock the queue. Scans up to 50 entries from the head.
+
+### Protocol fee warning
+
+Logs a warning if escrowed protocol fees exist. Claiming requires `VAULT_ADMIN_ROLE`, so the keeper just alerts — it doesn't claim.
+
+## Usage
+
+### Docker Compose
+
+```bash
+# packages/keeper/.env
+PK=0x...
+NETWORK=kitetestnet
+VAULT_ADDRESS=0x...
+PCHAIN_TX_PRIVATE_KEY=0x...
+# PK_COMPLETIONS=0x...         # optional: separate L1 key for completions container
+# RPC_URL=https://...           # optional: auto-derived from chain config
+# UPTIME_BLOCKCHAIN_ID=0x...    # optional: auto-read from staking manager storage
 
 docker compose up -d
 ```
 
-This starts two containers:
-- `keeper-core` — epoch processing, withdrawals, harvest, cleanup
-- `keeper-completions` — registration and removal completions
-
 ### Direct
 
 ```bash
-# Single run (all steps)
-node dist/index.js run 0xVAULT_ADDRESS --harvest --pchain-tx-private-key 0x...
+# Single run — everything (core + P-Chain operations)
+node dist/index.js run 0xVAULT --harvest --pchain-tx-private-key 0x...
 
-# Single run (core only, no completions)
-node dist/index.js run 0xVAULT_ADDRESS --harvest --skip-completions
+# Single run — core operations only (no P-Chain key needed)
+node dist/index.js run 0xVAULT --harvest --core
 
-# Single run (completions only)
-node dist/index.js run 0xVAULT_ADDRESS --completions-only --pchain-tx-private-key 0x...
+# Single run — P-Chain operations only (registration/removal completions)
+node dist/index.js run 0xVAULT --completions --pchain-tx-private-key 0x...
 
-# Long-running daemon (all steps)
-node dist/index.js watch 0xVAULT_ADDRESS --pchain-tx-private-key 0x...
+# Daemon — everything
+node dist/index.js watch 0xVAULT --pchain-tx-private-key 0x...
 
-# Long-running daemon (core only)
-node dist/index.js watch 0xVAULT_ADDRESS --skip-completions
+# Daemon — core operations only
+node dist/index.js watch 0xVAULT --core
 
-# Long-running daemon (completions only)
-node dist/index.js watch 0xVAULT_ADDRESS --completions-only --pchain-tx-private-key 0x...
+# Daemon — P-Chain operations only
+node dist/index.js watch 0xVAULT --completions --pchain-tx-private-key 0x...
 ```
 
-### Commands
+## Commands Reference
 
-**`run <stakingVaultAddress>`** — single keeper pass
+### Global Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--harvest` | off | Also run harvest this invocation |
-| `--pchain-tx-private-key` | — | P-Chain key (env: `PCHAIN_TX_PRIVATE_KEY`) |
-| `--skip-completions` | off | Skip P-Chain registration/removal completions |
-| `--completions-only` | off | Only run completions (skip epoch, harvest, withdrawals, cleanup) |
-| `--rpc-url` | auto | RPC URL for uptime queries (env: `RPC_URL`) |
-| `--uptime-blockchain-id` | auto | Blockchain ID for uptime proofs (env: `UPTIME_BLOCKCHAIN_ID`) |
+| Flag | Default | Env | Description |
+|------|---------|-----|-------------|
+| `-n, --network <network>` | `mainnet` | `NETWORK` | Chain selector: `mainnet`, `fuji`, `anvil`, `kitetestnet`, `custom` |
+| `-k, --private-key <pk>` | — | `PK` | EVM private key (hex) for the L1 where the StakingVault is deployed |
+| `-w, --wait <n>` | `2` | — | Confirmations to wait after write tx |
+| `--skip-abi-validation` | off | — | Skip contract ABI validation |
 
-**`watch <stakingVaultAddress>`** — long-running daemon
+### `run <stakingVaultAddress>`
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--poll-interval <seconds>` | 1800 | Seconds between ticks |
-| `--harvest-interval <seconds>` | 43200 | Seconds between harvest calls |
-| `--pchain-tx-private-key` | — | P-Chain key (env: `PCHAIN_TX_PRIVATE_KEY`) |
-| `--skip-completions` | off | Skip P-Chain registration/removal completions |
-| `--completions-only` | off | Only run completions (skip epoch, harvest, withdrawals, cleanup) |
-| `--rpc-url` | auto | RPC URL for uptime queries (env: `RPC_URL`) |
-| `--uptime-blockchain-id` | auto | Blockchain ID for uptime proofs (env: `UPTIME_BLOCKCHAIN_ID`) |
+Single keeper pass. Runs the selected operations once and exits.
+
+| Option | Default | Env | Description |
+|--------|---------|-----|-------------|
+| `--harvest` | off | — | Include harvest in this run |
+| `--pchain-tx-private-key <pk>` | — | `PCHAIN_TX_PRIVATE_KEY` | P-Chain key for completing registrations/removals |
+| `--core` | off | — | Core operations only |
+| `--completions` | off | — | P-Chain completions only |
+| `--rpc-url <url>` | auto | `RPC_URL` | RPC URL for uptime queries during delegator registration completion |
+| `--uptime-blockchain-id <hex>` | auto | `UPTIME_BLOCKCHAIN_ID` | Blockchain ID for uptime proofs |
+
+### `watch <stakingVaultAddress>`
+
+Long-running daemon. Runs keeper passes on a polling interval with a separate harvest cadence.
+
+| Option | Default | Env | Description |
+|--------|---------|-----|-------------|
+| `--poll-interval <seconds>` | `1800` | — | Seconds between ticks (30 min) |
+| `--harvest-interval <seconds>` | `43200` | — | Seconds between harvests (12 hours) |
+| `--pchain-tx-private-key <pk>` | — | `PCHAIN_TX_PRIVATE_KEY` | P-Chain key for completing registrations/removals |
+| `--core` | off | — | Core operations only |
+| `--completions` | off | — | P-Chain completions only |
+| `--rpc-url <url>` | auto | `RPC_URL` | RPC URL for uptime queries during delegator registration completion |
+| `--uptime-blockchain-id <hex>` | auto | `UPTIME_BLOCKCHAIN_ID` | Blockchain ID for uptime proofs |
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PK` | yes | Private key (hex) for signing transactions on the L1 where the StakingVault is deployed |
+| `NETWORK` | no | Chain selector (default: `mainnet`) |
+| `VAULT_ADDRESS` | yes | StakingVault contract address (passed as positional arg via docker-compose) |
+| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key for two-phase completions. If omitted, the keeper skips completions |
+| `PK_COMPLETIONS` | no | Separate L1 private key for the completions container (defaults to `PK`) |
+| `RPC_URL` | no | RPC URL for uptime queries. Auto-derived from chain config if omitted |
+| `UPTIME_BLOCKCHAIN_ID` | no | Blockchain ID (hex) for uptime proofs. Auto-read from staking manager storage if omitted |
 
 ## Build
 
