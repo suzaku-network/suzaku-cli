@@ -1,6 +1,23 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
+import { readFileSync, existsSync } from 'fs';
+
+// Load Docker secrets from /run/secrets/ into process.env.
+// Env vars take precedence — secret files are only used if the var is unset.
+const DOCKER_SECRETS: Record<string, string> = {
+    pk: 'PK',
+    pchain_tx_private_key: 'PCHAIN_TX_PRIVATE_KEY',
+};
+
+for (const [secretName, envVar] of Object.entries(DOCKER_SECRETS)) {
+    if (process.env[envVar]) continue;
+    const path = `/run/secrets/${secretName}`;
+    if (existsSync(path)) {
+        process.env[envVar] = readFileSync(path, 'utf-8').trim();
+    }
+}
+
 import { Command, Option } from '@commander-js/extra-typings';
 import { generateClient } from 'suzaku-cli/dist/client';
 import { getConfig } from 'suzaku-cli/dist/config';
