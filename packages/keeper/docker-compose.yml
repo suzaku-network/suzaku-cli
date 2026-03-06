@@ -8,6 +8,11 @@ services:
       - NETWORK=${NETWORK:-fuji}
     command: ["watch", "${VAULT_ADDRESS}", "--core"]
     restart: unless-stopped
+    read_only: true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   keeper-completions:
     build:
@@ -21,3 +26,8 @@ services:
       - UPTIME_BLOCKCHAIN_ID=${UPTIME_BLOCKCHAIN_ID:-}
     command: ["watch", "${VAULT_ADDRESS}", "--completions"]
     restart: unless-stopped
+    read_only: true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
