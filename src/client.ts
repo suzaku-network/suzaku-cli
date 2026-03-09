@@ -4,9 +4,10 @@ import { Account, privateKeyToAccount } from 'viem/accounts'
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 import { getAddresses } from './lib/utils';
 import { getLedgerAccount, toSafeProvider } from './lib/ledgerUtils';
+import { getCoreWalletAccount } from './lib/coreWalletUtils';
 import { chainList } from './lib/chainList';
 import { logger } from './lib/logger';
-
+import { createAvalancheWalletClient, type AvalancheWalletClient } from '@avalanche-sdk/client'
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
 export type Chains = keyof typeof chainList;
@@ -21,19 +22,22 @@ export type ExtendedPublicClient = PublicClient & { network: Network };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
-export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient>;
+export async function generateClient(chain: Chains, privateKey: Hex | 'ledger' | "web", safe?: Hex): Promise<ExtendedWalletClient>;
 export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex): Promise<ExtendedPublicClient>;
 export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger' | "web", safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger' | "web", safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
     const network = chainList[chain].testnet ? 'fuji' : 'mainnet';
     let account: ExtendedAccount | undefined;
+
     const isLedger = privateKey === 'ledger';
-    if (isLedger) {
+    if (privateKey === 'ledger') {
         const accountIndex = process.env.LEDGER_ACCOUNT_INDEX ? parseInt(process.env.LEDGER_ACCOUNT_INDEX) : 0;
         account = await getLedgerAccount(network, accountIndex);
         // logger.log(`Ledger account ${accountIndex}\nAddress: ${account.address}\nP-Chain Address: ${account.pChainAddress}`);
 
+    } else if (privateKey === "web") {
+        account = await getCoreWalletAccount(network);
     } else if (privateKey) {
         account = privateKeyToAccount(privateKey) as ExtendedAccount;
         const addresses = getAddresses(privateKey, network);
@@ -50,7 +54,7 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
         const client = createWalletClient({
             account,
             chain: chainList[chain],
-            transport: http()
+            transport: privateKey === "web" ? (window as any).avalanche : http()
         }).extend(publicActions);
         return {
             ...client,

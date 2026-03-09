@@ -61,6 +61,22 @@ export function getAddresses(privateKeyHex: string, network: string): Addresses 
     };
 }
 
+export function getAddressesFromCoreExtension(publicKeys: {evm: string, XP: string}, network: string): Addresses {
+    const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';
+
+    const pChainAddress = `P-${utils.formatBech32(
+        networkPrefix,
+        secp256k1.publicKeyBytesToAddress(hexToUint8Array(`0x${publicKeys.XP}`))
+    )}`;
+
+    const cChainAddress = Address.fromPublicKey(hexToUint8Array(`0x${publicKeys.evm}`)) as Hex;
+
+    return {
+        C: cChainAddress,
+        P: pChainAddress as `P-${string}`
+    };
+}
+
 export function getCchainAddress(privateKeyHex: string): string {
     const publicKey = secp256k1.getPublicKey(hexToBytes(privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex));
     return Address.fromPublicKey(publicKey) as Hex;
