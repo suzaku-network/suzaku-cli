@@ -26,14 +26,17 @@ export function cb58ToBytes(cb58: string): Uint8Array {
     return decodedBytes.slice(0, -CHECKSUM_LENGTH);
 }
 
-export function cb58ToHex(cb58: string, include0x: boolean = true): string {
+export function cb58ToHex(cb58: string): Hex;
+export function cb58ToHex(cb58: string, include0x: true): Hex;
+export function cb58ToHex(cb58: string, include0x: false): string;
+export function cb58ToHex(cb58: string, include0x?: boolean): Hex | string {
     const rawBytes = cb58ToBytes(cb58);
     const hex = bytesToHex(rawBytes);
 
     // Pad to 32 bytes (64 characters) - excluding the '0x' prefix
     const paddedHex = hex.padStart(64, '0');
 
-    return (include0x ? '0x' : '') + paddedHex;
+    return (include0x === false ? '' : '0x') + paddedHex;
 }
 
 /**

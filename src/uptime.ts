@@ -2,18 +2,30 @@ import { packValidationUptimeMessage, collectSignatures, packWarpIntoAccessList 
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
-import type { Account } from 'viem';
-import { Network } from "./client";
+import { ExtendedClient, Network } from "./client";
 import { logger } from './lib/logger';
+import { getCurrentValidators, validatedBy } from "./lib/pChainUtils";
+import { utils } from "@avalabs/avalanchejs";
+import { cb58ToHex } from "./lib/utils";
 
-export async function getValidationUptimeMessage(
-  network: Network,
-  rpcUrl: string,
-  nodeId: string,
-  networkID: number,
-  sourceChainID: string,
-) {
-  // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
+type getCurrentValidatorsRpcResponse = {
+  result: {
+    "validators": {
+    "validationID": string,
+    "nodeID": string,
+    "weight": number,
+    "startTimestamp": number,
+    "isActive": boolean,
+    "isL1Validator": boolean,
+    "isConnected": boolean,
+    "uptimePercentage": number,
+    "uptimeSeconds": number
+    }[],
+  }
+  error?: any
+}
+
+export async function getCurrentValidatorsFromNode(rpcUrl: string) {
   const response = await fetch(rpcUrl + "/validators", {
     method: "POST",
     headers: {
@@ -23,15 +35,27 @@ export async function getValidationUptimeMessage(
       jsonrpc: "2.0",
       method: "validators.getCurrentValidators",
       params: {
-        nodeIDs: [nodeId],
+        nodeIDs: [],
       },
       id: 1,
     }),
   });
-  const data = await response.json();
+  const data = await response.json() as getCurrentValidatorsRpcResponse;
   if (data.error) logger.exitError(["Error from validators.getCurrentValidators:", data.error])
-  if (!data.result.validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
-  const validator = data.result.validators[0];
+  return data.result.validators;
+}
+
+export async function getValidationUptimeMessage(
+  client: ExtendedClient,
+  rpcUrl: string,
+  nodeId: string,
+  networkID: number,
+  sourceChainID: string
+) {
+  // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
+  const validators = await getCurrentValidatorsFromNode(rpcUrl);
+  if (!validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
+  const validator = validators[0];
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;
   logger.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
@@ -40,7 +64,8 @@ export async function getValidationUptimeMessage(
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
-  const signedValidationUptimeMessage = await collectSignatures(network, unsignedValidationUptimeMessageHex);
+  const signingSubnetId = await validatedBy(client, sourceChainID)
+  const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
   logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 
   return signedValidationUptimeMessage;
@@ -56,7 +81,7 @@ export async function computeValidatorUptime(
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
 
-  const txHash = await uptimeTracker.write.computeValidatorUptime([0]);
+  const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
 
   logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;
@@ -66,22 +91,21 @@ export async function computeValidatorUptime(
 // New orchestrator function
 export async function reportAndSubmitValidatorUptime(
   // Parameters for getting the uptime message
-  network: Network,
+  client: ExtendedClient,
   rpcUrl: string,
   nodeId: string,
   sourceChainID: string, // The chain ID for which uptime is being reported
   // Parameters for submitting to the contract
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  account: Account
+  uptimeTracker: SafeSuzakuContract['UptimeTracker']
 ) {
   logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
   logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
-  const warpNetworkID = network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
+  const warpNetworkID = client.network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
 
   // Step 1: Get the signed validation uptime message
   let signedUptimeHex = await getValidationUptimeMessage(
-    network,
+    client,
     rpcUrl,
     nodeId,
     warpNetworkID,
@@ -220,4 +244,61 @@ export async function getLastUptimeCheckpoint(
   return await uptimeTracker.read.getLastUptimeCheckpoint(
     [validationID]
   );
+}
+
+/**
+ * Check if all validators from all operators have reported uptime for the epoch
+ */
+export async function reportAllValidatorsUptime(
+  client: ExtendedClient,
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  rpcUrl: string,
+  sourceChainID: string
+) {
+
+  const targetEpoch = Number(await middleware.read.getCurrentEpoch());
+  logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
+
+  const operators = await middleware.read.getAllOperators();
+  if (operators.length === 0) {
+    logger.log("No operators found.");
+    return;
+  }
+  const currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
+
+  if (currentValidators.length === 0) {
+    logger.log("No validators found for any operator.");
+    return;
+  }
+
+  // Check uptime status and get validator details in parallel structure
+  const uptimeStatus = await uptimeTracker.multicall(
+      currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
+    )
+
+  const signingSubnetId = await validatedBy(client, sourceChainID);
+  const networkID = client.network === 'mainnet' ? 1 : 5;
+
+  for (const [index, validator] of currentValidators.entries()) {
+    const { validationID, nodeID, uptimeSeconds } = validator;
+    const status = uptimeStatus[index];
+
+    if (!status) {
+      // get validator uptime
+      logger.log(`Reporting uptime for validator ${validationID} (${nodeID})...`);
+      const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
+      const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
+      const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
+      // compute validator uptime
+      const warpBytes = hexToBytes(signedValidationUptimeMessage);
+      const accessList = packWarpIntoAccessList(warpBytes);
+
+      const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
+      logger.log(`computeValidatorUptime done, tx hash: ${txHash}`);
+      logger.addData('computeValidatorUptime', { validationID, nodeID, txHash });
+    }
+  };
+
+  logger.log("All validators have reported their uptime for epoch " + targetEpoch);
 }

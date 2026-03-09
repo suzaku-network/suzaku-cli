@@ -1,6 +1,6 @@
 import { pvm, evm, Context, utils, avaxSerial } from "@avalabs/avalanchejs";
 import { ExtendedWalletClient } from "../client";
-import { addSigToAllCreds, getRPCEndpoint, waitPChainTx } from "./pChainUtils";
+import { addSigToAllCreds, getPchainBaseUrl, waitPChainTx } from "./pChainUtils";
 import { logger } from './logger';
 import { parseEventLogs, formatUnits, hexToBytes, Hex } from "viem";
 import { Config } from "../config";
@@ -27,7 +27,7 @@ export async function waitCChainTx(txID: string, evmApi: evm.EVMApi, pollingInte
 * @returns - A promise that resolves to a tuple of the signed transaction and the export fees
 */
 async function prepareCchainExport(pAddress: string, cAddress: `0x${string}`, client: ExtendedWalletClient, amount: bigint): Promise<[avaxSerial.SignedTx, bigint]> {
-  const rpcUrl: string = getRPCEndpoint(client);
+  const rpcUrl: string = getPchainBaseUrl(client);
   const evmapi = new evm.EVMApi(rpcUrl);
   const context = await Context.getContextFromURI(rpcUrl);
   const txCount = await client.getTransactionCount({ address: cAddress });
@@ -61,7 +61,7 @@ async function prepareCchainExport(pAddress: string, cAddress: `0x${string}`, cl
 export async function pChainImport(client: ExtendedWalletClient): Promise<{ txID: string }> {
 
   const { P: pAddress } = client.addresses;
-  const rpcUrl = getRPCEndpoint(client);
+  const rpcUrl = getPchainBaseUrl(client);
   const pvmApi = new pvm.PVMApi(rpcUrl);
   const context = await Context.getContextFromURI(rpcUrl);
   const feeState = await pvmApi.getFeeState();
@@ -96,7 +96,7 @@ export async function pChainImport(client: ExtendedWalletClient): Promise<{ txID
 // @throws - An error if the user doesn't have enough AVAX in the P-Chain address
 export async function requirePChainBallance(client: ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, signedTx?: avaxSerial.SignedTx, checkRetry: number = 3) {
 
-  const rpcUrl = getRPCEndpoint(client);
+  const rpcUrl = getPchainBaseUrl(client);
   const pvmApi = new pvm.PVMApi(rpcUrl);
   const evmapi = new evm.EVMApi(rpcUrl);
   const { P: pAddress, C: cAddress } = client.addresses;

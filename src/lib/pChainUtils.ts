@@ -2,13 +2,16 @@ import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PCh
 import { cb58ToHex, getAddresses, NodeId } from "./utils";
 import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { Hex, hexToBytes, toBytes } from "viem";
+import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicActions, toBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
+import { isCastMode, logPChainIssueTx } from "./castUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
 import { sha256 } from '@noble/hashes/sha256';
+import { avalanche, avalancheFuji } from "viem/chains";
+import { getConfig } from "../config";
 
 export type GetValidatorAtObject = { [nodeId: string]: { publicKey: string, weight: bigint } };
 
@@ -75,14 +78,14 @@ interface Validator {
 }
 
 export type ExtractWarpMessageFromTxResponse = {
-    message: string;
-    justification: string;
+    message: Hex;
+    justification: Hex;
     subnetId: string;
     signingSubnetId: string;
     networkId: typeof networkIDs.FujiID | typeof networkIDs.MainnetID;
     validators: Validator[];
     chainId: string;
-    managerAddress: string;
+    managerAddress: Hex;
 }
 
 interface OutputObject {
@@ -158,6 +161,11 @@ export const getRPCEndpoint = (client: ExtendedClient): string => {
     return `${url.protocol}//${url.host}`;
 };
 
+export const getPchainBaseUrl = (client: ExtendedClient): string => {
+    const url = new URL(client.network === 'fuji' ? avalancheFuji.rpcUrls.default.http[0] : avalanche.rpcUrls.default.http[0])
+    return `${url.protocol}//${url.host}`;
+}
+
 
 export async function addSigToAllCreds(
     unsignedTx: UnsignedTx,
@@ -173,7 +181,7 @@ export async function addSigToAllCreds(
     } else {
         signer = client.account!.sign!;
     }
-    
+
     const signatureV2 = hexToBytes(await signer({ hash }))
     signatureV2[64] = signatureV2[64] - 27
     if (!signatureV2) {
@@ -185,7 +193,7 @@ export async function addSigToAllCreds(
 }
 
 export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -214,7 +222,7 @@ export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
 }
 
 export async function createChain(params: CreateChainParams): Promise<Hex> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -248,65 +256,10 @@ export async function createChain(params: CreateChainParams): Promise<Hex> {
     return txID;
 }
 
-// export async function convertToL1(params: ConvertToL1Params): Promise<string> {
-//     const rpcUrl = getRPCEndpoint(params.client);
-//     const pvmApi = new pvm.PVMApi(rpcUrl);
-//     const feeState = await pvmApi.getFeeState();
-//     const context = await Context.getContextFromURI(rpcUrl);
-
-//     const { P: pAddress } = params.client.addresses;
-//     const addressBytes = utils.bech32ToBytes(pAddress);
-
-//     const { utxos } = await pvmApi.getUTXOs({
-//         addresses: [pAddress]
-//     });
-
-//     const pChainOwner = PChainOwner.fromNative([addressBytes], 1);
-
-//     // Create L1Validator instances for each validator
-//     const validators = params.validators.map(v => {
-//         const nodeID = v.nodeID;
-//         const publicKey = utils.hexToBuffer(v.blsPublicKey);
-//         const signature = utils.hexToBuffer(v.blsProofOfPossession);
-
-//         return L1Validator.fromNative(
-//             nodeID,
-//             BigInt(v.weight), // weight
-//             BigInt(v.balance), // balance
-//             new pvmSerial.ProofOfPossession(publicKey, signature),
-//             pChainOwner,
-//             pChainOwner
-//         );
-//     });
-
-//     const managerAddressBytes = utils.hexToBuffer(params.managerAddress.slice(2));
-
-//     const tx = pvm.e.newConvertSubnetToL1Tx(
-//         {
-//             feeState,
-//             fromAddressesBytes: [addressBytes],
-//             subnetId: params.subnetId,
-//             utxos,
-//             chainId: params.chainId,
-//             validators,
-//             subnetAuth: [0],
-//             address: managerAddressBytes,
-//         },
-//         context,
-//     );
-
-//     await addSigToAllCreds(tx, params.client);
-//     const txID = await sendSignedTx(pvmApi, tx);
-
-//     // Sleep for 3 seconds
-//     await waitPChainTx(txID, pvmApi);
-
-//     return txID;
-// }
-
 export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
+
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
 
@@ -349,7 +302,7 @@ export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
 }
 
 export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<Result<Hex, string>> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -381,7 +334,7 @@ export async function registerL1Validator(params: RegisterL1ValidatorParams): Pr
 }
 
 export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<Result<string, string>> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -417,7 +370,7 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
 type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
 
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string): Promise<ValidatorsResponsePatched> {
-    const rpcUrl = getRPCEndpoint(client);
+    const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getCurrentValidators({
@@ -427,10 +380,9 @@ export async function getCurrentValidators(client: ExtendedClient, subnetId: str
 }
 
 export async function getValidatorsAt(client: ExtendedClient, subnetId: string): Promise<GetValidatorAtObject> {
-    const rpcUrl = getRPCEndpoint(client);
+    const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const currentHeight = await pvmApi.getHeight();
-    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.getValidatorsAt({
         subnetID: subnetId,
@@ -445,10 +397,8 @@ export async function getValidatorsAt(client: ExtendedClient, subnetId: string):
 }
 
 export async function validates(client: ExtendedClient, subnetId: string): Promise<string | undefined> {
-    const rpcUrl = getRPCEndpoint(client);
+    const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
-    const currentHeight = await pvmApi.getHeight();
-    logger.log("L1: ", subnetId, " at height: ", currentHeight.height);
     // Fetch the L1 validator at the specified index
     const response = await pvmApi.validates({
         subnetID: subnetId,
@@ -461,8 +411,23 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
     return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
 }
 
+export async function validatedBy(client: ExtendedClient, blockchainId: string): Promise<string | undefined> {
+    const rpcUrl = getPchainBaseUrl(client);
+    const pvmApi = new pvm.PVMApi(rpcUrl);
+    // Fetch the L1 validator at the specified index
+    const response = await pvmApi.validatedBy({
+        blockchainID: blockchainId,
+    });
+
+    if (!response.subnetID) {
+        return undefined;
+    }
+
+    return response.subnetID;
+}
+
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<Result<string, string>> {
-    const rpcUrl = getRPCEndpoint(params.client);
+    const rpcUrl = getPchainBaseUrl(params.client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -499,7 +464,7 @@ export async function increasePChainValidatorBalance(
     validationId: string,
     check: boolean = true
 ): Promise<Result<Hex, string>> {
-    const rpcUrl = getRPCEndpoint(client);
+    const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
     const feeState = await pvmApi.getFeeState();
     const context = await Context.getContextFromURI(rpcUrl);
@@ -550,9 +515,8 @@ export async function waitPChainTx(txID: string, pvmApi: pvm.PVMApi, pollingInte
 }
 
 export async function extractWarpMessageFromPChainTx(subnetId: string, txId: string, client: ExtendedClient): Promise<ExtractWarpMessageFromTxResponse> {
-    const rpcEndpoint = getRPCEndpoint(client);
-    const networkId = networkIDs.FujiID;
-
+    const rpcEndpoint = getPchainBaseUrl(client);
+    const networkId = client.network === 'fuji' ? networkIDs.FujiID : networkIDs.MainnetID;
     //Fixme: here we do a direct call instead of using avalanchejs, because we need to get the raw response from the node
     const response = await fetch(rpcEndpoint + "/ext/bc/P", {
         method: 'POST',
@@ -593,14 +557,14 @@ export async function extractWarpMessageFromPChainTx(subnetId: string, txId: str
 
     const [message, justification] = packL1ConversionMessage(conversionArgs, networkId, data.result.tx.unsignedTx.blockchainID);
     return {
-        message: utils.bufferToHex(message),
-        justification: utils.bufferToHex(justification),
+        message: utils.bufferToHex(message) as Hex,
+        justification: utils.bufferToHex(justification) as Hex,
         subnetId: data.result.tx.unsignedTx.subnetID,
         signingSubnetId: subnetId,
         networkId,
         validators: data.result.tx.unsignedTx.validators,
         chainId: data.result.tx.unsignedTx.chainID,
-        managerAddress: data.result.tx.unsignedTx.address,
+        managerAddress: data.result.tx.unsignedTx.address as Hex,
     }
 }
 
@@ -616,26 +580,36 @@ export async function convertSubnetToL1(params:
     {
         subnetId: string;
         chainId: string;
-        validatorManager: SafeSuzakuContract['ValidatorManager'];
+        validatorManager: Hex;
         client: ExtendedWalletClient;
-        privateKeyHex: Hex;
         validators: NodeConfig[];
+        validatorManagerBlockchainID: string;
+        convertTx?: Hex;
+        init?: boolean;
+        churnPeriodSeconds?: bigint;
+        maximumChurnPercentage?: number;
     }) {
-    const managerAddress = params.validatorManager.address;
+    const managerAddress = params.validatorManager;
     const { client, validators } = params;
     // 1) convert to L1
-    const convertTx = await convertToL1({
+    const convertTx = params.convertTx || await convertToL1({
         client,
         subnetId: params.subnetId,
-        chainId: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+        chainId: params.validatorManagerBlockchainID,
         managerAddress,
-        validators: params.validators,
+        validators,
     });
     // 2) collect signatures
+
+    const signingSubnetId = await validatedBy(client, params.validatorManagerBlockchainID);
+    if (!signingSubnetId) {
+        throw new Error("Could not get signing subnet ID");
+    }
     const signed = await collectSignaturesInitializeValidatorSet({
         network: client.network,
         subnetId: params.subnetId,
-        validatorManagerBlockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+        validatorManagerBlockchainID: params.validatorManagerBlockchainID,
+        validatorManagerSubnetID: signingSubnetId,
         managerAddress,
         validators,
     });
@@ -645,18 +619,23 @@ export async function convertSubnetToL1(params:
     const accessList = packWarpIntoAccessList(signedBytes);
 
     // 4) call initializeValidatorSet
+    // client.chain = chain;
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
 
-    const initHash = await params.validatorManager.safeWrite.initializeValidatorSet(args, {
+    const config = await getConfig(client as ExtendedClient, 1, true)
+    const validatorManager = await config.contracts.ValidatorManager(params.validatorManager)
+    const init = {
+        admin: client.addresses.C,
+        subnetID: args[0].subnetID,
+        churnPeriodSeconds: params.churnPeriodSeconds || 10n,
+        maximumChurnPercentage: params.maximumChurnPercentage || 20,
+    }
+    if (params.init) await validatorManager.safeWrite.initialize([init])
+    await validatorManager.safeWrite.initializeValidatorSet(args, {
         account: client.account!,
         chain: null,
         accessList
     });
-
-    await client.waitForTransactionReceipt({
-        hash: initHash as Hex,
-        confirmations: 2
-    })
 
     return { txHash: convertTx };
 
@@ -667,9 +646,9 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     // Prepare transaction arguments
     return [
         {
-            subnetID: cb58ToHex(subnetId) as Hex,
-            validatorManagerBlockchainID: cb58ToHex(chainId) as Hex,
-            validatorManagerAddress: managerAddress as Hex,
+            subnetID: cb58ToHex(subnetId),
+            validatorManagerBlockchainID: cb58ToHex(chainId),
+            validatorManagerAddress: managerAddress,
             initialValidators: validators
                 .map(({ nodeID, weight, signer }: { nodeID: string, weight: number, signer: { publicKey: string } }) => {
                     // Ensure nodeID and blsPublicKey are properly formatted
@@ -694,11 +673,15 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     ];
 }
 
-export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx): Promise<Result<Hex, string>> {
+export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx, testnet: boolean = true): Promise<Result<Hex, string>> {
+    if (isCastMode()) {
+        const rpcUrl = testnet ? avalancheFuji.rpcUrls.default.http[0] : avalanche.rpcUrls.default.http[0];
+        return R.Ok(logPChainIssueTx(tx.getSignedTx().toBytes(), rpcUrl));
+    }
     const result = pipe(await R.fromPromise(pvmApi.issueSignedTx(tx.getSignedTx())),
         R.map(res => res.txID as Hex),
         R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`)
     )
-    if (R.isOk(result)) await waitPChainTx(result._0, pvmApi)
+    if (R.isOk(result)) await waitPChainTx(result._0, pvmApi);// else await logger.exitError([result._0])
     return result;
 }

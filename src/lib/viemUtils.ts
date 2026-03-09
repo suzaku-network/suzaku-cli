@@ -7,6 +7,9 @@ import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
+import { isCastMode, logCastCall, logCastSend } from './castUtils';
+
+export { setCastMode, isCastMode } from './castUtils';
 
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
@@ -129,6 +132,12 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
           try {
+            // ── Cast mode: log the equivalent cast send command and skip execution
+            if (isCastMode()) {
+              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+              logCastSend(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, Array.isArray(args) ? args : args != null ? [args] : [], rpcUrl, options);
+              return undefined;
+            }
             let hash: Hex;
             // If a safe smart account is connected, use it to send the transaction
             if ("safe" in client && client.safe != undefined) {
@@ -178,13 +187,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
             } else {
               hash = await fn(args, { chain: null, account: client.account!, ...options })
             }
-
-            logger.addData('txs', { to: contract.address, invocation: `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`, hash, options });
+            const sig = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
+            logger.addData('txs', { to: contract.address, invocation: sig, hash, options });
 
             if (!hash) return undefined; // when skipping
 
             const receipt = await client.waitForTransactionReceipt({ hash, confirmations })
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted, pls resend the transaction:\n` + receipt.logs);
+            if (receipt.status === 'reverted') throw new Error(`Transaction ${color.red(sig)} (hash: ${hash}) reverted, pls resend the transaction:\n` + JSON.stringify(receipt.logs, bigintReplacer));
 
             const logs = parseEventLogs({
               abi: SuzakuABI[abi],
@@ -192,7 +201,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
             });
             if (logs.length > 0) {
               logger.log("\nLogs emitted during the transaction:");
-              logger.log(logs.map((log) => {
+              logger.log(logs.map((log: any) => {
                 return `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`;
               }).join('\n'));
               logger.log("");
@@ -205,7 +214,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
         }
       },
     };
-
+    
     (contract as any).write = new Proxy(contract.write as Record<string, any>, writeHandler);
 
     // Proxy handler for safeWrite methods to simulate the write operation before executing it
@@ -215,10 +224,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (args: any, options: any) => {
           try {
-            const simulateFn = (contract as any).simulate?.[prop]
-            if (typeof simulateFn === 'function') {
-              // If any safe is connected, use its address to simulate the transaction
-              await simulateFn(args, "safe" in client && client.safe != undefined ? { ...options, account: await client.safe.getAddress() } : options)
+            // Skip simulation in cast mode — the write handler will log the command
+            if (!isCastMode()) {
+              const simulateFn = (contract as any).simulate?.[prop]
+              if (typeof simulateFn === 'function') {
+                // If any safe is connected, use its address to simulate the transaction
+                await simulateFn(args, "safe" in client && client.safe != undefined ? { ...options, account: await client.safe.getAddress() } : options)
+              }
             }
             return await fn(args, options)
           } catch (error: any) {
@@ -240,6 +252,10 @@ export function withSafeWrite<T extends SuzakuABINames>(
         if (typeof fn !== 'function') return fn
         return async (...args: any[]) => {
           try {
+            if (isCastMode()) {
+              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+              logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+            }
             const result = await fn(...args)
             const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
             logger.addData('receipt', { functionSignature, result });
@@ -265,6 +281,13 @@ export function withSafeWrite<T extends SuzakuABINames>(
           args,
         };
       });
+
+      if (isCastMode()) {
+        const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+        for (const c of contracts) {
+          logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
+        }
+      }
 
       const results = await client.multicall({ contracts: contracts as any });
 
@@ -292,7 +315,15 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address: Address) => {
-    if (!skipAbiValidation) await contractAbiValidation(client, [abi], address);
+    if (!skipAbiValidation) {
+      // (StakingVault uses delegatecall to forward to operations implementation)
+      // Skip ABI validation since functions are forwarded via fallback
+      if (abi.includes("StakingVault")) {
+        await contractAbiValidation(client, ["StakingVault"], address);
+      } else {
+        await contractAbiValidation(client, [abi], address);
+      }
+    }
     const contract = getContract({
       abi: SuzakuABI[abi],
       address,
@@ -337,7 +368,14 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   }
 
   // Validate ABI by checking that all function selectors are present in the bytecode
-  const ACs: [AhoCorasick, number][] = abis.map((abi) => [new AhoCorasick(AllSelectors[abi]), Object.keys(AllSelectors[abi]).length])// Use Aho-Corasick algorithm for multi-pattern search (perf)
+  const ACs: [AhoCorasick, number][] = abis.map((abi) => {
+    const selectors = (AllSelectors as Record<string, string[]>)[abi];
+    if (!selectors) {
+      logger.warn(`No selectors found for ABI ${abi}, skipping validation`);
+      return [new AhoCorasick([]), 0];
+    }
+    return [new AhoCorasick(selectors), Object.keys(selectors).length];
+  });// Use Aho-Corasick algorithm for multi-pattern search (perf)
 
   const missingRatio = ACs.map(([ac, selectorCount]) => {
     const matches = new Set(ac.search(contractByteCode).map(m => m[1][0])); // get only the matched selectors
@@ -348,8 +386,11 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
 
   const result = missingRatio.reduce((acc, [missingCount, ratio, matches], i) => {
     if (ratio > 0) {
+      const selectors = (AllSelectors as Record<string, string[]>)[abis[i]];
       logger.debug(`ABI validation for contract ${abis[i]} at address ${address}: ${matches.size} selectors matched, ${missingCount} missing (${(ratio * 100).toFixed(2)}% missing)`);
-      logger.debug(`Missing selectors: ${AllSelectors[abis[i]].filter(s => !matches.has(s)).join(', ')}`);
+      if (selectors) {
+        logger.debug(`Missing selectors: ${selectors.filter((s: string) => !matches.has(s)).join(', ')}`);
+      }
     }
     return [...acc, { name: abis[i], ratio, valid: ratio < TOLERANCE }]
   }, [] as { name: T, ratio: number, valid: boolean }[])

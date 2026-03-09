@@ -3,10 +3,19 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { toFunctionSelector, toEventSelector } from 'viem';
+import { toFunctionSelector } from 'viem';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const targetDir = path.resolve(__dirname, '../src/abis');
+
+let abiSelectors = {};
+if (fs.existsSync(path.join(targetDir, 'abi-selectors.json'))) {
+  console.log("Using existing ABI selectors from src/abis/abi-selectors.json");
+  abiSelectors = JSON.parse(fs.readFileSync(path.join(targetDir, 'abi-selectors.json')));
+}
+
+const selectorUpdated = Object.keys(abiSelectors).length > 0;
 
 // Define the mapping between contract names and their output files
 const contractMappings = {
@@ -28,16 +37,49 @@ const contractMappings = {
   ValidatorManager: "ValidatorManager.ts",
   AccessControl: "AccessControl.ts",
   RewardsNativeToken: "RewardsNativeToken.ts",
-  Ownable: "Ownable.ts"
+  Ownable: "Ownable.ts",
+  KiteStaking: "KiteStaking.ts",
+  StakingVault: "StakingVault.ts",
+  StakingVaultOperations: "StakingVaultOperations.ts",
 };
 
-// Source directory points to local suzaku-core repository (on size-middleware branch)
-// The 'conflict-core2' directory name is the local checkout of suzaku-core
-const sourceDir = path.resolve(
-  __dirname,
-  "../../suzaku-deployments/suzaku-protocol/out"
-);
-const targetDir = path.resolve(__dirname, '../src/abis');
+// Default source directory
+const DEFAULT_SOURCE_DIR = "/home/gaetan/Documents/kite-ia/lst-kite/out";
+
+// Parse CLI arguments for --source-dir or -s
+function parseArgs() {
+  const args = process.argv.slice(2);
+  let sourceDirArg = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--source-dir' || args[i] === '-s') {
+      sourceDirArg = args[i + 1];
+      break;
+    }
+    if (args[i].startsWith('--source-dir=')) {
+      sourceDirArg = args[i].split('=')[1];
+      break;
+    }
+  }
+
+  // Show help if requested
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+Usage: update-abis.mjs [options]
+
+Options:
+  -s, --source-dir <path>  Path to the Foundry output directory containing ABIs
+                           (default: ${DEFAULT_SOURCE_DIR})
+  -h, --help               Show this help message
+`);
+    process.exit(0);
+  }
+
+  return sourceDirArg;
+}
+
+const sourceDirArg = parseArgs();
+const sourceDir = path.resolve(sourceDirArg || DEFAULT_SOURCE_DIR);
 
 console.log('🔄 Updating ABI files...');
 console.log(`Source: ${sourceDir}`);
@@ -140,8 +182,6 @@ function main() {
   let updatedCount = 0;
   let totalCount = 0;
 
-  let selectors = {};
-
   // Check if source directory exists
   if (!fs.existsSync(sourceDir)) {
     console.error(`❌ Source directory not found: ${sourceDir}`);
@@ -157,17 +197,17 @@ function main() {
   // Update each contract
   for (const [contractName, outputFileName] of Object.entries(contractMappings)) {
     totalCount++;
-    if (
-      (selectors[outputFileName.replace('.ts', '')] = [...updateAbiFile(contractName, outputFileName)])
-    ) {
+    const contractSelectors = updateAbiFile(contractName, outputFileName);
+    if (contractSelectors !== false) {
+      abiSelectors[outputFileName.replace('.ts', '')] = [...contractSelectors];
       updatedCount++;
     }
   }
 
   // Write selectors to a JSON file for reference
   const selectorsPath = path.join(targetDir, 'abi-selectors.json');
-  fs.writeFileSync(selectorsPath, JSON.stringify(selectors, null, 4));
-  console.log(`✅ ABI selectors written to: abi-selectors.json`);
+  fs.writeFileSync(selectorsPath, JSON.stringify(abiSelectors, null, 4));
+  console.log(`✅ ABI selectors ${selectorUpdated ? 'updated' : 'written'} to: abi-selectors.json`);
 
   console.log(`\n📊 Summary: ${updatedCount}/${totalCount} ABI files updated successfully`);
   

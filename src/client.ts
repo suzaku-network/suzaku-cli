@@ -4,15 +4,12 @@ import { Account, privateKeyToAccount } from 'viem/accounts'
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 import { getAddresses } from './lib/utils';
 import { getLedgerAccount, toSafeProvider } from './lib/ledgerUtils';
+import { chainList } from './lib/chainList';
 import { logger } from './lib/logger';
 
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
-export const chains = {
-    fuji: avalancheFuji,
-    mainnet: avalanche,
-    anvil: anvil
-};
+export type Chains = keyof typeof chainList;
 
 export type PChainAddress = `P-${string}`;
 export type Addresses = { P: PChainAddress, C: Hex };
@@ -24,11 +21,12 @@ export type ExtendedPublicClient = PublicClient & { network: Network };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
-export async function generateClient(network: Network, privateKey: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient>;
-export async function generateClient(network: Network, privateKey?: undefined, safe?: Hex): Promise<ExtendedPublicClient>;
-export async function generateClient(network: Network): Promise<ExtendedPublicClient>;
-export async function generateClient(network: Network, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
-export async function generateClient(network: Network, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
+export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient>;
+export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex): Promise<ExtendedPublicClient>;
+export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
+    const network = chainList[chain].testnet ? 'fuji' : 'mainnet';
     let account: ExtendedAccount | undefined;
     const isLedger = privateKey === 'ledger';
     if (isLedger) {
@@ -43,10 +41,15 @@ export async function generateClient(network: Network, privateKey?: Hex | 'ledge
         account.pChainAddress = addresses.P;
     }
 
+    if (network !== chain && safe) {
+        logger.error(`Error: The chain ${chain} is not supported by safe on ${network} network`);
+        process.exit(1);
+    }
+
     if (account) {
         const client = createWalletClient({
             account,
-            chain: chains[network],
+            chain: chainList[chain],
             transport: http()
         }).extend(publicActions);
         return {
@@ -54,7 +57,7 @@ export async function generateClient(network: Network, privateKey?: Hex | 'ledge
             network,
             ledger: isLedger,
             safe: safe ? await createSafeClient({
-                provider: isLedger ? await toSafeProvider(client, account) : chains[network].rpcUrls.default.http[0],
+                provider: isLedger ? await toSafeProvider(client, account) : chainList[chain].rpcUrls.default.http[0],
                 signer: isLedger ? undefined : privateKey,
                 safeAddress: safe,
                 txServiceUrl: network === 'fuji' ? 'https://wallet-transaction-fuji.ash.center/api' : 'https://api.safe.global/tx-service/avax/api',
@@ -65,7 +68,7 @@ export async function generateClient(network: Network, privateKey?: Hex | 'ledge
     } else {
         return {
             ...createPublicClient({
-                chain: chains[network],
+                chain: chainList[chain],
                 transport: http()
             }).extend(publicActions),
             network
