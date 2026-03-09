@@ -130,7 +130,7 @@ import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP,
 import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
-import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval } from './kiteStaking';
+import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
 import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
@@ -2411,6 +2411,47 @@ async function main() {
         .command("kite-staking-manager")
         .alias("ksm")
         .description("Commands to interact with KiteStakingManager contracts");
+
+    kiteStakingManagerCmd
+        .command("info")
+        .description("Get global configuration from KiteStakingManager")
+        .addArgument(ArgAddress("kiteStakingManagerAddress", "KiteStakingManager contract address"))
+        .action(async (kiteStakingManagerAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const info = await getKiteStakingManagerInfo(kiteStakingManager);
+            logger.logJsonTree(info);
+        });
+
+    kiteStakingManagerCmd
+        .command("validator-info")
+        .description("Get comprehensive information for a validator on KiteStakingManager")
+        .addArgument(ArgAddress("kiteStakingManagerAddress", "KiteStakingManager contract address"))
+        .addArgument(ArgHex("validationID", "Validation ID of the validator"))
+        .action(async (kiteStakingManagerAddress, validationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const info = await getValidatorFullInfo(kiteStakingManager, validationID);
+            logger.logJsonTree(info);
+        });
+
+    kiteStakingManagerCmd
+        .command("delegator-info")
+        .description("Get comprehensive information for a delegator on KiteStakingManager")
+        .addArgument(ArgAddress("kiteStakingManagerAddress", "KiteStakingManager contract address"))
+        .addArgument(ArgHex("delegationID", "Delegation ID of the delegator"))
+        .action(async (kiteStakingManagerAddress, delegationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const info = await getDelegatorFullInfo(kiteStakingManager, delegationID);
+            logger.logJsonTree(info);
+        });
 
     kiteStakingManagerCmd
         .command("update-staking-config")

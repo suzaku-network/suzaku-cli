@@ -762,7 +762,7 @@ export async function completeValidatorRemoval(
         const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
 
         // Aggregate signatures from validators
-        const signedPChainMessage = await collectSignatures({network: client.network, message: unsignedPChainWarpMsgHex, justification: bytesToHex(justification), signingSubnetId});
+        const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: bytesToHex(justification), signingSubnetId });
         logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
 
         // Convert the signed warp message to bytes and pack into access list
@@ -775,13 +775,13 @@ export async function completeValidatorRemoval(
         logger.log("Executing completeValidatorRemoval transaction...");
         // Checking if the node was only in the vmc or also in the stakingManager
         const completeHash = await kiteStakingManager.safeWrite.completeValidatorRemoval(
-                [messageIndex],
-                {
-                    account: client.account!,
-                    chain: null,
-                    accessList
-                }
-            );
+            [messageIndex],
+            {
+                account: client.account!,
+                chain: null,
+                accessList
+            }
+        );
 
         if (waitValidatorVisible) {
             logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
@@ -790,4 +790,173 @@ export async function completeValidatorRemoval(
 
         logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
     }
+}
+
+// ─── Info Aggregators ────────────────────────────────────────────────────────
+
+const NANOS_PER_AVAX = 1_000_000_000n;
+
+function formatAvax(wei: bigint): string {
+    const whole = wei / NANOS_PER_AVAX;
+    const frac = wei % NANOS_PER_AVAX;
+    return frac === 0n
+        ? `${whole} AVAX`
+        : `${whole}.${frac.toString().padStart(9, '0').replace(/0+$/, '')} AVAX`;
+}
+
+function formatDuration(seconds: bigint): string {
+    const s = Number(seconds);
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+    return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+}
+
+function formatTimestamp(ts: bigint): string {
+    if (ts === 0n) return 'never';
+    return new Date(Number(ts) * 1000).toISOString();
+}
+
+/** Aggregate all global-level information from KiteStakingManager */
+export async function getKiteStakingManagerInfo(
+    kiteStakingManager: SafeSuzakuContract['KiteStakingManager']
+) {
+    const [
+        config,
+        settings,
+        rewardCalculator,
+        rewardVault,
+        owner,
+        pendingOwner,
+        bipsFactor,
+        maxDelegationFeeBips,
+        maxStakeMultiplierLimit,
+    ] = await Promise.all([
+        kiteStakingManager.read.getStakingConfig(),
+        kiteStakingManager.read.getStakingManagerSettings(),
+        kiteStakingManager.read.getRewardCalculator(),
+        kiteStakingManager.read.getRewardVault(),
+        kiteStakingManager.read.owner(),
+        kiteStakingManager.read.pendingOwner(),
+        kiteStakingManager.read.BIPS_CONVERSION_FACTOR(),
+        kiteStakingManager.read.MAXIMUM_DELEGATION_FEE_BIPS(),
+        kiteStakingManager.read.MAXIMUM_STAKE_MULTIPLIER_LIMIT(),
+    ]);
+
+    return {
+        // Staking config
+        minimumStakeAmount: config[0].toString(),
+        maximumStakeAmount: config[1].toString(),
+        minimumStakeDuration: config[2].toString(),
+        minimumDelegationFeeBips: config[3].toString(),
+        maximumStakeMultiplier: config[4].toString(),
+        weightToValueFactor: config[5].toString(),
+        // Addresses
+        validatorManager: settings.manager,
+        rewardCalculator,
+        rewardVault,
+        uptimeBlockchainID: settings.uptimeBlockchainID,
+        // Ownership
+        owner,
+        pendingOwner,
+        // Protocol constants
+        BIPS_CONVERSION_FACTOR: bipsFactor,
+        MAXIMUM_DELEGATION_FEE_BIPS: maxDelegationFeeBips,
+        MAXIMUM_STAKE_MULTIPLIER_LIMIT: maxStakeMultiplierLimit,
+        // Human-readable summaries
+        formatted: {
+            minimumStakeAmount: formatAvax(config[0]),
+            maximumStakeAmount: formatAvax(config[1]),
+            minimumStakeDuration: formatDuration(config[2]),
+            minimumDelegationFeeBips: `${config[3] / 100}%`,
+            maximumStakeMultiplier: `${config[4]}x`,
+        },
+    };
+}
+
+/** Aggregate all information for a specific validator by validationID */
+export async function getValidatorFullInfo(
+    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    validationID: Hex
+) {
+    const [validator, pendingRewards, rewardInfo] = await Promise.all([
+        kiteStakingManager.read.getStakingValidator([validationID]),
+        kiteStakingManager.read.getValidatorPendingRewards([validationID]),
+        kiteStakingManager.read.getValidatorRewardInfo([validationID]),
+    ]);
+
+    const [rewardRecipient, accruedRewards] = rewardInfo;
+
+    return {
+        validationID,
+        // PoS validator info
+        owner: validator.owner,
+        delegationFeeBips: validator.delegationFeeBips,
+        minStakeDuration: validator.minStakeDuration.toString(),
+        uptimeSeconds: validator.uptimeSeconds.toString(),
+        lastRewardClaimTime: validator.lastRewardClaimTime.toString(),
+        lastClaimUptimeSeconds: validator.lastClaimUptimeSeconds.toString(),
+        // Pending rewards
+        stakingReward: pendingRewards[0].toString(),
+        delegationFees: pendingRewards[1].toString(),
+        totalPendingReward: pendingRewards[2].toString(),
+        // Reward accounting
+        rewardRecipient,
+        accruedRewards: accruedRewards.toString(),
+        // Human-readable
+        formatted: {
+            delegationFeeBips: `${validator.delegationFeeBips / 100}%`,
+            minStakeDuration: formatDuration(validator.minStakeDuration),
+            uptime: formatDuration(validator.uptimeSeconds),
+            lastRewardClaimTime: formatTimestamp(validator.lastRewardClaimTime),
+            stakingReward: formatAvax(pendingRewards[0]),
+            delegationFees: formatAvax(pendingRewards[1]),
+            totalPendingReward: formatAvax(pendingRewards[2]),
+            accruedRewards: formatAvax(accruedRewards),
+        },
+    };
+}
+
+/** Aggregate all information for a specific delegator by delegationID */
+export async function getDelegatorFullInfo(
+    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    delegationID: Hex
+) {
+    const [delegator, pendingRewards, rewardInfo] = await Promise.all([
+        kiteStakingManager.read.getDelegatorInfo([delegationID]),
+        kiteStakingManager.read.getDelegatorPendingRewards([delegationID]),
+        kiteStakingManager.read.getDelegatorRewardInfo([delegationID]),
+    ]);
+
+    const [rewardRecipient, accruedRewards] = rewardInfo;
+
+    return {
+        delegationID,
+        // Delegator info
+        status: delegator.status,
+        owner: delegator.owner,
+        validationID: delegator.validationID,
+        weight: delegator.weight.toString(),
+        startTime: delegator.startTime.toString(),
+        startingNonce: delegator.startingNonce.toString(),
+        endingNonce: delegator.endingNonce.toString(),
+        lastRewardClaimTime: delegator.lastRewardClaimTime.toString(),
+        lastClaimUptimeSeconds: delegator.lastClaimUptimeSeconds.toString(),
+        // Pending rewards
+        grossReward: pendingRewards[0].toString(),
+        validatorFee: pendingRewards[1].toString(),
+        netPendingReward: pendingRewards[2].toString(),
+        // Reward accounting
+        rewardRecipient,
+        accruedRewards: accruedRewards.toString(),
+        // Human-readable
+        formatted: {
+            startTime: formatTimestamp(delegator.startTime),
+            lastRewardClaimTime: formatTimestamp(delegator.lastRewardClaimTime),
+            grossReward: formatAvax(pendingRewards[0]),
+            validatorFee: formatAvax(pendingRewards[1]),
+            netPendingReward: formatAvax(pendingRewards[2]),
+            accruedRewards: formatAvax(accruedRewards),
+        },
+    };
 }

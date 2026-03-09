@@ -25,6 +25,26 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
       default: { http: ["https://rpc-testnet.gokite.ai/"] },
     },
   }),
+  kiteIA: defineChain({
+    id: 2366,
+    name: 'kiteai',
+    network: 'mainnet',
+    testnet: false,
+    nativeCurrency: {
+      decimals: 18,
+      name: 'KITE',
+      symbol: 'KITE',
+    },
+    rpcUrls: {
+      default: { http: ["https://rpc.gokite.ai"] },
+    },
+    contracts: {
+      multicall3: {
+        address: "0xE3104A157cc4C0d3c7C3a8c655092668D068c149",
+        blockCreated: 29260
+      }
+    }
+  }),
   custom: defineChain({
     id: 13694,
     name: 'Custom',
