@@ -1,0 +1,144 @@
+{
+  "dashboard": {
+    "title": "Suzaku Keeper",
+    "uid": "suzaku-keeper",
+    "panels": [
+      {
+        "id": 1,
+        "title": "TVL",
+        "description": "Total value locked — getTotalPooledStake(). Sum of all staked assets including those delegated to validators.",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "targets": [{ "expr": "suzaku_tvl", "legendFormat": "TVL" }],
+        "fieldConfig": { "defaults": { "unit": "none", "decimals": 2 } }
+      },
+      {
+        "id": 2,
+        "title": "Solvency Ratio",
+        "description": "getTotalPooledStake() / totalSupply(). Should be ~1.0. Above 1 = undistributed rewards. Below 1 = undercollateralized. At 0, deposits are blocked (insolvency gate).",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "targets": [{ "expr": "suzaku_solvency_ratio" }],
+        "fieldConfig": { "defaults": { "min": 0.95, "max": 1.05, "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 0.99, "color": "yellow" }, { "value": 1.0, "color": "green" }] } } }
+      },
+      {
+        "id": 3,
+        "title": "Exchange Rate",
+        "description": "Share-to-asset conversion rate. Starts at 1.0 and grows as rewards accrue. A sudden drop indicates a loss event.",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "targets": [{ "expr": "suzaku_exchange_rate" }],
+        "fieldConfig": { "defaults": { "decimals": 6 } }
+      },
+      {
+        "id": 4,
+        "title": "Vault Status",
+        "description": "0 = Active, 1 = Paused. When paused, deposits and withdrawal requests are blocked. Emergency state set by the vault admin.",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "targets": [{ "expr": "suzaku_vault_paused" }],
+        "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "Active", "color": "green" }, "1": { "text": "PAUSED", "color": "red" } } }] } }
+      },
+      {
+        "id": 5,
+        "title": "Epoch Lag",
+        "description": "How many epochs behind the vault is (currentEpoch - lastEpochProcessed). The keeper calls processEpoch() to advance this. Each call processes up to 350 withdrawal entries, so large backlogs take multiple iterations. While epochs are behind, new withdrawal requests cannot be fulfilled.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 4 },
+        "targets": [{ "expr": "suzaku_epoch_lag", "legendFormat": "Epochs behind" }]
+      },
+      {
+        "id": 6,
+        "title": "Queue Depth",
+        "description": "Number of withdrawal requests waiting in the FIFO queue. The queue is head-of-line blocking — one large unfulfillable request blocks everything behind it. The keeper cleans up claimable entries at the head.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 4 },
+        "targets": [{ "expr": "suzaku_queue_depth", "legendFormat": "Queue depth" }]
+      },
+      {
+        "id": 7,
+        "title": "Liquidity",
+        "description": "Available Stake = liquid native token in the vault buffer, immediately available for withdrawals without unstaking. Pending Withdrawals = total native token requested but not yet claimable. When available stake drops low, prepareWithdrawals must initiate validator/delegator removals, adding 14+ day delays.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 10 },
+        "targets": [
+          { "expr": "suzaku_available_stake", "legendFormat": "Available stake" },
+          { "expr": "suzaku_pending_withdrawals", "legendFormat": "Pending withdrawals" }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Pending Protocol Fees",
+        "description": "Unclaimed protocol fees in native token. Requires VAULT_ADMIN_ROLE to claim — the keeper just tracks them.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 10 },
+        "targets": [{ "expr": "suzaku_pending_protocol_fees", "legendFormat": "Protocol fees" }]
+      },
+      {
+        "id": 9,
+        "title": "Operator Active Stake",
+        "description": "native token actively staked through each operator's validators and delegators.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 16 },
+        "targets": [{ "expr": "suzaku_operator_active_stake", "legendFormat": "{{operator}}" }]
+      },
+      {
+        "id": 10,
+        "title": "Operator Exit Debt",
+        "description": "native token owed by each operator due to slashing or early exits. At 50% of the operator's allocation, the operator is frozen on-chain.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 16 },
+        "targets": [{ "expr": "suzaku_operator_exit_debt", "legendFormat": "{{operator}}" }]
+      },
+      {
+        "id": 11,
+        "title": "Operator Validators",
+        "description": "Number of active validators per operator. Validators are L1 nodes that stake native token and participate in consensus.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 22 },
+        "targets": [{ "expr": "suzaku_operator_validator_count", "legendFormat": "{{operator}}" }]
+      },
+      {
+        "id": 12,
+        "title": "Operator Delegators",
+        "description": "Number of active delegators per operator. Delegators add stake to existing validators without running a node.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 22 },
+        "targets": [{ "expr": "suzaku_operator_delegator_count", "legendFormat": "{{operator}}" }]
+      },
+      {
+        "id": 13,
+        "title": "Keeper Tick Duration (ms)",
+        "description": "How long the last keeper tick took. Includes epoch processing, withdrawal prep, harvest, and queue cleanup. Spikes indicate RPC slowness or large batch operations.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 28 },
+        "targets": [{ "expr": "suzaku_keeper_tick_duration_ms", "legendFormat": "Duration" }]
+      },
+      {
+        "id": 14,
+        "title": "Keeper Errors",
+        "description": "Rate of tick failures. A sustained error rate means the keeper is unable to complete its operations — epochs fall behind, withdrawals stall, queue grows.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 28 },
+        "targets": [{ "expr": "rate(suzaku_keeper_tick_errors_total[5m])", "legendFormat": "Error rate" }]
+      },
+      {
+        "id": 15,
+        "title": "Events",
+        "description": "Rate of on-chain events observed by the keeper. Deposits, withdrawal requests, claims, epoch processing, and harvests. Useful for understanding vault activity patterns.",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 24, "x": 0, "y": 34 },
+        "targets": [
+          { "expr": "rate(suzaku_events_deposited_total[5m])", "legendFormat": "Deposits" },
+          { "expr": "rate(suzaku_events_withdrawal_requested_total[5m])", "legendFormat": "Withdrawal requests" },
+          { "expr": "rate(suzaku_events_withdrawal_claimed_total[5m])", "legendFormat": "Claims" },
+          { "expr": "rate(suzaku_events_epoch_processed_total[5m])", "legendFormat": "Epochs" },
+          { "expr": "rate(suzaku_events_harvested_total[5m])", "legendFormat": "Harvests" }
+        ]
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "refresh": "15s"
+  },
+  "overwrite": true
+}
