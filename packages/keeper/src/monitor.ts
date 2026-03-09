@@ -178,7 +178,6 @@ export class Monitor {
         this.pendingProtocolFees.set(toFloat(pendingProtocolFees));
         this.vaultPaused.set(paused ? 1 : 0);
 
-        // Per-operator metrics
         const operatorList = await stakingVault.read.getOperatorList();
         for (const operator of operatorList) {
             try {
@@ -236,6 +235,9 @@ export class Monitor {
         const unwatchers: WatchContractEventReturnType[] = [];
         const abi = StakingVaultABI;
         const pollingInterval = 2000;
+        const onError = (error: Error) => {
+            process.stderr.write(`[monitor] Event watcher error: ${error.message}\n`);
+        };
 
         unwatchers.push(client.watchContractEvent({
             address: stakingVaultAddress,
@@ -243,6 +245,7 @@ export class Monitor {
             eventName: 'StakingVault__Deposited' as any,
             pollingInterval,
             onLogs: () => { this.eventsDeposited.inc(); },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -251,6 +254,7 @@ export class Monitor {
             eventName: 'StakingVault__WithdrawalRequested' as any,
             pollingInterval,
             onLogs: () => { this.eventsWithdrawalRequested.inc(); },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -259,6 +263,7 @@ export class Monitor {
             eventName: 'StakingVault__WithdrawalClaimed' as any,
             pollingInterval,
             onLogs: () => { this.eventsWithdrawalClaimed.inc(); },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -267,6 +272,7 @@ export class Monitor {
             eventName: 'StakingVault__EpochProcessed' as any,
             pollingInterval,
             onLogs: () => { this.eventsEpochProcessed.inc(); },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -280,6 +286,7 @@ export class Monitor {
                     this.harvestTotalRewards.set(Number(formatUnits(logs[0].args.totalRewards, 18)));
                 }
             },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -291,6 +298,7 @@ export class Monitor {
                 this.vaultPaused.set(1);
                 this.checkAlert('vaultPaused', true, 1, 0, 'Vault paused', 'critical');
             },
+            onError,
         }));
 
         unwatchers.push(client.watchContractEvent({
@@ -302,6 +310,7 @@ export class Monitor {
                 this.vaultPaused.set(0);
                 this.checkAlert('vaultPaused', false, 0, 0, 'Vault unpaused');
             },
+            onError,
         }));
 
         return () => {
@@ -313,17 +322,17 @@ export class Monitor {
 
     // ── Alerting ─────────────────────────────────────────────────────
 
-    checkAlerts(): void {
+    async checkAlerts(): Promise<void> {
         // Solvency deviation
-        this.checkAlertFromGauge('solvency', this.solvencyRatio, (val) => Math.abs(val - 1.0) > this.thresholds.solvencyDeviation,
+        await this.checkAlertFromGauge('solvency', this.solvencyRatio, (val) => Math.abs(val - 1.0) > this.thresholds.solvencyDeviation,
             'Solvency ratio drift', 'warning', this.thresholds.solvencyDeviation);
 
         // Epoch lag
-        this.checkAlertFromGauge('epochLag', this.epochLag, (val) => val > this.thresholds.epochLag,
+        await this.checkAlertFromGauge('epochLag', this.epochLag, (val) => val > this.thresholds.epochLag,
             'Epoch lag exceeded', 'warning', this.thresholds.epochLag);
 
         // Queue depth
-        this.checkAlertFromGauge('queueDepth', this.queueDepth, (val) => val > this.thresholds.queueDepth,
+        await this.checkAlertFromGauge('queueDepth', this.queueDepth, (val) => val > this.thresholds.queueDepth,
             'Queue depth exceeded', 'warning', this.thresholds.queueDepth);
 
         // Consecutive failures
@@ -333,7 +342,7 @@ export class Monitor {
             'Consecutive tick failures', 'critical');
 
         // Vault paused (already handled via event watcher, but also check on tick)
-        this.checkAlertFromGauge('vaultPaused', this.vaultPaused, (val) => val === 1,
+        await this.checkAlertFromGauge('vaultPaused', this.vaultPaused, (val) => val === 1,
             'Vault is paused', 'critical', 0);
     }
 
@@ -387,11 +396,16 @@ export class Monitor {
 
         try {
             const url = new URL(this.webhookUrl);
+            if (url.protocol !== 'https:') {
+                process.stderr.write(`[monitor] WARNING: webhook URL is not HTTPS — secrets may be sent in cleartext\n`);
+            }
             const mod = url.protocol === 'https:' ? https : http;
             const req = mod.request(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+                timeout: 5000,
             });
+            req.on('timeout', () => { req.destroy(); });
             req.on('error', () => {}); // fire-and-forget
             req.write(body);
             req.end();

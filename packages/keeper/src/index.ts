@@ -78,15 +78,19 @@ program
             : undefined;
 
         const monitor = createMonitor(opts);
-        if (opts.metricsPort > 0) startServer(monitor, opts.metricsPort, 0);
+        const server = opts.metricsPort > 0 ? startServer(monitor, opts.metricsPort, 0) : undefined;
 
-        await keeperRun(client, pchainClient, config, stakingVault, {
-            harvest: options.harvest,
-            coreOnly: options.core,
-            completionsOnly: options.completions,
-            rpcUrl: opts.rpcUrl,
-            uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
-        });
+        try {
+            await keeperRun(client, pchainClient, config, stakingVault, {
+                harvest: options.harvest,
+                coreOnly: options.core,
+                completionsOnly: options.completions,
+                rpcUrl: opts.rpcUrl,
+                uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
+            });
+        } finally {
+            server?.close();
+        }
     });
 
 program
@@ -117,10 +121,7 @@ program
 
         const stopWatchers = monitor.startEventWatchers(client, stakingVaultAddress);
 
-        // Extend shutdown to clean up event watchers and metrics server
         const cleanup = () => { stopWatchers(); server?.close(); };
-        process.on('SIGINT', cleanup);
-        process.on('SIGTERM', cleanup);
 
         await keeperWatch(client, pchainClient, config, stakingVault, {
             pollInterval: options.pollInterval,
@@ -130,6 +131,7 @@ program
             rpcUrl: opts.rpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
             monitor,
+            onCleanup: cleanup,
         });
     });
 

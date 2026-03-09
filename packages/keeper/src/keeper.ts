@@ -33,6 +33,7 @@ export interface KeeperRunResult {
 }
 
 const HARVEST_BATCH_SIZE = 50n;
+const MAX_EPOCH_ITERATIONS = 100;
 
 // ── Process epoch loop (wraps processEpochStakingVault) ───────────────
 
@@ -54,7 +55,7 @@ async function processEpochLoop(
 
     let iteration = 0;
 
-    while (true) {
+    while (iteration < MAX_EPOCH_ITERATIONS) {
         iteration++;
         logger.log(`\nProcess epoch iteration ${iteration}...`);
 
@@ -67,6 +68,10 @@ async function processEpochLoop(
 
         if (result.finished) {
             break;
+        }
+
+        if (iteration >= MAX_EPOCH_ITERATIONS) {
+            throw new Error(`Epoch processing did not finish after ${MAX_EPOCH_ITERATIONS} iterations — aborting`);
         }
 
         logger.log("More processing needed, continuing...");
@@ -110,7 +115,6 @@ export async function keeperRun(
     logger.log("Time:", new Date().toISOString());
 
     if (!options.completionsOnly) {
-        // ── Step 1: Process epoch (loop until caught up) ──────────────
         try {
             const epochResult = await processEpochLoop(client, stakingVault);
             result.epochProcessed = epochResult.processed;
@@ -125,7 +129,6 @@ export async function keeperRun(
             result.errors.push(msg);
         }
 
-        // ── Step 2: Prepare withdrawals if needed ─────────────────────
         try {
             const [pendingWithdrawals, decimals] = await stakingVault.multicall([
                 'getPendingWithdrawals', 'decimals',
@@ -155,9 +158,7 @@ export async function keeperRun(
         }
     }
 
-    // ── Step 3: Complete pending operations (P-Chain) ──────────────
     if (pchainClient && !options.coreOnly) {
-        // 3a: Complete pending registrations
         try {
             const registrations = await completePendingRegistrations(
                 client, pchainClient, config, stakingVault, options.rpcUrl, options.uptimeBlockchainID
@@ -170,7 +171,6 @@ export async function keeperRun(
             result.errors.push(msg);
         }
 
-        // 3b: Complete pending removals
         try {
             const removals = await completePendingRemovals(client, pchainClient, config, stakingVault);
             result.validatorRemovalsCompleted = removals.validators;
@@ -187,7 +187,6 @@ export async function keeperRun(
     }
 
     if (!options.completionsOnly) {
-        // ── Step 4: Batched harvest ───────────────────────────────────
         if (options.harvest) {
             try {
                 logger.log("\nRunning batched harvest...");
@@ -201,7 +200,6 @@ export async function keeperRun(
             }
         }
 
-        // ── Step 5: Queue head cleanup ────────────────────────────────
         try {
             const cleanedUp = await cleanupQueueHead(client, stakingVault);
             result.queueCleanupCount = cleanedUp;
@@ -212,7 +210,6 @@ export async function keeperRun(
         }
     }
 
-    // ── Step 6: Protocol fees warning (skip in completions-only mode) ──
     if (!options.completionsOnly) try {
         const [pendingProtocolFees, decimals] = await stakingVault.multicall([
             'getPendingProtocolFees', 'decimals',
@@ -222,7 +219,6 @@ export async function keeperRun(
         }
     } catch { /* non-critical */ }
 
-    // ── Summary ───────────────────────────────────────────────────
     logger.log(color.bold("\n── Keeper Run Summary ──"));
     logger.log(`  Epoch processed:              ${result.epochProcessed} (${result.epochIterations} iterations)`);
     logger.log(`  prepareWithdrawals:           ${result.prepareWithdrawalsCalled}`);
@@ -256,9 +252,8 @@ async function cleanupQueueHead(
         return 0;
     }
 
-    // Scan from queue head forward to find claimable entries
     const claimableIds: bigint[] = [];
-    const maxScan = 50; // Limit scan depth
+    const maxScan = 50;
 
     for (let i = queueHead; i < queueLength && i < queueHead + BigInt(maxScan); i++) {
         try {
@@ -406,7 +401,6 @@ async function findRemovalTxHash(
         });
 
         if (logs.length > 0) {
-            // Use the most recent event
             return logs[logs.length - 1].transactionHash;
         }
     } catch (error: any) {
@@ -472,7 +466,6 @@ async function completePendingRegistrations(
         await getValidatorManagerAddress(config, stakingVault);
     const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
-    // Resolve rpcUrl and uptimeBlockchainID once (needed for delegator completions)
     const resolvedRpcUrl = rpcUrl || client.chain?.rpcUrls?.default?.http?.[0];
     let resolvedUptimeBlockchainID = uptimeBlockchainID;
     if (!resolvedUptimeBlockchainID) {
@@ -620,7 +613,6 @@ async function findRegistrationTxHash(
                 fromBlock,
                 toBlock: 'latest',
             });
-            // Find the log matching our delegationID
             for (let i = logs.length - 1; i >= 0; i--) {
                 if (logs[i].args.delegationID === id) {
                     return logs[i].transactionHash;
@@ -649,8 +641,9 @@ export async function keeperWatch(
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
         monitor?: Monitor;
+        onCleanup?: () => void;
     }
-): Promise<never> {
+): Promise<void> {
     logger.log(color.bold("\n══════════════════════════════════════"));
     logger.log(color.bold("  Keeper Watch — StakingVault"));
     logger.log(color.bold("══════════════════════════════════════"));
@@ -663,11 +656,11 @@ export async function keeperWatch(
 
     let lastHarvestTime = 0;
 
-    // Graceful shutdown
     let running = true;
     const shutdown = () => {
         logger.log("\nShutting down keeper watch...");
         running = false;
+        options.onCleanup?.();
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
@@ -694,7 +687,7 @@ export async function keeperWatch(
 
             const durationMs = Date.now() - tickStart;
             monitor?.recordTickResult(result, durationMs, false);
-            monitor?.checkAlerts();
+            await monitor?.checkAlerts();
             logTickStructured(result, durationMs);
 
             if (result.harvestCalled) {
@@ -714,16 +707,14 @@ export async function keeperWatch(
                 delegatorRemovalsCompleted: 0, errors: [error.message || String(error)],
             };
             monitor?.recordTickResult(emptyResult, durationMs, true);
-            monitor?.checkAlerts();
+            await monitor?.checkAlerts();
             logTickStructured(emptyResult, durationMs);
         }
 
-        // Wait for next tick
         if (running) {
             logger.log(`\nNext tick in ${options.pollInterval} seconds...`);
             await new Promise<void>((resolve) => {
                 const timer = setTimeout(resolve, options.pollInterval * 1000);
-                // Allow early exit on shutdown
                 const checkShutdown = setInterval(() => {
                     if (!running) {
                         clearTimeout(timer);
@@ -736,5 +727,4 @@ export async function keeperWatch(
     }
 
     logger.log("Keeper watch stopped");
-    process.exit(0);
 }
