@@ -132,7 +132,6 @@ import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
 import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, prepareWithdrawalsStakingVault, harvestStakingVault, harvestValidatorsStakingVault, harvestDelegatorsStakingVault, claimWithdrawalForStakingVault, claimWithdrawalsStakingVault, claimWithdrawalsForStakingVault, claimPendingProtocolFeesStakingVault, claimOperatorFeesStakingVault, setOperatorFeeRecipientStakingVault, claimEscrowedWithdrawalStakingVault, removeOperatorStakingVault, forceClaimOperatorFeesStakingVault, setProtocolFeeBipsStakingVault, setOperatorFeeBipsStakingVault, setProtocolFeeRecipientStakingVault, setLiquidityBufferBipsStakingVault, setMaximumValidatorStakeStakingVault, setMaximumDelegatorStakeStakingVault, setMaxOperatorsStakingVault, setMaxValidatorsPerOperatorStakingVault, setWithdrawalRequestFeeStakingVault, pauseStakingVault, unpauseStakingVault, setOperationsImplStakingVault, upgradeToAndCallStakingVault, beginDefaultAdminTransferStakingVault, acceptDefaultAdminTransferStakingVault } from './stakingVault';
-import { keeperRun, keeperWatch } from './keeper';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -4724,61 +4723,6 @@ async function main() {
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);
     });
-
-    /**
-     * --------------------------------------------------
-     * KEEPER: Automated keeper bot for StakingVault
-     * --------------------------------------------------
-     */
-    const keeperCmd = program
-        .command("keeper")
-        .description("Keeper bot for StakingVault epoch processing, withdrawals, and completions");
-
-    keeperCmd
-        .command("run")
-        .description("Single keeper run: process epoch, prepare withdrawals, complete removals, cleanup queue")
-        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
-        .addOption(new Option("--harvest", "Also run harvest this invocation"))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain private key for completing removals").argParser(ParserPrivateKey))
-        .addOption(new Option("--skip-completions", "Skip P-Chain removal completions"))
-        .action(async (stakingVaultAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
-            const pchainClient = options.pchainTxPrivateKey
-                ? await generateClient(opts.network, options.pchainTxPrivateKey)
-                : undefined;
-
-            await keeperRun(client, pchainClient, config, stakingVault, {
-                harvest: options.harvest,
-                skipCompletions: options.skipCompletions,
-            });
-        });
-
-    keeperCmd
-        .command("watch")
-        .description("Long-running keeper daemon with periodic polling")
-        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
-        .addOption(new Option("--poll-interval <seconds>", "Poll interval in seconds").default(1800).argParser(ParserNumber))
-        .addOption(new Option("--harvest-interval <seconds>", "Harvest interval in seconds").default(43200).argParser(ParserNumber))
-        .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain private key for completing removals").argParser(ParserPrivateKey))
-        .action(async (stakingVaultAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
-            const pchainClient = options.pchainTxPrivateKey
-                ? await generateClient(opts.network, options.pchainTxPrivateKey)
-                : undefined;
-
-            await keeperWatch(client, pchainClient, config, stakingVault, {
-                pollInterval: options.pollInterval,
-                harvestInterval: options.harvestInterval,
-            });
-        });
 
     program
         .command("completion install")
