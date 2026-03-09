@@ -19,13 +19,17 @@ The keeper has two categories of work:
 ## Quick Start
 
 ```bash
-# packages/keeper/.env
-PK=0x...
-NETWORK=kitetestnet
-VAULT_ADDRESS=0x...
-PCHAIN_TX_PRIVATE_KEY=0x...
-
 cd packages/keeper
+
+# Set chain and vault address
+echo "NETWORK=kitetestnet" > .env
+echo "VAULT_ADDRESS=0x..." >> .env
+
+# Write private keys as Docker secrets (not env vars)
+mkdir -p secrets
+echo -n "0x..." > secrets/pk.txt
+echo -n "0x..." > secrets/pchain_tx_private_key.txt
+
 docker compose up -d
 ```
 
@@ -38,7 +42,7 @@ Docker Compose runs two containers to isolate the P-Chain key:
 | Container | What it runs | Keys needed |
 |-----------|-------------|-------------|
 | `keeper-core` | Core operations (epochs, withdrawals, harvest, cleanup) | L1 key only (`PK`) |
-| `keeper-completions` | P-Chain operations (registration + removal completions) | L1 key (`PK_COMPLETIONS` or `PK`) + P-Chain key |
+| `keeper-completions` | P-Chain operations (registration + removal completions) | L1 key (`PK`) + P-Chain key |
 
 Only the completions container ever sees the P-Chain key. If key isolation isn't a concern, you can run everything in a single process (omit both `--core` and `--completions`).
 
@@ -81,13 +85,15 @@ Logs a warning if escrowed protocol fees exist. Claiming requires `VAULT_ADMIN_R
 
 ```bash
 # packages/keeper/.env
-PK=0x...
 NETWORK=kitetestnet
 VAULT_ADDRESS=0x...
-PCHAIN_TX_PRIVATE_KEY=0x...
-# PK_COMPLETIONS=0x...         # optional: separate L1 key for completions container
 # RPC_URL=https://...           # optional: auto-derived from chain config
 # UPTIME_BLOCKCHAIN_ID=0x...    # optional: auto-read from staking manager storage
+
+# Private keys go in secrets/ (mounted as Docker secrets, not env vars)
+# secrets/pk.txt                — L1 private key (required)
+# secrets/pchain_tx_private_key.txt — P-Chain key (required for completions)
+# secrets/pk_completions.txt    — optional: separate L1 key for completions container
 
 docker compose up -d
 ```
@@ -196,9 +202,9 @@ Alerts fire as webhook POSTs when a condition transitions from OK to alerting (o
 | Queue depth | `> 100` requests | The withdrawal queue is FIFO with head-of-line blocking. One large unfulfillable request blocks everything behind it |
 | Consecutive tick failures | `>= 3` | The keeper is down. All permissionless operations pile up — epochs fall behind, withdrawals stall, queue grows |
 | Vault paused | immediate | Deposits and withdrawal requests are blocked. Emergency state |
-| Operator exit debt | `> 500 bips` (5%) of allocation | At 50% the operator is frozen on-chain. Alert fires well before to give time to respond |
+| Operator exit debt | `> 500 bips` (5%) of allocation | **Not yet implemented** — threshold is accepted but the alert does not fire. Tracked for a future release |
 
-All thresholds are configurable via CLI flags or env vars (see below).
+All thresholds are configurable via CLI flags (see below). Only `--alert-webhook` has an env var (`ALERT_WEBHOOK_URL`).
 
 ### Structured Logs
 
@@ -210,16 +216,16 @@ Every tick writes a JSON line to stderr:
 
 ### Grafana Dashboard
 
-A pre-built dashboard is provisioned automatically when using the monitoring stack:
+A pre-built dashboard JSON is included at `grafana-dashboard.json`. To use it, start the monitoring stack and import it manually into Grafana:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 - **Prometheus** — `http://localhost:9092`
-- **Grafana** — `http://localhost:3000` (no login, anonymous admin)
+- **Grafana** — `http://localhost:3000` (no login, anonymous viewer)
 
-The dashboard is at `http://localhost:3000/d/suzaku-keeper` and includes: TVL, solvency ratio, exchange rate, vault paused status, epoch lag, queue depth, available stake vs pending withdrawals, protocol fees, per-operator stake/debt/validators/delegators, keeper tick duration, error rate, and event rates.
+Import `grafana-dashboard.json` via the Grafana UI (Dashboards → Import). The dashboard includes: TVL, solvency ratio, exchange rate, vault paused status, epoch lag, queue depth, available stake vs pending withdrawals, protocol fees, per-operator stake/debt/validators/delegators, keeper tick duration, error rate, and event rates.
 
 ## Commands Reference
 
@@ -269,14 +275,13 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PK` | yes | Private key (hex) for signing transactions. Any key with gas on the L1 — no special roles needed |
-| `NETWORK` | no | Chain selector (default: `mainnet`). Not needed if `RPC_URL` is set |
+| `PK` | yes | Private key (hex) for signing transactions. Any key with gas on the L1 — no special roles needed. In Docker, provided via file-based secret (`secrets/pk.txt`) |
+| `NETWORK` | no | Chain selector (default: `mainnet` for CLI, `fuji` in docker-compose). Not needed if `RPC_URL` is set |
 | `RPC_URL` | no | RPC URL for the L1 where the StakingVault lives. Auto-detects chain ID and sets `--network custom` |
-| `VAULT_ADDRESS` | yes | StakingVault contract address |
-| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key for two-phase completions. If omitted, the keeper skips completions |
-| `PK_COMPLETIONS` | no | Separate L1 private key for the completions container (defaults to `PK`) |
+| `VAULT_ADDRESS` | yes | StakingVault contract address (used by docker-compose to pass the CLI argument) |
+| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key for two-phase completions. If omitted, the keeper skips completions. In Docker, provided via file-based secret (`secrets/pchain_tx_private_key.txt`) |
 | `UPTIME_BLOCKCHAIN_ID` | no | Blockchain ID (hex) for uptime proofs. Auto-read from staking manager storage if omitted |
-| `SKIP_ABI_VALIDATION` | no | Set to `true` to skip contract ABI validation |
+| `SKIP_ABI_VALIDATION` | no | Set to any non-empty value to skip contract ABI validation |
 | `METRICS_PORT` | no | Prometheus metrics port (default: `9090`, set `0` to disable) |
 | `ALERT_WEBHOOK_URL` | no | Webhook URL for alerts. If unset, no alerts are sent |
 
