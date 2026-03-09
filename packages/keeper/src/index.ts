@@ -21,9 +21,11 @@ for (const [secretName, envVar] of Object.entries(DOCKER_SECRETS)) {
 import { Command, Option } from '@commander-js/extra-typings';
 import { generateClient } from 'suzaku-cli/dist/client';
 import { getConfig } from 'suzaku-cli/dist/config';
-import { chainList } from 'suzaku-cli/dist/lib/chainList';
+import { chainList, setCustomChainRpcUrl } from 'suzaku-cli/dist/lib/chainList';
 import { ParserPrivateKey, ParserNumber, ArgAddress, ParserHex } from 'suzaku-cli/dist/lib/cliParser';
 import { keeperRun, keeperWatch } from './keeper';
+import { Monitor } from './monitor';
+import { startServer } from './server';
 import { Hex } from 'viem';
 
 const networkChoices = Object.keys(chainList) as [string, ...string[]];
@@ -33,9 +35,28 @@ const program = new Command()
     .description('Keeper bot for Suzaku StakingVault operations')
     .version('0.1.0')
     .addOption(new Option('-n, --network <network>', 'Chain selector').choices(networkChoices).default('mainnet').env('NETWORK'))
+    .addOption(new Option('-r, --rpc-url <rpcUrl>', 'RPC URL (automatically sets --network custom)').env('RPC_URL'))
     .addOption(new Option('-k, --private-key <pk>', 'EVM private key (hex)').env('PK').argParser(ParserPrivateKey))
     .addOption(new Option('-w, --wait <n>', 'Confirmations to wait').default(2).argParser(ParserNumber))
-    .addOption(new Option('--skip-abi-validation', 'Skip contract ABI validation'));
+    .addOption(new Option('--skip-abi-validation', 'Skip contract ABI validation').env('SKIP_ABI_VALIDATION'))
+    .addOption(new Option('--metrics-port <port>', 'Prometheus metrics port (0 to disable)').default(9090).env('METRICS_PORT').argParser(ParserNumber))
+    .addOption(new Option('--alert-webhook <url>', 'Alert webhook URL').env('ALERT_WEBHOOK_URL'))
+    .addOption(new Option('--alert-solvency-threshold <n>', 'Solvency deviation threshold').default(0.01).argParser(Number))
+    .addOption(new Option('--alert-epoch-lag <n>', 'Epoch lag threshold').default(2).argParser(ParserNumber))
+    .addOption(new Option('--alert-queue-depth <n>', 'Queue depth threshold').default(100).argParser(ParserNumber))
+    .addOption(new Option('--alert-consecutive-failures <n>', 'Consecutive failures threshold').default(3).argParser(ParserNumber))
+    .addOption(new Option('--alert-exit-debt-bips <n>', 'Exit debt bips threshold').default(500).argParser(ParserNumber));
+
+program.hook('preAction', async (thisCommand) => {
+    const opts = program.opts();
+    if (opts.rpcUrl) {
+        await setCustomChainRpcUrl(opts.rpcUrl);
+        thisCommand.setOptionValue('network', 'custom');
+    } else if (opts.network === 'custom') {
+        console.error('Error: --rpc-url is required when using --network custom');
+        process.exit(1);
+    }
+});
 
 program
     .command('run')
@@ -45,7 +66,6 @@ program
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
     .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
-    .addOption(new Option('--rpc-url <rpcUrl>', 'RPC URL for uptime queries (delegator registration completion)').env('RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
@@ -57,11 +77,14 @@ program
             ? await generateClient(opts.network as any, options.pchainTxPrivateKey as Hex)
             : undefined;
 
+        const monitor = createMonitor(opts);
+        if (opts.metricsPort > 0) startServer(monitor, opts.metricsPort, 0);
+
         await keeperRun(client, pchainClient, config, stakingVault, {
             harvest: options.harvest,
             coreOnly: options.core,
             completionsOnly: options.completions,
-            rpcUrl: options.rpcUrl,
+            rpcUrl: opts.rpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
         });
     });
@@ -75,7 +98,6 @@ program
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
     .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
-    .addOption(new Option('--rpc-url <rpcUrl>', 'RPC URL for uptime queries (delegator registration completion)').env('RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
@@ -87,15 +109,39 @@ program
             ? await generateClient(opts.network as any, options.pchainTxPrivateKey as Hex)
             : undefined;
 
+        const monitor = createMonitor(opts);
+        let server: ReturnType<typeof startServer> | undefined;
+        if (opts.metricsPort > 0) {
+            server = startServer(monitor, opts.metricsPort, options.pollInterval);
+        }
+
+        const stopWatchers = monitor.startEventWatchers(client, stakingVaultAddress);
+
+        // Extend shutdown to clean up event watchers and metrics server
+        const cleanup = () => { stopWatchers(); server?.close(); };
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+
         await keeperWatch(client, pchainClient, config, stakingVault, {
             pollInterval: options.pollInterval,
             harvestInterval: options.harvestInterval,
             coreOnly: options.core,
             completionsOnly: options.completions,
-            rpcUrl: options.rpcUrl,
+            rpcUrl: opts.rpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
+            monitor,
         });
     });
+
+function createMonitor(opts: ReturnType<typeof program.opts>): Monitor {
+    return new Monitor({
+        solvencyDeviation: opts.alertSolvencyThreshold,
+        epochLag: opts.alertEpochLag,
+        queueDepth: opts.alertQueueDepth,
+        consecutiveFailures: opts.alertConsecutiveFailures,
+        exitDebtBips: opts.alertExitDebtBips,
+    }, opts.alertWebhook);
+}
 
 program.parseAsync().catch((err) => {
     console.error(err);

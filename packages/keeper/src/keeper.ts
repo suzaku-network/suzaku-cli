@@ -4,6 +4,8 @@ import { SafeSuzakuContract } from 'suzaku-cli/dist/lib/viemUtils';
 import { logger } from 'suzaku-cli/dist/lib/logger';
 import { color } from 'console-log-colors';
 import { Hex, formatUnits, parseAbiItem } from 'viem';
+import type { Monitor } from './monitor';
+import { logTickStructured } from './log';
 import {
     processEpochStakingVault,
     prepareWithdrawalsStakingVault,
@@ -17,7 +19,7 @@ import {
     getValidatorManagerAddress,
 } from 'suzaku-cli/dist/stakingVault';
 
-interface KeeperRunResult {
+export interface KeeperRunResult {
     epochProcessed: boolean;
     epochIterations: number;
     prepareWithdrawalsCalled: boolean;
@@ -646,6 +648,7 @@ export async function keeperWatch(
         completionsOnly?: boolean;
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
+        monitor?: Monitor;
     }
 ): Promise<never> {
     logger.log(color.bold("\n══════════════════════════════════════"));
@@ -669,12 +672,17 @@ export async function keeperWatch(
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
+    const monitor = options.monitor;
+
     while (running) {
         const now = Date.now();
         const shouldHarvest = (now - lastHarvestTime) >= options.harvestInterval * 1000;
+        const tickStart = Date.now();
 
         try {
             logger.log(color.bold(`\n── Keeper tick at ${new Date().toISOString()} ──`));
+
+            await monitor?.collectVaultMetrics(stakingVault).catch(() => {});
 
             const result = await keeperRun(client, pchainClient, config, stakingVault, {
                 harvest: shouldHarvest,
@@ -683,6 +691,11 @@ export async function keeperWatch(
                 rpcUrl: options.rpcUrl,
                 uptimeBlockchainID: options.uptimeBlockchainID,
             });
+
+            const durationMs = Date.now() - tickStart;
+            monitor?.recordTickResult(result, durationMs, false);
+            monitor?.checkAlerts();
+            logTickStructured(result, durationMs);
 
             if (result.harvestCalled) {
                 lastHarvestTime = now;
@@ -693,6 +706,16 @@ export async function keeperWatch(
             }
         } catch (error: any) {
             logger.error(`Keeper tick failed: ${error.message || error}`);
+            const durationMs = Date.now() - tickStart;
+            const emptyResult: KeeperRunResult = {
+                epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
+                harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
+                delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
+                delegatorRemovalsCompleted: 0, errors: [error.message || String(error)],
+            };
+            monitor?.recordTickResult(emptyResult, durationMs, true);
+            monitor?.checkAlerts();
+            logTickStructured(emptyResult, durationMs);
         }
 
         // Wait for next tick
