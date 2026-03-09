@@ -27,7 +27,7 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
   }),
   kiteIA: defineChain({
     id: 2366,
-    name: 'KiteIA',
+    name: 'kiteai',
     network: 'mainnet',
     testnet: false,
     nativeCurrency: {
