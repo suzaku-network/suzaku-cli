@@ -1,8 +1,16 @@
-import { SingleBar, Presets } from 'cli-progress';
 import { decodeEventLog, Hex, Abi } from 'viem';
 import { ExtendedClient, ExtendedPublicClient } from '../client';
 import { SafeSuzakuContract } from './viemUtils';
 import { logger } from './logger';
+
+export interface ProgressBar {
+  start(total: number, startValue: number): void;
+  increment(value?: number): void;
+  stop(): void;
+  getProgress(): number;
+  getTotal(): number;
+  setTotal(total: number): void;
+}
 
 type CommonEvent = {
   address: string;
@@ -54,7 +62,7 @@ export async function GetContractEvents(
   eventNames?: string[],
   snowscanApiKey?: string,
   forceTimestamp: boolean = true,
-  bar?: SingleBar
+  bar?: ProgressBar
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
   try {
@@ -87,10 +95,7 @@ export async function GetContractEvents(
       toBlock = toBlock - 2 // to avoid reading the current block, which may not be finalized yet
 
       const blockToScan = toBlock - fromBlock;
-      if (!bar) {
-        bar = new SingleBar({}, Presets.shades_classic);
-        bar.start(blockToScan, 0);
-      } else {
+      if (bar) {
         bar.setTotal(bar.getTotal() + blockToScan);
       }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
@@ -102,10 +107,12 @@ export async function GetContractEvents(
           fromBlock: BigInt(i),
           toBlock: BigInt(toSub)
         }))
-        bar.increment(2000);
+        if (bar) bar.increment(2000);
       }
-      bar.increment(blockToScan - (toBlock - fromBlock));
-      if (bar.getProgress() === 1) bar.stop();
+      if (bar) {
+        bar.increment(blockToScan - (toBlock - fromBlock));
+        if (bar.getProgress() === 1) bar.stop();
+      }
     }
   } catch (error) {
     logger.error("Read contract failed:", error);

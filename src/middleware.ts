@@ -2,10 +2,9 @@ import { Hex, Account, getAbiItem, decodeEventLog, Abi, parseAbi } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient } from './client';
 import { color } from 'console-log-colors';
-import cliProgress from 'cli-progress';
 import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
-import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents, ProgressBar } from './lib/cChainUtils';
 import { logger } from './lib/logger';
 
 export async function middlewareRegisterOperator(
@@ -284,7 +283,8 @@ export async function middlewareGetNodeLogs(
   config: Config,
   nodeId?: NodeId,
   snowscanApiKey?: string,
-  quiet?: boolean
+  quiet?: boolean,
+  bar?: ProgressBar
 ) {
   logger.log("Reading logs from middleware and balancer...");
 
@@ -292,8 +292,7 @@ export async function middlewareGetNodeLogs(
 
   const from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
 
-  const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-  if (bar) bar.start(0, 0);
+  if (bar && !snowscanApiKey) bar.start(0, 0);
 
   const logsProm: Promise<DecodedEvent[]>[] = []
 
@@ -426,7 +425,7 @@ export async function weightWatcher(
     loopEpochs?: number;
   }
 ) {
-  
+
   // middlewareManualProcessNodeStakeCache configuration
   const [lastGlobalNodeStakeUpdateEpoch, currentEpoch, updateWindow] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch', 'UPDATE_WINDOW']);
   let epochsPerCall;

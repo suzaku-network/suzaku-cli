@@ -1695,12 +1695,17 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             logger.log(`nodeId: ${options.nodeId}`);
             const middleware = await config.contracts.L1Middleware(middlewareAddress);
+            const cliProgress = (await import('cli-progress')).default;
+            const bar = options.snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+
             await middlewareGetNodeLogs(
                 client,
                 middleware,
                 config,
                 options.nodeId,
-                options.snowscanApiKey
+                options.snowscanApiKey,
+                false,
+                bar // Pass the progress bar interface!
             );
         });
 
