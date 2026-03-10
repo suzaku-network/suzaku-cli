@@ -1,7 +1,7 @@
 import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, networkIDs } from "@avalabs/avalanchejs";
 import { cb58ToHex, getAddresses, NodeId } from "./utils";
 import { ExtendedClient, ExtendedWalletClient } from "../client";
-import { requirePChainBallance } from "./transferUtils";
+
 import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicActions, toBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
@@ -461,8 +461,7 @@ export async function setValidatorWeight(params: SetValidatorWeightParams): Prom
 export async function increasePChainValidatorBalance(
     client: ExtendedWalletClient,
     amount: number,
-    validationId: string,
-    check: boolean = true
+    validationId: string
 ): Promise<Result<Hex, string>> {
     const rpcUrl = getPchainBaseUrl(client);
     const pvmApi = new pvm.PVMApi(rpcUrl);
@@ -472,8 +471,6 @@ export async function increasePChainValidatorBalance(
     const { P: pChainAddress } = client.addresses;
     const addressBytes = utils.bech32ToBytes(pChainAddress);
     const nAVAX = BigInt(Math.floor(amount * 1e9)); // Convert AVAX to nAVAX
-    // Ensure the P-Chain address has enough balance
-    if (check) await requirePChainBallance(client, nAVAX);
 
     const { utxos } = await pvmApi.getUTXOs({
         addresses: [pChainAddress]

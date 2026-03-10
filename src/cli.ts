@@ -123,7 +123,8 @@ import {
     getLastEpochClaimedCurator,
     getRewardsClaimsCount,
 } from "./rewards";
-import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
+import { getERC20Events } from "./lib/transferUtils";
+import { requirePChainBallance } from "./lib/cliBalances";
 import { bytes32ToAddress, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
@@ -262,8 +263,7 @@ async function main() {
                 pipe(await increasePChainValidatorBalance(
                     client,
                     amount,
-                    validationId,
-                    false
+                    validationId
                 ),
                     R.tapError(err => { logger.error(err); process.exit(1) }),)
             }
@@ -1429,8 +1429,7 @@ async function main() {
                 pipe(await increasePChainValidatorBalance(
                     client,
                     amount,
-                    validationId,
-                    false
+                    validationId
                 ),
                     R.tapError(err => { logger.error(err); process.exit(1) }),)
             }
