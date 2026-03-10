@@ -519,7 +519,7 @@ suzaku-cli --help
 
 ### Global Options
 
-- `-n, --network <network>`: Network to use (fuji, mainnet, anvil, kitetestnet, custom). Default: **mainnet**.
+- `-n, --network <network>`: Network to use (fuji, mainnet, anvil, kiteai, kiteaitestnet, custom). Default: **mainnet**.
 - `-r, --rpc-url <rpcUrl>`: RPC URL for a custom network. Automatically sets `--network` to `custom`. If `--network custom` is used, this option is **required**.
 - `-k, --private-key <privateKey>`: Private key for signing transactions.
 - `-s, --secret-name <secretName>`: The keystore secret name containing the private key.

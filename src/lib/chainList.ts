@@ -11,9 +11,9 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
   anvil: anvil,
   mainnet: avalanche,
   fuji: avalancheFuji,
-  kitetestnet: defineChain({
+  kiteaitestnet: defineChain({
     id: 2368,
-    name: 'KiteIA Testnet',
+    name: 'Kite AI Testnet',
     network: 'fuji',
     testnet: true,
     nativeCurrency: {
@@ -25,9 +25,9 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
       default: { http: ["https://rpc-testnet.gokite.ai/"] },
     },
   }),
-  kiteIA: defineChain({
+  kiteai: defineChain({
     id: 2366,
-    name: 'kiteai',
+    name: 'Kite AI',
     network: 'mainnet',
     testnet: false,
     nativeCurrency: {
