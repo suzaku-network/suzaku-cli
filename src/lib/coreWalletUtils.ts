@@ -5,7 +5,7 @@ import { toAccount } from "viem/accounts";
 import { ExtendedAccount } from "../client";
 
 
-export async function getCoreWalletAccount(network: Network, accountIndex: number = 0) {
+export async function getCoreWalletAccount(network: Network) {
   const provider = (window as any).avalanche
   if (!provider) throw new Error('Core extension not found. Please install Core. https://core.app')
 
@@ -63,8 +63,8 @@ export async function getCoreWalletAccount(network: Network, accountIndex: numbe
       async sign(parameters: { hash: Hex }) {
         const { hash } = parameters;
         return await provider.request({
-          method: 'eth_sign',
-          params: [addresses.C, hash]
+          method: 'avalanche_signMessage',
+          params: [hash]
         });
       },
 

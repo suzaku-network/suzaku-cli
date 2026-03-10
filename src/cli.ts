@@ -5,7 +5,8 @@ import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } 
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
-import { Chains, generateClient } from "./client";
+import { Chains } from "./client";
+import { generateClient } from "./cliClient";
 import { logger } from './lib/logger';
 import {
     registerVaultL1,

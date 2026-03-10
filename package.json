@@ -15,7 +15,15 @@
     "url": "git+https://github.com:suzaku-network/suzaku-cli.git"
   },
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
     "bin"
@@ -23,7 +31,7 @@
   "scripts": {
     "suzaku-cli": "node dist/cli.js",
     "cli": "pnpx ts-node src/cli.ts",
-    "build": "tsc",
+    "build": "tsup",
     "prepare": "pnpm build",
     "add-shell-completion": "complete -C 'suzaku-cli' suzaku-cli"
   },
@@ -54,6 +62,7 @@
   "devDependencies": {
     "@types/cli-progress": "^3.11.6",
     "@types/node": "24.10.1",
+    "tsup": "^8.5.1",
     "typescript": "5.9.3"
   },
   "packageManager": "pnpm@10.13.1"
