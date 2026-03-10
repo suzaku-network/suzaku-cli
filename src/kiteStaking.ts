@@ -4,7 +4,7 @@ import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
 import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
-import { color } from "console-log-colors";
+import { color } from "./lib/safeColors";
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
 import { getCurrentValidators, registerL1Validator, setValidatorWeight } from "./lib/pChainUtils";
 import { pipe, R } from "@mobily/ts-belt";

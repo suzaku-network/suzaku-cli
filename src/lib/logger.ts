@@ -1,4 +1,4 @@
-import { color } from "console-log-colors";
+import { color } from "./safeColors";
 import { bigintReplacer } from "./utils";
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray;

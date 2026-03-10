@@ -5,7 +5,7 @@ import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } 
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
 import { getContract } from 'viem';
-import { color } from 'console-log-colors';
+import { color } from './lib/safeColors';
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidationUptimeMessage } from './uptime';
 import { getCurrentValidators, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';

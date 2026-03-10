@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as util from 'util';
-import { color } from 'console-log-colors';
+import { color } from './safeColors';
 import { logger } from './logger';
 import { getCchainAddress } from './utils';
 
@@ -46,7 +46,7 @@ function printTree(pass: Pass, relativePath?: string, showAddresses: boolean = t
         address = 'corrupted';
       }
       lines.push(
-        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}${address ? ' '.repeat(maxKeyLength+2 - key.length) + ' (' + address + ')' : ''}`
+        `${prefix}${isLast ? '└── ' : '├── '}${displayedKey}${address ? ' '.repeat(maxKeyLength + 2 - key.length) + ' (' + address + ')' : ''}`
       );
 
       if (child) {

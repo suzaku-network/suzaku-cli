@@ -1,5 +1,5 @@
 import { Address, Abi, AbiFunction, Hex } from 'viem';
-import { color } from 'console-log-colors';
+import { color } from './safeColors';
 import { logger } from './logger';
 
 // ── Cast mode ────────────────────────────────────────────────────────

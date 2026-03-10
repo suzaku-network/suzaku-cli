@@ -1,7 +1,7 @@
 import { Hex, Account, getAbiItem, decodeEventLog, Abi, parseAbi } from 'viem';
 import { SafeSuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient } from './client';
-import { color } from 'console-log-colors';
+import { color } from './lib/safeColors';
 import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents, ProgressBar } from './lib/cChainUtils';

@@ -4,7 +4,7 @@ import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
 import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
-import { color } from "console-log-colors";
+import { color } from "./lib/safeColors";
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
 import { getCurrentValidators, registerL1Validator, setValidatorWeight } from "./lib/pChainUtils";
 import { pipe, R } from "@mobily/ts-belt";
@@ -303,7 +303,7 @@ export async function completeWeightUpdate(
   // Convert nodeIDs to validationIDs
   let validationIds;
   if (nodeIDs) {
-    
+
     validationIds = (await client.multicall({
       contracts: nodeIDs.map((id) => {
         return {
@@ -382,7 +382,7 @@ export async function completeWeightUpdate(
     // TODO: Find a way to use the proper signature of the method
     const method = securityModule.safeWrite.completeValidatorWeightUpdate as any;
     const hash = await method([0],
-      {chain: client.chain, accessList}
+      { chain: client.chain, accessList }
     );
     logger.log("completeStakeUpdate done, tx hash:", hash);
   }

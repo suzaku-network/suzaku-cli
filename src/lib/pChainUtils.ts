@@ -6,7 +6,7 @@ import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicAc
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
 import { SafeSuzakuContract } from "./viemUtils";
 import { isCastMode, logPChainIssueTx } from "./castUtils";
-import { color } from "console-log-colors";
+import { color } from "./safeColors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
 import { sha256 } from '@noble/hashes/sha256';

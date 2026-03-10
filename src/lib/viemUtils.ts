@@ -3,7 +3,7 @@ import { SuzakuABI } from '../abis';
 import { ExtendedClient } from '../client';
 import { logger } from './logger';
 import { bigintReplacer, bytes32ToAddress } from './utils';
-import { color } from 'console-log-colors';
+import { color } from './safeColors';
 import { handleTransactionStrategy } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
@@ -214,7 +214,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
         }
       },
     };
-    
+
     (contract as any).write = new Proxy(contract.write as Record<string, any>, writeHandler);
 
     // Proxy handler for safeWrite methods to simulate the write operation before executing it
