@@ -2,7 +2,8 @@ import { Command, Option } from '@commander-js/extra-typings';
 import { Pass } from "./lib/pass";
 import { confPath } from './config';
 import { logger } from './lib/logger';
-import { getClipboardValue, setClipboardValue, getAddresses } from './lib/utils';
+import { getAddresses } from './lib/utils';
+import { getClipboardValue, setClipboardValue } from './lib/cliUtils';
 import { ParserAddress } from './lib/cliParser';
 
 export const passPath = confPath + '/.password-store'

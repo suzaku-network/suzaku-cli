@@ -6,7 +6,6 @@ import { base58 } from '@scure/base';
 import { fromBytes, Hex, pad, sliceHex, getAddress, Account } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
-import { spawnSync } from "child_process";
 import { Addresses } from "../client";
 
 export function bytes32ToAddress(bytes32: `0x${string}`) {
@@ -61,7 +60,7 @@ export function getAddresses(privateKeyHex: string, network: string): Addresses 
     };
 }
 
-export function getAddressesFromCoreExtension(publicKeys: {evm: string, XP: string}, network: string): Addresses {
+export function getAddressesFromCoreExtension(publicKeys: { evm: string, XP: string }, network: string): Addresses {
     const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';
 
     const pChainAddress = `P-${utils.formatBech32(
@@ -161,37 +160,4 @@ export function bigintReplacer(_key: string, value: any) {
         return Number(value);
     }
     return value;
-}
-
-export function getClipboardValue(): string {
-    let result: string;
-    const platform = process.platform;
-
-    if (platform === 'win32') {
-        // Windows
-        result = spawnSync('powershell', ['-command', 'Get-Clipboard'], { encoding: 'utf-8', shell: false }).stdout;
-    } else if (platform === 'darwin') {
-        // macOS
-        result = spawnSync('pbpaste', [], { encoding: 'utf-8', shell: false }).stdout;
-    } else {
-        // Linux and others
-        result = spawnSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8', shell: false }).stdout;
-    }
-
-    return result.trim();
-}
-
-export function setClipboardValue(value: string): void {
-    const platform = process.platform;
-
-    if (platform === 'win32') {
-        // Windows
-        spawnSync('powershell', ['-command', `Set-Clipboard -Value "${value.replace(/"/g, '""')}"`], { encoding: 'utf-8', shell: false });
-    } else if (platform === 'darwin') {
-        // macOS
-        spawnSync('pbcopy', [], { input: value, encoding: 'utf-8', shell: false });
-    } else {
-        // Linux and others
-        spawnSync('echo ' + value + ' | xclip -selection clipboard', { encoding: 'utf-8', shell: false });
-    }
 }
