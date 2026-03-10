@@ -1,8 +1,5 @@
 import { color } from "console-log-colors";
 import { bigintReplacer } from "./utils";
-import * as readline from 'readline';
-import dotenv from 'dotenv';
-dotenv.config();
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
 interface JsonObject { [key: string]: JsonValue }
@@ -25,9 +22,17 @@ interface LoggerConfig {
   logLevel: LogLevelEnum;
 }
 
+// Helper to safely get env variables (browser-safe)
+const getEnvLogLevel = (): LogLevelEnum => {
+  if (typeof process !== 'undefined' && process.env && process.env.LogLevel) {
+    return LogLevelEnum[process.env.LogLevel as LogLevel] ?? LogLevelEnum.INFO;
+  }
+  return LogLevelEnum.INFO;
+};
+
 class Logger {
   private static instance: Logger;
-  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: process.env.LogLevel ? LogLevelEnum[process.env.LogLevel as LogLevel] : LogLevelEnum.INFO };
+  private config: LoggerConfig = { silent: false, jsonMode: false, logLevel: getEnvLogLevel() };
   public data: LogData = {};
 
   public static getInstance(): Logger {
@@ -93,13 +98,19 @@ class Logger {
 
     if (this.data['error'] !== errorMessage) this.addData('error', errorMessage);
 
-    process.exitCode = 1;
+    if (typeof process !== 'undefined' && process.exitCode !== undefined) {
+      process.exitCode = 1;
+    }
   }
 
   public exitError(args: any[], stackPop: number = 0) {
     const err = new Error();
-    this.error(...args, color.red("\nCLI Stack trace:\n" + err.stack?.split("\n").slice( 2 + stackPop, -1).join("\n")));
-    process.exit(1);
+    this.error(...args, color.red("\nCLI Stack trace:\n" + err.stack?.split("\n").slice(2 + stackPop, -1).join("\n")));
+    if (typeof process !== 'undefined' && process.exit) {
+      process.exit(1);
+    } else {
+      throw new Error(args.join(' '));
+    }
   }
 
   public table(data: any) {
@@ -189,22 +200,6 @@ class Logger {
         }
       }
     };
-  }
-
-  public prompt(question: string): Promise<string> {
-    if (this.config.jsonMode) {
-      return Promise.resolve('y');
-    }
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    return new Promise(resolve => {
-      rl.question(question, (answer) => {
-        rl.close();
-        resolve(answer.trim());
-      });
-    });
   }
 
   public getData(): LogData {

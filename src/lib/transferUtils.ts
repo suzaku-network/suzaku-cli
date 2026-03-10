@@ -2,6 +2,7 @@ import { pvm, evm, Context, utils, avaxSerial } from "@avalabs/avalanchejs";
 import { ExtendedWalletClient } from "../client";
 import { addSigToAllCreds, getPchainBaseUrl, waitPChainTx } from "./pChainUtils";
 import { logger } from './logger';
+import { prompt } from './cliUtils';
 import { parseEventLogs, formatUnits, hexToBytes, Hex } from "viem";
 import { Config } from "../config";
 
@@ -117,7 +118,7 @@ export async function requirePChainBallance(client: ExtendedWalletClient, amount
 
     let cChainExportTxResponse, pChainImportTxResponse;
 
-    switch (promptUser ? await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${formatUnits(neededOnCchain, 18)} to the P-Chain address.. Do you want to transfer it automatically (y/n)`) : 'y') {
+    switch (promptUser ? await prompt(`C-Chain address ${cAddress} have enough founds to transfer ${formatUnits(neededOnCchain, 18)} to the P-Chain address.. Do you want to transfer it automatically (y/n)`) : 'y') {
       case 'y':
         logger.log(`Exporting AVAX from C-Chain...`);
         cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
@@ -130,7 +131,7 @@ export async function requirePChainBallance(client: ExtendedWalletClient, amount
         // Call the transfer function here
         break;
       case 'n':
-        await logger.prompt(`Please transfer ${formatUnits(amount, 9)} AVAX to the P-Chain address (${pAddress}) manually and press enter to continue...`);
+        await prompt(`Please transfer ${formatUnits(amount, 9)} AVAX to the P-Chain address (${pAddress}) manually and press enter to continue...`);
         break;
       default:
         throw new Error(`Canceled by the user`);
@@ -156,7 +157,7 @@ export async function requireCChainBallance(client: ExtendedWalletClient, amount
     if (!promptUser) {
       throw new Error(`You don't have enough AVAX in your C-Chain address ${cAddress}`);
     }
-    await logger.prompt(`Please transfer ${formatUnits(amount, 18)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
+    await prompt(`Please transfer ${formatUnits(amount, 18)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
     cBalance = await client.getBalance({ address: cAddress });// ETH to AVAX decimals
     remainingCBalance = cBalance - amount;
   }

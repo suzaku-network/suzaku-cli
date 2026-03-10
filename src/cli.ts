@@ -129,6 +129,7 @@ import { bytes32ToAddress, encodeNodeID, getAddresses, NodeId, parseNodeID } fro
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex } from "./lib/cliParser";
 import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
+import { setClipboardValue, getClipboardValue, prompt } from './lib/cliUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
@@ -248,7 +249,7 @@ async function main() {
             logger.log(`${validatorsToTopUp.length} validators to top-up:`);
             await requirePChainBallance(client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
             if (!opts.yes) {
-                const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+                const response = await prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
                     logger.log("Operation cancelled by user.");
                     process.exit(0);
@@ -1415,7 +1416,7 @@ async function main() {
             logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
             await requirePChainBallance(client, totalTopUp + BigInt(2e4) * nodeCount, opts.yes); // extra 20000 for fees
             if (!opts.yes) {
-                const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
+                const response = await prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
                     logger.log("Operation cancelled by user.");
                     process.exit(0);
