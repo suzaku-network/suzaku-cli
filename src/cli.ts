@@ -2792,6 +2792,58 @@ async function main() {
         });
 
     stakingVaultCmd
+        .command("claim-withdrawal-for")
+        .description("Claim a withdrawal for a request ID (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
+        .action(async (stakingVaultAddress, requestId) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.claimWithdrawalFor([requestId]);
+            logger.log("claimWithdrawalFor tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("claimWithdrawalFor executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("claim-withdrawals-for")
+        .description("Claim multiple withdrawals for request IDs (permissionless)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .argument("requestIds...", "Withdrawal request IDs to claim")
+        .action(async (stakingVaultAddress, requestIds) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const ids = (requestIds as string[]).map((id) => BigInt(id));
+            const hash = await stakingVault.safeWrite.claimWithdrawalsFor([ids]);
+            logger.log("claimWithdrawalsFor tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("claimWithdrawalsFor executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("claim-escrowed-withdrawal")
+        .description("Claim escrowed withdrawal to a recipient")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("recipient", "Recipient address"))
+        .action(async (stakingVaultAddress, recipient) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
+            logger.log("claimEscrowedWithdrawal tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("claimEscrowedWithdrawal executed successfully");
+        });
+
+    stakingVaultCmd
         .command("process-epoch")
         .description("Process the current epoch in the StakingVault")
         .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
@@ -2872,6 +2924,23 @@ async function main() {
                 allocationBipsBigInt,
                 feeRecipient
             );
+        });
+
+    stakingVaultCmd
+        .command("remove-operator")
+        .description("Remove an operator from the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .action(async (stakingVaultAddress, operator) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.removeOperator([operator]);
+            logger.log("removeOperator tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("removeOperator executed successfully");
         });
 
     stakingVaultCmd
@@ -3130,6 +3199,157 @@ async function main() {
         });
 
     stakingVaultCmd
+        .command("claim-operator-fees")
+        .description("Claim operator fees for the caller")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.claimOperatorFees([]);
+            logger.log("claimOperatorFees tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("claimOperatorFees executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("force-claim-operator-fees")
+        .description("Force claim operator fees for an operator (admin)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgAddress("operator", "Operator address"))
+        .action(async (stakingVaultAddress, operator) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.forceClaimOperatorFees([operator]);
+            logger.log("forceClaimOperatorFees tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("forceClaimOperatorFees executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("claim-pending-protocol-fees")
+        .description("Claim pending protocol fees")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.claimPendingProtocolFees([]);
+            logger.log("claimPendingProtocolFees tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("claimPendingProtocolFees executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("harvest")
+        .description("Harvest rewards")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.harvest([]);
+            logger.log("harvest tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("harvest executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("harvest-validators")
+        .description("Harvest validator rewards in batches")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("operatorIndex", "Operator index"))
+        .addArgument(ArgBigInt("start", "Validator list start index"))
+        .addArgument(ArgBigInt("batchSize", "Validator batch size"))
+        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
+            logger.log("harvestValidators tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("harvestValidators executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("harvest-delegators")
+        .description("Harvest delegator rewards in batches")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgBigInt("operatorIndex", "Operator index"))
+        .addArgument(ArgBigInt("start", "Delegator list start index"))
+        .addArgument(ArgBigInt("batchSize", "Delegator batch size"))
+        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
+            logger.log("harvestDelegators tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("harvestDelegators executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("prepare-withdrawals")
+        .description("Prepare withdrawals by initiating stake removals")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
+            logger.log("prepareWithdrawals tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("prepareWithdrawals executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("pause")
+        .description("Pause the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.pause([]);
+            logger.log("pause tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("pause executed successfully");
+        });
+
+    stakingVaultCmd
+        .command("unpause")
+        .description("Unpause the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+
+            const hash = await stakingVault.safeWrite.unpause([]);
+            logger.log("unpause tx hash:", hash);
+            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
+            logger.log("unpause executed successfully");
+        });
+
+    stakingVaultCmd
         .command("info")
         .description("Get general overview of the StakingVault")
         .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
@@ -3229,6 +3449,48 @@ async function main() {
             await getDelegatorsInfo(stakingVault);
             await getWithdrawalsInfo(stakingVault);
             await getEpochInfo(stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("get-current-epoch")
+        .description("Get current epoch number of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const currentEpoch = await stakingVault.read.getCurrentEpoch();
+            logger.log(`Current epoch: ${currentEpoch}`);
+        });
+
+    stakingVaultCmd
+        .command("get-epoch-duration")
+        .description("Get epoch duration in seconds of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const epochDuration = await stakingVault.read.getEpochDuration();
+            logger.log(`Epoch duration (seconds): ${epochDuration}`);
+        });
+
+    stakingVaultCmd
+        .command("get-next-epoch-start-time")
+        .description("Get next epoch start time (timestamp) of the StakingVault")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .action(async (stakingVaultAddress) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const startTime = await stakingVault.read.getStartTime();
+            const [epochDuration, currentEpoch] = await stakingVault.multicall([ "getEpochDuration", "getCurrentEpoch"]);
+            const nextEpochStartTime = startTime + (epochDuration * (currentEpoch + 1n));
+            const nextEpochStartDate = new Date(Number(nextEpochStartTime) * 1000);
+            logger.log(`Next epoch start time (timestamp): ${nextEpochStartTime} => ${nextEpochStartDate.toLocaleString()}`);
         });
 
     /**

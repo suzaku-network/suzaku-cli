@@ -54,17 +54,18 @@ export async function getValidationUptimeMessage(
 ) {
   // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
   const validators = await getCurrentValidatorsFromNode(rpcUrl);
-  if (!validators[0]) logger.exitError(["Validator not found for nodeID: ", nodeId])
-  const validator = validators[0];
+  const validator = validators.find(v => v.nodeID === nodeId);
+  if (!validator) throw new Error("Validator not found for nodeID: " + nodeId);
   const validationID = validator.validationID;
   const uptimeSeconds = validator.uptimeSeconds;
-  logger.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds}`);
+  logger.log(`Validator ${nodeId} has validationID ${validationID} and uptimeSeconds ${uptimeSeconds} on network ${networkID} for source chain ${sourceChainID}`);
 
   const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
   const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
   logger.log("Unsigned Validation Uptime Message: ", unsignedValidationUptimeMessageHex);
 
   const signingSubnetId = await validatedBy(client, sourceChainID)
+  console.log("Signing Subnet ID:", signingSubnetId);
   const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
   logger.log("Signed Validation Uptime Message: ", signedValidationUptimeMessage);
 

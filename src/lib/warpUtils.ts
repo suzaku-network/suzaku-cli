@@ -292,10 +292,12 @@ export async function getSigningSubnetIdFromWarpMessage(client: ExtendedClient, 
 
 export async function collectSignatures({ network, message, justification, signingSubnetId }: CollectSignaturesProps): Promise<Hex> {
     // Use the signature aggregation API from Glacier
-    const body: { message: string; justification?: string; signingSubnetId?: string, quorumPercentage?: number } = { message };
+    const body: { message: string; justification?: string; signingSubnetId?: string, quorumPercentage?: number, quorumPercentageBuffer?: number } = { message };
     if (justification) body.justification = justification;
     body.signingSubnetId = signingSubnetId;
     body.quorumPercentage = 67;
+    // body.quorumPercentageBuffer = 23;
+    console.log(network)
     // Test every 2 seconds, timeout after 30 seconds
     const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {
@@ -303,7 +305,6 @@ export async function collectSignatures({ network, message, justification, signi
         headers: {
             'accept': 'application/json',
             'Content-Type': 'application/json'
-            
         },
         body: JSON.stringify(body)
     }), 2000, 30000, (result) => result.status !== 500);

@@ -8,7 +8,7 @@ import { getContract } from 'viem';
 import { color } from 'console-log-colors';
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidationUptimeMessage } from './uptime';
-import { getCurrentValidators, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
+import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from './lib/pChainUtils';
 import { GetRegistrationJustification } from './lib/justification';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
@@ -974,11 +974,11 @@ export async function completeDelegatorRegistrationStakingVault(
             }
             logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
         }));
-
     // Pack and sign the P-Chain warp message for weight update
     const validationIDBytes = hexToBytes(validationID as Hex);
     const unsignedPChainWeightWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(validatorWeight), client.network === 'fuji' ? 5 : 1, pChainChainID);
     const unsignedPChainWeightWarpMsgHex = bytesToHex(unsignedPChainWeightWarpMsg);
+    const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID));
     // Aggregate signatures from validators for the P-Chain weight message
     logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
     const signedPChainWeightMessage = await collectSignatures({ network: client.network, message: unsignedPChainWeightWarpMsgHex, signingSubnetId });
@@ -987,7 +987,6 @@ export async function completeDelegatorRegistrationStakingVault(
     // Get the uptime message
     // Use the uptimeBlockchainID passed as parameter (same as KiteStakingManager settings)
     const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-    const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID));
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client,
@@ -1285,13 +1284,6 @@ export async function completeDelegatorRemovalStakingVault(
             }
         );
 
-        if (waitValidatorVisible) {
-            logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-            const subnetIDHex = await validatorManager.read.subnetID();
-            const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
-            await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
-        }
-
         logger.log("completeDelegatorRemoval executed successfully, tx hash:", hash);
         lastHash = hash;
     }
@@ -1302,6 +1294,12 @@ export async function completeDelegatorRemovalStakingVault(
 
     return lastHash;
 }
+
+export async function claimOperatorFees(stakingVault: StakingVaultContract, client: ExtendedClient) {
+    stakingVault.safeWrite.claimOperatorFees
+}
+
+// stakingVault.safeWrite.claimEscrowedWithdrawal
 
 // ── Info functions ─────────────────────────────────────────────────────
 
