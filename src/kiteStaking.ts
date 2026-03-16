@@ -801,7 +801,7 @@ export async function submitUptimeProof(
 ) {
     const [uptimeBlockchainID, manager] = await kiteStakingManager.read.getStakingManagerSettings().then((settings) => [settings.uptimeBlockchainID, settings.manager]);
     const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-    const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID));
+    const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID as Hex));
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client,
