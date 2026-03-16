@@ -98,15 +98,15 @@ export type CurriedSuzakuContractMap = { [key in SuzakuABINames]: CurriedContrac
 
 function handleContractError(error: any, abi: SuzakuABINames) {
   if (error instanceof ContractFunctionExecutionError) {
-    logger.exitError([`${abi} ${error.cause}`], 3)
+    throw Error(`${abi} ${error.cause}`)
   } else if (error instanceof Error) {
     const eraseToIndex = error.message.indexOf("Docs:")
     if (eraseToIndex === -1) throw error;
-    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
   } else if (error instanceof Object) {
     const eraseToIndex = error.message.indexOf("Docs:")
     if (eraseToIndex === -1) throw error;
-    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
   } else {
     throw error
   }

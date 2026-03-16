@@ -1381,7 +1381,7 @@ export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
 
     let totalActive = 0;
     let totalAllocationBips = 0n;
-
+    stakingVault.read.getOperatorCurrentEpochPendingAmount
     for (const operator of operatorList) {
         const [info, exitDebt, validators, delegators] = await stakingVault.multicall([
             { name: 'getOperatorInfo', args: [operator] },
@@ -1423,6 +1423,7 @@ export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
 
     let totalValidators = 0;
     let totalPendingRemoval = 0;
+
 
     for (const operator of operatorList) {
         const [validatorIDs] = await stakingVault.multicall([

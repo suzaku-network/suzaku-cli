@@ -296,8 +296,6 @@ export async function collectSignatures({ network, message, justification, signi
     if (justification) body.justification = justification;
     body.signingSubnetId = signingSubnetId;
     body.quorumPercentage = 67;
-    // body.quorumPercentageBuffer = 23;
-    console.log(network)
     // Test every 2 seconds, timeout after 30 seconds
     const baseURL = process.env.SIG_AGG_URL ? process.env.SIG_AGG_URL : network === 'fuji' ? 'https://glacier-api-dev.avax.network/v1/signatureAggregator/fuji/aggregateSignatures' : 'https://glacier-api.avax.network/v1/signatureAggregator/mainnet/aggregateSignatures';
     const signResponse = await retryWhileError(() => fetch(baseURL, {

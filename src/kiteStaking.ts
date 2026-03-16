@@ -2,7 +2,7 @@ import { Account, bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "./client";
 import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
-import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
+import { cb58ToHex, encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
@@ -10,7 +10,7 @@ import { getCurrentValidators, registerL1Validator, setValidatorWeight } from ".
 import { pipe, R } from "@mobily/ts-belt";
 import { GetRegistrationJustification } from "./lib/justification";
 import { utils } from "@avalabs/avalanchejs";
-import { getValidationUptimeMessage } from "./uptime";
+import { getCurrentValidatorsFromNode, getValidationUptimeMessage } from "./uptime";
 
 export async function updateStakingConfig(
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
@@ -790,6 +790,41 @@ export async function completeValidatorRemoval(
 
         logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
     }
+}
+
+export async function submitUptimeProof(
+    client: ExtendedWalletClient,
+    config: Config,
+    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    rpcUrl: string,
+    nodeId: NodeId
+) {
+    const [uptimeBlockchainID, manager] = await kiteStakingManager.read.getStakingManagerSettings().then((settings) => [settings.uptimeBlockchainID, settings.manager]);
+    const warpNetworkID = client.network === 'fuji' ? 5 : 1;
+    const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID));
+    logger.log("\nGetting validation uptime message...");
+    const signedUptimeMessage = await getValidationUptimeMessage(
+        client,
+        rpcUrl,
+        nodeId,
+        warpNetworkID,
+        sourceChainID
+    );
+
+    // Ensure signedUptimeMessage has 0x prefix
+    const signedUptimeMessageHex = signedUptimeMessage.startsWith('0x') ? signedUptimeMessage : `0x${signedUptimeMessage}`;
+
+    // Pack both messages into separate access list objects
+    const uptimeAccessList = packWarpIntoAccessList(hexToBytes(signedUptimeMessageHex as Hex));
+
+    const validators = await getCurrentValidatorsFromNode(rpcUrl);
+    const validator = validators.find(v => v.nodeID === nodeId);
+    if (!validator) throw new Error(`Validator with nodeID ${nodeId} not found in the current validator set`);
+
+    const txHash = await kiteStakingManager.write.submitUptimeProof([cb58ToHex(validator.validationID), 0], { accessList: uptimeAccessList, chain: null });
+
+    logger.log("submitUptimeProof done, tx hash:", txHash);
+        return txHash;
 }
 
 // ─── Info Aggregators ────────────────────────────────────────────────────────

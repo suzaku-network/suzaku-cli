@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 
+// Temporarly rm warning from SafeSDK dependencies
+const _originalWarn = console.warn.bind(console);
+console.warn = function (...args) {
+    const msg = args.join(" ");
+    if (msg.includes("gelatonetwork")) {
+        return;
+    }
+    return _originalWarn(...args);
+};
+
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
 import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
@@ -126,11 +136,11 @@ import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { bytes32ToAddress, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex } from "./lib/cliParser";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex, OptHex } from "./lib/cliParser";
 import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
-import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
+import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo, submitUptimeProof } from './kiteStaking';
 import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
@@ -2725,6 +2735,27 @@ async function main() {
             );
         });
 
+    kiteStakingManagerCmd
+        .command("submit-uptime-proof")
+        .description("Submit uptime proof for a validator")
+        .addArgument(ArgAddress("kiteStakingManagerAddress", "KiteStakingManager contract address"))
+        .addArgument(ArgNodeID("nodeId", "Node ID of the validator"))
+        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .action(async (kiteStakingManagerAddress, nodeId, rpcUrl) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+
+            await submitUptimeProof(
+                client,
+                config,
+                kiteStakingManager,
+                rpcUrl,
+                nodeId
+            );
+        });
+
     /**
      * --------------------------------------------------
      * STAKING VAULT
@@ -4575,12 +4606,14 @@ async function main() {
         .addArgument(ArgAddress('validatorManagerAddress', 'Validator manager of the subnet'))
         .addArgument(ArgCB58('vmcChainId', 'Validator Manager Contract Chain ID'))
         .addOption(new Option('--validatorConfig <validatorConfig>', 'Validator config file path (json)').default([]).argParser(collectMultiple(String)).makeOptionMandatory())
+        .addOption(OptHex('--convertTx <convertTx>', 'Existing convert transaction hash to reuse'))
+        .addOption(new Option('--init-vmc', 'Initialize the VMC before conversion'))
         .action(async (subnetId, chainId, validatorManagerAddress, vmcChainId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             // const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress)
-            await convertSubnetToL1({ client, subnetId, chainId, validatorManager: validatorManagerAddress, validatorManagerBlockchainID: vmcChainId, validators: options.validatorConfig.map(v => JSON.parse(readFileSync(v).toString('utf-8'))) })
+            await convertSubnetToL1({ client, subnetId, chainId, validatorManager: validatorManagerAddress, validatorManagerBlockchainID: vmcChainId, validators: options.validatorConfig.map(v => JSON.parse(readFileSync(v).toString('utf-8'))), convertTx: options.convertTx, init: options.initVmc })
         });
 
     program
