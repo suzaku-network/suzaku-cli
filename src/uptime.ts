@@ -27,11 +27,16 @@ type getCurrentValidatorsRpcResponse = {
 }
 
 export async function getCurrentValidatorsFromNode(rpcUrl: string) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (process.env.RPC_BYPASS_TOKEN) {
+    logger.log("Using RPC bypass token");
+    headers["x-rpc-bypass-token"] = process.env.RPC_BYPASS_TOKEN;
+  }
   const response = await fetch(rpcUrl + "/validators", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "validators.getCurrentValidators",
