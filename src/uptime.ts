@@ -12,15 +12,15 @@ import { pChainChainID } from "./config";
 type getCurrentValidatorsRpcResponse = {
   result: {
     "validators": {
-    "validationID": string,
-    "nodeID": string,
-    "weight": number,
-    "startTimestamp": number,
-    "isActive": boolean,
-    "isL1Validator": boolean,
-    "isConnected": boolean,
-    "uptimePercentage": number,
-    "uptimeSeconds": number
+      "validationID": string,
+      "nodeID": string,
+      "weight": number,
+      "startTimestamp": number,
+      "isActive": boolean,
+      "isL1Validator": boolean,
+      "isConnected": boolean,
+      "uptimePercentage": number,
+      "uptimeSeconds": number
     }[],
   }
   error?: any
@@ -255,7 +255,7 @@ export async function getLastUptimeCheckpoint(
 /**
  * Check if all alive validators from all operators have reported its uptime for the epoch and then check if all operators have reported their uptime for each epoch in the last 50 epochs (or since genesis if less than 50 epochs have passed). If not, report the uptime for the operators that haven't reported yet.
  */
-export async function reportAllValidatorsUptime(
+export async function uptimeSync(
   client: ExtendedClient,
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   middleware: SafeSuzakuContract['L1Middleware'],
@@ -272,7 +272,7 @@ export async function reportAllValidatorsUptime(
     return;
   }
 
-  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl+`/ext/bc/${sourceChainID}`);
+  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl + `/ext/bc/${sourceChainID}`);
   if (currentValidators.length === 0) {
     logger.log("No validators found for any operator.");
     return;
@@ -284,8 +284,8 @@ export async function reportAllValidatorsUptime(
 
   // Check uptime status and get validator details in parallel structure
   const uptimeStatus = await uptimeTracker.multicall(
-      currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
-    )
+    currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
+  )
 
   const signingSubnetId = await validatedBy(client, sourceChainID);
   const networkID = client.network === 'mainnet' ? 1 : 5;
@@ -335,7 +335,7 @@ export async function reportAllValidatorsUptime(
 
   // build an indexing of operators status upon 50 epochs (except if the targetEpoch is less than 50.
   const epochsToCheck = targetEpoch < 50 ? targetEpoch : 50;
-  const epochRange = Array.from({ length: epochsToCheck }, (_, i) => targetEpoch - i-1);
+  const epochRange = Array.from({ length: epochsToCheck }, (_, i) => targetEpoch - i - 1);
   let operatorUptimeStatus = await uptimeTracker.multicall(
     operators.flatMap(op => epochRange.map(epoch => ({ name: 'isOperatorUptimeSet', args: [epoch, op] })))
   );

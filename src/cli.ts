@@ -68,7 +68,7 @@ import {
     middlewareGetNodeLogs,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
-    weightWatcher,
+    weightSync,
     middlewareInfo
 } from "./middleware";
 
@@ -100,7 +100,7 @@ import {
     getOperatorUptimeForEpoch,
     isOperatorUptimeSetForEpoch,
     getLastUptimeCheckpoint,
-    reportAllValidatorsUptime
+    uptimeSync
 } from "./uptime";
 
 import {
@@ -1867,7 +1867,7 @@ async function main() {
         });
 
     middlewareCmd
-        .command('weight-watcher')
+        .command('weight-sync')
         .description('Watch for operators weight changes')
         .addArgument(ArgAddress('middlewareAddress', 'Middleware address'))
         .addOption(new Option('-e, --epochs <number>', 'Number of epochs to watch').argParser(Number))
@@ -1876,7 +1876,7 @@ async function main() {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            await weightWatcher(await config.contracts.L1Middleware(middlewareAddress), config, { epochs: options.epochs, loopEpochs: options.loopEpochs });
+            await weightSync(await config.contracts.L1Middleware(middlewareAddress), config, { epochs: options.epochs, loopEpochs: options.loopEpochs });
         });
     /**
      * --------------------------------------------------
@@ -3518,7 +3518,7 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
             const startTime = await stakingVault.read.getStartTime();
-            const [epochDuration, currentEpoch] = await stakingVault.multicall([ "getEpochDuration", "getCurrentEpoch"]);
+            const [epochDuration, currentEpoch] = await stakingVault.multicall(["getEpochDuration", "getCurrentEpoch"]);
             const nextEpochStartTime = startTime + (epochDuration * (currentEpoch + 1n));
             const nextEpochStartDate = new Date(Number(nextEpochStartTime) * 1000);
             logger.log(`Next epoch start time (timestamp): ${nextEpochStartTime} => ${nextEpochStartDate.toLocaleString()}`);
@@ -3827,7 +3827,7 @@ async function main() {
         });
 
     uptimeCmd
-        .command("report-all-validators-uptime")
+        .command("uptime-sync")
         .description("Report uptime for all validators")
         .addArgument(ArgAddress("uptimeTrackerAddress", "Address of the UptimeTracker contract"))
         .addArgument(ArgAddress("middlewareAddress", "Address of the Middleware contract"))
@@ -3841,7 +3841,7 @@ async function main() {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
-            await reportAllValidatorsUptime(
+            await uptimeSync(
                 client,
                 uptimeTracker,
                 middlewareSvc,

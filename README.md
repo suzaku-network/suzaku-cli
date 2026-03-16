@@ -704,7 +704,7 @@ suzaku-cli --help
   Get account info.
 - **info `<middlewareAddress>`**
   Get general information about the middleware.
-- **weight-watcher `<middlewareAddress>` [--epochs `<number>`] [--loop-epochs `<number>`]**
+- **weight-sync `<middlewareAddress>` [--epochs `<number>`] [--loop-epochs `<number>`]**
   Watch for operators weight changes.
 
 ### Operator Opt-In Commands (`opt-in`)

@@ -418,7 +418,7 @@ export async function middlewareLastValidationId(
 }
 
 
-export async function weightWatcher(
+export async function weightSync(
   middleware: SafeSuzakuContract['L1Middleware'],
   config: Config,
   options: {
@@ -426,7 +426,7 @@ export async function weightWatcher(
     loopEpochs?: number;
   }
 ) {
-  
+
   // middlewareManualProcessNodeStakeCache configuration
   const [lastGlobalNodeStakeUpdateEpoch, currentEpoch, updateWindow] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch', 'UPDATE_WINDOW']);
   let epochsPerCall;
