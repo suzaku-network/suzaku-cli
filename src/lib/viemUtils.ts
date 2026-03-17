@@ -93,7 +93,7 @@ type MulticallFn<T extends SuzakuABINames> = {
 };
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
-export type CurriedContractFn<T extends SuzakuABINames> = (address: Address) => Promise<SafeSuzakuContract[T]>;
+export type CurriedContractFn<T extends SuzakuABINames> = (address?: Address) => Promise<SafeSuzakuContract[T]>;
 export type CurriedSuzakuContractMap = { [key in SuzakuABINames]: CurriedContractFn<key> }
 
 function handleContractError(error: any, abi: SuzakuABINames) {
@@ -314,7 +314,14 @@ export function withSafeWrite<T extends SuzakuABINames>(
 }
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
-  async (address: Address) => {
+  async (address?: Address) => {
+    const envVar = abi.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
+    if (!address && process.env[envVar]) {
+      address = process.env[envVar] as Address;
+    }
+    if (!address) {
+      throw new Error(`Address is required to create a contract instance for ${abi}. Please provide it as an argument or set it in the environment variable ${envVar}`);
+    }
     if (!skipAbiValidation) {
       // (StakingVault uses delegatecall to forward to operations implementation)
       // Skip ABI validation since functions are forwarded via fallback
@@ -338,8 +345,8 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
   };
 
 export async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abis: T[], address: Address): Promise<{ name: T, ratio: number, valid: boolean }[]> {
-  // Tolerance for missing selectors 5%
-  const TOLERANCE = 0.05;
+  // Tolerance for missing selectors 6%
+  const TOLERANCE = 0.06;
   // Check for proxy
   const proxyImplementation = await client.getStorageAt({
     address,

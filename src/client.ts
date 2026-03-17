@@ -6,6 +6,7 @@ import { getAddresses } from './lib/utils';
 import { getLedgerAccount, toSafeProvider } from './lib/ledgerUtils';
 import { chainList } from './lib/chainList';
 import { logger } from './lib/logger';
+import { configDotenv } from 'dotenv';
 
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
@@ -26,6 +27,7 @@ export async function generateClient(chain: Chains, privateKey?: undefined, safe
 export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
+    configDotenv({ path: `defaults/.env.${chain}` });
     const network = chainList[chain].testnet ? 'fuji' : 'mainnet';
     let account: ExtendedAccount | undefined;
     const isLedger = privateKey === 'ledger';
