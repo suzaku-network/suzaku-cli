@@ -18,7 +18,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "defaults"
   ],
   "scripts": {
     "suzaku-cli": "node dist/cli.js",

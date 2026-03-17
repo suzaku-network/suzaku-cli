@@ -186,24 +186,12 @@ async function main() {
             writeErr: (str) => { str.includes('Usage: suzaku-cli') ? process.stdout.write(str) : process.stderr.write(str) },
         });
 
-    program.hook("preAction", () => {
-
-        const opts = program.opts();
-        
-        // Ensure privateKey is set if opts.secret or ledger is provided
-        if (opts.secretName) {
-            program.setOptionValue('privateKey', opts.secretName)
-        } else if (opts.ledger) {
-            program.setOptionValue('privateKey', 'ledger')
-        }
-    });
-
     // Set cast mode and handle --rpc-url/custom network before any command runs
     program.hook('preSubcommand', async (thisCommand) => {
         const opts = program.opts();
         if (opts.cast) setCastMode(true);
         // Block manually private key on mainnet
-        if (opts.privateKey! && opts.network === "mainnet") {
+        if (opts.privateKey! && chainList[opts.network].testnet === false) {
             logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }
@@ -216,6 +204,16 @@ async function main() {
         }
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);
+    });
+
+    program.hook("preAction", () => {
+        const opts = program.opts();
+        // Ensure privateKey is set if opts.secret or ledger is provided
+        if (opts.secretName) {
+            program.setOptionValue('privateKey', opts.secretName)
+        } else if (opts.ledger) {
+            program.setOptionValue('privateKey', 'ledger')
+        }
     });
 
     program
@@ -245,8 +243,8 @@ async function main() {
     const argUptimeTrackerAddress = ArgAddress("uptimeTrackerAddress", "UptimeTracker contract address");
     const argRewardsAddress = ArgAddress("rewardsAddress", "Rewards contract address");
     const argRewardTokenAddress = ArgAddress("rewardTokenAddress", "Reward token contract address");
-    const argKiteStakingManagerAddress = ArgAddress("kiteStakingManagerAddress", "KiteStakingManager contract address").argOptional();
-    const argStakingVaultAddress = ArgAddress("stakeVaultAddress", "Staking vault contract address").argOptional();
+    const optKiteStakingManagerAddress = OptAddress("--staking-manager-address <address>", "KiteStakingManager contract address");
+    const optStakingVaultAddress = OptAddress("--staking-vault-address <address>", "Staking vault contract address");
     const argAccessControlAddress = ArgAddress("accessControlAddress", "A contract address with AccessControl functionalities");
 
     // EOA
@@ -329,14 +327,14 @@ async function main() {
     l1RegistryCmd
         .command("register")
         .description("Register a new L1 in the L1 registry")
-        .addArgument(argBalancerAddress)
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgURI("metadataUrl", "Metadata URL for the L1"))
-        .action(async (balancerAddress, l1Middleware, metadataUrl) => {
+        .action(async (l1Middleware, metadataUrl) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-
+            const middleware = await config.contracts.L1Middleware(l1Middleware);
+            const balancerAddress = await middleware.read.BALANCER();
             // instantiate L1Registry and call
             const l1Registry = await config.contracts.L1Registry();
             await registerL1(
@@ -2469,12 +2467,12 @@ async function main() {
     kiteStakingManagerCmd
         .command("info")
         .description("Get global configuration from KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
-        .action(async (kiteStakingManagerAddress) => {
+        .addOption(optKiteStakingManagerAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getKiteStakingManagerInfo(kiteStakingManager);
             logger.logJsonTree(info);
         });
@@ -2482,13 +2480,13 @@ async function main() {
     kiteStakingManagerCmd
         .command("validator-info")
         .description("Get comprehensive information for a validator on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("validationID", "Validation ID of the validator"))
-        .action(async (kiteStakingManagerAddress, validationID) => {
+        .action(async (validationID, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getValidatorFullInfo(kiteStakingManager, validationID);
             logger.logJsonTree(info);
         });
@@ -2496,13 +2494,13 @@ async function main() {
     kiteStakingManagerCmd
         .command("delegator-info")
         .description("Get comprehensive information for a delegator on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID of the delegator"))
-        .action(async (kiteStakingManagerAddress, delegationID) => {
+        .action(async (delegationID, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getDelegatorFullInfo(kiteStakingManager, delegationID);
             logger.logJsonTree(info);
         });
@@ -2510,18 +2508,17 @@ async function main() {
     kiteStakingManagerCmd
         .command("update-staking-config")
         .description("Update staking configuration")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .argument("minimumStakeAmount", "Minimum stake amount")
         .argument("maximumStakeAmount", "Maximum stake amount")
         .argument("minimumStakeDuration", "Minimum stake duration in seconds")
         .addArgument(ArgNumber("minimumDelegationFeeBips", "Minimum delegation fee in basis points"))
         .addArgument(ArgNumber("maximumStakeMultiplier", "Maximum stake multiplier"))
-        .action(async (kiteStakingManagerAddress, minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier) => {
+        .action(async (minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
-
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Get staking config to determine decimals - typically 18 for native tokens
             // For now, assume 18 decimals (1e18) for stake amounts
             const minimumStakeAmountWei = parseUnits(minimumStakeAmount, 18);
@@ -2541,7 +2538,7 @@ async function main() {
     kiteStakingManagerCmd
         .command("initiate-validator-registration")
         .description("Initiate validator registration on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID())
         .addArgument(ArgHex("blsKey", "BLS public key"))
         .addArgument(ArgNumber("delegationFeeBips", "Delegation fee in basis points"))
@@ -2552,11 +2549,11 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (kiteStakingManagerAddress, nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, options) => {
+        .action(async (nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
@@ -2592,13 +2589,13 @@ async function main() {
     kiteStakingManagerCmd
         .command("complete-validator-registration")
         .description("Complete validator registration on the P-Chain and on the KiteStakingManager after initiating registration")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate validator registration transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (kiteStakingManagerAddress, initiateTxHash, blsProofOfPossession, options) => {
+        .action(async (initiateTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -2608,7 +2605,7 @@ async function main() {
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             await kiteCompleteValidatorRegistration(
                 client,
@@ -2625,15 +2622,15 @@ async function main() {
     kiteStakingManagerCmd
         .command("initiate-delegator-registration")
         .description("Initiate delegator registration on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID())
         .addArgument(ArgAddress("rewardRecipient", "Reward recipient address"))
         .argument("stakeAmount", "Initial stake amount")
-        .action(async (kiteStakingManagerAddress, nodeId, rewardRecipient, stakeAmount) => {
+        .action(async (nodeId, rewardRecipient, stakeAmount, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             // Get staking config to determine decimals for stake amount
             // For now, assume 18 decimals (1e18) for stake amounts
@@ -2651,16 +2648,16 @@ async function main() {
     kiteStakingManagerCmd
         .command("complete-delegator-registration")
         .description("Complete delegator registration on the P-Chain and on the KiteStakingManager after initiating registration")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
         .argument("rpcUrl", "RPC URL for getting validator uptime")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (kiteStakingManagerAddress, initiateTxHash, rpcUrl, options) => {
+        .action(async (initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             await kiteCompleteDelegatorRegistration(
                 client,
@@ -2675,16 +2672,15 @@ async function main() {
     kiteStakingManagerCmd
         .command("initiate-delegator-removal")
         .description("Initiate delegator removal on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
         .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true)"))
-        .action(async (kiteStakingManagerAddress, delegationID, options) => {
+        .action(async (delegationID, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
-
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateDelegatorRemoval(
                 client,
                 kiteStakingManager,
@@ -2698,20 +2694,20 @@ async function main() {
     kiteStakingManagerCmd
         .command("complete-delegator-removal")
         .description("Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
         .argument("rpcUrl", "RPC URL for getting validator uptime")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash"))
-        .action(async (kiteStakingManagerAddress, initiateRemovalTxHash, rpcUrl, options) => {
+        .action(async (initiateRemovalTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
 
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
             await requirePChainBallance(client, 50000n, opts.yes);
 
@@ -2731,15 +2727,14 @@ async function main() {
     kiteStakingManagerCmd
         .command("initiate-validator-removal")
         .description("Initiate validator removal on KiteStakingManager")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID())
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
-        .action(async (kiteStakingManagerAddress, nodeId, options) => {
+        .action(async (nodeId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
-
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateValidatorRemoval(
                 kiteStakingManager,
                 config,
@@ -2751,19 +2746,19 @@ async function main() {
     kiteStakingManagerCmd
         .command("complete-validator-removal")
         .description("Complete validator removal on the P-Chain and on the KiteStakingManager after initiating removal")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate validator removal transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate validator registration transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
-        .action(async (kiteStakingManagerAddress, initiateRemovalTxHash, options) => {
+        .action(async (initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
 
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
             await requirePChainBallance(client, 50000n, opts.yes);
 
@@ -2782,15 +2777,14 @@ async function main() {
     kiteStakingManagerCmd
         .command("submit-uptime-proof")
         .description("Submit uptime proof for a validator")
-        .addArgument(argKiteStakingManagerAddress)
+        .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID of the validator"))
         .argument("rpcUrl", "RPC URL for getting validator uptime")
-        .action(async (kiteStakingManagerAddress, nodeId, rpcUrl) => {
+        .action(async (nodeId, rpcUrl, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const kiteStakingManager = await config.contracts.KiteStakingManager(kiteStakingManagerAddress);
-
+            const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await submitUptimeProof(
                 client,
                 config,
@@ -2818,15 +2812,14 @@ async function main() {
     stakingVaultCmd
         .command("deposit")
         .description("Deposit native tokens (AVAX) into the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .argument("amount", "Amount to deposit in AVAX")
         .addArgument(ArgBigInt("minShares", "Minimum shares expected from the deposit (slippage protection)"))
-        .action(async (stakingVaultAddress, amount, minShares) => {
+        .action(async ( amount, minShares, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await depositStakingVault(
                 client,
                 stakingVault,
@@ -2838,13 +2831,13 @@ async function main() {
     stakingVaultCmd
         .command("request-withdrawal")
         .description("Request withdrawal from the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .argument("shares", "Amount of shares to withdraw")
-        .action(async (stakingVaultAddress, shares) => {
+        .action(async (shares, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             await requestWithdrawalStakingVault(
                 client,
@@ -2856,14 +2849,13 @@ async function main() {
     stakingVaultCmd
         .command("claim-withdrawal")
         .description("Claim a withdrawal from the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
-        .action(async (stakingVaultAddress, requestId) => {
+        .action(async (requestId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await claimWithdrawalStakingVault(
                 client,
                 stakingVault,
@@ -2874,14 +2866,13 @@ async function main() {
     stakingVaultCmd
         .command("claim-withdrawal-for")
         .description("Claim a withdrawal for a request ID (permissionless)")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
-        .action(async (stakingVaultAddress, requestId) => {
+        .action(async (requestId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimWithdrawalFor([requestId]);
             logger.log("claimWithdrawalFor tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -2891,14 +2882,13 @@ async function main() {
     stakingVaultCmd
         .command("claim-withdrawals-for")
         .description("Claim multiple withdrawals for request IDs (permissionless)")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .argument("requestIds...", "Withdrawal request IDs to claim")
-        .action(async (stakingVaultAddress, requestIds) => {
+        .action(async ( requestIds, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const ids = (requestIds as string[]).map((id) => BigInt(id));
             const hash = await stakingVault.safeWrite.claimWithdrawalsFor([ids]);
             logger.log("claimWithdrawalsFor tx hash:", hash);
@@ -2909,14 +2899,13 @@ async function main() {
     stakingVaultCmd
         .command("claim-escrowed-withdrawal")
         .description("Claim escrowed withdrawal to a recipient")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgAddress("recipient", "Recipient address"))
-        .action(async (stakingVaultAddress, recipient) => {
+        .action(async (recipient, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
             logger.log("claimEscrowedWithdrawal tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -2926,13 +2915,12 @@ async function main() {
     stakingVaultCmd
         .command("process-epoch")
         .description("Process the current epoch in the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await processEpochStakingVault(
                 client,
                 stakingVault
@@ -2942,7 +2930,7 @@ async function main() {
     stakingVaultCmd
         .command("initiate-validator-registration")
         .description("Initiate validator registration in the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
         .addArgument(ArgHex("blsKey", "BLS public key"))
         .argument("stakeAmount", "Stake amount in AVAX")
@@ -2950,11 +2938,11 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (stakingVaultAddress, nodeId, blsKey, stakeAmount, options) => {
+        .action(async (nodeId, blsKey, stakeAmount, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
@@ -2984,15 +2972,15 @@ async function main() {
     stakingVaultCmd
         .command("add-operator")
         .description("Add an operator to the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
         .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
         .addArgument(ArgAddress("feeRecipient", "Fee recipient address"))
-        .action(async (stakingVaultAddress, operator, allocationBips, feeRecipient) => {
+        .action(async (operator, allocationBips, feeRecipient, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const allocationBipsBigInt = BigInt(allocationBips);
 
@@ -3009,14 +2997,13 @@ async function main() {
     stakingVaultCmd
         .command("remove-operator")
         .description("Remove an operator from the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
-        .action(async (stakingVaultAddress, operator) => {
+        .action(async (operator, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.removeOperator([operator]);
             logger.log("removeOperator tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3026,13 +3013,13 @@ async function main() {
     stakingVaultCmd
         .command("complete-validator-registration")
         .description("Complete validator registration on the P-Chain and on the StakingVault after initiating registration")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate validator registration transaction hash"))
         .addArgument(ArgBLSPOP())
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (stakingVaultAddress, initiateTxHash, blsProofOfPossession, options) => {
+        .action(async (initiateTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -3042,7 +3029,7 @@ async function main() {
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
             const client = await generateClient(opts.network, options.pchainTxPrivateKey, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
@@ -3062,13 +3049,13 @@ async function main() {
     stakingVaultCmd
         .command("initiate-validator-removal")
         .description("Initiate validator removal in the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
-        .action(async (stakingVaultAddress, nodeId) => {
+        .action(async (nodeId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
@@ -3084,18 +3071,18 @@ async function main() {
     stakingVaultCmd
         .command("complete-validator-removal")
         .description("Complete validator removal on the P-Chain and on the StakingVault after initiating removal")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate validator removal transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate validator registration transaction hash").argParser((value) => value as Hex))
-        .action(async (stakingVaultAddress, initiateRemovalTxHash, options) => {
+        .action(async (initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
@@ -3117,13 +3104,13 @@ async function main() {
     stakingVaultCmd
         .command("force-remove-validator")
         .description("Force remove a validator from the StakingVault (admin/emergency operation)")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
-        .action(async (stakingVaultAddress, nodeId) => {
+        .action(async (nodeId, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
@@ -3138,14 +3125,14 @@ async function main() {
     stakingVaultCmd
         .command("initiate-delegator-registration")
         .description("Initiate delegator registration in the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
         .argument("amount", "Stake amount in AVAX")
-        .action(async (stakingVaultAddress, nodeId, amount) => {
+        .action(async (nodeId, amount, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
@@ -3162,16 +3149,16 @@ async function main() {
     stakingVaultCmd
         .command("complete-delegator-registration")
         .description("Complete delegator registration on the P-Chain and on the StakingVault after initiating registration")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
         .argument("rpcUrl", "RPC URL for getting validator uptime (e.g. http(s)://domainOrIp:portIfNeeded)")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (stakingVaultAddress, initiateTxHash, rpcUrl, options) => {
+        .action(async (initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } = await getValidatorManagerAddress(config, stakingVault);
             const uptimeBlockchainID = await config.client.getStorageAt({ address: stakingManager.address, slot: `0x${(BigInt(stakingManagerStorageLocation) + 6n).toString(16).padStart(64, '0')}` })
@@ -3195,14 +3182,13 @@ async function main() {
     stakingVaultCmd
         .command("initiate-delegator-removal")
         .description("Initiate delegator removal in the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
-        .action(async (stakingVaultAddress, delegationID) => {
+        .action(async (delegationID, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await initiateDelegatorRemovalStakingVault(
                 client,
                 config,
@@ -3214,14 +3200,13 @@ async function main() {
     stakingVaultCmd
         .command("force-remove-delegator")
         .description("Force remove a delegator from the StakingVault (admin/emergency operation)")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
-        .action(async (stakingVaultAddress, delegationID) => {
+        .action(async (delegationID, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await forceRemoveDelegatorStakingVault(
                 client,
                 stakingVault,
@@ -3232,18 +3217,18 @@ async function main() {
     stakingVaultCmd
         .command("complete-delegator-removal")
         .description("Complete delegator removal on the P-Chain and on the StakingVault after initiating removal")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash").argParser((value) => value as Hex))
-        .action(async (stakingVaultAddress, initiateRemovalTxHash, options) => {
+        .action(async (initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
@@ -3265,15 +3250,14 @@ async function main() {
     stakingVaultCmd
         .command("update-operator-allocations")
         .description("Update operator allocations in the StakingVault")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
         .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
-        .action(async (stakingVaultAddress, operator, allocationBips) => {
+        .action(async (operator, allocationBips, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const allocationBipsBigInt = BigInt(allocationBips);
             await stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
         });
@@ -3281,12 +3265,12 @@ async function main() {
     stakingVaultCmd
         .command("claim-operator-fees")
         .description("Claim operator fees for the caller")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimOperatorFees([]);
             logger.log("claimOperatorFees tx hash:", hash);
@@ -3297,13 +3281,13 @@ async function main() {
     stakingVaultCmd
         .command("force-claim-operator-fees")
         .description("Force claim operator fees for an operator (admin)")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
-        .action(async (stakingVaultAddress, operator) => {
+        .action(async (operator, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.forceClaimOperatorFees([operator]);
             logger.log("forceClaimOperatorFees tx hash:", hash);
@@ -3314,13 +3298,13 @@ async function main() {
     stakingVaultCmd
         .command("claim-pending-protocol-fees")
         .description("Claim pending protocol fees")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             console.log(process.env.STAKING_VAULT)
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimPendingProtocolFees([]);
             logger.log("claimPendingProtocolFees tx hash:", hash);
@@ -3331,13 +3315,12 @@ async function main() {
     stakingVaultCmd
         .command("harvest")
         .description("Harvest rewards")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvest([]);
             logger.log("harvest tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3347,16 +3330,15 @@ async function main() {
     stakingVaultCmd
         .command("harvest-validators")
         .description("Harvest validator rewards in batches")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("operatorIndex", "Operator index"))
         .addArgument(ArgBigInt("start", "Validator list start index"))
         .addArgument(ArgBigInt("batchSize", "Validator batch size"))
-        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+        .action(async (operatorIndex, start, batchSize, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
             logger.log("harvestValidators tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3366,16 +3348,15 @@ async function main() {
     stakingVaultCmd
         .command("harvest-delegators")
         .description("Harvest delegator rewards in batches")
-        .addArgument(argStakingVaultAddress)
+        .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("operatorIndex", "Operator index"))
         .addArgument(ArgBigInt("start", "Delegator list start index"))
         .addArgument(ArgBigInt("batchSize", "Delegator batch size"))
-        .action(async (stakingVaultAddress, operatorIndex, start, batchSize) => {
+        .action(async (operatorIndex, start, batchSize, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
             logger.log("harvestDelegators tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3385,13 +3366,12 @@ async function main() {
     stakingVaultCmd
         .command("prepare-withdrawals")
         .description("Prepare withdrawals by initiating stake removals")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
             logger.log("prepareWithdrawals tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3401,13 +3381,12 @@ async function main() {
     stakingVaultCmd
         .command("pause")
         .description("Pause the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.pause([]);
             logger.log("pause tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3417,13 +3396,12 @@ async function main() {
     stakingVaultCmd
         .command("unpause")
         .description("Unpause the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
-
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.unpause([]);
             logger.log("unpause tx hash:", hash);
             await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
@@ -3433,96 +3411,96 @@ async function main() {
     stakingVaultCmd
         .command("info")
         .description("Get general overview of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getGeneralInfo(stakingVault, client);
         });
 
     stakingVaultCmd
         .command("fees-info")
         .description("Get fees configuration of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getFeesInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("operators-info")
         .description("Get operators details of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getOperatorsInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("validators-info")
         .description("Get validators details per operator of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getValidatorsInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("delegators-info")
         .description("Get delegations details per operator of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getDelegatorsInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("withdrawals-info")
         .description("Get withdrawal queue info of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getWithdrawalsInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("epoch-info")
         .description("Get epoch info of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getEpochInfo(stakingVault);
         });
 
     stakingVaultCmd
         .command("full-info")
         .description("Get all information about the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getGeneralInfo(stakingVault, client);
             await getFeesInfo(stakingVault);
             await getOperatorsInfo(stakingVault);
@@ -3535,12 +3513,12 @@ async function main() {
     stakingVaultCmd
         .command("get-current-epoch")
         .description("Get current epoch number of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const currentEpoch = await stakingVault.read.getCurrentEpoch();
             logger.log(`Current epoch: ${currentEpoch}`);
         });
@@ -3548,12 +3526,12 @@ async function main() {
     stakingVaultCmd
         .command("get-epoch-duration")
         .description("Get epoch duration in seconds of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const epochDuration = await stakingVault.read.getEpochDuration();
             logger.log(`Epoch duration (seconds): ${epochDuration}`);
         });
@@ -3561,12 +3539,12 @@ async function main() {
     stakingVaultCmd
         .command("get-next-epoch-start-time")
         .description("Get next epoch start time (timestamp) of the StakingVault")
-        .addArgument(argStakingVaultAddress)
-        .action(async (stakingVaultAddress) => {
+        .addOption(optStakingVaultAddress)
+        .action(async (options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const startTime = await stakingVault.read.getStartTime();
             const [epochDuration, currentEpoch] = await stakingVault.multicall(["getEpochDuration", "getCurrentEpoch"]);
             const nextEpochStartTime = startTime + (epochDuration * (currentEpoch + 1n));

@@ -315,12 +315,11 @@ export function withSafeWrite<T extends SuzakuABINames>(
 
 export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
   async (address?: Address) => {
+    // format camelCase ABI name to SCREAMING_SNAKE_CASE for env var lookup
     const envVar = abi.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
-    if (!address && process.env[envVar]) {
-      address = process.env[envVar] as Address;
-    }
     if (!address) {
-      throw new Error(`Address is required to create a contract instance for ${abi}. Please provide it as an argument or set it in the environment variable ${envVar}`);
+      if (process.env[envVar]) address = process.env[envVar] as Address;
+      else throw new Error(`Address is required to create a contract instance for ${abi}. Please provide associated option or set as environment variable ${envVar}`);
     }
     if (!skipAbiValidation) {
       // (StakingVault uses delegatecall to forward to operations implementation)
