@@ -15,7 +15,7 @@ export type Chains = keyof typeof chainList;
 
 export type PChainAddress = `P-${string}`;
 export type Addresses = { P: PChainAddress, C: Hex };
-export type ExtendedAccount = Account & { pChainAddress: PChainAddress, cSign?: (parameters: { hash: Hex }) => Promise<Hex> };
+export type ExtendedAccount = Account & { address: Hex, pChainAddress: PChainAddress, cSign?: (parameters: { hash: Hex }) => Promise<Hex> };
 
 // Create extended client type that includes public actions and network type
 export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, addresses: Addresses, safe?: SafeClient, ledger?: boolean, account: ExtendedAccount | undefined };

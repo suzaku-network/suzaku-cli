@@ -154,14 +154,14 @@ packages:
     engines: {node: '>=14.0.0'}
     deprecated: This package is deprecated. Use @gelatocloud/gasless instead.
 
-  '@ledgerhq/client-ids@0.7.0':
-    resolution: {integrity: sha512-3TM590rpCSpncVBY0pXYvQjppCNJxIEZXSnvvumiNmjfDendDZrfxVK7jN1BYJI3SQETvo6+8+FLIyzI3aydwA==}
+  '@ledgerhq/client-ids@0.8.0':
+    resolution: {integrity: sha512-COxmSvDAtyRlgitKcCfbq7+dqOnwzbyaasUgBj7AdVtswUwPOLLBbq1y/E/dg5TNjfXTV3zMCOu7WpNq0PdVTg==}
 
   '@ledgerhq/cryptoassets-evm-signatures@13.7.1':
     resolution: {integrity: sha512-ehLn62L15fOlTH6u5D1eV1d4/QIju6aaUKWy7CpVLSiRmkWEBaORhOL/l9TvBrRIvNLHVBQEhiBaJcJ4hGrlEw==}
 
-  '@ledgerhq/devices@8.11.0':
-    resolution: {integrity: sha512-R4tSytEZBbvAnePrDsJzD9vltxmmKBdR5+ur4usqlGY7dwNH+WB4frZO0MoHhI646DVQY5jktbcZd4Ls3gv13g==}
+  '@ledgerhq/devices@8.12.0':
+    resolution: {integrity: sha512-E6msvdhwHax6mseoOzuPp/z7+X41KE2PWBzmmmrrJ+pNNp7KIb/FZbGuwNu1Vjeg3ekbExVwQYJXdwQLuGwRKw==}
 
   '@ledgerhq/devices@8.5.1':
     resolution: {integrity: sha512-oW75YQQiP2muHveXTuwSAze6CBxJ7jOYILhFiJbsVzmgLPVqtdw4s0bJJlOBft4Aup67yNAjboFCIU7kTYQBFg==}
@@ -169,14 +169,14 @@ packages:
   '@ledgerhq/devices@8.8.0':
     resolution: {integrity: sha512-ZFRAQQaESxIK/8SYrrHyqb7pQjLPO8f62PI6H16SP0/uC9fdZKR8NqOGMvIf7I6K442SkiQATnC/kxUeUTfuHA==}
 
-  '@ledgerhq/domain-service@1.7.0':
-    resolution: {integrity: sha512-fqQEpqEvjdRT0Wm+zL0h5EQACHf11IooRQJarvsRXfhdJca3bojQxSTO4+YJzNc+ylLbEGz71ghBcwN/0DyGgQ==}
+  '@ledgerhq/domain-service@1.7.1':
+    resolution: {integrity: sha512-CXI9UaJN+UCtTFU/+/Z5pmEWI/dQ4CCJSqCCpX3i+BY8M6JWhgCgLA4EDum2zmtvlCuQuIAh59ZW7pb6JtVFLg==}
 
-  '@ledgerhq/errors@6.30.0':
-    resolution: {integrity: sha512-MnN0JDIcGRJRjLTt9bTXYhuWsoyeUXMkC/UcjG/HbukYAZx28o3Y8eRxu1Zfi4cL7lInuBuc8Nq2wwngHjg6jw==}
+  '@ledgerhq/errors@6.31.0':
+    resolution: {integrity: sha512-aGyE0HLzM8VwWikWEETfHdOzRyUsHuXHs9n+OCBNj11Tg0LeU05iuRvfL7SiXxYNN2fE45JzPfuMFsI5dp5G7w==}
 
-  '@ledgerhq/evm-tools@1.12.0':
-    resolution: {integrity: sha512-B3rgEoJCd20eFGWq01JhYmtoguZVstc5Mi9a/+Uj5FtBY2ZnUqMsJIHOkrWyN2uAvlw17cs5cVsBk3w2N4zlQg==}
+  '@ledgerhq/evm-tools@1.12.1':
+    resolution: {integrity: sha512-TP6011l1qINtByuK930K4ETCSBwoTEwX+PSqFhaDelj2QSLmPllDj7uAL4LLAMyVCsKkfLK6SP+Qw2m9XVRnEA==}
 
   '@ledgerhq/hw-app-eth@6.45.18':
     resolution: {integrity: sha512-B4ao8TUHC+plZusSYzphqsqDW2sVwa8k7Xi5fAAI8SQXzNj1yXTU/yDCXSmFa0e6wTUH/3QM5Ak2okPUoC94Vw==}
@@ -184,11 +184,11 @@ packages:
   '@ledgerhq/hw-app-eth@7.1.1':
     resolution: {integrity: sha512-KcUBl5LRziB7icDKWbfE9gcdhaLkJqD131AgBPTh1cTF9LmzL76BBtnxQYp9W/ZUrKkFYF/vGfjJqxxt6mrxqg==}
 
-  '@ledgerhq/hw-transport-mocker@6.32.0':
-    resolution: {integrity: sha512-LLpuf55O0gZqd5Dc4ld1WDuLOm194EgoB0yrS/O6ZI/8txVgHDGfmJv4854BSCIQHV1mXIPe5zf87iBoOjIojw==}
+  '@ledgerhq/hw-transport-mocker@6.33.0':
+    resolution: {integrity: sha512-/WB3VXm2gq77xKPyKPEazFC+rcsLgfSZqRCGK7NSr5TJ/ZElz43FNhzPN8ZoFQ2M7tpB7HxyQVq71muAYcvM/g==}
 
-  '@ledgerhq/hw-transport-node-hid-noevents@6.32.0':
-    resolution: {integrity: sha512-votE6/E86A+qdK8BbmvcpZ8HxmMZYJGlvx8kmCFJkiBvKfoBBXzfrgqziYD5sNn2aTbdXPqp5ozXJCHhW1wXkw==}
+  '@ledgerhq/hw-transport-node-hid-noevents@6.33.0':
+    resolution: {integrity: sha512-HLdIErIdqaCJzzIxvgNyr4Zl/BKZTwC8hcWUq66P6vd67VWVkL2pgdqoZWU+z8GJ4r1Sr/p7kagFuAvWdPTREQ==}
 
   '@ledgerhq/hw-transport-node-hid@6.29.16':
     resolution: {integrity: sha512-xDrAJ7DFnVLuL26/guKGDN9lYvlIlKgFUwjp8MIBem3pj3z0wkIS9LyM9zV6BQ3g57BgMe+//X92OMEc4NpivA==}
@@ -199,17 +199,17 @@ packages:
   '@ledgerhq/hw-transport@6.31.15':
     resolution: {integrity: sha512-I+hzH9XGFPaYq9K+iw+qWJUyVdhN9fdO00Df9zAkOCzju1W5Gc+cDJxbYnZApmY8oMd8mNoXTstEW3Ih5ikaVg==}
 
-  '@ledgerhq/hw-transport@6.33.0':
-    resolution: {integrity: sha512-pRlINA4FTF2Yt/tzjlIHBL89Zf3Y5GQ7Binra2zHM7eeXcRpD5OizuBkSddfKwXqroNKut9zZt365s//Q2DMjQ==}
+  '@ledgerhq/hw-transport@6.34.0':
+    resolution: {integrity: sha512-BHpsf2n0/JnHsGSLGT3x3dEgOk7oLO3QYXYrzrn4RVDdiYAEyXbERYJeS1D4WbINN0/LBmTM0n4M8raRJBxxSg==}
 
-  '@ledgerhq/live-env@2.29.0':
-    resolution: {integrity: sha512-n6or6Lf0YisMymk33Ycoq80ZqX9lSVGbTQKYQCxSw14oTuTIStoxRKHAgM+IoGB11fqNigmu1wwevBFf+/dddg==}
+  '@ledgerhq/live-env@2.30.0':
+    resolution: {integrity: sha512-cs+MOC1oWv6b6Iuu0NiIjH78ecX4UAAFHgEHipdcojdsuOCRbPUxGmj/l3vpATkyEwTZEjIAVGFFtJ830KQDAw==}
 
-  '@ledgerhq/logs@6.15.0':
-    resolution: {integrity: sha512-AJSXELFIDTyKkMs8udR9B3YxftQIibceeZFWC36pGkAXDnY53vPR8s25IgQefEANGr8e2ZdAEwTL1tLOYAHqSw==}
+  '@ledgerhq/logs@6.16.0':
+    resolution: {integrity: sha512-v/PLfb1dq1En35kkpbfRWp8jLYgbPUXxGhmd4pmvPSIe0nRGkNTomsZASmWQAv6pRonVGqHIBVlte7j1MBbOww==}
 
-  '@ledgerhq/types-live@6.100.0':
-    resolution: {integrity: sha512-gyTEI6n3h70RKFYcd6G3V1xRWjDa5CXcgKluxvB/1U1HousAFmd/DZu8f5+GL7YsBMUngt2TbC7Po8r9jo6ghQ==}
+  '@ledgerhq/types-live@6.101.0':
+    resolution: {integrity: sha512-lojGdktKcwWpy6sElA9Mbl1LlmJn3ZsCxFSv7TT6ptBJwjUTatlbFu9YWaodoZ6/vJKNCdm6eehBldkgHbhqiw==}
 
   '@ledgerhq/types-live@6.82.0':
     resolution: {integrity: sha512-+Sn+pwgMxrMpX/8hvwCNKpRLgJvBHeBozAnNvis4O+okBjQ8P4SGVNMr6I/2m3eNKbTzOGtEnGVi9+PWOjEOxQ==}
@@ -274,8 +274,8 @@ packages:
   '@safe-global/relay-kit@4.1.1':
     resolution: {integrity: sha512-13dt8R7lydpMUsALXtcM7xhqg7eketHdQkA3uMuHO/gFW1BvcLvu3Nvc1cWICXXolXrfYMHmq8TCpOZVK1pB7w==}
 
-  '@safe-global/safe-deployments@1.37.52':
-    resolution: {integrity: sha512-BFwJWY7L4nB2T7grHmcPp/DNtwz3L1Iuydra1iaRg+WbqPTgsrS2Buf5bkKWD3AG5MdwuqqdTnClBfzQJs+6GA==}
+  '@safe-global/safe-deployments@1.37.53':
+    resolution: {integrity: sha512-3XihirwKqcCi6jsipCiW3lYXra9i4pC9nlhHTdUyi7Yx38nBYIkXeLZN2Nmf2UPcQBeHGnW1T3DgzY4VnuF/FQ==}
 
   '@safe-global/safe-modules-deployments@2.2.25':
     resolution: {integrity: sha512-KjgenKhBRyFHEfo8xlBgNzKAy25vrmGyCGZwTjIuA81yOSRJRe85GE5Yfg/FBKeeyHqR2dD1WPZr6c2Uqd6C/g==}
@@ -1019,9 +1019,9 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@ledgerhq/client-ids@0.7.0(react@19.0.0)':
+  '@ledgerhq/client-ids@0.8.0(react@19.0.0)':
     dependencies:
-      '@ledgerhq/live-env': 2.29.0
+      '@ledgerhq/live-env': 2.30.0
       '@reduxjs/toolkit': 2.11.2(react@19.0.0)
       uuid: 9.0.1
     transitivePeerDependencies:
@@ -1030,37 +1030,37 @@ snapshots:
 
   '@ledgerhq/cryptoassets-evm-signatures@13.7.1':
     dependencies:
-      '@ledgerhq/live-env': 2.29.0
+      '@ledgerhq/live-env': 2.30.0
       axios: 1.12.2
     transitivePeerDependencies:
       - debug
 
-  '@ledgerhq/devices@8.11.0':
+  '@ledgerhq/devices@8.12.0':
     dependencies:
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       rxjs: 7.8.2
       semver: 7.7.3
 
   '@ledgerhq/devices@8.5.1':
     dependencies:
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       rxjs: 7.8.2
       semver: 7.7.4
 
   '@ledgerhq/devices@8.8.0':
     dependencies:
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       rxjs: 7.8.2
       semver: 7.7.4
 
-  '@ledgerhq/domain-service@1.7.0':
+  '@ledgerhq/domain-service@1.7.1':
     dependencies:
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
-      '@ledgerhq/types-live': 6.100.0(react@19.0.0)
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
+      '@ledgerhq/types-live': 6.101.0(react@19.0.0)
       axios: 1.13.2
       eip55: 2.1.1
       react: 19.0.0
@@ -1069,13 +1069,13 @@ snapshots:
       - debug
       - react-redux
 
-  '@ledgerhq/errors@6.30.0': {}
+  '@ledgerhq/errors@6.31.0': {}
 
-  '@ledgerhq/evm-tools@1.12.0':
+  '@ledgerhq/evm-tools@1.12.1':
     dependencies:
       '@ethersproject/constants': 5.8.0
       '@ethersproject/hash': 5.8.0
-      '@ledgerhq/live-env': 2.29.0
+      '@ledgerhq/live-env': 2.30.0
       axios: 1.13.2
       crypto-js: 4.2.0
     transitivePeerDependencies:
@@ -1087,13 +1087,13 @@ snapshots:
       '@ethersproject/rlp': 5.8.0
       '@ethersproject/transactions': 5.8.0
       '@ledgerhq/cryptoassets-evm-signatures': 13.7.1
-      '@ledgerhq/domain-service': 1.7.0
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/evm-tools': 1.12.0
+      '@ledgerhq/domain-service': 1.7.1
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/evm-tools': 1.12.1
       '@ledgerhq/hw-transport': 6.31.10
-      '@ledgerhq/hw-transport-mocker': 6.32.0
-      '@ledgerhq/logs': 6.15.0
-      '@ledgerhq/types-live': 6.100.0(react@19.0.0)
+      '@ledgerhq/hw-transport-mocker': 6.33.0
+      '@ledgerhq/logs': 6.16.0
+      '@ledgerhq/types-live': 6.101.0(react@19.0.0)
       axios: 1.11.0
       bignumber.js: 9.3.1
       semver: 7.7.4
@@ -1107,13 +1107,13 @@ snapshots:
       '@ethersproject/abi': 5.8.0
       '@ethersproject/rlp': 5.8.0
       '@ethersproject/transactions': 5.8.0
-      '@ledgerhq/domain-service': 1.7.0
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/evm-tools': 1.12.0
+      '@ledgerhq/domain-service': 1.7.1
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/evm-tools': 1.12.1
       '@ledgerhq/hw-transport': 6.31.15
-      '@ledgerhq/hw-transport-mocker': 6.32.0
-      '@ledgerhq/logs': 6.15.0
-      '@ledgerhq/types-live': 6.100.0(react@19.0.0)
+      '@ledgerhq/hw-transport-mocker': 6.33.0
+      '@ledgerhq/logs': 6.16.0
+      '@ledgerhq/types-live': 6.101.0(react@19.0.0)
       axios: 1.12.2
       bignumber.js: 9.3.1
       semver: 7.7.4
@@ -1122,27 +1122,27 @@ snapshots:
       - react
       - react-redux
 
-  '@ledgerhq/hw-transport-mocker@6.32.0':
+  '@ledgerhq/hw-transport-mocker@6.33.0':
     dependencies:
-      '@ledgerhq/hw-transport': 6.33.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/hw-transport': 6.34.0
+      '@ledgerhq/logs': 6.16.0
       rxjs: 7.8.2
 
-  '@ledgerhq/hw-transport-node-hid-noevents@6.32.0':
+  '@ledgerhq/hw-transport-node-hid-noevents@6.33.0':
     dependencies:
-      '@ledgerhq/devices': 8.11.0
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/hw-transport': 6.33.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/devices': 8.12.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/hw-transport': 6.34.0
+      '@ledgerhq/logs': 6.16.0
       node-hid: 2.1.2
 
   '@ledgerhq/hw-transport-node-hid@6.29.16':
     dependencies:
       '@ledgerhq/devices': 8.8.0
-      '@ledgerhq/errors': 6.30.0
+      '@ledgerhq/errors': 6.31.0
       '@ledgerhq/hw-transport': 6.31.15
-      '@ledgerhq/hw-transport-node-hid-noevents': 6.32.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/hw-transport-node-hid-noevents': 6.33.0
+      '@ledgerhq/logs': 6.16.0
       lodash: 4.17.23
       node-hid: 2.1.2
       usb: 2.9.0
@@ -1150,34 +1150,34 @@ snapshots:
   '@ledgerhq/hw-transport@6.31.10':
     dependencies:
       '@ledgerhq/devices': 8.5.1
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       events: 3.3.0
 
   '@ledgerhq/hw-transport@6.31.15':
     dependencies:
       '@ledgerhq/devices': 8.8.0
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       events: 3.3.0
 
-  '@ledgerhq/hw-transport@6.33.0':
+  '@ledgerhq/hw-transport@6.34.0':
     dependencies:
-      '@ledgerhq/devices': 8.11.0
-      '@ledgerhq/errors': 6.30.0
-      '@ledgerhq/logs': 6.15.0
+      '@ledgerhq/devices': 8.12.0
+      '@ledgerhq/errors': 6.31.0
+      '@ledgerhq/logs': 6.16.0
       events: 3.3.0
 
-  '@ledgerhq/live-env@2.29.0':
+  '@ledgerhq/live-env@2.30.0':
     dependencies:
       rxjs: 7.8.2
       utility-types: 3.11.0
 
-  '@ledgerhq/logs@6.15.0': {}
+  '@ledgerhq/logs@6.16.0': {}
 
-  '@ledgerhq/types-live@6.100.0(react@19.0.0)':
+  '@ledgerhq/types-live@6.101.0(react@19.0.0)':
     dependencies:
-      '@ledgerhq/client-ids': 0.7.0(react@19.0.0)
+      '@ledgerhq/client-ids': 0.8.0(react@19.0.0)
       bignumber.js: 9.3.1
       rxjs: 7.8.2
     transitivePeerDependencies:
@@ -1208,6 +1208,7 @@ snapshots:
   '@noble/curves@1.9.7':
     dependencies:
       '@noble/hashes': 1.8.0
+    optional: true
 
   '@noble/hashes@1.3.2': {}
 
@@ -1250,7 +1251,7 @@ snapshots:
 
   '@safe-global/protocol-kit@6.1.2(typescript@5.9.3)':
     dependencies:
-      '@safe-global/safe-deployments': 1.37.52
+      '@safe-global/safe-deployments': 1.37.53
       '@safe-global/safe-modules-deployments': 2.2.25
       '@safe-global/types-kit': 3.0.0(typescript@5.9.3)
       abitype: 1.2.3(typescript@5.9.3)
@@ -1280,7 +1281,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@safe-global/safe-deployments@1.37.52':
+  '@safe-global/safe-deployments@1.37.53':
     dependencies:
       semver: 7.7.4
 
@@ -1316,7 +1317,7 @@ snapshots:
 
   '@scure/bip32@1.7.0':
     dependencies:
-      '@noble/curves': 1.9.7
+      '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
@@ -1667,7 +1668,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.2.3(typescript@5.9.3)
+      abitype: 1.1.0(typescript@5.9.3)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.9.3

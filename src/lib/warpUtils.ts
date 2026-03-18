@@ -1,5 +1,5 @@
 import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log } from 'viem';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { cb58ToBytes, retryWhileError, cb58ToHex } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';

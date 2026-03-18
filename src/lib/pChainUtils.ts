@@ -9,7 +9,7 @@ import { isCastMode, logPChainIssueTx } from "./castUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { avalanche, avalancheFuji } from "viem/chains";
 import { getConfig } from "../config";
 
