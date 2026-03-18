@@ -1,5 +1,5 @@
 import { pvm, evm, Context, utils, avaxSerial } from "@avalabs/avalanchejs";
-import { ExtendedWalletClient } from "../client";
+import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from "../client";
 import { addSigToAllCreds, getPchainBaseUrl, waitPChainTx } from "./pChainUtils";
 import { logger } from './logger';
 import { parseEventLogs, formatUnits, hexToBytes, Hex } from "viem";
@@ -164,7 +164,7 @@ export async function requireCChainBallance(client: ExtendedWalletClient, amount
   return cBalance;
 }
 
-export async function getERC20Events(hash: `0x${string}`, config: Config) {
+export async function getERC20Events(hash: `0x${string}`, config: Config<ExtendedClient>) {
   const receipt = await config.client.getTransactionReceipt({ hash });
   const logs = parseEventLogs({
     abi: config.abis.ERC20,

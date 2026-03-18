@@ -12,18 +12,17 @@ import { GetRegistrationJustification } from "./lib/justification";
 import { utils } from "@avalabs/avalanchejs";
 
 export async function completeValidatorRegistration(
-  client: ExtendedWalletClient,
   pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['PoASecurityModule'] | SafeSuzakuContract['L1Middleware'],
   balancer: SafeSuzakuContract['BalancerValidatorManager'],
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
   initialBalance: bigint,
   waitValidatorVisible: boolean
 ) {
   logger.log("Completing validator registration...");
-
+  const client = config.client;
   // Wait for transaction receipt to extract warp message and validation ID
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
 
@@ -108,18 +107,17 @@ export async function completeValidatorRegistration(
 }
 
 export async function completeValidatorRemoval(
-  client: ExtendedWalletClient,
   pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['L1Middleware'] | SafeSuzakuContract['PoASecurityModule'],
   balancerValidatorManager: SafeSuzakuContract['BalancerValidatorManager'],
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   initializeEndValidationTxHash: Hex,
   waitValidatorVisible: boolean,
   nodeIDs?: NodeId[],
   addNodeTxHash?: Hex[]
 ) {
   logger.log("Completing validator removal...");
-
+  const client = config.client;
   // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
   const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash, confirmations: 1 });
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
@@ -286,15 +284,14 @@ export async function completeValidatorRemoval(
 }
 
 export async function completeWeightUpdate(
-  client: ExtendedWalletClient,
   pchainClient: ExtendedWalletClient,
   securityModule: SafeSuzakuContract['PoASecurityModule'] | SafeSuzakuContract['L1Middleware'],
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   validatorWeightUpdateTxHash: Hex,
   nodeIDs?: NodeId[]
 ) {
   logger.log("Completing node stake update...");
-
+  const client = config.client;
   // Wait for the removeNode transaction to be confirmed to extract the unsigned L1ValidatorWeightMessage and validationID from the receipt
   const receipt = await client.waitForTransactionReceipt({ hash: validatorWeightUpdateTxHash })
 

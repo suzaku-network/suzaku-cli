@@ -2,7 +2,7 @@
 import { Buffer } from 'buffer';
 import { parseAbiItem, Hex, hexToBytes } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from './warpUtils';
 import { ExtendedPublicClient } from '../client';
 import { logger } from './logger';

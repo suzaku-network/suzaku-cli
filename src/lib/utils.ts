@@ -1,7 +1,7 @@
 import { utils, secp256k1 } from "@avalabs/avalanchejs";
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { base58 } from '@scure/base';
 import { fromBytes, Hex, pad, sliceHex, getAddress, Account } from "viem";
 import { logger } from './logger';

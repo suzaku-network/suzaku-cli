@@ -9,7 +9,7 @@ import { isCastMode, logPChainIssueTx } from "./castUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
 import { logger } from './logger';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { avalanche, avalancheFuji } from "viem/chains";
 import { getConfig } from "../config";
 
@@ -367,7 +367,7 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     return txID;
 }
 
-type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
+export type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
 
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string): Promise<ValidatorsResponsePatched> {
     const rpcUrl = getPchainBaseUrl(client);
@@ -622,7 +622,7 @@ export async function convertSubnetToL1(params:
     // client.chain = chain;
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
 
-    const config = await getConfig(client as ExtendedClient, 1, true)
+    const config = await getConfig(client, 1, true)
     const validatorManager = await config.contracts.ValidatorManager(params.validatorManager)
     const init = {
         admin: client.addresses.C,

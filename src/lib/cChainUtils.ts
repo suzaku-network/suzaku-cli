@@ -1,7 +1,7 @@
 import { SingleBar, Presets } from 'cli-progress';
 import { decodeEventLog, Hex, Abi } from 'viem';
 import { ExtendedClient, ExtendedPublicClient } from '../client';
-import { SafeSuzakuContract } from './viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './viemUtils';
 import { logger } from './logger';
 
 type CommonEvent = {
@@ -152,7 +152,7 @@ export async function PatchEventsTimestamp(
 }
 
 export async function fillEventsNodeId(
-  balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  balancer: SuzakuContract['BalancerValidatorManager'],
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
 

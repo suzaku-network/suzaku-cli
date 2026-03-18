@@ -6,6 +6,8 @@ import { getAddresses } from './lib/utils';
 import { getLedgerAccount, toSafeProvider } from './lib/ledgerUtils';
 import { chainList } from './lib/chainList';
 import { logger } from './lib/logger';
+import { configDotenv } from 'dotenv';
+import path from 'path';
 
 // Define the network types
 export type Network = 'fuji' | 'mainnet' | 'anvil';
@@ -13,11 +15,11 @@ export type Chains = keyof typeof chainList;
 
 export type PChainAddress = `P-${string}`;
 export type Addresses = { P: PChainAddress, C: Hex };
-export type ExtendedAccount = Account & { pChainAddress: PChainAddress, cSign?: (parameters: { hash: Hex }) => Promise<Hex> };
+export type ExtendedAccount = Account & { address: Hex, pChainAddress: PChainAddress, cSign?: (parameters: { hash: Hex }) => Promise<Hex> };
 
 // Create extended client type that includes public actions and network type
 export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, addresses: Addresses, safe?: SafeClient, ledger?: boolean, account: ExtendedAccount | undefined };
-export type ExtendedPublicClient = PublicClient & { network: Network };
+export type ExtendedPublicClient = PublicClient & { network: Network, safe?: SafeClient };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
@@ -26,7 +28,12 @@ export async function generateClient(chain: Chains, privateKey?: undefined, safe
 export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient | ExtendedPublicClient> {
+    // Load environment variables from the corresponding .env file based on the selected chain and expand vars from the associated network
+    const envFileBase = path.resolve(__dirname, '..', 'defaults', `.env.`)
     const network = chainList[chain].testnet ? 'fuji' : 'mainnet';
+    configDotenv({ path: envFileBase + network });
+    if (network !== chain) configDotenv({ path: envFileBase + chain });
+
     let account: ExtendedAccount | undefined;
     const isLedger = privateKey === 'ledger';
     if (isLedger) {
@@ -69,9 +76,16 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
         return {
             ...createPublicClient({
                 chain: chainList[chain],
-                transport: http()
+                transport: http(),
+                
             }).extend(publicActions),
-            network
+            network,
+            safe: safe ? await createSafeClient({
+                provider: chainList[chain].rpcUrls.default.http[0],
+                safeAddress: safe,
+                txServiceUrl: network === 'fuji' ? 'https://wallet-transaction-fuji.ash.center/api' : 'https://api.safe.global/tx-service/avax/api',
+                apiKey: network === 'fuji' ? undefined : process.env.SAFE_API_KEY
+            }) : undefined,
         };
     }
 }

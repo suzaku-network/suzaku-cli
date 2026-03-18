@@ -1,6 +1,6 @@
 import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError } from 'viem';
 import { SuzakuABI } from '../abis';
-import { ExtendedClient } from '../client';
+import { ExtendedClient, ExtendedWalletClient } from '../client';
 import { logger } from './logger';
 import { bigintReplacer, bytes32ToAddress } from './utils';
 import { color } from 'console-log-colors';
@@ -30,13 +30,13 @@ type MakeAccountOptionalInWrite<T> = T extends { write: infer W }
   : T;
 
 // Define the type for the contract instances
-export type SuzakuContracts = { [K in SuzakuABINames]: MakeAccountOptionalInWrite<GetContractReturnType<typeof SuzakuABI[K], ExtendedClient>> & { address: Hex, name: string } };
+export type SuzakuContract = { [K in SuzakuABINames]: MakeAccountOptionalInWrite<GetContractReturnType<typeof SuzakuABI[K], ExtendedClient>> & { address: Hex, name: string, multicall: MulticallFn<K> } };
 
 // Define the type to use the same signature write methods of each contract
-export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] extends { write: infer W } ? W : never };
+export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContract[K] extends { write: infer W } ? W : never };
 
 // Define the type for the safe contract instances that include a safeWrite method
-export type SafeSuzakuContract = { [K in SuzakuABINames]: SuzakuContracts[K] & { safeWrite: TWriteSuzakuContract[K], multicall: MulticallFn<K> } };
+export type SafeSuzakuContract = { [K in SuzakuABINames]: SuzakuContract[K] & { safeWrite: TWriteSuzakuContract[K] } };
 
 // Multicall Types
 // Extract read function names from a contract ABI
@@ -93,20 +93,20 @@ type MulticallFn<T extends SuzakuABINames> = {
 };
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
-export type CurriedContractFn<T extends SuzakuABINames> = (address: Address) => Promise<SafeSuzakuContract[T]>;
-export type CurriedSuzakuContractMap = { [key in SuzakuABINames]: CurriedContractFn<key> }
+export type CurriedContractFn<T extends SuzakuABINames, C extends ExtendedClient> = (address?: Address) => Promise<C extends ExtendedWalletClient ? SafeSuzakuContract[T] : SuzakuContract[T]>;
+export type CurriedSuzakuContractMap<C extends ExtendedClient> = { [key in SuzakuABINames]: CurriedContractFn<key, C> }
 
 function handleContractError(error: any, abi: SuzakuABINames) {
   if (error instanceof ContractFunctionExecutionError) {
-    logger.exitError([`${abi} ${error.cause}`], 3)
+    throw Error(`${abi} ${error.cause}`)
   } else if (error instanceof Error) {
     const eraseToIndex = error.message.indexOf("Docs:")
     if (eraseToIndex === -1) throw error;
-    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
   } else if (error instanceof Object) {
     const eraseToIndex = error.message.indexOf("Docs:")
     if (eraseToIndex === -1) throw error;
-    logger.exitError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
+    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
   } else {
     throw error
   }
@@ -114,7 +114,7 @@ function handleContractError(error: any, abi: SuzakuABINames) {
 
 // Map a proxy handler on safeWrite methods of the contract to simulate the write operation before executing it
 export function withSafeWrite<T extends SuzakuABINames>(
-  contract: SuzakuContracts[T],
+  contract: SuzakuContract[T],
   abi: T,
   client: ExtendedClient,
   confirmations = 1
@@ -243,78 +243,95 @@ export function withSafeWrite<T extends SuzakuABINames>(
     (contract as any).safeWrite = new Proxy(contract.write as Record<string, any>, safeWriteHandler);
   }
 
-  if ('read' in contract) {
-
-    // Proxy handler for read methods to catch and format errors
-    const readHandler: ProxyHandler<Record<string, any>> = {
-      get(target, prop,) {
-        const fn = (target as any)[prop]
-        if (typeof fn !== 'function') return fn
-        return async (...args: any[]) => {
-          try {
-            if (isCastMode()) {
-              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-              logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
-            }
-            const result = await fn(...args)
-            const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
-            logger.addData('receipt', { functionSignature, result });
-            return result
-          } catch (error: any) {
-            handleContractError(error, abi)
-          }
-        }
-      },
-    };
-
-    (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
-
-    // Multicall implementation for batching read operations
-    (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>, options?: MulticallOptions) => {
-      const contracts = items.map((item) => {
-        const functionName = typeof item === 'string' ? item : item.name;
-        const args = typeof item === 'object' && 'args' in item ? item.args : [];
-        return {
-          address: contract.address,
-          abi: SuzakuABI[abi] as Abi,
-          functionName,
-          args,
-        };
-      });
-
-      if (isCastMode()) {
-        const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-        for (const c of contracts) {
-          logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
-        }
-      }
-
-      const results = await client.multicall({ contracts: contracts as any });
-
-      return results.map((result, index) => {
-        const item = items[index];
-        const name = typeof item === 'string' ? item : item.name;
-        if (result.status === 'failure') {
-          if (options?.strict) {
-            throw new Error(`Multicall failed for ${name}: ${result.error}`);
-          }
-          logger.warn(`Multicall failed for ${name}: ${result.error}`);
-        }
-        return options?.details ? {
-          name,
-          result: result.status === 'success' ? result.result : undefined,
-          args: typeof item === 'object' && 'args' in item ? item.args : [],
-        } : result.result;
-      });
-    };
-
-  }
-
   return contract as unknown as SafeSuzakuContract[T];
 }
 
-export const curriedContract = <T extends SuzakuABINames>(abi: T, client: ExtendedClient, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T> =>
-  async (address: Address) => {
+// Map a proxy handler on safeWrite methods of the contract to simulate the write operation before executing it
+export function withMulticall<T extends SuzakuABINames>(
+  contract: SuzakuContract[T],
+  abi: T,
+  client: ExtendedClient,
+): SuzakuContract[T] {
+
+  // Introspection
+  contract.name = abi;
+if ('read' in contract) {
+
+  // Proxy handler for read methods to catch and format errors
+  const readHandler: ProxyHandler<Record<string, any>> = {
+    get(target, prop,) {
+      const fn = (target as any)[prop]
+      if (typeof fn !== 'function') return fn
+      return async (...args: any[]) => {
+        try {
+          if (isCastMode()) {
+            const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+            logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+          }
+          const result = await fn(...args)
+          const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
+          logger.addData('receipt', { functionSignature, result });
+          return result
+        } catch (error: any) {
+          handleContractError(error, abi)
+        }
+      }
+    },
+  };
+
+  (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
+
+  // Multicall implementation for batching read operations
+  (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>, options?: MulticallOptions) => {
+    const contracts = items.map((item) => {
+      const functionName = typeof item === 'string' ? item : item.name;
+      const args = typeof item === 'object' && 'args' in item ? item.args : [];
+      return {
+        address: contract.address,
+        abi: SuzakuABI[abi] as Abi,
+        functionName,
+        args,
+      };
+    });
+
+    if (isCastMode()) {
+      const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+      for (const c of contracts) {
+        logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
+      }
+    }
+
+    const results = await client.multicall({ contracts: contracts as any });
+
+    return results.map((result, index) => {
+      const item = items[index];
+      const name = typeof item === 'string' ? item : item.name;
+      if (result.status === 'failure') {
+        if (options?.strict) {
+          throw new Error(`Multicall failed for ${name}: ${result.error}`);
+        }
+        logger.warn(`Multicall failed for ${name}: ${result.error}`);
+      }
+      return options?.details ? {
+        name,
+        result: result.status === 'success' ? result.result : undefined,
+        args: typeof item === 'object' && 'args' in item ? item.args : [],
+      } : result.result;
+    });
+  };
+
+}
+return contract as unknown as SuzakuContract[T];
+}
+
+export const curriedContract = <T extends SuzakuABINames, C extends ExtendedClient>(abi: T, client: C, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T, C> =>
+  async (address?: Address) => {
+    // format camelCase ABI name to SCREAMING_SNAKE_CASE for env var lookup
+    const envVar = abi.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
+    if (!address) {
+      if (process.env[envVar]) address = process.env[envVar] as Address;
+      else throw new Error(`Address is required to create a contract instance for ${abi}. Please provide associated option or set as environment variable ${envVar}`);
+    }
     if (!skipAbiValidation) {
       // (StakingVault uses delegatecall to forward to operations implementation)
       // Skip ABI validation since functions are forwarded via fallback
@@ -324,11 +341,11 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
         await contractAbiValidation(client, [abi], address);
       }
     }
-    const contract = getContract({
+    const contract = withMulticall(getContract({
       abi: SuzakuABI[abi],
       address,
       client,
-    }) as SuzakuContracts[T];
+    }) as SuzakuContract[T], abi, client);
     return withSafeWrite(
       contract,
       abi,
@@ -338,8 +355,8 @@ export const curriedContract = <T extends SuzakuABINames>(abi: T, client: Extend
   };
 
 export async function contractAbiValidation<T extends SuzakuABINames>(client: ExtendedClient, abis: T[], address: Address): Promise<{ name: T, ratio: number, valid: boolean }[]> {
-  // Tolerance for missing selectors 5%
-  const TOLERANCE = 0.05;
+  // Tolerance for missing selectors 6%
+  const TOLERANCE = 0.06;
   // Check for proxy
   const proxyImplementation = await client.getStorageAt({
     address,

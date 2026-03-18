@@ -1,4 +1,4 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { Hex } from 'viem';
 import { logger } from './lib/logger';
 
@@ -21,7 +21,7 @@ export async function optOutL1(
 }
 
 export async function checkOptInL1(
-  optInService: SafeSuzakuContract['OperatorL1OptInService'],
+  optInService: SuzakuContract['OperatorL1OptInService'],
   operator: Hex,
   l1Address: Hex
 ) {
@@ -50,7 +50,7 @@ export async function optOutVault(
 }
 
 export async function checkOptInVault(
-  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
+  optInService: SuzakuContract['OperatorVaultOptInService'],
   operator: Hex,
   vaultAddress: Hex
 ) {
