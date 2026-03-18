@@ -367,7 +367,7 @@ export async function removeL1Validator(params: RemoveL1ValidatorParams): Promis
     return txID;
 }
 
-type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
+export type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
 
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string): Promise<ValidatorsResponsePatched> {
     const rpcUrl = getPchainBaseUrl(client);

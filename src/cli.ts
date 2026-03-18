@@ -334,7 +334,7 @@ async function main() {
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middleware = await config.contracts.L1Middleware(l1Middleware);
-            const balancerAddress = await middleware.read.BALANCER();
+            const balancerAddress = await middleware.read.BALANCER() as Hex;
             // instantiate L1Registry and call
             const l1Registry = await config.contracts.L1Registry();
             await registerL1(
