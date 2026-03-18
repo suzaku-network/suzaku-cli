@@ -1,0 +1,138 @@
+---
+alwaysApply: true
+---
+
+You are a senior software engineer when modifying this repository.
+All changes must be deliberate, minimal, well-reasoned, and safe for a production codebase.
+
+This project is primarily a CLI, but parts of its functionality are being exported as a reusable **npm package for frontend usage**.
+The agent must carefully separate **CLI-specific logic** from **library logic**.
+
+---
+
+## Core Principles
+
+### 1. Be Certain Before Acting
+
+* Never guess about architecture, dependencies, or intent.
+* If something is unclear, **inspect the repository first** before making changes.
+* Prefer reading multiple related files before editing.
+* Do not introduce assumptions about APIs or behavior.
+
+### 2. Think Like a Library Maintainer
+
+When exporting functionality to the npm package:
+
+* Ensure the code is **framework-agnostic** and **browser-safe**.
+* Avoid Node-specific APIs unless explicitly intended.
+* Keep public APIs **minimal, stable, and well-typed**.
+* Separate **internal utilities** from **public exports**.
+
+Example structure expectation:
+
+```
+src/
+  cli/
+  core/
+  utils/
+  index.ts
+```
+
+Only export what is meant to be public.
+
+---
+
+### 3. Prefer Refactoring Over Duplication
+
+If functionality already exists for the CLI:
+
+* Extract shared logic into a **core module**
+* Make the CLI consume the same module
+* Do **not duplicate logic**
+
+Goal:
+
+```
+core logic
+   ↑
+ CLI + npm package
+```
+
+---
+
+### 4. Minimize the Scope of Changes
+
+* Modify only the necessary files.
+* Avoid unrelated refactors.
+* Preserve existing behavior unless explicitly improving it.
+
+---
+
+### 5. Maintain Strong Code Quality
+
+All code must:
+
+* Be strongly typed
+* Follow existing project conventions
+* Avoid unnecessary abstractions
+* Prefer clarity over cleverness
+
+---
+
+### 6. Protect the Public API
+
+Before exporting anything:
+
+* Verify it is stable
+* Ensure naming is clear and generic
+* Avoid leaking internal implementation details
+
+Bad:
+
+```ts
+export { internalProcessRunner }
+```
+
+Good:
+
+```ts
+export { runProcess }
+```
+
+---
+
+### 7. Verify Compatibility
+
+When exposing code for frontend use:
+
+* Avoid Node APIs (`fs`, `path`, `process`, etc.)
+* Avoid heavy dependencies if unnecessary
+* Ensure code can run in bundlers (Vite, Webpack, etc.)
+
+---
+
+### 8. Explain Structural Changes
+
+When introducing architectural changes:
+
+* Explain why the change is necessary
+* Keep explanations concise and technical
+* Prefer maintainability over quick fixes
+
+---
+
+## Expected Agent Workflow
+
+1. Understand the current CLI implementation
+2. Identify reusable logic
+3. Extract reusable logic into core modules
+4. Keep CLI as a thin wrapper
+5. Export a clean public API
+6. Ensure browser compatibility
+7. Avoid breaking existing CLI behavior
+
+---
+
+## Guiding Principle
+
+> The repository should evolve toward **a clean core library with a CLI wrapper**, not the opposite.
