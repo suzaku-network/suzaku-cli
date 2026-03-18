@@ -2865,8 +2865,7 @@ async function main() {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimOperatorFees([]);
-            logger.log("claimOperatorFees tx hash:", hash);
-            logger.log("claimOperatorFees executed successfully");
+            logger.log("claimOperatorFees executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2878,8 +2877,7 @@ async function main() {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.forceClaimOperatorFees([operator]);
-            logger.log("forceClaimOperatorFees tx hash:", hash);
-            logger.log("forceClaimOperatorFees executed successfully");
+            logger.log("forceClaimOperatorFees executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2891,8 +2889,7 @@ async function main() {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimPendingProtocolFees([]);
-            logger.log("claimPendingProtocolFees tx hash:", hash);
-            logger.log("claimPendingProtocolFees executed successfully");
+            logger.log("claimPendingProtocolFees executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2902,8 +2899,7 @@ async function main() {
         .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvest([]);
-            logger.log("harvest tx hash:", hash);
-            logger.log("harvest executed successfully");
+            logger.log("harvest executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2916,8 +2912,7 @@ async function main() {
         .asyncAction({ signer: true }, async (config, operatorIndex, start, batchSize, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
-            logger.log("harvestValidators tx hash:", hash);
-            logger.log("harvestValidators executed successfully");
+            logger.log("harvestValidators executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2930,8 +2925,7 @@ async function main() {
         .asyncAction({ signer: true }, async (config, operatorIndex, start, batchSize, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
-            logger.log("harvestDelegators tx hash:", hash);
-            logger.log("harvestDelegators executed successfully");
+            logger.log("harvestDelegators executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2941,8 +2935,7 @@ async function main() {
         .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
-            logger.log("prepareWithdrawals tx hash:", hash);
-            logger.log("prepareWithdrawals executed successfully");
+            logger.log("prepareWithdrawals executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2952,8 +2945,7 @@ async function main() {
         .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.pause([]);
-            logger.log("pause tx hash:", hash);
-            logger.log("pause executed successfully");
+            logger.log("pause executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -2963,8 +2955,132 @@ async function main() {
         .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.unpause([]);
-            logger.log("unpause tx hash:", hash);
-            logger.log("unpause executed successfully");
+            logger.log("unpause executed successfully, tx hash:", hash);
+        });
+    
+    /**     
+     * Setters
+     */
+
+    stakingVaultCmd
+        .command("set-liquidity-buffer-bips")
+        .description("Set the liquidity buffer in basis points")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("liquidityBufferBips", "Liquidity buffer in basis points"))
+        .asyncAction({ signer: true }, async (config, liquidityBufferBips, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setLiquidityBufferBips([liquidityBufferBips]);
+            logger.log("setLiquidityBufferBips executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-max-delegators-per-operator")
+        .description("Set the maximum number of delegators per operator")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("maxDelegatorsPerOperator", "Maximum number of delegators per operator"))
+        .asyncAction({ signer: true }, async (config, maxDelegatorsPerOperator, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setMaxDelegatorsPerOperator([maxDelegatorsPerOperator]);
+            logger.log("setMaxDelegatorsPerOperator executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-max-operators")
+        .description("Set the maximum number of operators")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("maxOperators", "Maximum number of operators"))
+        .asyncAction({ signer: true }, async (config, maxOperators, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setMaxOperators([maxOperators]);
+            logger.log("setMaxOperators executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-max-validators-per-operator")
+        .description("Set the maximum number of validators per operator")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("maxValidatorsPerOperator", "Maximum number of validators per operator"))
+        .asyncAction({ signer: true }, async (config, maxValidatorsPerOperator, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setMaxValidatorsPerOperator([maxValidatorsPerOperator]);
+            logger.log("setMaxValidatorsPerOperator executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-maximum-delegator-stake")
+        .description("Set the maximum stake amount for a delegator")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("maximumDelegatorStake", "Maximum stake amount for a delegator"))
+        .asyncAction({ signer: true }, async (config, maximumDelegatorStake, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setMaximumDelegatorStake([maximumDelegatorStake]);
+            logger.log("setMaximumDelegatorStake executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-maximum-validator-stake")
+        .description("Set the maximum stake amount for a validator")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("maximumValidatorStake", "Maximum stake amount for a validator"))
+        .asyncAction({ signer: true }, async (config, maximumValidatorStake, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setMaximumValidatorStake([maximumValidatorStake]);
+            logger.log("setMaximumValidatorStake executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-operations-impl")
+        .description("Set the operations implementation")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgAddress("operationsImpl", "Operations implementation"))
+        .asyncAction({ signer: true }, async (config, operationsImpl, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setOperationsImpl([operationsImpl]);
+            logger.log("setOperationsImpl executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-operator-fee-bips")
+        .description("Set the operator fee in basis points")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("operatorFeeBips", "Operator fee in basis points"))
+        .asyncAction({ signer: true }, async (config, operatorFeeBips, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setOperatorFeeBips([operatorFeeBips]);
+            logger.log("setOperatorFeeBips executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-operator-fee-recipient")
+        .description("Set the operator fee recipient")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgAddress("operatorFeeRecipient", "Operator fee recipient"))
+        .asyncAction({ signer: true }, async (config, operatorFeeRecipient, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setOperatorFeeRecipient([operatorFeeRecipient]);
+            logger.log("setOperatorFeeRecipient executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-protocol-fee-bips")
+        .description("Set the protocol fee in basis points")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgBigInt("protocolFeeBips", "Protocol fee in basis points"))
+        .asyncAction({ signer: true }, async (config, protocolFeeBips, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setProtocolFeeBips([protocolFeeBips]);
+            logger.log("setProtocolFeeBips executed successfully, tx hash:", hash);
+        });
+
+    stakingVaultCmd
+        .command("set-protocol-fee-recipient")
+        .description("Set the protocol fee recipient")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgAddress("protocolFeeRecipient", "Protocol fee recipient"))
+        .asyncAction({ signer: true }, async (config, protocolFeeRecipient, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const hash = await stakingVault.safeWrite.setProtocolFeeRecipient([protocolFeeRecipient]);
+            logger.log("setProtocolFeeRecipient executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd

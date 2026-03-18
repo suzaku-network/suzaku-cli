@@ -1288,7 +1288,9 @@ export async function claimOperatorFees(stakingVault: SafeSuzakuContract['Stakin
     return stakingVault.safeWrite.claimOperatorFees([]);
 }
 
-// stakingVault.safeWrite.claimEscrowedWithdrawal
+export async function claimEscrowedWithdrawal(stakingVault: SafeSuzakuContract['StakingVault'], recipient: Hex) {
+    return stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
+}
 
 // ── Info functions ─────────────────────────────────────────────────────
 
