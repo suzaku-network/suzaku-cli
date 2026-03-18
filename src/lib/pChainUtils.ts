@@ -622,7 +622,7 @@ export async function convertSubnetToL1(params:
     // client.chain = chain;
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTx, params.subnetId, client);
 
-    const config = await getConfig(client as ExtendedClient, 1, true)
+    const config = await getConfig(client, 1, true)
     const validatorManager = await config.contracts.ValidatorManager(params.validatorManager)
     const init = {
         admin: client.addresses.C,

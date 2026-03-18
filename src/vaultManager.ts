@@ -1,4 +1,4 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 
@@ -40,7 +40,7 @@ export async function removeVault(
 }
 
 export async function getVaultCount(
-    vaultManager: SafeSuzakuContract['VaultManager']
+    vaultManager: SuzakuContract['VaultManager']
 ) {
     logger.log("Getting vault count...");
 
@@ -49,7 +49,7 @@ export async function getVaultCount(
 }
 
 export async function getVaultAtWithTimes(
-    vaultManager: SafeSuzakuContract['VaultManager'],
+    vaultManager: SuzakuContract['VaultManager'],
     index: bigint
 ) {
     logger.log("Getting vault at index with times...");
@@ -59,7 +59,7 @@ export async function getVaultAtWithTimes(
 }
 
 export async function getVaultCollateralClass(
-    vaultManager: SafeSuzakuContract['VaultManager'],
+    vaultManager: SuzakuContract['VaultManager'],
     vaultAddress: Hex
 ) {
     logger.log("Getting vault collateral class...");

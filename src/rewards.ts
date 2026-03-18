@@ -1,7 +1,8 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
+import { ExtendedPublicClient } from './client';
 
 /**
  * Distributes rewards for a specific epoch
@@ -17,8 +18,8 @@ export async function distributeRewards(
 }
 
 export async function getRewardsClaimsCount(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
-  config: Config,
+  rewards: SuzakuContract['RewardsNativeToken'],
+  config: Config<ExtendedPublicClient>,
   role: 'Staker' | 'Operator' | 'Curator',
   account: Account
 ) {
@@ -186,7 +187,7 @@ export async function updateAllFees(
  * Gets rewards amount for a specific token from epoch
  */
 export async function getEpochRewards(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   epoch: number
 ) {
   const amount = await rewards.read.getEpochRewards(
@@ -200,7 +201,7 @@ export async function getEpochRewards(
  * Gets operator shares for a specific epoch
  */
 export async function getOperatorShares(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   epoch: number,
   operator: Hex
 ) {
@@ -216,7 +217,7 @@ export async function getOperatorShares(
  * Gets vault shares for a specific epoch
  */
 export async function getVaultShares(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   epoch: number,
   vault: Hex
 ) {
@@ -232,7 +233,7 @@ export async function getVaultShares(
  * Gets curator shares for a specific epoch
  */
 export async function getCuratorShares(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   epoch: number,
   curator: Hex
 ) {
@@ -248,7 +249,7 @@ export async function getCuratorShares(
  * Gets protocol rewards for a token
  */
 export async function getProtocolRewards(
-  rewards: SafeSuzakuContract['RewardsNativeToken']
+  rewards: SuzakuContract['RewardsNativeToken']
 ) {
   const rewardsAmount = await rewards.read.protocolRewards();
 
@@ -260,7 +261,7 @@ export async function getProtocolRewards(
  * Gets distribution batch status for an epoch
  */
 export async function getDistributionBatch(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   epoch: number
 ) {
   const result = await rewards.read.distributionBatches(
@@ -281,7 +282,7 @@ export async function getDistributionBatch(
  * Gets current fees configuration
  */
 export async function getFeesConfiguration(
-  rewards: SafeSuzakuContract['RewardsNativeToken']
+  rewards: SuzakuContract['RewardsNativeToken']
 ) {
   const protocolFee = await rewards.read.protocolFee();
   const operatorFee = await rewards.read.operatorFee();
@@ -299,7 +300,7 @@ export async function getFeesConfiguration(
  * Gets rewards bips for collateral class
  */
 export async function getRewardsBipsForCollateralClass(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   collateralClass: bigint
 ) {
   const bips = await rewards.read.rewardsBipsPerCollateralClass(
@@ -314,7 +315,7 @@ export async function getRewardsBipsForCollateralClass(
  * Gets min required uptime
  */
 export async function getMinRequiredUptime(
-  rewards: SafeSuzakuContract['RewardsNativeToken']
+  rewards: SuzakuContract['RewardsNativeToken']
 ) {
   const minUptime = await rewards.read.minRequiredUptime();
 
@@ -326,7 +327,7 @@ export async function getMinRequiredUptime(
  * Gets last claimed epoch for a staker
  */
 export async function getLastEpochClaimedStaker(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   staker: Hex
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker]);
@@ -339,7 +340,7 @@ export async function getLastEpochClaimedStaker(
  * Gets last claimed epoch for an operator
  */
 export async function getLastEpochClaimedOperator(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   operator: Hex
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator]);
@@ -352,7 +353,7 @@ export async function getLastEpochClaimedOperator(
  * Gets last claimed epoch for a curator
  */
 export async function getLastEpochClaimedCurator(
-  rewards: SafeSuzakuContract['RewardsNativeToken'],
+  rewards: SuzakuContract['RewardsNativeToken'],
   curator: Hex
 ) {
   const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator]);

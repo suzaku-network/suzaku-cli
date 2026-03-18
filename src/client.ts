@@ -19,7 +19,7 @@ export type ExtendedAccount = Account & { pChainAddress: PChainAddress, cSign?: 
 
 // Create extended client type that includes public actions and network type
 export type ExtendedWalletClient = WalletClient & PublicActions & { network: Network, addresses: Addresses, safe?: SafeClient, ledger?: boolean, account: ExtendedAccount | undefined };
-export type ExtendedPublicClient = PublicClient & { network: Network };
+export type ExtendedPublicClient = PublicClient & { network: Network, safe?: SafeClient };
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 
 // Overloaded function to generate a client based on the network and optional private key
@@ -76,9 +76,16 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
         return {
             ...createPublicClient({
                 chain: chainList[chain],
-                transport: http()
+                transport: http(),
+                
             }).extend(publicActions),
-            network
+            network,
+            safe: safe ? await createSafeClient({
+                provider: chainList[chain].rpcUrls.default.http[0],
+                safeAddress: safe,
+                txServiceUrl: network === 'fuji' ? 'https://wallet-transaction-fuji.ash.center/api' : 'https://api.safe.global/tx-service/avax/api',
+                apiKey: network === 'fuji' ? undefined : process.env.SAFE_API_KEY
+            }) : undefined,
         };
     }
 }

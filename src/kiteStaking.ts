@@ -1,7 +1,7 @@
 import { Account, bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "./client";
 import { Config, pChainChainID } from "./config";
-import { SafeSuzakuContract } from "./lib/viemUtils";
+import { SafeSuzakuContract, SuzakuContract } from "./lib/viemUtils";
 import { cb58ToHex, encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
@@ -72,7 +72,7 @@ export async function initiateValidatorRegistration(
 
 export async function initiateDelegatorRegistration(
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     nodeId: NodeId,
     rewardRecipient: Hex,
     stakeAmount: bigint
@@ -102,15 +102,14 @@ export async function initiateDelegatorRegistration(
 }
 
 export async function initiateDelegatorRemoval(
-    client: ExtendedWalletClient,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     delegationID: Hex,
     includeUptimeProof: boolean,
     rpcUrl?: string
 ): Promise<Hex> {
     logger.log("Initiating delegator removal...");
-
+    const client = config.client;
     // messageIndex is always 0 for KiteStakingManager
     const messageIndex = 0;
 
@@ -171,7 +170,7 @@ export async function initiateDelegatorRemoval(
 
 export async function initiateValidatorRemoval(
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     nodeId: NodeId,
     includeUptimeProof: boolean
 ) {
@@ -201,15 +200,14 @@ export async function initiateValidatorRemoval(
 }
 
 export async function completeDelegatorRegistration(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     initiateTxHash: Hex,
     rpcUrl: string
 ): Promise<Hex> {
     logger.log("Completing delegator registration...");
-
+    const client = config.client;
     // Wait for the initiate delegator registration transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
@@ -337,10 +335,9 @@ export async function completeDelegatorRegistration(
 }
 
 export async function completeDelegatorRemoval(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     initiateRemovalTxHash: Hex,
     rpcUrl: string,
     waitValidatorVisible: boolean,
@@ -348,7 +345,7 @@ export async function completeDelegatorRemoval(
     initiateTxHash?: Hex
 ): Promise<Hex> {
     logger.log("Completing delegator removal...");
-
+    const client = config.client;
     // Wait for the initiate removal transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
@@ -511,17 +508,16 @@ export async function completeDelegatorRemoval(
 }
 
 export async function completeValidatorRegistration(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     blsProofOfPossession: string,
     initiateTxHash: Hex,
     initialBalance: bigint,
     waitValidatorVisible: boolean
 ) {
     logger.log("Completing validator registration...");
-
+    const client = config.client;
     // Wait for transaction receipt to extract warp message and validation ID
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash });
 
@@ -633,17 +629,16 @@ export async function completeValidatorRegistration(
 }
 
 export async function completeValidatorRemoval(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     initiateRemovalTxHash: Hex,
     waitValidatorVisible: boolean,
     nodeIDs?: NodeId[],
     initiateTxHash?: Hex[]
 ) {
     logger.log("Completing validator removal...");
-
+    const client = config.client;
     // Wait for the initiate removal transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
@@ -793,12 +788,12 @@ export async function completeValidatorRemoval(
 }
 
 export async function submitUptimeProof(
-    client: ExtendedWalletClient,
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
     rpcUrl: string,
     nodeId: NodeId
 ) {
+    const client = config.client;
     const [uptimeBlockchainID, manager] = await kiteStakingManager.read.getStakingManagerSettings().then((settings) => [settings.uptimeBlockchainID, settings.manager]);
     const warpNetworkID = client.network === 'fuji' ? 5 : 1;
     const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID as Hex));
@@ -854,7 +849,7 @@ function formatTimestamp(ts: bigint): string {
 
 /** Aggregate all global-level information from KiteStakingManager */
 export async function getKiteStakingManagerInfo(
-    kiteStakingManager: SafeSuzakuContract['KiteStakingManager']
+    kiteStakingManager: SuzakuContract['KiteStakingManager']
 ) {
     const [
         config,
@@ -911,7 +906,7 @@ export async function getKiteStakingManagerInfo(
 
 /** Aggregate all information for a specific validator by validationID */
 export async function getValidatorFullInfo(
-    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    kiteStakingManager: SuzakuContract['KiteStakingManager'],
     validationID: Hex
 ) {
     const [validator, pendingRewards, rewardInfo] = await Promise.all([
@@ -954,7 +949,7 @@ export async function getValidatorFullInfo(
 
 /** Aggregate all information for a specific delegator by delegationID */
 export async function getDelegatorFullInfo(
-    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    kiteStakingManager: SuzakuContract['KiteStakingManager'],
     delegationID: Hex
 ) {
     const [delegator, pendingRewards, rewardInfo] = await Promise.all([

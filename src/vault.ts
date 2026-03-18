@@ -1,20 +1,18 @@
 import { ExtendedWalletClient } from './client';
 import { Config } from './config';
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account, parseUnits } from 'viem';
 import { logger } from './lib/logger';
 
 // deposit
 export async function depositVault(
-  client: ExtendedWalletClient,
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   vaultAddress: Hex,
   onBehalfOf: Hex,
   amount: string,
-  account: Account
 ) {
   logger.log("Depositing...");
-
+  const client = config.client;
   // Get the collateral token address
   const vault = await config.contracts.VaultTokenized(vaultAddress);
   const collateralAddress = await vault.read.collateral();
@@ -85,7 +83,7 @@ export async function claimVault(
 }
 
 export async function getVaultDelegator(
-  vault: SafeSuzakuContract['VaultTokenized']
+  vault: SuzakuContract['VaultTokenized']
 ) {
   return await vault.read.delegator();
 }
@@ -103,7 +101,7 @@ export async function getStake(
 
 // New read functions for vault information
 export async function getVaultCollateral(
-  vault: SafeSuzakuContract['VaultTokenized']
+  vault: SuzakuContract['VaultTokenized']
 ) {
   logger.log("Reading vault collateral...");
 
@@ -114,7 +112,7 @@ export async function getVaultCollateral(
 }
 
 export async function getVaultBalanceOf(
-  vault: SafeSuzakuContract['VaultTokenized'],
+  vault: SuzakuContract['VaultTokenized'],
   account: Hex
 ) {
   logger.log(`Reading vault balance for ${account}...`);
@@ -125,7 +123,7 @@ export async function getVaultBalanceOf(
 }
 
 export async function getVaultActiveBalanceOf(
-  vault: SafeSuzakuContract['VaultTokenized'],
+  vault: SuzakuContract['VaultTokenized'],
   account: Hex
 ) {
   logger.log(`Reading active vault balance for ${account}...`);
@@ -136,7 +134,7 @@ export async function getVaultActiveBalanceOf(
 }
 
 export async function getVaultTotalSupply(
-  vault: SafeSuzakuContract['VaultTokenized']
+  vault: SuzakuContract['VaultTokenized']
 ) {
   logger.log("Reading vault total supply...");
 
@@ -146,7 +144,7 @@ export async function getVaultTotalSupply(
 }
 
 export async function getVaultWithdrawalSharesOf(
-  vault: SafeSuzakuContract['VaultTokenized'],
+  vault: SuzakuContract['VaultTokenized'],
   epoch: bigint,
   account: Hex
 ) {
@@ -158,7 +156,7 @@ export async function getVaultWithdrawalSharesOf(
 }
 
 export async function getVaultWithdrawalsOf(
-  vault: SafeSuzakuContract['VaultTokenized'],
+  vault: SuzakuContract['VaultTokenized'],
   epoch: bigint,
   account: Hex
 ) {
@@ -171,11 +169,11 @@ export async function getVaultWithdrawalsOf(
 
 // Staker approve collateral and deposit tokens to collateral contract
 export async function approveAndDepositCollateral(
-  client: ExtendedWalletClient,
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   collateralAddress: Hex,
   amount: string,
 ) {
+  const client = config.client;
   logger.log("Approving collateral...");
   const account = client.account!
 

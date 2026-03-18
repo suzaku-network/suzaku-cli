@@ -1,4 +1,4 @@
-import { SafeSuzakuContract, SuzakuABINames, TSuzakuABI } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuABINames, SuzakuContract, TSuzakuABI } from './lib/viemUtils';
 import { type Hex, keccak256, toBytes, AbiFunction } from 'viem';
 
 
@@ -10,7 +10,7 @@ type ExtractRoleNames<T extends SuzakuABINames> = TSuzakuABI[T][number] extends 
   : never
   : never;
 
-export function getRoles<T extends SuzakuABINames>(contract: SafeSuzakuContract[T]): ExtractRoleNames<T>[] {
+export function getRoles<T extends SuzakuABINames>(contract: SuzakuContract[T]): ExtractRoleNames<T>[] {
   return contract.abi.filter((item) => item.type === 'function' && item.name && item.name.endsWith('_ROLE')).map((item) => (item as AbiFunction).name) as ExtractRoleNames<T>[];
 }
 
@@ -30,7 +30,7 @@ export async function revokeRole(
 }
 
 export async function hasRole(
-  accessControl: SafeSuzakuContract['AccessControl'],
+  accessControl: SuzakuContract['AccessControl'],
   role: string,
   address: Hex
 ) {
@@ -40,7 +40,7 @@ export async function hasRole(
 }
 
 export async function getRoleAdmin(
-  accessControl: SafeSuzakuContract['AccessControl'],
+  accessControl: SuzakuContract['AccessControl'],
   role: string
 ) {
   return await accessControl.read.getRoleAdmin(
@@ -49,7 +49,7 @@ export async function getRoleAdmin(
 }
 
 export async function isAccessControl(
-  accessControl: SafeSuzakuContract['AccessControl']
+  accessControl: SuzakuContract['AccessControl']
 ): Promise<boolean> {
   try {
     return await accessControl.read.supportsInterface(["0x7965db0b"]);

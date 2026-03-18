@@ -11,26 +11,25 @@ dotenv.config();
 export const confPath = os.homedir() + '/.suzaku-cli'
 
 // Define the configuration interface
-export interface Config {
+export interface Config<T extends ExtendedClient> {
   abis: TSuzakuABI;
-  contracts: CurriedSuzakuContractMap;
-  client: ExtendedClient;
+  contracts: CurriedSuzakuContractMap<T>;
+  client: T;
 }
 
-export function getConfig(client: ExtendedClient, waitForTxCount = 0, skipAbiValidation: boolean = false): Config {
+export function getConfig<T extends ExtendedClient>(client: T, waitForTxCount = 0, skipAbiValidation: boolean = false): Config<T> {
 
   // Dynamically build the contracts map using the curriedContract function
-  const contracts = Object.fromEntries(
-    (Object.keys(SuzakuABI) as SuzakuABINames[]).map((name) => [
-      name,
-      curriedContract(name, client, waitForTxCount, skipAbiValidation),
-    ]),
-  ) as CurriedSuzakuContractMap;
-    return {
-      abis: SuzakuABI,
-      contracts,
-      client,
-    }
+  const contracts = Object.keys(SuzakuABI).reduce((acc, name) => {
+    // Keep the any to bypass type evaluation and complexity errors
+    (acc as any)[name] = curriedContract(name as SuzakuABINames, client, waitForTxCount, skipAbiValidation);
+    return acc;
+  }, {} as CurriedSuzakuContractMap<T>);
+  return {
+    abis: SuzakuABI,
+    contracts,
+    client,
+  }
 }
 
 // Constants

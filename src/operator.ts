@@ -1,4 +1,4 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { logger } from './lib/logger';
 
 async function registerOperator(
@@ -14,7 +14,7 @@ async function registerOperator(
 }
 
 async function listOperators(
-    operatorRegistry: SafeSuzakuContract['OperatorRegistry']
+    operatorRegistry: SuzakuContract['OperatorRegistry']
 ) {
     const result = await operatorRegistry.read.getAllOperators();
 

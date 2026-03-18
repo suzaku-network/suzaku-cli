@@ -1,6 +1,6 @@
-import { Hex, Account, getAbiItem, decodeEventLog, Abi, parseAbi } from 'viem';
-import { SafeSuzakuContract } from './lib/viemUtils';
-import { ExtendedClient, ExtendedPublicClient } from './client';
+import { Hex } from 'viem';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
+import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config } from './config';
@@ -113,7 +113,7 @@ export async function middlewareForceUpdateNodes(
 
 // getOperatorStake
 export async function middlewareGetOperatorStake(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   operator: Hex,
   epoch: number,
   collateralClass: bigint
@@ -128,7 +128,7 @@ export async function middlewareGetOperatorStake(
 
 // getCurrentEpoch
 export async function middlewareGetCurrentEpoch(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   logger.log("Reading current epoch...");
   const val = await middleware.read.getCurrentEpoch();
@@ -137,7 +137,7 @@ export async function middlewareGetCurrentEpoch(
 
 // getEpochStartTs
 export async function middlewareGetEpochStartTs(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   epoch: number
 ) {
   logger.log("Reading epoch start timestamp...");
@@ -150,7 +150,7 @@ export async function middlewareGetEpochStartTs(
 
 // getActiveNodesForEpoch
 export async function middlewareGetActiveNodesForEpoch(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   operator: Hex,
   epoch: number
 ) {
@@ -165,7 +165,7 @@ export async function middlewareGetActiveNodesForEpoch(
 
 // getOperatorNodesLength
 export async function middlewareGetOperatorNodesLength(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   logger.log("Reading operator nodes length...");
@@ -177,7 +177,7 @@ export async function middlewareGetOperatorNodesLength(
 
 // nodeStakeCache
 export async function middlewareGetNodeStakeCache(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   epoch: number,
   validationId: Hex
 ) {
@@ -190,7 +190,7 @@ export async function middlewareGetNodeStakeCache(
 
 // operatorLockedStake
 export async function middlewareGetOperatorLockedStake(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   logger.log("Reading operator locked stake...");
@@ -202,7 +202,7 @@ export async function middlewareGetOperatorLockedStake(
 
 // nodePendingRemoval
 export async function middlewareNodePendingRemoval(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   validatorId: Hex
 ) {
   logger.log("Reading nodePendingRemoval...");
@@ -214,7 +214,7 @@ export async function middlewareNodePendingRemoval(
 
 // nodePendingUpdate - Note: This function is not available in the current contract
 export async function middlewareNodePendingUpdate(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   validatorId: Hex
 ) {
   logger.log("Node pending update check is not available in the current contract version");
@@ -224,7 +224,7 @@ export async function middlewareNodePendingUpdate(
 
 // getOperatorUsedStakeCached
 export async function middlewareGetOperatorUsedStake(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   operator: Hex
 ) {
   logger.log("Reading operator used stake cached...");
@@ -236,7 +236,7 @@ export async function middlewareGetOperatorUsedStake(
 
 // getAllOperators
 export async function middlewareGetAllOperators(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   logger.log("Reading all operators from middleware...");
 
@@ -249,7 +249,7 @@ export async function middlewareGetAllOperators(
  * Gets all operator nodes
  */
 export async function getAllOperators(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   const operators = await middleware.read.getAllOperators();
   logger.log("All operators:", operators);
@@ -260,7 +260,7 @@ export async function getAllOperators(
  * Gets all collateral class IDs
  */
 export async function getCollateralClassIds(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   const collateralClassIds = await middleware.read.getCollateralClassIds();
   logger.log("Collateral class IDs:", collateralClassIds);
@@ -271,7 +271,7 @@ export async function getCollateralClassIds(
  * Gets active collateral classes (primary and secondary)
  */
 export async function getActiveCollateralClasses(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   const result = await middleware.read.getActiveCollateralClasses();
   logger.log("Active collateral classes - Primary:", result[0], "Secondaries:", result[1]);
@@ -280,8 +280,8 @@ export async function getActiveCollateralClasses(
 
 export async function middlewareGetNodeLogs(
   client: ExtendedClient,
-  middleware: SafeSuzakuContract['L1Middleware'],
-  config: Config,
+  middleware: SuzakuContract['L1Middleware'],
+  config: Config<ExtendedPublicClient>,
   nodeId?: NodeId,
   snowscanApiKey?: string,
   quiet?: boolean
@@ -395,8 +395,8 @@ export async function middlewareManualProcessNodeStakeCache(
 
 export async function middlewareLastValidationId(
   client: ExtendedClient,
-  middleware: SafeSuzakuContract['L1Middleware'],
-  balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  middleware: SuzakuContract['L1Middleware'],
+  balancer: SuzakuContract['BalancerValidatorManager'],
   nodeId: NodeId,
 ): Promise<Hex> {
   const nodeIdHex = parseNodeID(nodeId)
@@ -420,7 +420,7 @@ export async function middlewareLastValidationId(
 
 export async function weightSync(
   middleware: SafeSuzakuContract['L1Middleware'],
-  config: Config,
+  config: Config<ExtendedWalletClient>,
   options: {
     epochs?: number;
     loopEpochs?: number;
@@ -467,8 +467,8 @@ export async function weightSync(
       await middleware.safeWrite.calcAndCacheStakes([epoch, collateralClass]);
     }
   }
-
-  const predictions = await predictForceUpdateImpact(config, middleware, operators as Hex[]);
+  // TODO: fix type (too complex for now)
+  const predictions = await predictForceUpdateImpact(config as any, middleware, operators as Hex[]);
 
   for (const prediction of predictions) {
     if (prediction.willLoseWeight) {
@@ -496,7 +496,7 @@ export interface OperatorForceUpdatePrediction {
 }
 
 export async function predictForceUpdateImpact(
-  config: Config,
+  config: Config<ExtendedClient>,
   middleware: SafeSuzakuContract['L1Middleware'],
   operators: Hex[]
 ): Promise<OperatorForceUpdatePrediction[]> {
@@ -589,7 +589,7 @@ export async function predictForceUpdateImpact(
 }
 
 export async function middlewareInfo(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   logger.log("Fetching middleware information...");
 

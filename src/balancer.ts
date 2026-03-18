@@ -1,4 +1,4 @@
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account } from 'viem';
 import { logger } from './lib/logger';
 
@@ -45,7 +45,7 @@ export async function setUpSecurityModule(
 }
 
 export async function getSecurityModules(
-  balancer: SafeSuzakuContract['BalancerValidatorManager']
+  balancer: SuzakuContract['BalancerValidatorManager']
 ) {
   logger.log("Getting security modules...");
 
@@ -54,7 +54,7 @@ export async function getSecurityModules(
 }
 
 export async function getSecurityModuleWeights(
-  balancer: SafeSuzakuContract['BalancerValidatorManager'],
+  balancer: SuzakuContract['BalancerValidatorManager'],
   securityModule: Hex
 ) {
   logger.log("Getting security module weights...");

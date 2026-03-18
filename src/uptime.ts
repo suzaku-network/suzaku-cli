@@ -1,7 +1,7 @@
 import { packValidationUptimeMessage, collectSignatures, packWarpIntoAccessList } from "./lib/warpUtils";
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
-import { SafeSuzakuContract } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, Network } from "./client";
 import { logger } from './lib/logger';
 import { getCurrentValidators, validatedBy } from "./lib/pChainUtils";
@@ -192,7 +192,7 @@ export async function computeOperatorUptimeForEpochs(
  * Get validator uptime for a specific epoch
  */
 export async function getValidatorUptimeForEpoch(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  uptimeTracker: SuzakuContract['UptimeTracker'],
   validationID: Hex,
   epoch: number
 ) {
@@ -205,7 +205,7 @@ export async function getValidatorUptimeForEpoch(
  * Check if validator uptime is set for a specific epoch
  */
 export async function isValidatorUptimeSetForEpoch(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  uptimeTracker: SuzakuContract['UptimeTracker'],
   validationID: Hex,
   epoch: number
 ) {
@@ -218,7 +218,7 @@ export async function isValidatorUptimeSetForEpoch(
  * Get operator uptime for a specific epoch
  */
 export async function getOperatorUptimeForEpoch(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  uptimeTracker: SuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number
 ) {
@@ -231,7 +231,7 @@ export async function getOperatorUptimeForEpoch(
  * Check if operator uptime is set for a specific epoch
  */
 export async function isOperatorUptimeSetForEpoch(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  uptimeTracker: SuzakuContract['UptimeTracker'],
   operator: Hex,
   epoch: number
 ) {
@@ -244,7 +244,7 @@ export async function isOperatorUptimeSetForEpoch(
  * Get last uptime checkpoint for a validator
  */
 export async function getLastUptimeCheckpoint(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  uptimeTracker: SuzakuContract['UptimeTracker'],
   validationID: Hex
 ) {
   return await uptimeTracker.read.getLastUptimeCheckpoint(

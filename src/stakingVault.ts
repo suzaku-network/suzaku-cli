@@ -1,6 +1,6 @@
-import { ExtendedClient, ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
-import { CurriedSuzakuContractMap, SafeSuzakuContract, withSafeWrite } from './lib/viemUtils';
+import { CurriedSuzakuContractMap, SafeSuzakuContract, SuzakuContract, withSafeWrite } from './lib/viemUtils';
 import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
@@ -14,7 +14,7 @@ import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
 import { pChainChainID } from './config';
 
-export async function getValidatorManagerAddress(config: Config, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
+export async function getValidatorManagerAddress(config: Config<ExtendedWalletClient>, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
     const stakingManagerAddress = await stakingVault.read.getStakingManager();
     const stakingManager = await config.contracts.KiteStakingManager(stakingManagerAddress);
     const stakingManagerStorageLocation = await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION() as Hex
@@ -248,7 +248,6 @@ export async function processEpochStakingVault(
  */
 export async function initiateValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
-    config: Config,
     stakingVault: SafeSuzakuContract['StakingVault'],
     nodeId: NodeId,
     blsKey: Hex,
@@ -324,7 +323,6 @@ export async function initiateValidatorRegistrationStakingVault(
  */
 export async function addOperatorStakingVault(
     client: ExtendedWalletClient,
-    config: Config,
     stakingVault: SafeSuzakuContract['StakingVault'],
     operator: Hex,
     allocationBips: bigint,
@@ -387,9 +385,8 @@ export async function addOperatorStakingVault(
  * @param waitValidatorVisible - Whether to wait for the validator to be visible on P-Chain
  */
 export async function completeValidatorRegistrationStakingVault(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     blsProofOfPossession: string,
@@ -398,7 +395,7 @@ export async function completeValidatorRegistrationStakingVault(
     waitValidatorVisible: boolean
 ) {
     logger.log("Completing validator registration in StakingVault...");
-
+    const client = config.client;
     // Wait for transaction receipt to extract warp message and validation ID
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash });
 
@@ -515,7 +512,6 @@ export async function completeValidatorRegistrationStakingVault(
  */
 export async function initiateValidatorRemovalStakingVault(
     client: ExtendedWalletClient,
-    config: Config,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId
@@ -619,9 +615,8 @@ export async function forceRemoveValidatorStakingVault(
  * @param initiateTxHash - Optional initiate validator registration transaction hash for justification
  */
 export async function completeValidatorRemovalStakingVault(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
@@ -630,7 +625,7 @@ export async function completeValidatorRemovalStakingVault(
     initiateTxHash?: Hex
 ) {
     logger.log("Completing validator removal in StakingVault...");
-
+    const client = config.client;
     // Wait for the initiate removal transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
@@ -804,7 +799,6 @@ export async function completeValidatorRemovalStakingVault(
  */
 export async function initiateDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
-    config: Config,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     nodeId: NodeId,
@@ -879,9 +873,8 @@ export async function initiateDelegatorRegistrationStakingVault(
  * @param uptimeBlockchainID - The uptime blockchain ID (Hex) for the source chain ID
  */
 export async function completeDelegatorRegistrationStakingVault(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateTxHash: Hex,
@@ -889,7 +882,7 @@ export async function completeDelegatorRegistrationStakingVault(
     uptimeBlockchainID: Hex
 ): Promise<Hex> {
     logger.log("Completing delegator registration in StakingVault...");
-
+    const client = config.client;
     // Wait for the initiate delegator registration transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
@@ -1035,13 +1028,11 @@ export async function completeDelegatorRegistrationStakingVault(
 /**
  * Initiate delegator removal in the StakingVault
  * @param client - The wallet client
- * @param config - The config object
  * @param stakingVaultAddress - The StakingVault contract address
  * @param delegationID - The delegation ID to remove
  */
 export async function initiateDelegatorRemovalStakingVault(
     client: ExtendedWalletClient,
-    config: Config,
     stakingVault: SafeSuzakuContract['StakingVault'],
     delegationID: Hex
 ) {
@@ -1127,18 +1118,16 @@ export async function forceRemoveDelegatorStakingVault(
  * @param initiateTxHash - Optional initiate delegator registration transaction hash
  */
 export async function completeDelegatorRemovalStakingVault(
-    client: ExtendedWalletClient,
     pchainClient: ExtendedWalletClient,
-    config: Config,
+    config: Config<ExtendedWalletClient>,
     stakingVault: SafeSuzakuContract['StakingVault'],
     validatorManager: SafeSuzakuContract['ValidatorManager'],
     initiateRemovalTxHash: Hex,
-    waitValidatorVisible: boolean,
     delegationIDs?: Hex[],
     initiateTxHash?: Hex
 ): Promise<Hex> {
     logger.log("Completing delegator removal in StakingVault...");
-
+    const client = config.client;
     // Wait for the initiate removal transaction to be confirmed
     const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
     if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
@@ -1295,15 +1284,15 @@ export async function completeDelegatorRemovalStakingVault(
     return lastHash;
 }
 
-export async function claimOperatorFees(stakingVault: StakingVaultContract, client: ExtendedClient) {
-    stakingVault.safeWrite.claimOperatorFees
+export async function claimOperatorFees(stakingVault: SafeSuzakuContract['StakingVault']) {
+    return stakingVault.safeWrite.claimOperatorFees([]);
 }
 
 // stakingVault.safeWrite.claimEscrowedWithdrawal
 
 // ── Info functions ─────────────────────────────────────────────────────
 
-type StakingVaultContract = SafeSuzakuContract['StakingVault'];
+type StakingVaultContract = SuzakuContract['StakingVault'];
 
 function fmt(amount: bigint, decimals: number): string {
     return formatUnits(amount, decimals);

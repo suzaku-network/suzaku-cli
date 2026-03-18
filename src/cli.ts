@@ -15,7 +15,7 @@ import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } 
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
-import { Chains, generateClient } from "./client";
+import { Chains, ExtendedWalletClient, generateClient } from "./client";
 import { logger } from './lib/logger';
 import {
     registerVaultL1,
@@ -133,7 +133,7 @@ import {
     getRewardsClaimsCount,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
-import { bytes32ToAddress, encodeNodeID, getAddresses, NodeId, parseNodeID } from "./lib/utils";
+import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
 import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex, OptHex } from "./lib/cliParser";
@@ -146,17 +146,11 @@ import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
 import { ensureRoleHex, getRoleAdmin, getRoles, grantRole, hasRole, isAccessControl, revokeRole } from './accessControl';
-import { contractAbiValidation, SafeSuzakuContract, SuzakuABINames, setCastMode } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuABINames, setCastMode } from './lib/viemUtils';
 import './lib/commandUtils';
 import { execSync } from 'child_process';
 import { chainList, setCustomChainRpcUrl } from './lib/chainList';
 import { readFileSync } from 'fs';
-// import { Command } from '@commander-js/extra-typings';
-
-async function getDefaultAccount(opts: any): Promise<Hex> {
-    const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-    return client.account?.address as Hex;
-}
 
 // Main function to set up the CLI commands
 async function main() {
@@ -221,10 +215,7 @@ async function main() {
         .description('Verify that a contract at a given address matches the expected Suzaku ABI (5% tolerance)')
         .addArgument(ArgAddress("address", "Contract address to test"))
         .argument('abi', 'ABI name to test')
-        .action(async (address, abi) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, address, abi) => {
             await config.contracts[abi as SuzakuABINames](address)
             logger.log(`Verified ABI for contract ${abi} at address ${address} ✅`);
         });
@@ -260,14 +251,14 @@ async function main() {
         .addArgument(ArgCB58("subnetID", "Subnet ID of the L1"))
         .argument("targetBalance", "Target continuous fee balance per validator (in AVAX)")
         .addOption(new Option("--node-id <nodeId>", "Add a validator to be topped up").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
-        .action(async (subnetID, targetBalance, options) => {
+        .asyncAction({ signer: true }, async (config, subnetID, targetBalance, options) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const targetBalanceWei = parseUnits(targetBalance, 9); // AVAX has 9 decimals
             if (targetBalanceWei <= BigInt(1e7)) { // 0.01 AVAX min
                 throw new Error("Target balance must be greater than 0.01 AVAX");
             }
-            const validators = await getCurrentValidators(client, subnetID)
+            const validators = await getCurrentValidators(config.client, subnetID)
 
             const validatorsToTopUp = validators.reduce((acc, validator) => {
                 if (options.nodeId && options.nodeId.length > 0 && !options.nodeId.includes(validator.nodeID as NodeId)) {
@@ -292,7 +283,7 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up:`);
-            await requirePChainBallance(client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
+            await requirePChainBallance(config.client, totalTopUp + BigInt(2e4) * BigInt(validatorsToTopUp.length), opts.yes); // extra 20000 for fees
             if (!opts.yes) {
                 const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
@@ -305,7 +296,7 @@ async function main() {
                 logger.log(`\nTopping up validator ${validationId}`);
                 const amount = Number(topup) / 1e9
                 pipe(await increasePChainValidatorBalance(
-                    client,
+                    config.client,
                     amount,
                     validationId,
                     false
@@ -329,10 +320,7 @@ async function main() {
         .description("Register a new L1 in the L1 registry")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgURI("metadataUrl", "Metadata URL for the L1"))
-        .action(async (l1Middleware, metadataUrl) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, l1Middleware, metadataUrl) => {
             const middleware = await config.contracts.L1Middleware(l1Middleware);
             const balancerAddress = await middleware.read.BALANCER() as Hex;
             // instantiate L1Registry and call
@@ -342,17 +330,14 @@ async function main() {
                 balancerAddress,
                 l1Middleware,
                 metadataUrl,
-                client.account!
+                config.client.account!
             );
         });
 
     l1RegistryCmd
         .command("get-all")
         .description("List all L1s registered in the L1 registry")
-        .action(async () => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, ) => {
             const l1Registry = await config.contracts.L1Registry()
             const l1s = await l1Registry.read.getAllL1s()
             // l1s: [balancerAddress[], middleware[], metadataUrl[]]
@@ -372,10 +357,7 @@ async function main() {
         .description("Set metadata URL for an L1 in the L1 registry")
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgURI("metadataUrl", "New metadata URL"))
-        .action(async (l1Address, metadataUrl) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, l1Address, metadataUrl) => {
             const l1Reg = await config.contracts.L1Registry();
             await setL1MetadataUrl(
                 l1Reg,
@@ -389,10 +371,7 @@ async function main() {
         .description("Set middleware address for an L1 in the L1 registry")
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgAddress("l1Middleware", "New L1 middleware address"))
-        .action(async (l1Address, l1Middleware) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, l1Address, l1Middleware) => {
             const l1Reg2 = await config.contracts.L1Registry();
             await setL1Middleware(
                 l1Reg2,
@@ -411,10 +390,7 @@ async function main() {
         .command("register")
         .description("Register a new operator in the operator registry")
         .addArgument(ArgURI("metadataUrl", "Operator metadata URL"))
-        .action(async (metadataUrl) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, metadataUrl) => {
             const opReg = await config.contracts.OperatorRegistry();
             await registerOperator(
                 opReg,
@@ -425,10 +401,7 @@ async function main() {
     operatorRegistryCmd
         .command("get-all")
         .description("List all operators registered in the operator registry")
-        .action(async () => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, ) => {
             const opReg2 = await config.contracts.OperatorRegistry();
             await listOperators(opReg2);
         });
@@ -447,10 +420,7 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .argument("maxLimit", "Maximum limit (in decimal format)")
-        .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             // instantiate VaultManager contract
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManagerAddress);
             const vault = await config.contracts.VaultTokenized(vaultAddress);
@@ -460,7 +430,7 @@ async function main() {
                 vaultAddress,
                 collateralClass,
                 maxLimitWei,
-                client.account!
+                config.client.account!
             );
         });
 
@@ -471,10 +441,7 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .argument("maxLimit", "Maximum limit")
-        .action(async (middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareVaultManagerAddress, vaultAddress, collateralClass, maxLimit) => {
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManagerAddress);
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const maxLimitWei = parseUnits(maxLimit, await vault.read.decimals())
@@ -483,7 +450,7 @@ async function main() {
                 vaultAddress,
                 collateralClass,
                 maxLimitWei,
-                client.account!
+                config.client.account!
             );
         });
 
@@ -492,15 +459,12 @@ async function main() {
         .description("Remove a vault from L1 staking")
         .addArgument(argMiddlewareVaultManagerAddress)
         .addArgument(argVaultAddress)
-        .action(async (middlewareVaultManager, vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareVaultManager, vaultAddress) => {
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await removeVault(
                 vaultManager,
                 vaultAddress,
-                client.account!
+                config.client.account!
             );
         });
 
@@ -508,10 +472,7 @@ async function main() {
         .command("get-vault-count")
         .description("Get the number of vaults registered for L1 staking")
         .addArgument(argMiddlewareVaultManagerAddress)
-        .action(async (middlewareVaultManager) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareVaultManager) => {
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCount(vaultManager);
         });
@@ -521,10 +482,7 @@ async function main() {
         .description("Get the vault address at a specific index along with its registration and removal times")
         .addArgument(argMiddlewareVaultManagerAddress)
         .addArgument(ArgBigInt("index", "Vault index"))
-        .action(async (middlewareVaultManager, index) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareVaultManager, index) => {
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultAtWithTimes(
                 vaultManager,
@@ -537,10 +495,7 @@ async function main() {
         .description("Get the collateral class ID associated with a vault")
         .addArgument(argMiddlewareVaultManagerAddress)
         .addArgument(argVaultAddress)
-        .action(async (middlewareVaultManager, vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareVaultManager, vaultAddress) => {
             const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
             await getVaultCollateralClass(
                 vaultManager,
@@ -561,18 +516,13 @@ async function main() {
         .addArgument(argVaultAddress)
         .argument("amount", "Amount of token to deposit in the vault")
         .addOption(new Option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address").argParser(ParserAddress))
-        .action(async (vaultAddress, amount, options) => {
-            const onBehalfOf = options.onBehalfOf ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, amount, options) => {
+            const onBehalfOf = options.onBehalfOf ?? config.client.account!.address;
             await depositVault(
-                client,
                 config,
                 vaultAddress,
                 onBehalfOf,
                 amount,
-                client.account!
             );
         });
 
@@ -582,11 +532,8 @@ async function main() {
         .addArgument(argVaultAddress)
         .argument("amount", "Amount of token to withdraw in the vault")
         .addOption(new Option("--claimer <claimer>", "Optional claimer").argParser(ParserAddress))
-        .action(async (vaultAddress, amount, options) => {
-            const claimer = options.claimer ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, amount, options) => {
+            const claimer = options.claimer ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const amountWei = parseUnits(amount, await vault.read.decimals())
             await withdrawVault(
@@ -602,11 +549,8 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient").argParser(ParserAddress))
-        .action(async (vaultAddress, epoch, options) => {
-            const recipient = options.recipient ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
+            const recipient = options.recipient ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await claimVault(
                 vault,
@@ -620,15 +564,12 @@ async function main() {
         .description("Grant staker role on a vault to an account")
         .addArgument(argVaultAddress)
         .addArgument(ArgAddress("account", "Account to grant the role to"))
-        .action(async (vaultAddress, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, account) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.grantRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 })
             logger.log(`Granted staker role to ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
         });
@@ -638,15 +579,12 @@ async function main() {
         .description("Revoke staker role on a vault from an account")
         .addArgument(argVaultAddress)
         .addArgument(ArgAddress("account", "Account to revoke the role from"))
-        .action(async (vaultAddress, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, account) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await vault.safeWrite.revokeRole([await vault.read.DEPOSITOR_WHITELIST_ROLE(), account],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 })
             logger.log(`Revoked staker role from ${account} on vault (${await vault.read.name()}) ${vaultAddress}`);
         });
@@ -656,12 +594,11 @@ async function main() {
         .description("Approve and deposit tokens into the collateral contract associated with a vault")
         .addArgument(ArgAddress("collateralAddress", "Collateral contract address"))
         .argument("amount", "Amount of token to deposit in the collateral")
-        .action(async (collateralAddress, amount) => {
+        .asyncAction({ signer: true }, async (_, collateralAddress, amount) => {
             const opts = program.opts();
             const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
             const config = getConfig(client, opts.wait, true); // skip abi validation as erc20 are commonly different
             await approveAndDepositCollateral(
-                client,
                 config,
                 collateralAddress,
                 amount,
@@ -675,10 +612,7 @@ async function main() {
         .description("Set deposit limit for a vault (0 will disable the limit)")
         .addArgument(argVaultAddress)
         .argument("limit", "Deposit limit amount")
-        .action(async (vaultAddress, limit) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, limit) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const limitWei = parseUnits(limit, await vault.read.decimals())
             const isLimitShouldBeEnabled = limitWei > 0n;
@@ -687,14 +621,14 @@ async function main() {
                 await vault.safeWrite.setIsDepositLimit([isLimitShouldBeEnabled],
                     {
                         chain: null,
-                        account: client.account!,
+                        account: config.client.account!,
                     })
                 logger.log(`Set deposit limit enabled to ${isLimitShouldBeEnabled} for vault (${await vault.read.name()}) ${vaultAddress}`);
             }
             await vault.safeWrite.setDepositLimit([limitWei],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 })
             logger.log(`Set deposit limit to ${limit} for vault (${await vault.read.name()}) ${vaultAddress}`);
         });
@@ -705,10 +639,7 @@ async function main() {
         .description("Set deposit limit for a collateral")
         .addArgument(argVaultAddress)
         .argument("limit", "Deposit limit amount")
-        .action(async (vaultAddress, limit) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, limit) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
 
             const collateralAddress = await vault.read.collateral();
@@ -717,7 +648,7 @@ async function main() {
             await collateral.safeWrite.increaseLimit([limitWei],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 })
             logger.log(`Collateral (${collateralAddress}) limit increased to ${limit} (${await collateral.read.name()})`);
         });
@@ -729,10 +660,7 @@ async function main() {
         .command("get-collateral")
         .description("Get the collateral token address of a vault")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultCollateral(vault);
         });
@@ -741,10 +669,7 @@ async function main() {
         .command("get-delegator")
         .description("Get the delegator address of a vault")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegator = await getVaultDelegator(vault);
             logger.log("Vault delegator:", delegator);
@@ -755,11 +680,8 @@ async function main() {
         .description("Get vault token balance for an account")
         .addArgument(argVaultAddress)
         .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
-        .action(async (vaultAddress, options) => {
-            const account = options.account ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, options) => {
+            const account = options.account ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultBalanceOf(vault, account);
         });
@@ -769,11 +691,8 @@ async function main() {
         .description("Get active vault balance for an account")
         .addArgument(argVaultAddress)
         .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
-        .action(async (vaultAddress, options) => {
-            const account = options.account ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, options) => {
+            const account = options.account ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultActiveBalanceOf(vault, account);
         });
@@ -782,10 +701,7 @@ async function main() {
         .command("get-total-supply")
         .description("Get total supply of vault tokens")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultTotalSupply(vault);
         });
@@ -796,11 +712,8 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
-        .action(async (vaultAddress, epoch, options) => {
-            const account = options.account ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
+            const account = options.account ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalSharesOf(vault, epoch, account);
         });
@@ -811,11 +724,8 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
-        .action(async (vaultAddress, epoch, options) => {
-            const account = options.account ?? (await getDefaultAccount(program.opts()));
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
+            const account = options.account ?? config.client.account!.address;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalsOf(vault, epoch, account);
         });
@@ -825,10 +735,7 @@ async function main() {
         .command("get-deposit-limit")
         .description("Get deposit limit for a vault")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const limit = await vault.read.depositLimit();
             const isLimitEnabled = await vault.read.isDepositLimit();
@@ -845,10 +752,7 @@ async function main() {
         .addArgument(argValidatorManagerAddress)
         .argument("limit", "Limit amount")
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (vaultAddress, l1Address, limit, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, l1Address, limit, collateralClass) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
@@ -871,10 +775,7 @@ async function main() {
         .addArgument(argOperatorAddress)
         .addArgument(ArgBigInt("shares", "Shares amount"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (vaultAddress, l1Address, operatorAddress, shares, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress, l1Address, operatorAddress, shares, collateralClass) => {
             // instantiate L1RestakeDelegator contract
 
             const vault = await config.contracts.VaultTokenized(vaultAddress);
@@ -895,10 +796,7 @@ async function main() {
         .addArgument(argVaultAddress)
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (vaultAddress, l1Address, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress, l1Address, collateralClass) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
@@ -915,10 +813,7 @@ async function main() {
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .addArgument(argOperatorAddress)
-        .action(async (vaultAddress, l1Address, collateralClass, operatorAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, vaultAddress, l1Address, collateralClass, operatorAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const delegatorAddress = await vault.read.delegator();
 
@@ -943,10 +838,7 @@ async function main() {
         .argument("minValidatorStake", "Minimum validator stake amount")
         .argument("maxValidatorStake", "Maximum validator stake amount")
         .addArgument(ArgAddress("initialCollateral", "Initial collateral address"))
-        .action(async (middlewareAddress, collateralClassId, minValidatorStake, maxValidatorStake, initialCollateral) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId, minValidatorStake, maxValidatorStake, initialCollateral) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const collateral = await config.contracts.DefaultCollateral(initialCollateral);
             const decimals = await collateral.read.decimals();
@@ -955,7 +847,7 @@ async function main() {
             await middlewareSvc.safeWrite.addCollateralClass([collateralClassId, minStakeWei, maxStakeWei, initialCollateral],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Added collateral class ${collateralClassId} with min stake ${minValidatorStake} and max stake ${maxValidatorStake} using collateral at ${initialCollateral}`);
         });
@@ -967,15 +859,12 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
         .addArgument(ArgAddress("collateralAddress", "Collateral address to add"))
-        .action(async (middlewareAddress, collateralClassId, collateralAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId, collateralAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.addAssetToClass([collateralClassId, collateralAddress],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Added collateral ${collateralAddress} to class ${collateralClassId}`);
         });
@@ -987,15 +876,12 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
         .addArgument(ArgAddress("collateralAddress", "Collateral address to remove"))
-        .action(async (middlewareAddress, collateralClassId, collateralAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId, collateralAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const tx = await middlewareSvc.safeWrite.removeAssetFromClass([collateralClassId, collateralAddress],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Removed collateral ${collateralAddress} from class ${collateralClassId}`);
             logger.log("tx hash:", tx);
@@ -1007,15 +893,12 @@ async function main() {
         .description("Remove an existing secondary collateral class")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
-        .action(async (middlewareAddress, collateralClassId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.removeCollateralClass([collateralClassId],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Removed collateral class ${collateralClassId}`);
         });
@@ -1026,15 +909,12 @@ async function main() {
         .description("Activate a secondary collateral class")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
-        .action(async (middlewareAddress, collateralClassId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.activateSecondaryCollateralClass([collateralClassId],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Activated collateral class ${collateralClassId}`);
         });
@@ -1045,15 +925,12 @@ async function main() {
         .description("Deactivate a secondary collateral class")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("collateralClassId", "Collateral class ID"))
-        .action(async (middlewareAddress, collateralClassId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, collateralClassId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.deactivateSecondaryCollateralClass([collateralClassId],
                 {
                     chain: null,
-                    account: client.account!,
+                    account: config.client.account!,
                 });
             logger.log(`Deactivated collateral class ${collateralClassId}`);
         });
@@ -1064,10 +941,7 @@ async function main() {
         .description("Register an operator to operate on this L1")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRegisterOperator(
                 middlewareSvc,
@@ -1081,10 +955,7 @@ async function main() {
         .description("Disable an operator to prevent it from operating on this L1")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareDisableOperator(
                 middlewareSvc,
@@ -1098,10 +969,7 @@ async function main() {
         .description("Remove an operator from this L1")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveOperator(
                 middlewareSvc,
@@ -1117,10 +985,7 @@ async function main() {
         .addOption(new Option("--epochs <epochs>", "Number of epochs to process (default: all)").default(0).argParser(ParserNumber))
         .addOption(new Option("--loop-epochs <count>", "Loop through multiple epochs, processing --epochs at a time").argParser(ParserNumber))
         .addOption(new Option("--delay <milliseconds>", "Delay between loop iterations in milliseconds (default: 1000)").default(1000).argParser(ParserNumber))
-        .action(async (middlewareAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, options) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             let epochsPerCall;
@@ -1165,12 +1030,9 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (middlewareAddress, nodeId, blsKey, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, nodeId, blsKey, options) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(config.client.addresses.P), 'hex');
 
             // Default registration expiry to now + 12 hours if not provided
             // const registrationExpiry = options.registrationExpiry
@@ -1216,7 +1078,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))// In decimals
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
+        .asyncAction(async (_, middlewareAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -1230,11 +1092,10 @@ async function main() {
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
-            // await requirePChainBallance(client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
+            // await requirePChainBallance(config.client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration (no safe for pChain txs)
             await completeValidatorRegistration(
-                client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 middlewareSvc,
                 balancerSvc,
@@ -1252,10 +1113,7 @@ async function main() {
         .description("Remove a node from an L1")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNodeID())
-        .action(async (middlewareAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, nodeId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareRemoveNode(
                 middlewareSvc,
@@ -1273,20 +1131,16 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
-        .action(async (middlewareAddress, removeNodeTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await middlewareSvc.read.balancerValidatorManager());
             // Check if P-Chain address have 0.01 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was added recently)
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             await completeValidatorRemoval(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 middlewareSvc,
                 balancerSvc,
                 config,
@@ -1304,10 +1158,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNodeID())
         .argument("newStake", "New stake amount")
-        .action(async (middlewareAddress, nodeId, newStake) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, nodeId, newStake) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
             const collateral = await config.contracts.DefaultCollateral(primaryCollateral);
@@ -1328,7 +1179,7 @@ async function main() {
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
-        .action(async (middlewareAddress, validatorStakeUpdateTxHash, options) => {
+        .asyncAction(async (_, middlewareAddress, validatorStakeUpdateTxHash, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -1344,7 +1195,6 @@ async function main() {
             await requirePChainBallance(client, 50000n, opts.yes);
 
             await completeWeightUpdate(
-                client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 middlewareSvc,
                 config,
@@ -1360,20 +1210,17 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (middlewareAddress, epoch, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, epoch, collateralClass) => {
             logger.log("Calculating and caching stakes...");
 
-            if (!client.account) {
+            if (!config.client.account) {
                 throw new Error('Client account is required');
             }
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const hash = await middlewareSvc.safeWrite.calcAndCacheStakes([epoch, collateralClass],
                 {
                     chain: null,
-                    account: client.account,
+                    account: config.client.account,
                 });
             logger.log("calcAndCacheStakes done, tx hash:", hash);
 
@@ -1384,10 +1231,7 @@ async function main() {
         .command("calc-node-stakes")
         .description("Calculate and cache node stakes for all operators")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareCalcNodeStakes(
                 middlewareSvc
@@ -1401,10 +1245,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
         .addOption(new Option("--limit-stake <stake>", "Stake limit").default(0n).argParser(ParserAVAX))
-        .action(async (middlewareAddress, operator, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, operator, options) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareForceUpdateNodes(
                 middlewareSvc,
@@ -1420,10 +1261,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
         .argument("targetBalance", "Target continuous fee balance per validator (in AVAX)")
-        .action(async (middlewareAddress, operator, targetBalance) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, operator, targetBalance) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const targetBalanceWei = parseUnits(targetBalance, 9); // AVAX has 9 decimals
             if (targetBalanceWei <= BigInt(1e7)) { // 0.01 AVAX min
@@ -1432,7 +1270,7 @@ async function main() {
             const balancerAddress = await middlewareSvc.read.BALANCER()
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const [nodeCount, subnetID] = await Promise.all([middlewareSvc.read.getOperatorNodesLength([operator]), balancer.read.subnetID()]);
-            const validators = await getCurrentValidators(client, utils.base58check.encode(hexToUint8Array(subnetID)))
+            const validators = await getCurrentValidators(config.client, utils.base58check.encode(hexToUint8Array(subnetID)))
 
             const validatorsToCheck = await Promise.all(
                 A.range(0, Number(nodeCount) - 1)
@@ -1459,8 +1297,8 @@ async function main() {
             }
 
             logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
-            await requirePChainBallance(client, totalTopUp + BigInt(2e4) * nodeCount, opts.yes); // extra 20000 for fees
-            if (!opts.yes) {
+            await requirePChainBallance(config.client, totalTopUp + BigInt(2e4) * nodeCount, program.opts().yes); // extra 20000 for fees
+            if (!program.opts().yes) {
                 const response = await logger.prompt(`Proceed with topping up validators? (y/n): `);
                 if (response.toLowerCase() !== 'y') {
                     logger.log("Operation cancelled by user.");
@@ -1472,7 +1310,7 @@ async function main() {
                 logger.log(`\nTopping up validator ${validationId}`);
                 const amount = Number(topup) / 1e9
                 pipe(await increasePChainValidatorBalance(
-                    client,
+                    config.client,
                     amount,
                     validationId,
                     false
@@ -1492,10 +1330,7 @@ async function main() {
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (middlewareAddress, operator, epoch, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator, epoch, collateralClass) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorStake(
                 middlewareSvc,
@@ -1510,15 +1345,12 @@ async function main() {
         .description("Get operator nodes")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const nodeCount = await middlewareSvc.read.getOperatorNodesLength([operator]);
             const abi = [getAbiItem({ abi: middlewareSvc.abi, name: 'operatorNodesArray' })] as Abi
 
-            const multicallResult = await client.multicall(
+            const multicallResult = await config.client.multicall(
                 {
                     contracts: A.range(0, Number(nodeCount) - 1).map(i => { return { args: [operator, BigInt(i)], abi, address: middlewareAddress, functionName: 'operatorNodesArray' } })
                 }
@@ -1536,10 +1368,7 @@ async function main() {
         .command("get-current-epoch")
         .description("Get current epoch number")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCurrentEpoch(
                 middlewareSvc
@@ -1552,10 +1381,7 @@ async function main() {
         .description("Get epoch start timestamp")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (middlewareAddress, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, epoch) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetEpochStartTs(
                 middlewareSvc,
@@ -1570,10 +1396,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (middlewareAddress, operator, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator, epoch) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetActiveNodesForEpoch(
                 middlewareSvc,
@@ -1588,10 +1411,7 @@ async function main() {
         .description("Get current number of nodes for an operator")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorNodesLength(
                 middlewareSvc,
@@ -1606,10 +1426,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgHex("validationId", "Validation ID"))
-        .action(async (middlewareAddress, epoch, validationId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, epoch, validationId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeStakeCache(
                 middlewareSvc,
@@ -1624,10 +1441,7 @@ async function main() {
         .description("Get operator locked stake")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorLockedStake(
                 middlewareSvc,
@@ -1641,10 +1455,7 @@ async function main() {
         .description("Check if node is pending removal")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgHex("validationId", "Validation ID"))
-        .action(async (middlewareAddress, validationId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, validationId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareNodePendingRemoval(
                 middlewareSvc,
@@ -1658,10 +1469,7 @@ async function main() {
         .description("Get operator used stake from cache")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
@@ -1675,10 +1483,7 @@ async function main() {
         .description("Get operator available stake")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
             logger.log(`Operator ${operator} available stake: ${availableStake}`);
@@ -1689,10 +1494,7 @@ async function main() {
         .command("get-all-operators")
         .description("Get all operators registered")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetAllOperators(
                 middlewareSvc
@@ -1704,10 +1506,7 @@ async function main() {
         .command("get-collateral-class-ids")
         .description("Get all collateral class IDs from the middleware")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await getCollateralClassIds(
                 middlewareSvc
@@ -1719,10 +1518,7 @@ async function main() {
         .command("get-active-collateral-classes")
         .description("Get active collateral classes (primary and secondary)")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await getActiveCollateralClasses(
                 middlewareSvc
@@ -1735,14 +1531,11 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
         .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
-        .action(async (middlewareAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, options) => {
             logger.log(`nodeId: ${options.nodeId}`);
             const middleware = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetNodeLogs(
-                client,
+                config.client,
                 middleware,
                 config,
                 options.nodeId,
@@ -1755,16 +1548,13 @@ async function main() {
         .description("Set middleware log level")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNodeID())
-        .action(async (middlewareAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, nodeId) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
             const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
             logger.log(`Fetching last validation ID`);
             const validationId = await middlewareLastValidationId(
-                client,
+                config.client,
                 middlewareSvc,
                 balancerSvc,
                 nodeId
@@ -1778,10 +1568,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(argVaultAddress)
         .addArgument(ArgNumber("middlewareEpoch", "Middleware epoch number"))
-        .action(async (middlewareAddress, vaultAddress, middlewareEpoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, vaultAddress, middlewareEpoch) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const vaultSvc = await config.contracts.VaultTokenized(vaultAddress);
             const middlewareEpochTs = await middlewareSvc.read.getEpochStartTs([middlewareEpoch]);
@@ -1793,10 +1580,7 @@ async function main() {
         .command("update-window-ends-ts")
         .description("Get the end timestamp of the last completed middleware epoch window")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [currentEpoch, updateWindow] = await middlewareSvc.multicall(['getCurrentEpoch', 'UPDATE_WINDOW'])
             const lastEpochStartTs = await middlewareSvc.read.getEpochStartTs([currentEpoch])
@@ -1809,10 +1593,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(argVaultAddress)
         .addArgument(ArgNumber("vaultEpoch", "Vault epoch number"))
-        .action(async (middlewareAddress, vaultAddress, vaultEpoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, vaultAddress, vaultEpoch) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const vaultSvc = await config.contracts.VaultTokenized(vaultAddress);
             const vaultEpochStartTs = await vaultSvc.read.epochDuration() * vaultEpoch + await vaultSvc.read.epochDurationInit();
@@ -1825,10 +1606,7 @@ async function main() {
         .description("Set vault manager")
         .addArgument(argMiddlewareAddress)
         .addArgument(argMiddlewareVaultManagerAddress)
-        .action(async (middlewareAddress, vaultManagerAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, vaultManagerAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareSvc.safeWrite.setVaultManager([vaultManagerAddress])
             logger.log(`Set vault manager to ${vaultManagerAddress} on middleware ${middlewareAddress} ok`);
@@ -1839,10 +1617,7 @@ async function main() {
         .description("Get operator validation IDs")
         .addArgument(argMiddlewareAddress)
         .addArgument(argOperatorAddress)
-        .action(async (middlewareAddress, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, operator) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const validationIDs = await middlewareSvc.read.getOperatorValidationIDs([operator]);
             logger.log(`Validation IDs for operator ${operator}: ${validationIDs.join(', ')}`);
@@ -1853,10 +1628,7 @@ async function main() {
         .description("Get account info")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgAddress("account", "Account address"))
-        .action(async (middlewareAddress, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, account) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [owner, operators, epoch, balancerAddress] = await middlewareSvc.multicall(['owner', 'getAllOperators', 'getCurrentEpoch', 'BALANCER']);
             const roles = getRoles(middlewareSvc);
@@ -1878,7 +1650,7 @@ async function main() {
                 const validators = await balancerSvc.multicall(validationIDs.flatMap(id => { return [{ name: 'getValidator', args: [id] }, { name: 'isValidatorPendingWeightUpdate', args: [id] }] }));
                 logger.log(`Operator with stake ${stake} and the following validators: `);
                 const subnetIdHex = await balancerSvc.read.subnetID();
-                const pChainValidators = await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIdHex)));
+                const pChainValidators = await getCurrentValidators(config.client, utils.base58check.encode(hexToBytes(subnetIdHex)));
                 const formated: { [key: string]: any } = {};
                 for (let i = 0; i < validators.length; i += 2) {
                     const validator = validators[i] as Validator;
@@ -1895,10 +1667,7 @@ async function main() {
         .command("info")
         .description("Get general information about the middleware")
         .addArgument(argMiddlewareAddress)
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareInfo(middlewareSvc);
         });
@@ -1909,10 +1678,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addOption(new Option('-e, --epochs <number>', 'Number of epochs to watch').argParser(Number))
         .addOption(new Option('-l, --loop-epochs <number>', 'Number of epochs to loop').argParser(Number))
-        .action(async (middlewareAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, middlewareAddress, options) => {
             await weightSync(await config.contracts.L1Middleware(middlewareAddress), config, { epochs: options.epochs, loopEpochs: options.loopEpochs });
         });
     /**
@@ -1929,10 +1695,7 @@ async function main() {
         .command("l1-in")
         .description("Operator opts in to a given L1")
         .addArgument(argValidatorManagerAddress)
-        .action(async (l1Address) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, l1Address) => {
             const service = await config.contracts.OperatorL1OptInService();
             await optInL1(
                 service,
@@ -1944,10 +1707,7 @@ async function main() {
         .command("l1-out")
         .description("Operator opts out from a given L1")
         .addArgument(argValidatorManagerAddress)
-        .action(async (l1Address) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, l1Address) => {
             const service = await config.contracts.OperatorL1OptInService();
             await optOutL1(
                 service,
@@ -1960,10 +1720,7 @@ async function main() {
         .description("Check if an operator is opted in to a given L1")
         .addArgument(argOperatorAddress)
         .addArgument(argValidatorManagerAddress)
-        .action(async (operator, l1Address) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, operator, l1Address) => {
             const service = await config.contracts.OperatorL1OptInService();
             await checkOptInL1(
                 service,
@@ -1982,10 +1739,7 @@ async function main() {
         .command("vault-in")
         .description("Operator opts in to a given Vault")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress) => {
             const service = await config.contracts.OperatorVaultOptInService();
             await optInVault(
                 service,
@@ -1997,10 +1751,7 @@ async function main() {
         .command("vault-out")
         .description("Operator opts out from a given Vault")
         .addArgument(argVaultAddress)
-        .action(async (vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, vaultAddress) => {
             const service = await config.contracts.OperatorVaultOptInService();
             await optOutVault(
                 service,
@@ -2013,10 +1764,7 @@ async function main() {
         .description("Check if an operator is opted in to a given Vault")
         .addArgument(argOperatorAddress)
         .addArgument(argVaultAddress)
-        .action(async (operator, vaultAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, operator, vaultAddress) => {
             const service = await config.contracts.OperatorVaultOptInService();
             await checkOptInVault(
                 service,
@@ -2038,10 +1786,7 @@ async function main() {
         .command("info")
         .description("Get summary informations of a ValidatorManager contract")
         .addArgument(argValidatorManagerAddress)
-        .action(async (validatorManagerAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, validatorManagerAddress) => {
             // instantiate ValidatorManager contract
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
@@ -2061,10 +1806,7 @@ async function main() {
         .description("Transfer the ownership of a ValidatorManager contract")
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgAddress("owner", "Owner address"))
-        .action(async (validatorManagerAddress, owner) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, validatorManagerAddress, owner) => {
             // instantiate ValidatorManager contract
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             await validatorManager.safeWrite.transferOwnership([owner]);
@@ -2075,13 +1817,10 @@ async function main() {
         .description("Complete the removal of a validator that has been pending removal")
         .addArgument(argValidatorManagerAddress)
         .addArgument(ArgHex("removalTxId", "Removal transaction ID"))
-        .action(async (validatorManagerAddress, removalTxId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, validatorManagerAddress, removalTxId) => {
             // instantiate ValidatorManager contract
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
-
+            logger.error("Not implemented yet");
         });
 
 
@@ -2100,10 +1839,7 @@ async function main() {
         .addArgument(argBalancerAddress)
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgBigInt("maxWeight", "Maximum weight"))
-        .action(async (balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, balancerValidatorManagerAddress, middlewareAddress, maxWeight) => {
             // instantiate BalancerValidatorManager contract
             const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await setUpSecurityModule(
@@ -2117,10 +1853,7 @@ async function main() {
         .command("get-security-modules")
         .description("Get all security modules")
         .addArgument(argBalancerAddress)
-        .action(async (balancerValidatorManagerAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, balancerValidatorManagerAddress) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModules(
                 balancer
@@ -2132,10 +1865,7 @@ async function main() {
         .description("Get security module weights")
         .addArgument(argBalancerAddress)
         .addArgument(ArgAddress("securityModule", "Security module address"))
-        .action(async (balancerValidatorManagerAddress, securityModule) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, balancerValidatorManagerAddress, securityModule) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
             await getSecurityModuleWeights(
                 balancer,
@@ -2148,10 +1878,7 @@ async function main() {
         .description("Get validator status by node ID")
         .addArgument(argBalancerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID"))
-        .action(async (balancerAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, balancerAddress, nodeId) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
@@ -2173,10 +1900,7 @@ async function main() {
         .description("Resend validator registration transaction")
         .addArgument(argBalancerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID"))
-        .action(async (balancerAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, balancerAddress, nodeId) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
@@ -2190,10 +1914,7 @@ async function main() {
         .description("Resend validator weight update transaction")
         .addArgument(argBalancerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID"))
-        .action(async (balancerAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, balancerAddress, nodeId) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
@@ -2207,10 +1928,7 @@ async function main() {
         .description("Resend validator removal transaction")
         .addArgument(argBalancerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID"))
-        .action(async (balancerAddress, nodeId) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, balancerAddress, nodeId) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const nodeIdHex32 = parseNodeID(nodeId, false)
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex32]);
@@ -2224,10 +1942,7 @@ async function main() {
         .description("Transfer Validator manager, balancer and its security modules ownership to a new owner")
         .addArgument(argBalancerAddress)
         .addArgument(ArgAddress("newOwner", "New owner address"))
-        .action(async (balancerAddress, newOwner) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, balancerAddress, newOwner) => {
             const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
             const VMTx = await balancer.safeWrite.transferValidatorManagerOwnership([newOwner]);
             logger.log("transferValidatorManagerOwnership executed successfully, tx hash:", VMTx);
@@ -2272,12 +1987,9 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (poaSecurityModule, nodeId, blsKey, initialWeight, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, poaSecurityModule, nodeId, blsKey, initialWeight, options) => {
             const poaSM = await config.contracts.PoASecurityModule(poaSecurityModule);
-            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(config.client.addresses.P), 'hex');
 
             // Default registration expiry to now + 12 hours if not provided
             // const registrationExpiry = options.registrationExpiry
@@ -2311,7 +2023,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
+        .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, addNodeTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -2319,20 +2031,18 @@ async function main() {
                 options.pchainTxPrivateKey = opts.privateKey!;
             }
 
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
 
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance')
 
             // Check if P-Chain address have 0.1 AVAX for tx fees but some times it can be less than 0.000050000 AVAX (perhaps when the validator was removed recently)
-            await requirePChainBallance(client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
+            await requirePChainBallance(config.client, BigInt(Math.round((50000 + Number(initialBalance)))), opts.yes);
 
             // Call middlewareCompleteValidatorRegistration
             await completeValidatorRegistration(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 poaSecurityModule,
                 balancerSvc,
                 config,
@@ -2348,10 +2058,7 @@ async function main() {
         .description("Initiate validator removal")
         .addArgument(argPoaSecurityModuleAddress)
         .addArgument(ArgNodeID())
-        .action(async (poaSecurityModuleAddress, nodeID) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, nodeID) => {
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerValidatorManagerAddress = await poaSecurityModule.read.balancerValidatorManager();
             const balancer = await config.contracts.BalancerValidatorManager(balancerValidatorManagerAddress);
@@ -2361,7 +2068,7 @@ async function main() {
             const validationId = await balancer.read.getNodeValidationID([nodeIdHex]);
             const txHash = await poaSecurityModule.safeWrite.initiateValidatorRemoval([validationId], {
                 chain: null,
-                account: client.account!,
+                account: config.client.account!,
             })
             logger.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
 
@@ -2376,19 +2083,17 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
-        .action(async (poaSecurityModuleAddress, removeNodeTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             const balancerSvc = await config.contracts.BalancerValidatorManager(await poaSecurityModule.read.balancerValidatorManager());
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             const txHash = await completeValidatorRemoval(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 poaSecurityModule,
                 balancerSvc,
                 config,
@@ -2407,10 +2112,7 @@ async function main() {
         .addArgument(argPoaSecurityModuleAddress)
         .addArgument(ArgNodeID())
         .addArgument(ArgBigInt("newWeight", "New weight"))
-        .action(async (poaSecurityModuleAddress, nodeId, newWeight) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, nodeId, newWeight) => {
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             logger.log("Calling function initializeValidatorStakeUpdate...");
 
@@ -2428,18 +2130,16 @@ async function main() {
         .addArgument(ArgHex("validatorStakeUpdateTxHash", "Validator stake update transaction hash"))
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
-        .action(async (poaSecurityModuleAddress, weightUpdateTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, weightUpdateTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const poaSecurityModule = await config.contracts.PoASecurityModule(poaSecurityModuleAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             const txHash = await completeWeightUpdate(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 poaSecurityModule,
                 config,
                 weightUpdateTxHash,
@@ -2468,10 +2168,7 @@ async function main() {
         .command("info")
         .description("Get global configuration from KiteStakingManager")
         .addOption(optKiteStakingManagerAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getKiteStakingManagerInfo(kiteStakingManager);
             logger.logJsonTree(info);
@@ -2482,10 +2179,7 @@ async function main() {
         .description("Get comprehensive information for a validator on KiteStakingManager")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("validationID", "Validation ID of the validator"))
-        .action(async (validationID, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, validationID, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getValidatorFullInfo(kiteStakingManager, validationID);
             logger.logJsonTree(info);
@@ -2496,10 +2190,7 @@ async function main() {
         .description("Get comprehensive information for a delegator on KiteStakingManager")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID of the delegator"))
-        .action(async (delegationID, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, delegationID, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getDelegatorFullInfo(kiteStakingManager, delegationID);
             logger.logJsonTree(info);
@@ -2514,10 +2205,7 @@ async function main() {
         .argument("minimumStakeDuration", "Minimum stake duration in seconds")
         .addArgument(ArgNumber("minimumDelegationFeeBips", "Minimum delegation fee in basis points"))
         .addArgument(ArgNumber("maximumStakeMultiplier", "Maximum stake multiplier"))
-        .action(async (minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config, minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Get staking config to determine decimals - typically 18 for native tokens
             // For now, assume 18 decimals (1e18) for stake amounts
@@ -2549,12 +2237,9 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
-            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(config.client.addresses.P), 'hex');
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
@@ -2595,7 +2280,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (initiateTxHash, blsProofOfPossession, options) => {
+        .asyncAction(async (_, initiateTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -2608,7 +2293,6 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             await kiteCompleteValidatorRegistration(
-                client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 kiteStakingManager,
                 config,
@@ -2626,10 +2310,7 @@ async function main() {
         .addArgument(ArgNodeID())
         .addArgument(ArgAddress("rewardRecipient", "Reward recipient address"))
         .argument("stakeAmount", "Initial stake amount")
-        .action(async (nodeId, rewardRecipient, stakeAmount, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config, nodeId, rewardRecipient, stakeAmount, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             // Get staking config to determine decimals for stake amount
@@ -2652,16 +2333,14 @@ async function main() {
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
         .argument("rpcUrl", "RPC URL for getting validator uptime")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (initiateTxHash, rpcUrl, options) => {
+        .asyncAction({ signer: true }, async (config, initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             await kiteCompleteDelegatorRegistration(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 kiteStakingManager,
                 config,
                 initiateTxHash,
@@ -2676,13 +2355,9 @@ async function main() {
         .addArgument(ArgHex("delegationID", "Delegation ID"))
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
         .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true)"))
-        .action(async (delegationID, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, delegationID, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateDelegatorRemoval(
-                client,
                 kiteStakingManager,
                 config,
                 delegationID,
@@ -2701,19 +2376,15 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash"))
-        .action(async (initiateRemovalTxHash, rpcUrl, options) => {
+        .asyncAction({ signer: true }, async (config, initiateRemovalTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             await kiteCompleteDelegatorRemoval(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 kiteStakingManager,
                 config,
                 initiateRemovalTxHash,
@@ -2730,10 +2401,7 @@ async function main() {
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID())
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
-        .action(async (nodeId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config, nodeId, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateValidatorRemoval(
                 kiteStakingManager,
@@ -2752,19 +2420,15 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate validator registration transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
-        .action(async (initiateRemovalTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             await kiteCompleteValidatorRemoval(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 kiteStakingManager,
                 config,
                 initiateRemovalTxHash,
@@ -2780,13 +2444,9 @@ async function main() {
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID of the validator"))
         .argument("rpcUrl", "RPC URL for getting validator uptime")
-        .action(async (nodeId, rpcUrl, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, rpcUrl, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await submitUptimeProof(
-                client,
                 config,
                 kiteStakingManager,
                 rpcUrl,
@@ -2815,13 +2475,10 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .argument("amount", "Amount to deposit in AVAX")
         .addArgument(ArgBigInt("minShares", "Minimum shares expected from the deposit (slippage protection)"))
-        .action(async ( amount, minShares, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config,  amount, minShares, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await depositStakingVault(
-                client,
+                config.client,
                 stakingVault,
                 amount,
                 minShares
@@ -2833,14 +2490,11 @@ async function main() {
         .description("Request withdrawal from the StakingVault")
         .addOption(optStakingVaultAddress)
         .argument("shares", "Amount of shares to withdraw")
-        .action(async (shares, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, shares, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             await requestWithdrawalStakingVault(
-                client,
+                config.client,
                 stakingVault,
                 shares
             );
@@ -2851,13 +2505,10 @@ async function main() {
         .description("Claim a withdrawal from the StakingVault")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
-        .action(async (requestId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, requestId, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await claimWithdrawalStakingVault(
-                client,
+                config.client,
                 stakingVault,
                 requestId
             );
@@ -2868,14 +2519,10 @@ async function main() {
         .description("Claim a withdrawal for a request ID (permissionless)")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
-        .action(async (requestId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config, requestId, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimWithdrawalFor([requestId]);
             logger.log("claimWithdrawalFor tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("claimWithdrawalFor executed successfully");
         });
 
@@ -2884,15 +2531,11 @@ async function main() {
         .description("Claim multiple withdrawals for request IDs (permissionless)")
         .addOption(optStakingVaultAddress)
         .argument("requestIds...", "Withdrawal request IDs to claim")
-        .action(async ( requestIds, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config,  requestIds, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const ids = (requestIds as string[]).map((id) => BigInt(id));
             const hash = await stakingVault.safeWrite.claimWithdrawalsFor([ids]);
             logger.log("claimWithdrawalsFor tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("claimWithdrawalsFor executed successfully");
         });
 
@@ -2901,14 +2544,10 @@ async function main() {
         .description("Claim escrowed withdrawal to a recipient")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgAddress("recipient", "Recipient address"))
-        .action(async (recipient, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({signer: true}, async (config, recipient, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
             logger.log("claimEscrowedWithdrawal tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("claimEscrowedWithdrawal executed successfully");
         });
 
@@ -2916,13 +2555,10 @@ async function main() {
         .command("process-epoch")
         .description("Process the current epoch in the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await processEpochStakingVault(
-                client,
+                config.client,
                 stakingVault
             );
         });
@@ -2938,12 +2574,9 @@ async function main() {
         .addOption(new Option("--pchain-disable-owner-threshold <threshold>", "P-Chain disable owner threshold").default(1).argParser(ParserNumber))
         .addOption(new Option("--pchain-remaining-balance-owner-address <address>", "P-Chain remaining balance owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
-        .action(async (nodeId, blsKey, stakeAmount, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, blsKey, stakeAmount, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
+            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(config.client.addresses.P), 'hex');
 
             // Build remainingBalanceOwner and disableOwner PChainOwner structs
             const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
@@ -2958,8 +2591,7 @@ async function main() {
             ];
 
             await initiateValidatorRegistrationStakingVault(
-                client,
-                config,
+                config.client,
                 stakingVault,
                 nodeId,
                 blsKey,
@@ -2976,17 +2608,13 @@ async function main() {
         .addArgument(argOperatorAddress)
         .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
         .addArgument(ArgAddress("feeRecipient", "Fee recipient address"))
-        .action(async (operator, allocationBips, feeRecipient, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operator, allocationBips, feeRecipient, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const allocationBipsBigInt = BigInt(allocationBips);
 
             await addOperatorStakingVault(
-                client,
-                config,
+                config.client,
                 stakingVault,
                 operator,
                 allocationBipsBigInt,
@@ -2999,14 +2627,10 @@ async function main() {
         .description("Remove an operator from the StakingVault")
         .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
-        .action(async (operator, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operator, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.removeOperator([operator]);
             logger.log("removeOperator tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("removeOperator executed successfully");
         });
 
@@ -3019,7 +2643,7 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--initial-balance <initialBalance>", "Node initial balance to pay for continuous fee").default('0.01'))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
-        .action(async (initiateTxHash, blsProofOfPossession, options) => {
+        .asyncAction(async (_, initiateTxHash, blsProofOfPossession, options) => {
             const opts = program.opts();
 
             // If pchainTxPrivateKey is not provided, use the private key
@@ -3034,7 +2658,6 @@ async function main() {
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await completeValidatorRegistrationStakingVault(
-                client,
                 options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
                 config,
                 stakingVault,
@@ -3051,17 +2674,13 @@ async function main() {
         .description("Initiate validator removal in the StakingVault")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
-        .action(async (nodeId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await initiateValidatorRemovalStakingVault(
-                client,
-                config,
+                config.client,
                 stakingVault,
                 validatorManager,
                 nodeId
@@ -3077,20 +2696,18 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate validator registration transaction hash").argParser((value) => value as Hex))
-        .action(async (initiateRemovalTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             await completeValidatorRemovalStakingVault(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 config,
                 stakingVault,
                 validatorManager,
@@ -3106,16 +2723,13 @@ async function main() {
         .description("Force remove a validator from the StakingVault (admin/emergency operation)")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
-        .action(async (nodeId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await forceRemoveValidatorStakingVault(
-                client,
+                config.client,
                 stakingVault,
                 validatorManager,
                 nodeId
@@ -3128,17 +2742,13 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .addArgument(ArgNodeID())
         .argument("amount", "Stake amount in AVAX")
-        .action(async (nodeId, amount, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, nodeId, amount, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await initiateDelegatorRegistrationStakingVault(
-                client,
-                config,
+                config.client,
                 stakingVault,
                 validatorManager,
                 nodeId,
@@ -3153,11 +2763,10 @@ async function main() {
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
         .argument("rpcUrl", "RPC URL for getting validator uptime (e.g. http(s)://domainOrIp:portIfNeeded)")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
-        .action(async (initiateTxHash, rpcUrl, options) => {
+        .asyncAction({ signer: true }, async (config, initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } = await getValidatorManagerAddress(config, stakingVault);
@@ -3168,8 +2777,7 @@ async function main() {
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
 
             await completeDelegatorRegistrationStakingVault(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 config,
                 stakingVault,
                 validatorManager,
@@ -3184,14 +2792,10 @@ async function main() {
         .description("Initiate delegator removal in the StakingVault")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
-        .action(async (delegationID, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, delegationID, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await initiateDelegatorRemovalStakingVault(
-                client,
-                config,
+                config.client,
                 stakingVault,
                 delegationID
             );
@@ -3202,13 +2806,10 @@ async function main() {
         .description("Force remove a delegator from the StakingVault (admin/emergency operation)")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
-        .action(async (delegationID, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, delegationID, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await forceRemoveDelegatorStakingVault(
-                client,
+                config.client,
                 stakingVault,
                 delegationID
             );
@@ -3223,25 +2824,22 @@ async function main() {
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be removed from the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash").argParser((value) => value as Hex))
-        .action(async (initiateRemovalTxHash, options) => {
+        .asyncAction({ signer: true }, async (config, initiateRemovalTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const { validatorManagerAddress } = await getValidatorManagerAddress(config, stakingVault);
             const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
             // Check if P-Chain address have 0.000050000 AVAX for tx fees
-            await requirePChainBallance(client, 50000n, opts.yes);
+            await requirePChainBallance(config.client, 50000n, opts.yes);
 
             await completeDelegatorRemovalStakingVault(
-                client,
-                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client,
+                options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : config.client,
                 config,
                 stakingVault,
                 validatorManager,
                 initiateRemovalTxHash,
-                !options.skipWaitApi,
                 options.delegationId.length > 0 ? options.delegationId : undefined,
                 options.initiateTx
             );
@@ -3253,10 +2851,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
         .argument("allocationBips", "Allocation in basis points (1 bips = 0.01%)")
-        .action(async (operator, allocationBips, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operator, allocationBips, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const allocationBipsBigInt = BigInt(allocationBips);
             await stakingVault.safeWrite.updateOperatorAllocations([[operator], [allocationBipsBigInt]])
@@ -3266,15 +2861,11 @@ async function main() {
         .command("claim-operator-fees")
         .description("Claim operator fees for the caller")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimOperatorFees([]);
             logger.log("claimOperatorFees tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("claimOperatorFees executed successfully");
         });
 
@@ -3283,15 +2874,11 @@ async function main() {
         .description("Force claim operator fees for an operator (admin)")
         .addOption(optStakingVaultAddress)
         .addArgument(argOperatorAddress)
-        .action(async (operator, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operator, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.forceClaimOperatorFees([operator]);
             logger.log("forceClaimOperatorFees tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("forceClaimOperatorFees executed successfully");
         });
 
@@ -3299,16 +2886,12 @@ async function main() {
         .command("claim-pending-protocol-fees")
         .description("Claim pending protocol fees")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            console.log(process.env.STAKING_VAULT)
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
+
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
 
             const hash = await stakingVault.safeWrite.claimPendingProtocolFees([]);
             logger.log("claimPendingProtocolFees tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("claimPendingProtocolFees executed successfully");
         });
 
@@ -3316,14 +2899,10 @@ async function main() {
         .command("harvest")
         .description("Harvest rewards")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvest([]);
             logger.log("harvest tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("harvest executed successfully");
         });
 
@@ -3334,14 +2913,10 @@ async function main() {
         .addArgument(ArgBigInt("operatorIndex", "Operator index"))
         .addArgument(ArgBigInt("start", "Validator list start index"))
         .addArgument(ArgBigInt("batchSize", "Validator batch size"))
-        .action(async (operatorIndex, start, batchSize, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operatorIndex, start, batchSize, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
             logger.log("harvestValidators tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("harvestValidators executed successfully");
         });
 
@@ -3352,14 +2927,10 @@ async function main() {
         .addArgument(ArgBigInt("operatorIndex", "Operator index"))
         .addArgument(ArgBigInt("start", "Delegator list start index"))
         .addArgument(ArgBigInt("batchSize", "Delegator batch size"))
-        .action(async (operatorIndex, start, batchSize, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, operatorIndex, start, batchSize, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
             logger.log("harvestDelegators tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("harvestDelegators executed successfully");
         });
 
@@ -3367,14 +2938,10 @@ async function main() {
         .command("prepare-withdrawals")
         .description("Prepare withdrawals by initiating stake removals")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
             logger.log("prepareWithdrawals tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("prepareWithdrawals executed successfully");
         });
 
@@ -3382,14 +2949,10 @@ async function main() {
         .command("pause")
         .description("Pause the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.pause([]);
             logger.log("pause tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("pause executed successfully");
         });
 
@@ -3397,14 +2960,10 @@ async function main() {
         .command("unpause")
         .description("Unpause the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.unpause([]);
             logger.log("unpause tx hash:", hash);
-            await client.waitForTransactionReceipt({ hash, confirmations: opts.wait });
             logger.log("unpause executed successfully");
         });
 
@@ -3412,22 +2971,16 @@ async function main() {
         .command("info")
         .description("Get general overview of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, client);
+            await getGeneralInfo(stakingVault, config.client);
         });
 
     stakingVaultCmd
         .command("fees-info")
         .description("Get fees configuration of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getFeesInfo(stakingVault);
         });
@@ -3436,10 +2989,7 @@ async function main() {
         .command("operators-info")
         .description("Get operators details of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getOperatorsInfo(stakingVault);
         });
@@ -3448,10 +2998,7 @@ async function main() {
         .command("validators-info")
         .description("Get validators details per operator of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getValidatorsInfo(stakingVault);
         });
@@ -3460,10 +3007,7 @@ async function main() {
         .command("delegators-info")
         .description("Get delegations details per operator of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getDelegatorsInfo(stakingVault);
         });
@@ -3472,10 +3016,7 @@ async function main() {
         .command("withdrawals-info")
         .description("Get withdrawal queue info of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getWithdrawalsInfo(stakingVault);
         });
@@ -3484,10 +3025,7 @@ async function main() {
         .command("epoch-info")
         .description("Get epoch info of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await getEpochInfo(stakingVault);
         });
@@ -3496,12 +3034,9 @@ async function main() {
         .command("full-info")
         .description("Get all information about the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, client);
+            await getGeneralInfo(stakingVault, config.client);
             await getFeesInfo(stakingVault);
             await getOperatorsInfo(stakingVault);
             await getValidatorsInfo(stakingVault);
@@ -3514,10 +3049,7 @@ async function main() {
         .command("get-current-epoch")
         .description("Get current epoch number of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const currentEpoch = await stakingVault.read.getCurrentEpoch();
             logger.log(`Current epoch: ${currentEpoch}`);
@@ -3527,10 +3059,7 @@ async function main() {
         .command("get-epoch-duration")
         .description("Get epoch duration in seconds of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const epochDuration = await stakingVault.read.getEpochDuration();
             logger.log(`Epoch duration (seconds): ${epochDuration}`);
@@ -3540,10 +3069,7 @@ async function main() {
         .command("get-next-epoch-start-time")
         .description("Get next epoch start time (timestamp) of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const startTime = await stakingVault.read.getStartTime();
             const [epochDuration, currentEpoch] = await stakingVault.multicall(["getEpochDuration", "getCurrentEpoch"]);
@@ -3563,10 +3089,7 @@ async function main() {
         .addArgument(argMiddlewareVaultManagerAddress)
         .addArgument(argOperatorAddress)
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
-        .action(async (middlewareVaultManager, operatorAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareVaultManager, operatorAddress) => {
 
             const operator = operatorAddress;
             logger.log(`Operator: ${operator}`);
@@ -3655,7 +3178,7 @@ async function main() {
         .description("Show L1 stakes for a given validator manager")
         .addArgument(argValidatorManagerAddress)
         .description("Show L1 stakes for a given validator manager")
-        .action(async () => {
+        .asyncAction(async (config, ) => {
             // TODO: Implement
         });
 
@@ -3675,15 +3198,15 @@ async function main() {
         .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
         .addArgument(ArgCB58("blockchainId", "Blockchain ID"))
         .addArgument(ArgNodeID())
-        .action(async (rpcUrl, blockchainId, nodeId) => {
+        .asyncAction(async (config, rpcUrl, blockchainId, nodeId) => {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
             const opts = program.opts();
             const client = await generateClient(opts.network);
             await getValidationUptimeMessage(
-                client,
+                config.client,
                 rpcUrl,
                 nodeId,
-                client.network === "fuji" ? 5 : 1,
+                config.client.network === "fuji" ? 5 : 1,
                 blockchainId);
         });
 
@@ -3691,14 +3214,10 @@ async function main() {
         .command('compute-validator-uptime')
         .addArgument(argUptimeTrackerAddress)
         .addArgument(ArgHex("signedUptimeHex", "Signed uptime hex"))
-        .action(async (uptimeTrackerAddress, signedUptimeHex) => {
-            const opts = program.opts();
-            const { privateKey, network, wait, safe } = program.opts();
-            const client = await generateClient(network, privateKey!, safe);
-            const config = getConfig(client, wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, signedUptimeHex) => {
             await computeValidatorUptime(
-                await config.contracts.UptimeTracker(uptimeTrackerAddress as Hex),
-                signedUptimeHex as Hex
+                await config.contracts.UptimeTracker(uptimeTrackerAddress),
+                signedUptimeHex
             );
         });
 
@@ -3710,19 +3229,18 @@ async function main() {
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
         .addArgument(argUptimeTrackerAddress)
-        .action(async (rpcUrl, blockchainId, nodeId, uptimeTrackerAddress) => {
+        .asyncAction({ signer: true }, async (config, rpcUrl, blockchainId, nodeId, uptimeTrackerAddress) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
 
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
-                client,
+                config.client,
                 rpcUrl,
                 nodeId,
                 blockchainId,
@@ -3737,14 +3255,13 @@ async function main() {
         .addArgument(argUptimeTrackerAddress)
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (uptimeTrackerAddress, operator, epoch) => {
+        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, operator, epoch) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeAtEpoch(
                 uptimeTracker,
@@ -3760,14 +3277,13 @@ async function main() {
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("startEpoch", "Starting epoch number"))
         .addArgument(ArgNumber("endEpoch", "Ending epoch number"))
-        .action(async (uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
+        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
             const opts = program.opts();
             if (!opts.privateKey!) {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             await computeOperatorUptimeForEpochs(
                 uptimeTracker,
@@ -3784,10 +3300,7 @@ async function main() {
         .addArgument(argUptimeTrackerAddress)
         .addArgument(ArgHex("validationID", "Validation ID of the validator"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (uptimeTrackerAddress, validationID, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, uptimeTrackerAddress, validationID, epoch) => {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getValidatorUptimeForEpoch(
                 uptimeTracker,
@@ -3803,10 +3316,7 @@ async function main() {
         .addArgument(argUptimeTrackerAddress)
         .addArgument(ArgHex("validationID", "Validation ID of the validator"))
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (uptimeTrackerAddress, validationID, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, uptimeTrackerAddress, validationID, epoch) => {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isValidatorUptimeSetForEpoch(
                 uptimeTracker,
@@ -3822,10 +3332,7 @@ async function main() {
         .addArgument(argUptimeTrackerAddress)
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (uptimeTrackerAddress, operator, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, uptimeTrackerAddress, operator, epoch) => {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const uptime = await getOperatorUptimeForEpoch(
                 uptimeTracker,
@@ -3841,10 +3348,7 @@ async function main() {
         .addArgument(argUptimeTrackerAddress)
         .addArgument(argOperatorAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
-        .action(async (uptimeTrackerAddress, operator, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, uptimeTrackerAddress, operator, epoch) => {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const isSet = await isOperatorUptimeSetForEpoch(
                 uptimeTracker,
@@ -3862,15 +3366,12 @@ async function main() {
         .argument("rpcUrl", "RPC URL of the network")
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
-        .action(async (uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
             const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             await uptimeSync(
-                client,
+                config.client,
                 uptimeTracker,
                 middlewareSvc,
                 rpcUrl,
@@ -3891,10 +3392,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to distribute rewards for"))
         .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
-        .action(async (rewardsAddress, epoch, batchSize) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const txHash = await distributeRewards(
                 rewardsContract,
@@ -3909,15 +3407,12 @@ async function main() {
         .description("Claim rewards for a staker in batch of 64 epochs")
         .addArgument(argRewardsAddress)
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? (await getDefaultAccount(opts));
+            const recipient = options.recipient ?? config.client.account!.address;
 
             let hashs: Hex[] = [];
-            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Staker', client.account!) })) {
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config as any, 'Staker', config.client.account!) })) {
                 hashs.push(await claimRewards(
                     rewardsContract,
                     recipient,
@@ -3929,7 +3424,7 @@ async function main() {
                 return;
             }
 
-            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config as any)));
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
@@ -3943,16 +3438,13 @@ async function main() {
         .description("Claim operator fees in batch of 64 epochs")
         .addArgument(argRewardsAddress)
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? (await getDefaultAccount(opts));
+            const recipient = options.recipient ?? config.client.account!.address;
 
             let hashs: Hex[] = [];
 
-            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Operator', client.account!) })) {
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config as any, 'Operator', config.client.account!) })) {
                 hashs.push(await claimOperatorFee(
                     rewardsContract,
                     recipient
@@ -3964,7 +3456,7 @@ async function main() {
                 return;
             }
 
-            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config as any)));
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
@@ -3979,16 +3471,13 @@ async function main() {
         .description("Claim all curator fees in batch of 64 epochs")
         .addArgument(argRewardsAddress)
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? (await getDefaultAccount(opts));
+            const recipient = options.recipient ?? config.client.account!.address;
 
             let hashs: Hex[] = [];
 
-            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config, 'Curator', client.account!) })) {
+            for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config as any, 'Curator', config.client.account!) })) {
                 hashs.push(await claimCuratorFee(
                     rewardsContract,
                     recipient
@@ -4000,7 +3489,7 @@ async function main() {
                 return;
             }
 
-            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config)));
+            const logs = await Promise.all(hashs.map(hash => getERC20Events(hash, config as any)));
             logs.flat().forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
@@ -4014,12 +3503,9 @@ async function main() {
         .description("Claim protocol fees (only for protocol owner)")
         .addArgument(argRewardsAddress)
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? (await getDefaultAccount(opts));
+            const recipient = options.recipient ?? config.client.account!.address;
             const hash = await claimProtocolFee(
                 rewardsContract,
                 recipient
@@ -4030,7 +3516,7 @@ async function main() {
                 return;
             }
 
-            const logs = await getERC20Events(hash, config)
+            const logs = await getERC20Events(hash, config as any)
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
@@ -4045,12 +3531,9 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to claim undistributed rewards for"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
-        .action(async (rewardsAddress, epoch, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? (await getDefaultAccount(opts));
+            const recipient = options.recipient ?? config.client.account!.address;
             const hash = await claimUndistributedRewards(
                 rewardsContract,
                 epoch,
@@ -4062,7 +3545,7 @@ async function main() {
                 return;
             }
 
-            const logs = await getERC20Events(hash, config)
+            const logs = await getERC20Events(hash, config as any)
             logs.forEach((log) => {
                 if (log.eventName === "Transfer") {
                     const { from, to, value } = log.args;
@@ -4078,10 +3561,7 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .argument("rewardsAmount", "Amount of rewards in decimal format")
-        .action(async (rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             if (rewardsContract.name !== 'RewardsNativeToken') {
                 throw new Error('Rewards contract is not a RewardsNativeToken');
@@ -4093,7 +3573,7 @@ async function main() {
             const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
             await token.safeWrite.approve([rewardsAddress, amountToApprove], {
                 chain: null,
-                account: client.account!,
+                account: config.client.account!,
             });
             const txHash = await setRewardsAmountForEpochs(
                 rewardsContract,
@@ -4110,10 +3590,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
         .addArgument(ArgNumber("bips", "Bips in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, collateralClass, bips) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, collateralClass, bips) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await setRewardsBipsForCollateralClass(
                 rewardsContract,
@@ -4128,10 +3605,7 @@ async function main() {
         .description("Set minimum required uptime for rewards eligibility")
         .addArgument(argRewardsAddress)
         .addArgument(ArgBigInt("minUptime", "Minimum uptime in seconds"))
-        .action(async (rewardsAddress, minUptime) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, minUptime) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await setMinRequiredUptime(
                 rewardsContract,
@@ -4145,10 +3619,7 @@ async function main() {
         .description("Set protocol owner (DEFAULT_ADMIN_ROLE only)")
         .addArgument(argRewardsAddress)
         .addArgument(ArgAddress("newOwner", "New protocol owner address"))
-        .action(async (rewardsAddress, newOwner) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, newOwner) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await setProtocolOwner(
                 rewardsContract,
@@ -4162,10 +3633,7 @@ async function main() {
         .description("Update protocol fee")
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, newFee) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, newFee) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateProtocolFee(
                 rewardsContract,
@@ -4179,10 +3647,7 @@ async function main() {
         .description("Update operator fee")
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, newFee) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, newFee) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateOperatorFee(
                 rewardsContract,
@@ -4196,10 +3661,7 @@ async function main() {
         .description("Update curator fee")
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("newFee", "New fee in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, newFee) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, newFee) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateCuratorFee(
                 rewardsContract,
@@ -4215,10 +3677,7 @@ async function main() {
         .addArgument(ArgNumber("protocolFee", "New protocol fee in basis points (100 = 1%)"))
         .addArgument(ArgNumber("operatorFee", "New operator fee in basis points (100 = 1%)"))
         .addArgument(ArgNumber("curatorFee", "New curator fee in basis points (100 = 1%)"))
-        .action(async (rewardsAddress, protocolFee, operatorFee, curatorFee) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction({ signer: true }, async (config, rewardsAddress, protocolFee, operatorFee, curatorFee) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const hash = await updateAllFees(
                 rewardsContract,
@@ -4234,10 +3693,7 @@ async function main() {
         .description("Get rewards amount for a specific epoch")
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to query"))
-        .action(async (rewardsAddress, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, epoch) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getEpochRewards(
                 rewardsContract,
@@ -4251,10 +3707,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to query"))
         .addArgument(argOperatorAddress)
-        .action(async (rewardsAddress, epoch, operator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, epoch, operator) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getOperatorShares(
                 rewardsContract,
@@ -4269,10 +3722,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to query"))
         .addArgument(argVaultAddress)
-        .action(async (rewardsAddress, epoch, vault) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, epoch, vault) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getVaultShares(
                 rewardsContract,
@@ -4287,10 +3737,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to query"))
         .addArgument(ArgAddress("curator", "Curator address"))
-        .action(async (rewardsAddress, epoch, curator) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, epoch, curator) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getCuratorShares(
                 rewardsContract,
@@ -4304,10 +3751,7 @@ async function main() {
         .description("Get protocol rewards for a token")
         .addArgument(argRewardsAddress)
         .addArgument(ArgAddress("token", "Token address"))
-        .action(async (rewardsAddress, token) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, token) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getProtocolRewards(
                 rewardsContract
@@ -4319,10 +3763,7 @@ async function main() {
         .description("Get distribution batch status for an epoch")
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to query"))
-        .action(async (rewardsAddress, epoch) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, epoch) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getDistributionBatch(
                 rewardsContract,
@@ -4334,10 +3775,7 @@ async function main() {
         .command("get-fees-config")
         .description("Get current fees configuration")
         .addArgument(argRewardsAddress)
-        .action(async (rewardsAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getFeesConfiguration(
                 rewardsContract
@@ -4349,10 +3787,7 @@ async function main() {
         .description("Get rewards bips for collateral class")
         .addArgument(argRewardsAddress)
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .action(async (rewardsAddress, collateralClass) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, collateralClass) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getRewardsBipsForCollateralClass(
                 rewardsContract,
@@ -4364,10 +3799,7 @@ async function main() {
         .command("get-min-uptime")
         .description("Get minimum required uptime for rewards eligibility")
         .addArgument(argRewardsAddress)
-        .action(async (rewardsAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getMinRequiredUptime(
                 rewardsContract
@@ -4380,10 +3812,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgAddress("staker", "Staker address"))
         .addArgument(argRewardTokenAddress)
-        .action(async (rewardsAddress, staker, rewardToken) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, staker, rewardToken) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getLastEpochClaimedStaker(
                 rewardsContract,
@@ -4397,10 +3826,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(argOperatorAddress)
         .addArgument(argRewardTokenAddress)
-        .action(async (rewardsAddress, operator, rewardToken) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, operator, rewardToken) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getLastEpochClaimedOperator(
                 rewardsContract,
@@ -4414,10 +3840,7 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgAddress("curator", "Curator address"))
         .addArgument(argRewardTokenAddress)
-        .action(async (rewardsAddress, curator, rewardToken) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, true);
+        .asyncAction(async (config, rewardsAddress, curator, rewardToken) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getLastEpochClaimedCurator(
                 rewardsContract,
@@ -4460,10 +3883,7 @@ async function main() {
         .addArgument(argAccessControlAddress)
         .argument("role", "Role hash or name case unsensitive without '()'")
         .addArgument(ArgAddress("account", "Account address to grant the role to"))
-        .action(async (contractAddress, role, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, contractAddress, role, account) => {
             const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
@@ -4482,10 +3902,7 @@ async function main() {
         .addArgument(argAccessControlAddress)
         .argument("role", "Role hash or name case unsensitive")
         .addArgument(ArgAddress("account", "Account address to revoke the role from"))
-        .action(async (contractAddress, role, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, contractAddress, role, account) => {
             const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
@@ -4504,10 +3921,7 @@ async function main() {
         .addArgument(argAccessControlAddress)
         .argument("role", "Role hash or name case unsensitive")
         .addArgument(ArgAddress("account", "Account address to check"))
-        .action(async (contractAddress, role, account) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, contractAddress, role, account) => {
             const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
@@ -4525,10 +3939,7 @@ async function main() {
         .description("Get the admin role that controls a specific role")
         .addArgument(argAccessControlAddress)
         .argument("role", "Role hash or name case unsensitive")
-        .action(async (contractAddress, role) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, contractAddress, role) => {
             const accessControl = await config.contracts.AccessControl(contractAddress);
             if (!await isAccessControl(accessControl)) {
                 throw new Error("Contract does not implement AccessControl interface");
@@ -4547,7 +3958,7 @@ async function main() {
     ledgerCmd
         .command("addresses")
         .description("Get ledger addresses")
-        .action(async () => {
+        .asyncAction(async () => {
             const opts = program.opts();
             const client = await generateClient(opts.network, 'ledger');
             logger.log(client.addresses);
@@ -4556,7 +3967,7 @@ async function main() {
     ledgerCmd
         .command('fix-usb-rules')
         .description('Fix ledger usb rules on linux')
-        .action(async () => {
+        .asyncAction(async (config, ) => {
             logger.log("Fixing ledger usb rules...");
             try {
                 // Execute system command to fix ledger usb rules (https://github.com/LedgerHQ/ledger-live-desktop/issues/2873#issuecomment-674844905)
@@ -4576,22 +3987,18 @@ async function main() {
         .command("nonce")
         .description("Get safe nonce")
         .addArgument(ArgAddress("safeAddress", "Address of the safe"))
-        .action(async (safeAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            logger.log((await client.safe!.getNonce()).toString());
+        .asyncAction(async (config, safeAddress) => {
+            logger.log((await config.client.safe!.getNonce()).toString());
         });
 
     safeCmd
         .command("get-role")
         .description("Get user role in the safe")
         .addOption(OptAddress("--account <account>", "Account address to check"))
-        .action(async (options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const addressToCheck = options.account || client.account!.address;
-            const owners = await client.safe!.getOwners()
-            const delegates = await client.safe!.apiKit!.getSafeDelegates({ safeAddress: opts.safe! })
+        .asyncAction({ signer: true }, async (config, options) => {
+            const addressToCheck = options.account || config.client.account!.address;
+            const owners = await config.client.safe!.getOwners()
+            const delegates = await config.client.safe!.apiKit!.getSafeDelegates({ safeAddress: program.opts().safe! })
             if (owners.find(owner => owner.toLowerCase() === addressToCheck.toLowerCase())) {
                 logger.log("Owner");
             } else if (delegates.results.find(delegate => delegate.delegate.toLowerCase() === addressToCheck.toLowerCase())) {
@@ -4608,13 +4015,11 @@ async function main() {
         .argument('chainName', 'Name of the chain')
         .argument('genesisFile', 'Path to the genesis file')
         .option('--vm-id <vmId>', 'subnet-evm custom id')
-        .action(async (chainName, genesisFile, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const subnetId = await createSubnet({ client })
+        .asyncAction({ signer: true }, async (config, chainName, genesisFile, options) => {
+            const subnetId = await createSubnet({ client: config.client })
             const genesisData = readFileSync(genesisFile).toString('utf-8');
             const chainId = await createChain({
-                client,
+                client: config.client,
                 chainName,
                 subnetId,
                 genesisData,
@@ -4636,18 +4041,15 @@ async function main() {
         .addOption(new Option('--validatorConfig <validatorConfig>', 'Validator config file path (json)').default([]).argParser(collectMultiple(String)).makeOptionMandatory())
         .addOption(OptHex('--convertTx <convertTx>', 'Existing convert transaction hash to reuse'))
         .addOption(new Option('--init-vmc', 'Initialize the VMC before conversion'))
-        .action(async (subnetId, chainId, validatorManagerAddress, vmcChainId, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction({ signer: true }, async (config, subnetId, chainId, validatorManagerAddress, vmcChainId, options) => {
             // const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress)
-            await convertSubnetToL1({ client, subnetId, chainId, validatorManager: validatorManagerAddress, validatorManagerBlockchainID: vmcChainId, validators: options.validatorConfig.map(v => JSON.parse(readFileSync(v).toString('utf-8'))), convertTx: options.convertTx, init: options.initVmc })
+            await convertSubnetToL1({ client: config.client, subnetId, chainId, validatorManager: validatorManagerAddress, validatorManagerBlockchainID: vmcChainId, validators: options.validatorConfig.map(v => JSON.parse(readFileSync(v).toString('utf-8'))), convertTx: options.convertTx, init: options.initVmc })
         });
 
     program
         .command("help-all")
         .description("Display help for all commands and sub-commands")
-        .action(async () => {
+        .action(() => {
             console.log(`Suzaku CLI - version ${program.version()}`);
             console.log(program.description());
             console.log("Commands:\n");
@@ -4657,13 +4059,13 @@ async function main() {
     program
         .command("completion install")
         .description("Install autocompletion for Bash/Zsh")
-        .action(async () => installCompletion(program));
+        .action(() => installCompletion(program));
 
     program
         .command("__complete")
         .description("internal completion helper")
         .option("--line <line>")
-        .action(async ({ line }) => {
+        .action(({ line }) => {
             line = line || "";
             const parts = line.trim().split(/\s+/).slice(1);
 
