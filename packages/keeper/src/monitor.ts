@@ -15,6 +15,7 @@ export interface AlertThresholds {
     queueDepth: number;          // e.g. 100
     consecutiveFailures: number; // e.g. 3
     exitDebtBips: number;        // e.g. 500 = 5% of allocation
+    tickDurationMs: number;      // e.g. pollInterval * 0.8 * 1000
 }
 
 interface AlertPayload {
@@ -446,7 +447,7 @@ export class Monitor {
 
     // ── Alerting ─────────────────────────────────────────────────────
 
-    async checkAlerts(): Promise<void> {
+    async checkAlerts(pollIntervalSeconds: number): Promise<void> {
         // Solvency deviation
         await this.checkAlertFromGauge('solvency', this.solvencyRatio, (val) => Math.abs(val - 1.0) > this.thresholds.solvencyDeviation,
             'Solvency ratio drift', 'warning', this.thresholds.solvencyDeviation);
@@ -473,6 +474,21 @@ export class Monitor {
         // Vault paused (already handled via event watcher, but also check on tick)
         await this.checkAlertFromGauge('vaultPaused', this.vaultPaused, (val) => val === 1,
             'Vault is paused', 'critical', 0);
+
+        // Tick duration
+        await this.checkAlertFromGauge('tickDuration', this.tickDurationMs,
+            (val) => val > this.thresholds.tickDurationMs,
+            'Tick duration exceeded threshold', 'warning', this.thresholds.tickDurationMs);
+
+        // Tick staleness — fires at 2x poll interval, before Docker restart at 3x
+        if (this._lastTickTimestamp > 0) {
+            const ageSeconds = (Date.now() - this._lastTickTimestamp) / 1000;
+            const stalenessThreshold = pollIntervalSeconds * 2;
+            this.checkAlert('tickStaleness',
+                ageSeconds > stalenessThreshold,
+                ageSeconds, stalenessThreshold,
+                'Keeper tick stale — no completed tick in 2x poll interval', 'critical');
+        }
     }
 
     private async checkAlertFromGauge(

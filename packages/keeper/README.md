@@ -151,10 +151,12 @@ Alerts fire as webhook POSTs when a condition transitions from OK to alerting (o
 | Epoch lag | `> 2` epochs | `processEpoch` is capped at 350 entries per call - large queues need multiple iterations. Lag means stuck withdrawals and stale accounting |
 | Queue depth | `> 100` requests | The withdrawal queue is FIFO with head-of-line blocking. One large unfulfillable request blocks everything behind it |
 | Consecutive tick failures | `>= 3` | The keeper is down. All permissionless operations pile up - epochs fall behind, withdrawals stall, queue grows |
+| Tick duration | `> pollInterval * 0.8 * 1000` ms | A tick is taking too long relative to the poll interval. Indicates RPC slowness or heavy on-chain work |
+| Tick staleness | `> pollInterval * 2` seconds | No tick has completed in 2x the poll interval. Fires before Docker's health-based restart at 3x |
 | Vault paused | immediate | Deposits and withdrawal requests are blocked. Emergency state |
 | Operator exit debt | `> 500 bips` (5%) of allocation | **Not yet implemented** - threshold is accepted but the alert does not fire. Tracked for a future release |
 
-All thresholds are configurable via CLI flags (see below). Only `--alert-webhook` has an env var (`ALERT_WEBHOOK_URL`).
+All thresholds are configurable via CLI flags (see below).
 
 ### Structured Logs
 
@@ -195,6 +197,7 @@ Import `grafana-dashboard.json` via the Grafana UI (Dashboards → Import). The 
 | `--alert-queue-depth <n>` | `100` | - | Queue depth threshold |
 | `--alert-consecutive-failures <n>` | `3` | - | Consecutive tick failures threshold |
 | `--alert-exit-debt-bips <n>` | `500` | - | Operator exit debt threshold in bips |
+| `--alert-tick-duration <ms>` | `pollInterval * 0.8 * 1000` | `ALERT_TICK_DURATION_MS` | Tick duration alert threshold in ms |
 
 ### `run <stakingVaultAddress>`
 
@@ -216,6 +219,7 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 |--------|---------|-----|-------------|
 | `--poll-interval <seconds>` | `1800` | - | Seconds between ticks (30 min) |
 | `--harvest-interval <seconds>` | `43200` | - | Seconds between harvests (12 hours) |
+| `--tick-timeout <seconds>` | `0` (disabled) | `TICK_TIMEOUT` | Tick timeout. If a tick takes longer, it's abandoned and marked hung. 0 disables |
 | `--pchain-tx-private-key <pk>` | - | `PCHAIN_TX_PRIVATE_KEY` | P-Chain key for completing registrations/removals |
 | `--core` | off | - | Core operations only |
 | `--completions` | off | - | P-Chain completions only |
@@ -234,6 +238,8 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 | `SKIP_ABI_VALIDATION` | no | Set to any non-empty value to skip contract ABI validation |
 | `METRICS_PORT` | no | Prometheus metrics port (default: `9090`, set `0` to disable) |
 | `ALERT_WEBHOOK_URL` | no | Webhook URL for alerts. If unset, no alerts are sent |
+| `TICK_TIMEOUT` | no | Tick timeout in seconds (0 = disabled). When a tick exceeds this, it's abandoned and marked hung |
+| `ALERT_TICK_DURATION_MS` | no | Tick duration alert threshold in ms (default: `pollInterval * 0.8 * 1000`) |
 
 ## Build
 
