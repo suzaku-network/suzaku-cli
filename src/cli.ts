@@ -2974,14 +2974,14 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("set-max-delegators-per-operator")
-        .description("Set the maximum number of delegators per operator")
+        .command("set-withdrawal-request-fee")
+        .description("Set the withdrawal request fee")
         .addOption(optStakingVaultAddress)
-        .addArgument(ArgBigInt("maxDelegatorsPerOperator", "Maximum number of delegators per operator"))
-        .asyncAction({ signer: true }, async (config, maxDelegatorsPerOperator, options) => {
+        .addArgument(ArgBigInt("fee", "Withdrawal request fee"))
+        .asyncAction({ signer: true }, async (config, fee, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            const hash = await stakingVault.safeWrite.setMaxDelegatorsPerOperator([maxDelegatorsPerOperator]);
-            logger.log("setMaxDelegatorsPerOperator executed successfully, tx hash:", hash);
+            const hash = await stakingVault.safeWrite.setWithdrawalRequestFee([fee]);
+            logger.log("setWithdrawalRequestFee executed successfully, tx hash:", hash);
         });
 
     stakingVaultCmd
@@ -3081,6 +3081,16 @@ async function main() {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.setProtocolFeeRecipient([protocolFeeRecipient]);
             logger.log("setProtocolFeeRecipient executed successfully, tx hash:", hash);
+        });
+    
+    stakingVaultCmd
+        .command("get-withdrawal-request-fee")
+        .description("Get the withdrawal request fee")
+        .addOption(optStakingVaultAddress)
+        .asyncAction(async (config, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            const fee = await stakingVault.read.getWithdrawalRequestFee();
+            logger.log("Withdrawal request fee:", fee);
         });
 
     stakingVaultCmd
