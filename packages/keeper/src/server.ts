@@ -31,5 +31,9 @@ export function startServer(
         process.stderr.write(`Metrics server listening on port ${port}\n`);
     });
 
+    server.on('error', (err: NodeJS.ErrnoException) => {
+        process.stderr.write(`[server] HTTP server error: ${err.message} (code: ${err.code})\n`);
+    });
+
     return server;
 }

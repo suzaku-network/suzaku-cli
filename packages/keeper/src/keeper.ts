@@ -67,11 +67,11 @@ async function processEpochLoop(
             break;
         }
 
-        if (iteration >= MAX_EPOCH_ITERATIONS) {
-            throw new Error(`Epoch processing did not finish after ${MAX_EPOCH_ITERATIONS} iterations — aborting`);
-        }
-
         logger.log("More processing needed, continuing...");
+    }
+
+    if (iteration >= MAX_EPOCH_ITERATIONS) {
+        throw new Error(`Epoch processing did not finish after ${MAX_EPOCH_ITERATIONS} iterations — aborting`);
     }
 
     return { processed: true, iterations: iteration };
@@ -339,7 +339,8 @@ async function completePendingRemovals(
                     client,
                     stakingVault.address,
                     'StakingVault__DelegatorRemovalInitiated',
-                    delegationID
+                    delegationID,
+                    43200n // ~1 day lookback for delegators (vs 7 days for validators)
                 );
 
                 if (!removalTxHash) continue; // Not pending removal
@@ -374,13 +375,13 @@ async function findRemovalTxHash(
     client: ExtendedWalletClient,
     contractAddress: Hex,
     eventName: 'StakingVault__ValidatorRemovalInitiated' | 'StakingVault__DelegatorRemovalInitiated',
-    id: Hex
+    id: Hex,
+    lookbackBlocks = 302400n
 ): Promise<Hex | null> {
     // Scan recent blocks for the removal initiation event
     // The indexed param is the second one (validationID or delegationID)
     const currentBlock = await client.getBlockNumber();
-    // Look back ~7 days of blocks (~2s block time on Kite L1)
-    const fromBlock = currentBlock > 302400n ? currentBlock - 302400n : 0n;
+    const fromBlock = currentBlock > lookbackBlocks ? currentBlock - lookbackBlocks : 0n;
 
     const event = eventName === 'StakingVault__ValidatorRemovalInitiated'
         ? parseAbiItem('event StakingVault__ValidatorRemovalInitiated(address indexed operator, bytes32 indexed validationID)')
@@ -502,12 +503,12 @@ async function completePendingRegistrations(
                 }
 
                 logger.log(`Found initiate registration tx: ${txHash}`);
+                // blsProofOfPossession='', initialBalance=0: not needed for keeper completion
+                // — the node is already registered on P-Chain; the keeper only submits the
+                // C-Chain warp completion step.
                 await completeValidatorRegistrationStakingVault(
                     pchainClient, config, stakingVault, validatorManager,
-                    '', // blsProofOfPossession — not needed when node is already on P-Chain
-                    txHash,
-                    0n, // initialBalance — not used when skipping P-Chain step
-                    false // waitValidatorVisible
+                    '', txHash, 0n, false
                 );
                 validators++;
                 logger.log(color.green(`Completed validator registration: ${validationID}`));
@@ -659,8 +660,8 @@ export async function keeperWatch(
         running = false;
         options.onCleanup?.();
     };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
 
     const monitor = options.monitor;
 
@@ -718,7 +719,7 @@ export async function keeperWatch(
             logTickStructured(emptyResult, durationMs);
         } finally {
             process.exit = realExit;
-            process.exitCode = 0;
+            if (!exitTrapped) process.exitCode = 0;
         }
 
         if (running) {

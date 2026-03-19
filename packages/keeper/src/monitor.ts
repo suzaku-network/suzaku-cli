@@ -406,7 +406,9 @@ export class Monitor {
                 timeout: 5000,
             });
             req.on('timeout', () => { req.destroy(); });
-            req.on('error', () => {}); // fire-and-forget
+            req.on('error', (err: Error) => {
+                process.stderr.write(`[monitor] webhook error: ${err.message}\n`);
+            });
             req.write(body);
             req.end();
         } catch {
