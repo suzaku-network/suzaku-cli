@@ -3363,7 +3363,7 @@ async function main() {
             }
 
 
-            rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
+            // rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
                 config.client,

@@ -272,7 +272,7 @@ export async function uptimeSync(
     return;
   }
 
-  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl + `/ext/bc/${sourceChainID}`);
+  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
   if (currentValidators.length === 0) {
     logger.log("No validators found for any operator.");
     return;
