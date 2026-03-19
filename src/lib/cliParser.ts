@@ -56,7 +56,7 @@ export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
   if (!value.startsWith('0x')) {
     return parseSecretName(value,).trim() as Hex;
   }
-  if (process.argv.includes('mainnet')) {
+  if (process.argv.includes('mainnet') || process.env.NETWORK === 'mainnet') {
     throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
   }
   return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
