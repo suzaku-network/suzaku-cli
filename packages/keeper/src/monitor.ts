@@ -83,6 +83,15 @@ export class Monitor {
     private eventsEpochProcessed: Counter;
     private eventsHarvested: Counter;
     private harvestTotalRewards: Gauge;
+    private eventsDelegatorRemovalFailed: Counter;
+    private eventsValidatorRemovalFailed: Counter;
+    private eventsExitDebtRecorded: Counter;
+    private eventsExitDebtReduced: Counter;
+    private eventsAccountingMismatch: Counter;
+    private eventsLiquidityPrepared: Counter;
+    private eventsInFlightExiting: Gauge;
+    private eventsDelegatorRemovalAdopted: Counter;
+    private eventsDelegatorRegistrationAborted: Counter;
 
     constructor(thresholds: AlertThresholds, webhookUrl?: string) {
         this.thresholds = thresholds;
@@ -130,6 +139,15 @@ export class Monitor {
         this.eventsEpochProcessed = new Counter({ name: 'suzaku_events_epoch_processed_total', help: 'EpochProcessed events observed', registers: [this.registry] });
         this.eventsHarvested = new Counter({ name: 'suzaku_events_harvested_total', help: 'Harvested events observed', registers: [this.registry] });
         this.harvestTotalRewards = new Gauge({ name: 'suzaku_harvest_total_rewards', help: 'Total rewards from last harvest event (native token)', registers: [this.registry] });
+        this.eventsDelegatorRemovalFailed = new Counter({ name: 'suzaku_events_delegator_removal_failed_total', help: 'DelegatorRemovalFailed events observed', registers: [this.registry] });
+        this.eventsValidatorRemovalFailed = new Counter({ name: 'suzaku_events_validator_removal_failed_total', help: 'ValidatorRemovalFailed events observed', registers: [this.registry] });
+        this.eventsExitDebtRecorded = new Counter({ name: 'suzaku_events_exit_debt_recorded_total', help: 'ExitDebtRecorded events observed', registers: [this.registry] });
+        this.eventsExitDebtReduced = new Counter({ name: 'suzaku_events_exit_debt_reduced_total', help: 'ExitDebtReduced events observed', registers: [this.registry] });
+        this.eventsAccountingMismatch = new Counter({ name: 'suzaku_events_accounting_mismatch_total', help: 'AccountingMismatchDetected events observed', registers: [this.registry] });
+        this.eventsLiquidityPrepared = new Counter({ name: 'suzaku_events_liquidity_prepared_total', help: 'LiquidityPrepared events observed', registers: [this.registry] });
+        this.eventsInFlightExiting = new Gauge({ name: 'suzaku_in_flight_exiting', help: 'Current in-flight exiting amount', registers: [this.registry] });
+        this.eventsDelegatorRemovalAdopted = new Counter({ name: 'suzaku_events_delegator_removal_adopted_total', help: 'DelegatorRemovalAdopted events observed', registers: [this.registry] });
+        this.eventsDelegatorRegistrationAborted = new Counter({ name: 'suzaku_events_delegator_registration_aborted_total', help: 'DelegatorRegistrationAborted events observed', registers: [this.registry] });
     }
 
     // ── Vault metrics collection ─────────────────────────────────────
@@ -195,6 +213,18 @@ export class Monitor {
                 this.operatorAccruedFees.labels(label).set(toFloat(info.accruedFees));
                 this.operatorValidatorCount.labels(label).set(validators.length);
                 this.operatorDelegatorCount.labels(label).set(delegators.length);
+
+                // Check operator exit debt against freeze threshold
+                const allocationShare = totalPooledStake * info.allocationBips / 10000n;
+                if (allocationShare > 0n) {
+                    const debtRatio = Number(exitDebt) / Number(allocationShare);
+                    const threshold = this.thresholds.exitDebtBips / 10000;
+                    this.checkAlert(
+                        `operatorExitDebt:${operator}`, debtRatio >= threshold,
+                        debtRatio, threshold,
+                        `Operator ${operator} exit debt approaching freeze`, 'warning'
+                    );
+                }
             } catch {
                 // Non-critical — skip this operator
             }
@@ -313,6 +343,100 @@ export class Monitor {
             onError,
         }));
 
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__DelegatorRemovalFailed' as any,
+            pollingInterval,
+            onLogs: () => {
+                this.eventsDelegatorRemovalFailed.inc();
+                this.checkAlert('delegatorRemovalFailed', true, 1, 0, 'Delegator removal failed', 'warning');
+            },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__ValidatorRemovalFailed' as any,
+            pollingInterval,
+            onLogs: () => {
+                this.eventsValidatorRemovalFailed.inc();
+                this.checkAlert('validatorRemovalFailed', true, 1, 0, 'Validator removal failed', 'warning');
+            },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__ExitDebtRecorded' as any,
+            pollingInterval,
+            onLogs: () => { this.eventsExitDebtRecorded.inc(); },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__ExitDebtReduced' as any,
+            pollingInterval,
+            onLogs: () => { this.eventsExitDebtReduced.inc(); },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__AccountingMismatchDetected' as any,
+            pollingInterval,
+            onLogs: () => {
+                this.eventsAccountingMismatch.inc();
+                this.checkAlert('accountingMismatch', true, 1, 0, 'Accounting mismatch detected', 'critical');
+            },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__LiquidityPrepared' as any,
+            pollingInterval,
+            onLogs: () => { this.eventsLiquidityPrepared.inc(); },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__InFlightExitingUpdated' as any,
+            pollingInterval,
+            onLogs: (logs: any[]) => {
+                if (logs.length > 0 && logs[0].args?.newAmount != null) {
+                    this.eventsInFlightExiting.set(Number(formatUnits(logs[0].args.newAmount, 18)));
+                }
+            },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__DelegatorRemovalAdopted' as any,
+            pollingInterval,
+            onLogs: () => { this.eventsDelegatorRemovalAdopted.inc(); },
+            onError,
+        }));
+
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__DelegatorRegistrationAborted' as any,
+            pollingInterval,
+            onLogs: () => { this.eventsDelegatorRegistrationAborted.inc(); },
+            onError,
+        }));
+
         return () => {
             for (const unwatch of unwatchers) {
                 unwatch();
@@ -326,6 +450,11 @@ export class Monitor {
         // Solvency deviation
         await this.checkAlertFromGauge('solvency', this.solvencyRatio, (val) => Math.abs(val - 1.0) > this.thresholds.solvencyDeviation,
             'Solvency ratio drift', 'warning', this.thresholds.solvencyDeviation);
+
+        // Zero-TVL with active depositors (solvencyRatio is 1 when supply=0, so val===0 means TVL=0 with supply>0)
+        await this.checkAlertFromGauge('zeroStakeSolvency', this.solvencyRatio,
+            (val) => val === 0,
+            'Critical: TVL is zero with active depositors', 'critical', 0);
 
         // Epoch lag
         await this.checkAlertFromGauge('epochLag', this.epochLag, (val) => val > this.thresholds.epochLag,
