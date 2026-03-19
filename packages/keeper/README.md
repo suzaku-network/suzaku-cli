@@ -25,12 +25,22 @@ cd packages/keeper
 echo "NETWORK=kiteaitestnet" > .env
 echo "VAULT_ADDRESS=0x..." >> .env
 
+# For custom L1s (not in the built-in chain list), use RPC_URL instead of NETWORK:
+# echo "RPC_URL=http://host:port/ext/bc/<blockchainID>/rpc" > .env
+# echo "VAULT_ADDRESS=0x..." >> .env
+# echo "SKIP_ABI_VALIDATION=true" >> .env   # required for custom L1s
+
 # Write private keys as Docker secrets (not env vars)
+# IMPORTANT: keys must be 0x-prefixed hex strings
 mkdir -p secrets
 echo -n "0x..." > secrets/pk.txt
 echo -n "0x..." > secrets/pchain_tx_private_key.txt
 
+# Start both containers (core + completions)
 docker compose up -d
+
+# Or start core only (no P-Chain key needed)
+docker compose up -d keeper-core
 ```
 
 This starts two containers (`keeper-core` and `keeper-completions`) that together cover all maintenance operations. See [Architecture](#architecture) for why the split exists.
@@ -88,13 +98,19 @@ Logs a warning if escrowed protocol fees exist. Claiming requires `VAULT_ADMIN_R
 ### Docker Compose
 
 ```bash
-# packages/keeper/.env
+# packages/keeper/.env — known chain
 NETWORK=kiteaitestnet
 VAULT_ADDRESS=0x...
-# RPC_URL=https://...           # optional: auto-derived from chain config
+
+# packages/keeper/.env — custom L1 (use RPC_URL instead of NETWORK)
+RPC_URL=http://host:port/ext/bc/<blockchainID>/rpc
+VAULT_ADDRESS=0x...
+SKIP_ABI_VALIDATION=true
 # UPTIME_BLOCKCHAIN_ID=0x...    # optional: auto-read from staking manager storage
 
 # Private keys go in secrets/ (mounted as Docker secrets, not env vars)
+# All secret files must contain 0x-prefixed hex keys — bare hex or plaintext
+# names will be treated as GPG keystore references and fail in Docker.
 # secrets/pk.txt                - L1 private key (required)
 # secrets/pchain_tx_private_key.txt - P-Chain key (required for completions)
 # secrets/pk_completions.txt    - optional: separate L1 key for completions container
@@ -188,8 +204,8 @@ Import `grafana-dashboard.json` via the Grafana UI (Dashboards → Import). The 
 | `-n, --network <network>` | `mainnet` | `NETWORK` | Chain selector: `mainnet`, `fuji`, `anvil`, `kiteaitestnet`, `custom` |
 | `-r, --rpc-url <url>` | - | `RPC_URL` | RPC URL - automatically sets `--network custom` and queries the node for chain ID |
 | `-k, --private-key <pk>` | - | `PK` | EVM private key (hex). Any key with gas works - keeper calls are permissionless |
-| `-w, --wait <n>` | `2` | - | Confirmations to wait after write tx |
-| `--skip-abi-validation` | off | `SKIP_ABI_VALIDATION` | Skip contract ABI validation |
+| `-w, --wait <n>` | `2` | - | Confirmations to wait after write tx. On slow L1s, lower to `1` or `0` to avoid tx receipt timeouts |
+| `--skip-abi-validation` | off | `SKIP_ABI_VALIDATION` | Skip contract ABI validation. Required for custom L1s not in the built-in chain list |
 | `--metrics-port <port>` | `9090` | `METRICS_PORT` | Prometheus metrics port. Set to `0` to disable |
 | `--alert-webhook <url>` | - | `ALERT_WEBHOOK_URL` | Webhook URL for alerts (Slack, Discord, PagerDuty) |
 | `--alert-solvency-threshold <n>` | `0.01` | - | Solvency deviation threshold (0.01 = 1%) |
@@ -229,17 +245,41 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PK` | yes | Private key (hex) for signing transactions. Any key with gas on the L1 - no special roles needed. In Docker, provided via file-based secret (`secrets/pk.txt`) |
+| `PK` | yes | Private key (`0x`-prefixed hex) for signing transactions. Any key with gas on the L1 - no special roles needed. In Docker, provided via file-based secret (`secrets/pk.txt`). Must be `0x`-prefixed — bare hex is treated as a GPG keystore name |
 | `NETWORK` | no | Chain selector (default: `mainnet` for CLI, `fuji` in docker-compose). Not needed if `RPC_URL` is set |
-| `RPC_URL` | no | RPC URL for the L1 where the StakingVault lives. Auto-detects chain ID and sets `--network custom` |
+| `RPC_URL` | no | RPC URL for the L1 where the StakingVault lives. Auto-detects chain ID and sets `--network custom`. Required for custom L1s not in the built-in chain list |
 | `VAULT_ADDRESS` | yes | StakingVault contract address (used by docker-compose to pass the CLI argument) |
-| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key for two-phase completions. If omitted, the keeper skips completions. In Docker, provided via file-based secret (`secrets/pchain_tx_private_key.txt`) |
+| `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key (`0x`-prefixed hex) for two-phase completions. If omitted, the keeper skips completions. In Docker, provided via file-based secret (`secrets/pchain_tx_private_key.txt`) |
 | `UPTIME_BLOCKCHAIN_ID` | no | Blockchain ID (hex) for uptime proofs. Auto-read from staking manager storage if omitted |
-| `SKIP_ABI_VALIDATION` | no | Set to any non-empty value to skip contract ABI validation |
+| `SKIP_ABI_VALIDATION` | no | Set to any non-empty value to skip contract ABI validation. Required for custom L1s where the ABI selectors may not match the on-chain bytecode |
 | `METRICS_PORT` | no | Prometheus metrics port (default: `9090`, set `0` to disable) |
 | `ALERT_WEBHOOK_URL` | no | Webhook URL for alerts. If unset, no alerts are sent |
 | `TICK_TIMEOUT` | no | Tick timeout in seconds (0 = disabled). When a tick exceeds this, it's abandoned and marked hung |
 | `ALERT_TICK_DURATION_MS` | no | Tick duration alert threshold in ms (default: `pollInterval * 0.8 * 1000`) |
+
+## Troubleshooting
+
+### `Password store directory does not exist` (completions container crash-loops)
+
+The secret file doesn't contain a `0x`-prefixed hex key. `ParserPrivateKey` treats non-`0x` values as GPG keystore references, which don't exist in the Docker container. Fix: ensure `secrets/pk.txt`, `secrets/pk_completions.txt`, and `secrets/pchain_tx_private_key.txt` all start with `0x`.
+
+### All contract calls revert (`execution reverted` on every function)
+
+Wrong RPC URL. If using a custom Avalanche L1, the blockchain ID in the URL path (`/ext/bc/<blockchainID>/rpc`) must match the chain where the contracts were deployed. Verify with `cast chain-id --rpc-url <url>` and compare against your deployment config.
+
+### `Timed out while waiting for transaction to be confirmed`
+
+The `--wait` default (2 confirmations) can timeout on slow L1s with long block times. Lower it: `--wait 1` or `--wait 0`. In Docker, this isn't directly exposed as an env var — override via the `command` array in docker-compose or set it as a global option.
+
+### Running core-only (no completions container)
+
+If you don't need P-Chain completions, start only the core container:
+
+```bash
+docker compose up -d keeper-core
+```
+
+This avoids needing `secrets/pchain_tx_private_key.txt` and `secrets/pk_completions.txt`.
 
 ## Build
 
