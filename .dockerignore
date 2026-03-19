@@ -15,3 +15,4 @@ dist
 packages/mcp/
 off-chain-actions.md
 claude-code-*
+packages/keeper/secrets/

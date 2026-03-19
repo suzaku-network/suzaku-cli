@@ -6,6 +6,10 @@ secrets:
   pk_completions:
     file: ${PK_COMPLETIONS_FILE:-./secrets/pk_completions.txt}
 
+networks:
+  keeper-net:
+    name: keeper-net
+
 services:
   keeper-core:
     build:
@@ -20,8 +24,8 @@ services:
     command: ["watch", "${VAULT_ADDRESS}", "--core"]
     restart: unless-stopped
     read_only: true
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:9090/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
@@ -34,6 +38,8 @@ services:
           memory: 512M
     secrets:
       - pk
+    networks:
+      - keeper-net
 
   keeper-completions:
     build:
@@ -49,8 +55,8 @@ services:
     command: ["watch", "${VAULT_ADDRESS}", "--completions"]
     restart: unless-stopped
     read_only: true
-    ports:
-      - "9091:9090"
+    expose:
+      - "9090"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:9090/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
@@ -65,3 +71,5 @@ services:
       - source: pk_completions
         target: pk
       - pchain_tx_private_key
+    networks:
+      - keeper-net

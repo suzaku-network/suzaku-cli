@@ -5,11 +5,11 @@ FROM base AS deps
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/keeper/package.json packages/keeper/
-COPY src/ src/
 COPY tsconfig.json ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
+COPY src/ src/
 COPY packages/keeper/ packages/keeper/
 RUN pnpm build && cd packages/keeper && pnpm build
 RUN find packages/keeper/dist -name '*.js.map' -delete
