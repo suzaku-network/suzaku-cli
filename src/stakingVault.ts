@@ -194,15 +194,18 @@ export async function claimWithdrawalStakingVault(
  */
 export async function processEpochStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault']
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    options?: { gas?: bigint }
 ) {
     logger.log("Processing epoch in StakingVault...");
 
     logger.log("\n=== Process Epoch Details ===");
     logger.log("Vault address:", stakingVault.address);
 
-    // Call processEpoch
-    const hash = await stakingVault.safeWrite.processEpoch([]);
+    // Call processEpoch (explicit gas avoids auto-estimation hitting the bail-out path)
+    const hash = await (stakingVault.safeWrite.processEpoch as any)(
+        [], options?.gas ? { gas: options.gas } : undefined
+    );
 
     logger.log("Process epoch tx hash:", hash);
 

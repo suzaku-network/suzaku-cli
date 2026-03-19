@@ -40,14 +40,14 @@ const MAX_EPOCH_ITERATIONS = 100;
 async function processEpochLoop(
     client: ExtendedWalletClient,
     stakingVault: SafeSuzakuContract['StakingVault']
-): Promise<{ processed: boolean; iterations: number }> {
+): Promise<{ processed: boolean; iterations: number; stalledOnLiquidity: boolean }> {
     const [currentEpoch, lastEpochProcessedBefore] = await stakingVault.multicall([
         'getCurrentEpoch', 'getLastEpochProcessed',
     ]);
 
     if (currentEpoch <= lastEpochProcessedBefore) {
         logger.log("\nEpoch already up to date (current:", currentEpoch.toString(), ", last processed:", lastEpochProcessedBefore.toString(), ")");
-        return { processed: false, iterations: 0 };
+        return { processed: false, iterations: 0, stalledOnLiquidity: false };
     }
 
     logger.log("\nCurrent epoch:", currentEpoch.toString(), "Last processed:", lastEpochProcessedBefore.toString());
@@ -59,12 +59,20 @@ async function processEpochLoop(
         iteration++;
         logger.log(`\nProcess epoch iteration ${iteration}...`);
 
-        await processEpochStakingVault(client, stakingVault);
+        await processEpochStakingVault(client, stakingVault, { gas: 2_000_000n });
 
         // Check if we've caught up
         const lastProcessedNow = await stakingVault.read.getLastEpochProcessed();
         if (lastProcessedNow >= currentEpoch) {
             break;
+        }
+
+        // Detect liquidity stall: if available stake is 0, epoch can't seal —
+        // break early so prepareWithdrawals can free up liquidity
+        const available = await stakingVault.read.getAvailableStake();
+        if (available === 0n) {
+            logger.warn(`Liquidity stall detected at iteration ${iteration} — no available stake to process`);
+            return { processed: false, iterations: iteration, stalledOnLiquidity: true };
         }
 
         logger.log("More processing needed, continuing...");
@@ -74,7 +82,7 @@ async function processEpochLoop(
         throw new Error(`Epoch processing did not finish after ${MAX_EPOCH_ITERATIONS} iterations — aborting`);
     }
 
-    return { processed: true, iterations: iteration };
+    return { processed: true, iterations: iteration, stalledOnLiquidity: false };
 }
 
 // ── keeper run ────────────────────────────────────────────────────────
@@ -117,7 +125,9 @@ export async function keeperRun(
             result.epochProcessed = epochResult.processed;
             result.epochIterations = epochResult.iterations;
 
-            if (epochResult.processed) {
+            if (epochResult.stalledOnLiquidity) {
+                logger.warn(color.yellow(`\nEpoch processing stalled on liquidity after ${epochResult.iterations} iteration(s) — waiting for prepareWithdrawals`));
+            } else if (epochResult.processed) {
                 logger.log(color.green(`\nEpoch processing complete (${epochResult.iterations} iteration(s))`));
             }
         } catch (error: any) {
