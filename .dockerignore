@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.gitmodules
+.pnpm-store
+.claude
+.claude-backup
+.claudeignore
+.mcp.json
+.idea
+.vscode
+*.md
+node_modules
+dist
+packages/mcp/
+off-chain-actions.md
+claude-code-*
