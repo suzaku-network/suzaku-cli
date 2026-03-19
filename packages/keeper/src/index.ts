@@ -56,6 +56,13 @@ program.hook('preAction', async (thisCommand) => {
         console.error('Error: --rpc-url is required when using --network custom');
         process.exit(1);
     }
+
+    // C3: Guard against raw hex private keys on mainnet (post-RPC resolution)
+    const resolvedChain = chainList[opts.network as string] ?? chainList.custom;
+    if (resolvedChain && !resolvedChain.testnet && opts.privateKey && (opts.privateKey as string).startsWith('0x')) {
+        console.error('Error: Raw hex private key on mainnet is not allowed. Use Docker secrets instead.');
+        process.exit(1);
+    }
 });
 
 program
@@ -78,7 +85,7 @@ program
             : undefined;
 
         const monitor = createMonitor(opts);
-        const server = opts.metricsPort > 0 ? startServer(monitor, opts.metricsPort, 0) : undefined;
+        const server = opts.metricsPort > 0 ? startServer(monitor, opts.metricsPort, Infinity) : undefined;
 
         try {
             await keeperRun(client, pchainClient, config, stakingVault, {
