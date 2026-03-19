@@ -151,6 +151,7 @@ import './lib/commandUtils';
 import { execSync } from 'child_process';
 import { chainList, setCustomChainRpcUrl } from './lib/chainList';
 import { readFileSync } from 'fs';
+import packageJson from '../package.json';
 
 // Main function to set up the CLI commands
 async function main() {
@@ -174,7 +175,7 @@ async function main() {
         .addOption(OptAddress('--safe <address>', 'Use safe smart account for transactions'))
         .addOption(new Option('--skip-abi-validation', 'Skip the ABI validation for used contract'))
         .addOption(new Option('--cast', 'Output equivalent Foundry cast commands instead of executing write transactions').conflicts(['safe']))
-        .version('0.1.0')
+        .version(packageJson.version)
         .configureOutput({
             writeOut: (str) => process.stdout.write(str),
             writeErr: (str) => { str.includes('Usage: suzaku-cli') ? process.stdout.write(str) : process.stderr.write(str) },
