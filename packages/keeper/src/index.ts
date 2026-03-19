@@ -45,7 +45,8 @@ const program = new Command()
     .addOption(new Option('--alert-epoch-lag <n>', 'Epoch lag threshold').default(2).argParser(ParserNumber))
     .addOption(new Option('--alert-queue-depth <n>', 'Queue depth threshold').default(100).argParser(ParserNumber))
     .addOption(new Option('--alert-consecutive-failures <n>', 'Consecutive failures threshold').default(3).argParser(ParserNumber))
-    .addOption(new Option('--alert-exit-debt-bips <n>', 'Exit debt bips threshold').default(500).argParser(ParserNumber));
+    .addOption(new Option('--alert-exit-debt-bips <n>', 'Exit debt bips threshold').default(500).argParser(ParserNumber))
+    .addOption(new Option('--alert-tick-duration <ms>', 'Tick duration alert threshold in ms (default: pollInterval * 0.8 * 1000)').env('ALERT_TICK_DURATION_MS').argParser(ParserNumber));
 
 program.hook('preAction', async (thisCommand) => {
     const opts = program.opts();
@@ -106,6 +107,7 @@ program
     .addArgument(ArgAddress('stakingVaultAddress', 'StakingVault contract address'))
     .addOption(new Option('--poll-interval <seconds>', 'Poll interval in seconds').default(1800).argParser(ParserNumber))
     .addOption(new Option('--harvest-interval <seconds>', 'Harvest interval in seconds').default(43200).argParser(ParserNumber))
+    .addOption(new Option('--tick-timeout <seconds>', 'Tick timeout in seconds (0=disabled)').default(0).env('TICK_TIMEOUT').argParser(ParserNumber))
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
     .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
@@ -120,7 +122,7 @@ program
             ? await generateClient(opts.network as any, options.pchainTxPrivateKey as Hex)
             : undefined;
 
-        const monitor = createMonitor(opts);
+        const monitor = createMonitor(opts, options.pollInterval);
         let server: ReturnType<typeof startServer> | undefined;
         if (opts.metricsPort > 0) {
             server = startServer(monitor, opts.metricsPort, options.pollInterval);
@@ -139,16 +141,18 @@ program
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
             monitor,
             onCleanup: cleanup,
+            tickTimeoutMs: options.tickTimeout > 0 ? options.tickTimeout * 1000 : 0,
         });
     });
 
-function createMonitor(opts: ReturnType<typeof program.opts>): Monitor {
+function createMonitor(opts: ReturnType<typeof program.opts>, pollIntervalSeconds?: number): Monitor {
     return new Monitor({
         solvencyDeviation: opts.alertSolvencyThreshold,
         epochLag: opts.alertEpochLag,
         queueDepth: opts.alertQueueDepth,
         consecutiveFailures: opts.alertConsecutiveFailures,
         exitDebtBips: opts.alertExitDebtBips,
+        tickDurationMs: opts.alertTickDuration ?? (pollIntervalSeconds ? pollIntervalSeconds * 0.8 * 1000 : Infinity),
     }, opts.alertWebhook);
 }
 

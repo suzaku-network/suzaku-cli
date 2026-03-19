@@ -21,6 +21,8 @@ services:
       - SKIP_ABI_VALIDATION=${SKIP_ABI_VALIDATION:-}
       - METRICS_PORT=9090
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      - TICK_TIMEOUT=${TICK_TIMEOUT:-}
+      - ALERT_TICK_DURATION_MS=${ALERT_TICK_DURATION_MS:-}
     command: ["watch", "${VAULT_ADDRESS}", "--core"]
     restart: unless-stopped
     read_only: true
@@ -52,6 +54,8 @@ services:
       - SKIP_ABI_VALIDATION=${SKIP_ABI_VALIDATION:-}
       - METRICS_PORT=9090
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      - TICK_TIMEOUT=${TICK_TIMEOUT:-}
+      - ALERT_TICK_DURATION_MS=${ALERT_TICK_DURATION_MS:-}
     command: ["watch", "${VAULT_ADDRESS}", "--completions"]
     restart: unless-stopped
     read_only: true

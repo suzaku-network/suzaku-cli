@@ -650,6 +650,7 @@ export async function keeperWatch(
         uptimeBlockchainID?: Hex;
         monitor?: Monitor;
         onCleanup?: () => void;
+        tickTimeoutMs?: number;
     }
 ): Promise<void> {
     logger.log(color.bold("\n══════════════════════════════════════"));
@@ -663,6 +664,7 @@ export async function keeperWatch(
     logger.log("Started at:", new Date().toISOString());
 
     let lastHarvestTime = 0;
+    let tickHung = false;
 
     let running = true;
     const shutdown = () => {
@@ -674,62 +676,118 @@ export async function keeperWatch(
     process.once('SIGTERM', shutdown);
 
     const monitor = options.monitor;
+    const tickTimeoutMs = options.tickTimeoutMs && options.tickTimeoutMs > 0 ? options.tickTimeoutMs : 0;
 
     while (running) {
-        const now = Date.now();
-        const shouldHarvest = (now - lastHarvestTime) >= options.harvestInterval * 1000;
-        const tickStart = Date.now();
+        // If a previous tick is hung, skip execution — just run alerts and sleep
+        if (tickHung) {
+            logger.warn('Previous tick still hung — skipping tick execution');
+            await monitor?.checkAlerts(options.pollInterval);
+        } else {
+            const now = Date.now();
+            const shouldHarvest = (now - lastHarvestTime) >= options.harvestInterval * 1000;
+            const tickStart = Date.now();
 
-        // Trap process.exit during ticks so the daemon survives contract errors.
-        // The CLI's handleContractError calls logger.exitError → process.exit(1),
-        // which is correct for one-shot CLI usage but kills a long-running daemon.
-        const realExit = process.exit;
-        let exitTrapped = false;
-        process.exit = ((code?: number) => {
-            exitTrapped = true;
-            process.exitCode = code ?? 1;
-        }) as never;
+            // Trap process.exit during ticks so the daemon survives contract errors.
+            // The CLI's handleContractError calls logger.exitError → process.exit(1),
+            // which is correct for one-shot CLI usage but kills a long-running daemon.
+            const realExit = process.exit;
+            let exitTrapped = false;
+            process.exit = ((code?: number) => {
+                exitTrapped = true;
+                process.exitCode = code ?? 1;
+            }) as never;
 
-        try {
-            logger.log(color.bold(`\n── Keeper tick at ${new Date().toISOString()} ──`));
+            try {
+                logger.log(color.bold(`\n── Keeper tick at ${new Date().toISOString()} ──`));
 
-            await monitor?.collectVaultMetrics(stakingVault).catch(() => {});
+                await monitor?.collectVaultMetrics(stakingVault).catch(() => {});
 
-            const result = await keeperRun(client, pchainClient, config, stakingVault, {
-                harvest: shouldHarvest,
-                coreOnly: options.coreOnly,
-                completionsOnly: options.completionsOnly,
-                rpcUrl: options.rpcUrl,
-                uptimeBlockchainID: options.uptimeBlockchainID,
-            });
+                const tickBody = keeperRun(client, pchainClient, config, stakingVault, {
+                    harvest: shouldHarvest,
+                    coreOnly: options.coreOnly,
+                    completionsOnly: options.completionsOnly,
+                    rpcUrl: options.rpcUrl,
+                    uptimeBlockchainID: options.uptimeBlockchainID,
+                });
 
-            const durationMs = Date.now() - tickStart;
-            monitor?.recordTickResult(result, durationMs, exitTrapped || result.errors.length > 0);
-            await monitor?.checkAlerts();
-            logTickStructured(result, durationMs);
+                let result: KeeperRunResult;
 
-            if (result.harvestCalled) {
-                lastHarvestTime = now;
+                if (tickTimeoutMs > 0) {
+                    const timeoutPromise = new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('Tick timed out')), tickTimeoutMs)
+                    );
+                    try {
+                        result = await Promise.race([tickBody, timeoutPromise]);
+                    } catch (error: any) {
+                        if (error.message === 'Tick timed out') {
+                            logger.error(`Tick timed out after ${tickTimeoutMs}ms — marking hung`);
+                            // Restore exit immediately — no new tick can start while hung
+                            process.exit = realExit;
+                            if (!exitTrapped) process.exitCode = 0;
+                            tickHung = true;
+                            // Let the abandoned promise run; clear hung flag when it settles
+                            tickBody.finally(() => { tickHung = false; });
+
+                            const durationMs = Date.now() - tickStart;
+                            const timeoutResult: KeeperRunResult = {
+                                epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
+                                harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
+                                delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
+                                delegatorRemovalsCompleted: 0, errors: ['Tick timed out'],
+                            };
+                            monitor?.recordTickResult(timeoutResult, durationMs, true);
+                            await monitor?.checkAlerts(options.pollInterval);
+                            logTickStructured(timeoutResult, durationMs);
+
+                            // Skip the normal finally + sleep logic below — go straight to sleep
+                            if (running) {
+                                logger.log(`\nNext tick in ${options.pollInterval} seconds...`);
+                                await new Promise<void>((resolve) => {
+                                    const timer = setTimeout(resolve, options.pollInterval * 1000);
+                                    const checkShutdown = setInterval(() => {
+                                        if (!running) { clearTimeout(timer); clearInterval(checkShutdown); resolve(); }
+                                    }, 1000);
+                                });
+                            }
+                            continue;
+                        }
+                        throw error;
+                    }
+                } else {
+                    result = await tickBody;
+                }
+
+                const durationMs = Date.now() - tickStart;
+                monitor?.recordTickResult(result, durationMs, exitTrapped || result.errors.length > 0);
+                await monitor?.checkAlerts(options.pollInterval);
+                logTickStructured(result, durationMs);
+
+                if (result.harvestCalled) {
+                    lastHarvestTime = now;
+                }
+
+                if (result.errors.length > 0 || exitTrapped) {
+                    logger.warn(`Tick completed with ${result.errors.length} error(s)${exitTrapped ? ' (contract error trapped)' : ''}`);
+                }
+            } catch (error: any) {
+                logger.error(`Keeper tick failed: ${error.message || error}`);
+                const durationMs = Date.now() - tickStart;
+                const emptyResult: KeeperRunResult = {
+                    epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
+                    harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
+                    delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
+                    delegatorRemovalsCompleted: 0, errors: [error.message || String(error)],
+                };
+                monitor?.recordTickResult(emptyResult, durationMs, true);
+                await monitor?.checkAlerts(options.pollInterval);
+                logTickStructured(emptyResult, durationMs);
+            } finally {
+                if (!tickHung) {
+                    process.exit = realExit;
+                    if (!exitTrapped) process.exitCode = 0;
+                }
             }
-
-            if (result.errors.length > 0 || exitTrapped) {
-                logger.warn(`Tick completed with ${result.errors.length} error(s)${exitTrapped ? ' (contract error trapped)' : ''}`);
-            }
-        } catch (error: any) {
-            logger.error(`Keeper tick failed: ${error.message || error}`);
-            const durationMs = Date.now() - tickStart;
-            const emptyResult: KeeperRunResult = {
-                epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
-                harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
-                delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
-                delegatorRemovalsCompleted: 0, errors: [error.message || String(error)],
-            };
-            monitor?.recordTickResult(emptyResult, durationMs, true);
-            await monitor?.checkAlerts();
-            logTickStructured(emptyResult, durationMs);
-        } finally {
-            process.exit = realExit;
-            if (!exitTrapped) process.exitCode = 0;
         }
 
         if (running) {
