@@ -384,12 +384,18 @@ export async function uptimeSyncLight(
     logger.log("No operators found.");
     return;
   }
-  const currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
+  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl + `/ext/bc/${sourceChainID}`);
 
   if (currentValidators.length === 0) {
     logger.log("No validators found for any operator.");
     return;
   }
+
+  // Filter out PoA validators — only process validators registered via middleware
+  const allValidationIDs = (await middleware.multicall(
+    operators.map(op => ({ name: 'getOperatorValidationIDs', args: [op] }))
+  )).flat();
+  currentValidators = currentValidators.filter(v => allValidationIDs.includes(cb58ToHex(v.validationID)));
 
   // Check uptime status and get validator details in parallel structure
   const uptimeStatus = await uptimeTracker.multicall(
