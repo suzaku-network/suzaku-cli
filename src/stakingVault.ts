@@ -463,7 +463,7 @@ export async function completeValidatorRegistrationStakingVault(
             client: pchainClient,
             blsProofOfPossession: blsProofOfPossession,
             signedMessage,
-            initialBalance: initialBalance
+            initialBalance
         }),
             R.tap(pChainTxId => logger.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId)),
             R.tapError(err => { logger.error(err); process.exit(1) })
@@ -983,7 +983,7 @@ export async function completeDelegatorRegistrationStakingVault(
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client,
-        `${rpcUrl}/ext/bc/${sourceChainID}`,
+        `${rpcUrl}`,
         nodeId,
         warpNetworkID,
         sourceChainID

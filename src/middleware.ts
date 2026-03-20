@@ -478,7 +478,8 @@ export async function weightSync(
       logger.log(`Registered stake: ${prediction.registeredStake}`);
       logger.log(`Stake deficit: ${prediction.stakeDeficit}`);
       logger.log(`Active nodes count: ${prediction.activeNodesCount}`);
-      await middleware.safeWrite.forceUpdateNodes([prediction.operator, 0n]);
+      const hash = await middleware.safeWrite.forceUpdateNodes([prediction.operator, 0n]);
+      logger.addData('forceUpdateNodes', { operator: prediction.operator, stakeDeficit: prediction.stakeDeficit.toString(), txHash: hash });
     } else {
       logger.log(`Operator ${prediction.operator} will not lose weight`);
     }

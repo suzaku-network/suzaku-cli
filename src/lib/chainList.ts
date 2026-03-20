@@ -70,15 +70,20 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
 export async function setCustomChainRpcUrl(rpcUrl: string) {
   const url = new URL(rpcUrl);
   const infoApi = new info.InfoApi(`${url.protocol}//${url.host}`);
-  const networkIDresp = await infoApi.getNetworkId()
-  const chainId = await getChainId(rpcUrl)
-  chainList.custom = defineChain({
-    ...chainList.custom,
-    testnet: networkIDresp.networkID === "1" ? false : true,
-    network: networkIDresp.networkID === "1" ? 'mainnet' : 'fuji',
-    id: Number(chainId),
-    rpcUrls: {
-      default: { http: [rpcUrl] },
-    },
-  });
+  try {
+    const networkIDresp = await infoApi.getNetworkId()
+    const chainId = await getChainId(rpcUrl)
+    chainList.custom = defineChain({
+      ...chainList.custom,
+      testnet: networkIDresp.networkID === "1" ? false : true,
+      network: networkIDresp.networkID === "1" ? 'mainnet' : 'fuji',
+      id: Number(chainId),
+      rpcUrls: {
+        default: { http: [rpcUrl] },
+      },
+    });
+  } catch (error) {
+    console.error("Error Custom RPC seems to be down or the infoAPI is not available, please check your RPC URL.", error);
+    process.exit(1);
+  }
 }

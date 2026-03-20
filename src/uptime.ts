@@ -350,6 +350,7 @@ export async function uptimeSync(
     const operatorEpochsWithoutUptime = epochRange.filter((_, i) => !operatorEpochStatus[i]);
     if (operatorEpochsWithoutUptime.length > 0) {
       logger.log(`Operator ${operator} has missing uptime reports`);
+      logger.addData("missingOperatorUptime", { operator, epochs: operatorEpochsWithoutUptime });
       try {
         for (const epoch of operatorEpochsWithoutUptime) {
           await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);

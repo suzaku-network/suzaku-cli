@@ -136,7 +136,7 @@ import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
 
 import { buildCommands as buildKeyStoreCmds } from "./keyStore";
-import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex, OptHex } from "./lib/cliParser";
+import { ArgAddress, ArgNodeID, ArgHex, ArgURI, ArgNumber, ArgBigInt, ArgBLSPOP, ArgCB58, ParserPrivateKey, ParserAddress, ParserAVAX, ParserNumber, ParserNodeID, parseSecretName, collectMultiple, ParseUnits, OptAddress, ParserHex, OptHex, OptCB58 } from "./lib/cliParser";
 import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, increasePChainValidatorBalance } from './lib/pChainUtils';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
@@ -185,16 +185,17 @@ async function main() {
     program.hook('preSubcommand', async (thisCommand) => {
         const opts = program.opts();
         if (opts.cast) setCastMode(true);
-        // Block manually private key on mainnet
-        if (opts.privateKey! && chainList[opts.network].testnet === false) {
-            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
-            process.exit(1);
-        }
+        
         if (opts.rpcUrl) {
             await setCustomChainRpcUrl(opts.rpcUrl);
             thisCommand.setOptionValue('network', 'custom');
         } else if (opts.network === 'custom') {
             logger.error('Error: --rpc-url is required when using --network custom');
+            process.exit(1);
+        }
+        // Block manually private key on mainnet
+        if (opts.privateKey! && chainList[opts.network].testnet === false) {
+            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }
         // Activate json output if --json is provided
@@ -4166,7 +4167,7 @@ async function main() {
         .addArgument(ArgAddress('validatorManagerAddress', 'Validator manager of the subnet'))
         .addArgument(ArgCB58('vmcChainId', 'Validator Manager Contract Chain ID'))
         .addOption(new Option('--validatorConfig <validatorConfig>', 'Validator config file path (json)').default([]).argParser(collectMultiple(String)).makeOptionMandatory())
-        .addOption(OptHex('--convertTx <convertTx>', 'Existing convert transaction hash to reuse'))
+        .addOption(OptCB58('--convertTx <convertTx>', 'Existing convert transaction hash to reuse'))
         .addOption(new Option('--init-vmc', 'Initialize the VMC before conversion'))
         .asyncAction({ signer: true }, async (config, subnetId, chainId, validatorManagerAddress, vmcChainId, options) => {
             // const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress)

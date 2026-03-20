@@ -104,6 +104,17 @@ export const OptHex = <T extends string>(name: T, description?: string, bytes?: 
   `${description ? description : "Hex string (e.g., 0x1234567890abcdef1234567890abcdef12345678)"}`
 ).argParser((value) => ParserHex(value, bytes, errorMsg ? `${name}: ` + errorMsg + ` (${value})` : undefined));
 
+// Validate CB58 strings
+export const OptCB58 = <T extends string>(name: T, description?: string, errorMsg?: string) => new Option(
+  name,
+  `${description ? description : "CB58 string (e.g., 3J4k5L6m7N8o9P0Q1R2S3T4U5V6W7X8Y9Z0A1B2C)"}`
+).argParser((value) => {
+  if (!isValidCB58(value)) {
+    throw new Error(`${name}: Invalid CB58 string (${value})`);
+  }
+  return value;
+});
+
 // Argument exports
 
 // Validate NodeID in CB58 format
