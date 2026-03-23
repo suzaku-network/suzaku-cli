@@ -363,3 +363,65 @@ export async function uptimeSync(
   }
   logger.log("All operators have their uptime reported for the last " + epochsToCheck + " epochs from " + targetEpoch + ".");
 }
+
+/**
+ * Light version of uptimeSync for the keeper daemon.
+ * Reports validator uptime only (no operator epoch backfill).
+ */
+export async function uptimeSyncLight(
+  client: ExtendedClient,
+  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
+  middleware: SafeSuzakuContract['L1Middleware'],
+  rpcUrl: string,
+  sourceChainID: string
+) {
+
+  const targetEpoch = Number(await middleware.read.getCurrentEpoch());
+  logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
+
+  const operators = await middleware.read.getAllOperators();
+  if (operators.length === 0) {
+    logger.log("No operators found.");
+    return;
+  }
+  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl + `/ext/bc/${sourceChainID}`);
+
+  if (currentValidators.length === 0) {
+    logger.log("No validators found for any operator.");
+    return;
+  }
+
+  // Filter out PoA validators — only process validators registered via middleware
+  const allValidationIDs = (await middleware.multicall(
+    operators.map(op => ({ name: 'getOperatorValidationIDs', args: [op] }))
+  )).flat();
+  currentValidators = currentValidators.filter(v => allValidationIDs.includes(cb58ToHex(v.validationID)));
+
+  // Check uptime status and get validator details in parallel structure
+  const uptimeStatus = await uptimeTracker.multicall(
+      currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
+    )
+
+  const signingSubnetId = await validatedBy(client, sourceChainID);
+  const networkID = client.network === 'mainnet' ? 1 : 5;
+
+  for (const [index, validator] of currentValidators.entries()) {
+    const { validationID, nodeID, uptimeSeconds } = validator;
+    const status = uptimeStatus[index];
+
+    if (!status) {
+      logger.log(`Reporting uptime for validator ${validationID} (${nodeID})...`);
+      const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
+      const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
+      const signedValidationUptimeMessage = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
+      const warpBytes = hexToBytes(signedValidationUptimeMessage);
+      const accessList = packWarpIntoAccessList(warpBytes);
+
+      const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
+      logger.log(`computeValidatorUptime done, tx hash: ${txHash}`);
+      logger.addData('computeValidatorUptime', { validationID, nodeID, txHash });
+    }
+  };
+
+  logger.log("All validators have reported their uptime for epoch " + targetEpoch);
+}

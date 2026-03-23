@@ -194,15 +194,18 @@ export async function claimWithdrawalStakingVault(
  */
 export async function processEpochStakingVault(
     client: ExtendedWalletClient,
-    stakingVault: SafeSuzakuContract['StakingVault']
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    options?: { gas?: bigint }
 ) {
     logger.log("Processing epoch in StakingVault...");
 
     logger.log("\n=== Process Epoch Details ===");
     logger.log("Vault address:", stakingVault.address);
 
-    // Call processEpoch
-    const hash = await stakingVault.safeWrite.processEpoch([]);
+    // Call processEpoch (explicit gas avoids auto-estimation hitting the bail-out path)
+    const hash = await (stakingVault.safeWrite.processEpoch as any)(
+        [], options?.gas ? { gas: options.gas } : undefined
+    );
 
     logger.log("Process epoch tx hash:", hash);
 
@@ -1290,6 +1293,53 @@ export async function claimOperatorFees(stakingVault: SafeSuzakuContract['Stakin
 
 export async function claimEscrowedWithdrawal(stakingVault: SafeSuzakuContract['StakingVault'], recipient: Hex) {
     return stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
+}
+
+// ── Keeper-imported functions ──────────────────────────────────────────
+// These are exported for use by packages/keeper (keeper.ts imports them).
+// The CLI already has inline commands for these via asyncAction.
+
+export async function prepareWithdrawalsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault']
+) {
+    const hash = await stakingVault.safeWrite.prepareWithdrawals([]);
+    logger.log("prepareWithdrawals tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
+}
+
+export async function harvestValidatorsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operatorIndex: bigint,
+    start: bigint,
+    batchSize: bigint
+) {
+    const hash = await stakingVault.safeWrite.harvestValidators([operatorIndex, start, batchSize]);
+    logger.log("harvestValidators tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
+}
+
+export async function harvestDelegatorsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    operatorIndex: bigint,
+    start: bigint,
+    batchSize: bigint
+) {
+    const hash = await stakingVault.safeWrite.harvestDelegators([operatorIndex, start, batchSize]);
+    logger.log("harvestDelegators tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
+}
+
+export async function claimWithdrawalsForStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    requestIds: bigint[]
+) {
+    const hash = await stakingVault.safeWrite.claimWithdrawalsFor([requestIds]);
+    logger.log("claimWithdrawalsFor tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
 }
 
 // ── Info functions ─────────────────────────────────────────────────────
