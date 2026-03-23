@@ -1,6 +1,6 @@
 {
-  "name": "suzaku-cli",
-  "version": "0.1.0",
+  "name": "@suzaku-network/suzaku-cli",
+  "version": "1.0.2",
   "homepage": "https://github.com/suzaku-network/suzaku-cli?tab=readme-ov-file#suzaku-cli",
   "keywords": [
     "Avalanche",
@@ -10,12 +10,16 @@
     "staking",
     "restaking"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com:suzaku-network/suzaku-cli.git"
+    "url": "https://github.com/suzaku-network/suzaku-cli.git"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "module": "dist/index.mjs",
   "files": [
     "dist",
     "bin",
