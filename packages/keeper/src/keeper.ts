@@ -14,7 +14,6 @@ import {
     claimWithdrawalsForStakingVault,
     completeValidatorRemovalStakingVault,
     completeDelegatorRemovalStakingVault,
-    completeValidatorRegistrationStakingVault,
     completeDelegatorRegistrationStakingVault,
     getValidatorManagerAddress,
 } from 'suzaku-cli/dist/stakingVault';
@@ -305,6 +304,37 @@ async function completePendingRemovals(
     const operatorList = await stakingVault.read.getOperatorList();
 
     for (const operator of operatorList) {
+
+        // Check delegators pending removal
+        const delegatorIDs = await stakingVault.read.getOperatorDelegators([operator]);
+        for (const delegationID of delegatorIDs) {
+            try {
+                // Check delegator info — if the removal was initiated, the delegator
+                // will still be listed but we need to find the removal event
+                const removalTxHash = await findRemovalTxHash(
+                    client,
+                    stakingVault.address,
+                    'StakingVault__DelegatorRemovalInitiated',
+                    delegationID,
+                    43200n // ~1 day lookback for delegators (vs 7 days for validators)
+                );
+
+                if (!removalTxHash) continue; // Not pending removal
+
+                logger.log(`\nFound pending delegator removal: ${delegationID} (operator: ${operator})`);
+                logger.log(`Found initiate removal tx: ${removalTxHash}`);
+
+                await completeDelegatorRemovalStakingVault(
+                    pchainClient, config, stakingVault, validatorManager,
+                    removalTxHash
+                );
+                delegators++;
+                logger.log(color.green(`Completed delegator removal: ${delegationID}`));
+            } catch (error: any) {
+                logger.warn(`Failed to complete delegator removal ${delegationID}: ${error.message || error}`);
+            }
+        }
+
         // Check validators pending removal
         const validatorIDs = await stakingVault.read.getOperatorValidators([operator]);
         for (const validationID of validatorIDs) {
@@ -336,36 +366,6 @@ async function completePendingRemovals(
                 logger.log(color.green(`Completed validator removal: ${validationID}`));
             } catch (error: any) {
                 logger.warn(`Failed to complete validator removal ${validationID}: ${error.message || error}`);
-            }
-        }
-
-        // Check delegators pending removal
-        const delegatorIDs = await stakingVault.read.getOperatorDelegators([operator]);
-        for (const delegationID of delegatorIDs) {
-            try {
-                // Check delegator info — if the removal was initiated, the delegator
-                // will still be listed but we need to find the removal event
-                const removalTxHash = await findRemovalTxHash(
-                    client,
-                    stakingVault.address,
-                    'StakingVault__DelegatorRemovalInitiated',
-                    delegationID,
-                    43200n // ~1 day lookback for delegators (vs 7 days for validators)
-                );
-
-                if (!removalTxHash) continue; // Not pending removal
-
-                logger.log(`\nFound pending delegator removal: ${delegationID} (operator: ${operator})`);
-                logger.log(`Found initiate removal tx: ${removalTxHash}`);
-
-                await completeDelegatorRemovalStakingVault(
-                    pchainClient, config, stakingVault, validatorManager,
-                    removalTxHash
-                );
-                delegators++;
-                logger.log(color.green(`Completed delegator removal: ${delegationID}`));
-            } catch (error: any) {
-                logger.warn(`Failed to complete delegator removal ${delegationID}: ${error.message || error}`);
             }
         }
     }
@@ -467,13 +467,12 @@ async function completePendingRegistrations(
     rpcUrl?: string,
     uptimeBlockchainID?: Hex,
 ): Promise<{ validators: number; delegators: number }> {
-    let validators = 0;
     let delegators = 0;
 
     const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } =
         await getValidatorManagerAddress(config, stakingVault);
     const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
-
+    console.log(rpcUrl)
     const resolvedRpcUrl = rpcUrl || client.chain?.rpcUrls?.default?.http?.[0];
     let resolvedUptimeBlockchainID = uptimeBlockchainID;
     if (!resolvedUptimeBlockchainID) {
@@ -490,43 +489,6 @@ async function completePendingRegistrations(
     const operatorList = await stakingVault.read.getOperatorList();
 
     for (const operator of operatorList) {
-        // Check validators pending registration
-        const validatorIDs = await stakingVault.read.getOperatorValidators([operator]);
-        for (const validationID of validatorIDs) {
-            try {
-                const validatorInfo = await validatorManager.read.getValidator([validationID]);
-                // Status 1 = PendingAdded
-                if (validatorInfo.status !== 1) continue;
-
-                logger.log(`\nFound pending validator registration: ${validationID} (operator: ${operator})`);
-
-                const txHash = await findRegistrationTxHash(
-                    client,
-                    stakingVault.address,
-                    'validator',
-                    validationID
-                );
-
-                if (!txHash) {
-                    logger.warn(`Could not find initiate registration tx for validator ${validationID} — skipping`);
-                    continue;
-                }
-
-                logger.log(`Found initiate registration tx: ${txHash}`);
-                // blsProofOfPossession='', initialBalance=0: not needed for keeper completion
-                // — the node is already registered on P-Chain; the keeper only submits the
-                // C-Chain warp completion step.
-                await completeValidatorRegistrationStakingVault(
-                    pchainClient, config, stakingVault, validatorManager,
-                    '', txHash, 0n, false
-                );
-                validators++;
-                logger.log(color.green(`Completed validator registration: ${validationID}`));
-            } catch (error: any) {
-                logger.warn(`Failed to complete validator registration ${validationID}: ${error.message || error}`);
-            }
-        }
-
         // Check delegators pending registration
         const delegatorIDs = await stakingVault.read.getOperatorDelegators([operator]);
         for (const delegationID of delegatorIDs) {
@@ -572,13 +534,13 @@ async function completePendingRegistrations(
         }
     }
 
-    if (validators > 0 || delegators > 0) {
-        logger.log(`\nCompleted ${validators} validator registration(s) and ${delegators} delegator registration(s)`);
+    if (delegators > 0) {
+        logger.log(`\nCompleted ${delegators} delegator registration(s)`);
     } else {
-        logger.log("\nNo pending registrations to complete");
+        logger.log("\nNo pending delegator registrations to complete");
     }
 
-    return { validators, delegators };
+    return { validators: 0, delegators };
 }
 
 // ── Registration event scanning ──────────────────────────────────────
@@ -586,7 +548,7 @@ async function completePendingRegistrations(
 async function findRegistrationTxHash(
     client: ExtendedWalletClient,
     contractAddress: Hex,
-    type: 'validator' | 'delegator',
+    _type: 'delegator',
     id: Hex,
     validationID?: Hex,
 ): Promise<Hex | null> {
@@ -595,40 +557,24 @@ async function findRegistrationTxHash(
     const fromBlock = currentBlock > 302400n ? currentBlock - 302400n : 0n;
 
     try {
-        if (type === 'validator') {
-            const event = parseAbiItem(
-                'event StakingVault__ValidatorRegistrationInitiated(address indexed operator, bytes32 indexed validationID)'
-            );
-            const logs = await client.getLogs({
-                address: contractAddress,
-                event,
-                args: { validationID: id },
-                fromBlock,
-                toBlock: 'latest',
-            });
-            if (logs.length > 0) {
-                return logs[logs.length - 1].transactionHash;
-            }
-        } else {
-            // delegationID is NOT indexed — filter by validationID (indexed), then match delegationID in data
-            const event = parseAbiItem(
-                'event StakingVault__DelegatorRegistrationInitiated(address indexed operator, bytes32 indexed validationID, bytes32 delegationID, uint256 amount)'
-            );
-            const logs = await client.getLogs({
-                address: contractAddress,
-                event,
-                args: { validationID },
-                fromBlock,
-                toBlock: 'latest',
-            });
-            for (let i = logs.length - 1; i >= 0; i--) {
-                if (logs[i].args.delegationID === id) {
-                    return logs[i].transactionHash;
-                }
+        // delegationID is NOT indexed — filter by validationID (indexed), then match delegationID in data
+        const event = parseAbiItem(
+            'event StakingVault__DelegatorRegistrationInitiated(address indexed operator, bytes32 indexed validationID, bytes32 delegationID, uint256 amount)'
+        );
+        const logs = await client.getLogs({
+            address: contractAddress,
+            event,
+            args: { validationID },
+            fromBlock,
+            toBlock: 'latest',
+        });
+        for (let i = logs.length - 1; i >= 0; i--) {
+            if (logs[i].args.delegationID === id) {
+                return logs[i].transactionHash;
             }
         }
     } catch (error: any) {
-        logger.debug(`Event scan failed for ${type} registration: ${error.message || error}`);
+        logger.debug(`Event scan failed for delegator registration: ${error.message || error}`);
     }
 
     return null;
@@ -701,7 +647,7 @@ export async function keeperWatch(
             try {
                 logger.log(color.bold(`\n── Keeper tick at ${new Date().toISOString()} ──`));
 
-                await monitor?.collectVaultMetrics(stakingVault).catch(() => {});
+                await monitor?.collectVaultMetrics(stakingVault).catch(() => { });
 
                 const tickBody = keeperRun(client, pchainClient, config, stakingVault, {
                     harvest: shouldHarvest,
