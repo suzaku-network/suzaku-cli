@@ -986,7 +986,7 @@ export async function completeDelegatorRegistrationStakingVault(
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client,
-        `${rpcUrl}/ext/bc/${sourceChainID}`,
+        `${rpcUrl}`,
         nodeId,
         warpNetworkID,
         sourceChainID

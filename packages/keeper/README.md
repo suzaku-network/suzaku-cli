@@ -1,11 +1,11 @@
 # suzaku-keeper
 
-Keeper bot for Suzaku StakingVault contracts. Runs permissionless maintenance operations - epoch processing, withdrawal preparation, harvest, and validator/delegator lifecycle completions - that keep a vault healthy and its withdrawal queue moving.
+Keeper bot for Suzaku StakingVault contracts. Runs permissionless maintenance operations - epoch processing, withdrawal preparation, harvest, and delegator lifecycle completions - that keep a vault healthy and its withdrawal queue moving.
 
 The keeper has two categories of work:
 
 - **Core operations** (L1 key only) - epoch processing, withdrawal preparation, harvest, queue cleanup. These are pure L1 transactions.
-- **P-Chain operations** (L1 key + P-Chain key) - completing two-phase validator/delegator registrations and removals. These require signing P-Chain transactions via warp messages.
+- **P-Chain operations** (L1 key + P-Chain key) - completing two-phase delegator registrations and removals. These require signing P-Chain transactions via warp messages.
 
 ## Requirements
 
@@ -35,6 +35,9 @@ echo "VAULT_ADDRESS=0x..." >> .env
 mkdir -p secrets
 echo -n "0x..." > secrets/pk.txt
 echo -n "0x..." > secrets/pchain_tx_private_key.txt
+# pk_completions.txt is the L1 key used by the completions container.
+# If you don't need a separate key, reuse pk.txt:
+[ -f secrets/pk_completions.txt ] || cp secrets/pk.txt secrets/pk_completions.txt
 
 # Start both containers (core + completions)
 docker compose up -d
@@ -72,14 +75,16 @@ When pending withdrawals exist, calls `prepareWithdrawals()` to earmark liquid b
 
 ### P-Chain completions (registrations + removals)
 
-Validator and delegator lifecycle operations are two-phase: first you *initiate* on the L1 (C-Chain tx), then you *complete* on the P-Chain (warp message + P-Chain tx). The keeper automates the second step.
+Delegator lifecycle operations are two-phase: first you *initiate* on the L1 (C-Chain tx), then you *complete* on the P-Chain (warp message + P-Chain tx). The keeper automates the second step.
 
-It scans all operators' validators and delegators for pending operations:
+It scans all operators' delegators for pending operations:
 
-- **Registration completions** - finds validators/delegators in `PendingAdded` status, locates the initiation tx via event logs, and calls `completeValidatorRegistration` / `completeDelegatorRegistration`.
+- **Delegator registration completions** - finds delegators in `PendingAdded` status, locates the initiation tx via event logs, and calls `completeDelegatorRegistration`. Requires `--uptime-rpc-url` to fetch uptime proofs.
 - **Removal completions** - finds validators/delegators with pending removals and calls `completeValidatorRemoval` / `completeDelegatorRemoval`.
 
-Requires `PCHAIN_TX_PRIVATE_KEY`. If omitted, the keeper skips these entirely.
+> **Note:** Validator registration completions are **not** automated by the keeper. They must be triggered manually via the CLI.
+
+Requires `PCHAIN_TX_PRIVATE_KEY` and `UPTIME_RPC_URL`. If omitted, the keeper skips these entirely.
 
 ### Harvest
 
@@ -106,6 +111,7 @@ VAULT_ADDRESS=0x...
 RPC_URL=http://host:port/ext/bc/<blockchainID>/rpc
 VAULT_ADDRESS=0x...
 SKIP_ABI_VALIDATION=true
+UPTIME_RPC_URL=http://host:port/ext/bc/<uptimeBlockchainID>/rpc  # required for completions
 # UPTIME_BLOCKCHAIN_ID=0x...    # optional: auto-read from staking manager storage
 
 # Private keys go in secrets/ (mounted as Docker secrets, not env vars)
@@ -113,7 +119,7 @@ SKIP_ABI_VALIDATION=true
 # names will be treated as GPG keystore references and fail in Docker.
 # secrets/pk.txt                - L1 private key (required)
 # secrets/pchain_tx_private_key.txt - P-Chain key (required for completions)
-# secrets/pk_completions.txt    - optional: separate L1 key for completions container
+# secrets/pk_completions.txt    - L1 key for completions container (required; copy pk.txt if no separate key)
 
 docker compose up -d
 ```
@@ -124,22 +130,22 @@ docker compose up -d
 
 ```bash
 # Single run - everything (core + P-Chain operations)
-node dist/index.js run 0x1234...abcd -n kiteaitestnet --harvest --pchain-tx-private-key 0x...
+node dist/index.js run 0x1234...abcd -n kiteaitestnet --harvest --pchain-tx-private-key 0x... --uptime-rpc-url http://host:port/...
 
 # Single run - core operations only (no P-Chain key needed)
 node dist/index.js run 0x1234...abcd -n kiteaitestnet --harvest --core
 
-# Single run - P-Chain operations only (registration/removal completions)
-node dist/index.js run 0x1234...abcd -n kiteaitestnet --completions --pchain-tx-private-key 0x...
+# Single run - P-Chain operations only (delegator registration/removal completions)
+node dist/index.js run 0x1234...abcd -n kiteaitestnet --completions --pchain-tx-private-key 0x... --uptime-rpc-url http://host:port/...
 
 # Daemon - everything
-node dist/index.js watch 0x1234...abcd -n kiteaitestnet --pchain-tx-private-key 0x...
+node dist/index.js watch 0x1234...abcd -n kiteaitestnet --pchain-tx-private-key 0x... --uptime-rpc-url http://host:port/...
 
 # Daemon - core operations only
 node dist/index.js watch 0x1234...abcd -n kiteaitestnet --core
 
 # Daemon - P-Chain operations only
-node dist/index.js watch 0x1234...abcd -n kiteaitestnet --completions --pchain-tx-private-key 0x...
+node dist/index.js watch 0x1234...abcd -n kiteaitestnet --completions --pchain-tx-private-key 0x... --uptime-rpc-url http://host:port/...
 ```
 
 ## Monitoring & Observability
@@ -184,16 +190,16 @@ Every tick writes a JSON line to stderr:
 
 ### Grafana Dashboard
 
-A pre-built dashboard JSON is included at `grafana-dashboard.json`. To use it, start the monitoring stack and import it manually into Grafana:
+Start the monitoring stack and the Suzaku Keeper dashboard loads automatically — no manual import needed:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 - **Prometheus** - `http://localhost:9092`
-- **Grafana** - `http://localhost:3000` (no login, anonymous viewer)
+- **Grafana** - `http://localhost:3000` (anonymous viewer, no login required)
 
-Import `grafana-dashboard.json` via the Grafana UI (Dashboards → Import). The dashboard includes: TVL, solvency ratio, exchange rate, vault paused status, epoch lag, queue depth, available stake vs pending withdrawals, protocol fees, per-operator stake/debt/validators/delegators, keeper tick duration, error rate, and event rates.
+The dashboard is provisioned automatically from `grafana-dashboard.json` and includes: TVL, solvency ratio, exchange rate, vault paused status, epoch lag, queue depth, available stake vs pending withdrawals, protocol fees, per-operator stake/debt/validators/delegators, keeper tick duration, error rate, and event rates.
 
 ## Commands Reference
 
@@ -225,6 +231,7 @@ Single keeper pass. Runs the selected operations once and exits.
 | `--pchain-tx-private-key <pk>` | - | `PCHAIN_TX_PRIVATE_KEY` | P-Chain key for completing registrations/removals |
 | `--core` | off | - | Core operations only |
 | `--completions` | off | - | P-Chain completions only |
+| `--uptime-rpc-url <url>` | - | `UPTIME_RPC_URL` | RPC URL for the uptime-tracking chain. **Required when completions are enabled** |
 | `--uptime-blockchain-id <hex>` | auto | `UPTIME_BLOCKCHAIN_ID` | Blockchain ID for uptime proofs |
 
 ### `watch <stakingVaultAddress>`
@@ -239,6 +246,7 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 | `--pchain-tx-private-key <pk>` | - | `PCHAIN_TX_PRIVATE_KEY` | P-Chain key for completing registrations/removals |
 | `--core` | off | - | Core operations only |
 | `--completions` | off | - | P-Chain completions only |
+| `--uptime-rpc-url <url>` | - | `UPTIME_RPC_URL` | RPC URL for the uptime-tracking chain. **Required when completions are enabled** |
 | `--uptime-blockchain-id <hex>` | auto | `UPTIME_BLOCKCHAIN_ID` | Blockchain ID for uptime proofs |
 
 ## Environment Variables
@@ -250,6 +258,7 @@ Long-running daemon. Runs keeper passes on a polling interval with a separate ha
 | `RPC_URL` | no | RPC URL for the L1 where the StakingVault lives. Auto-detects chain ID and sets `--network custom`. Required for custom L1s not in the built-in chain list |
 | `VAULT_ADDRESS` | yes | StakingVault contract address (used by docker-compose to pass the CLI argument) |
 | `PCHAIN_TX_PRIVATE_KEY` | no | P-Chain private key (`0x`-prefixed hex) for two-phase completions. If omitted, the keeper skips completions. In Docker, provided via file-based secret (`secrets/pchain_tx_private_key.txt`) |
+| `UPTIME_RPC_URL` | **yes (if completions)** | RPC URL for the uptime-tracking chain (the chain that tracks validator uptime for delegator registration completions). Required when `PCHAIN_TX_PRIVATE_KEY` is set or `--completions` is used |
 | `UPTIME_BLOCKCHAIN_ID` | no | Blockchain ID (hex) for uptime proofs. Auto-read from staking manager storage if omitted |
 | `SKIP_ABI_VALIDATION` | no | Set to any non-empty value to skip contract ABI validation. Required for custom L1s where the ABI selectors may not match the on-chain bytecode |
 | `METRICS_PORT` | no | Prometheus metrics port (default: `9090`, set `0` to disable) |
@@ -279,7 +288,7 @@ If you don't need P-Chain completions, start only the core container:
 docker compose up -d keeper-core
 ```
 
-This avoids needing `secrets/pchain_tx_private_key.txt` and `secrets/pk_completions.txt`.
+This avoids needing `secrets/pchain_tx_private_key.txt` and `secrets/pk_completions.txt` (the completions container won't start).
 
 ## Build
 

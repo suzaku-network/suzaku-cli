@@ -93,7 +93,7 @@ type MulticallFn<T extends SuzakuABINames> = {
 };
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
-export type CurriedContractFn<T extends SuzakuABINames, C extends ExtendedClient> = (address?: Address) => Promise<C extends ExtendedWalletClient ? SafeSuzakuContract[T] : SuzakuContract[T]>;
+export type CurriedContractFn<T extends SuzakuABINames, C extends ExtendedClient> = (address?: Address, _skipAbiValidation?: boolean) => Promise<C extends ExtendedWalletClient ? SafeSuzakuContract[T] : SuzakuContract[T]>;
 export type CurriedSuzakuContractMap<C extends ExtendedClient> = { [key in SuzakuABINames]: CurriedContractFn<key, C> }
 
 function handleContractError(error: any, abi: SuzakuABINames) {
@@ -325,14 +325,14 @@ return contract as unknown as SuzakuContract[T];
 }
 
 export const curriedContract = <T extends SuzakuABINames, C extends ExtendedClient>(abi: T, client: C, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T, C> =>
-  async (address?: Address) => {
+  async (address?: Address, _skipAbiValidation: boolean = skipAbiValidation) => {
     // format camelCase ABI name to SCREAMING_SNAKE_CASE for env var lookup
     const envVar = abi.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
     if (!address) {
       if (process.env[envVar]) address = process.env[envVar] as Address;
       else throw new Error(`Address is required to create a contract instance for ${abi}. Please provide associated option or set as environment variable ${envVar}`);
     }
-    if (!skipAbiValidation) {
+    if (!_skipAbiValidation) {
       // (StakingVault uses delegatecall to forward to operations implementation)
       // Skip ABI validation since functions are forwarded via fallback
       if (abi.includes("StakingVault")) {

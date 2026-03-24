@@ -101,7 +101,6 @@ import {
     isOperatorUptimeSetForEpoch,
     getLastUptimeCheckpoint,
     uptimeSync,
-    uptimeSyncLight
 } from "./uptime";
 
 import {
@@ -3498,26 +3497,6 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             await uptimeSync(
-                config.client,
-                uptimeTracker,
-                middlewareSvc,
-                rpcUrl,
-                blockchainId
-            );
-        });
-
-    uptimeCmd
-        .command("uptime-sync-light")
-        .description("Report validator uptime only (no operator epoch backfill), for keeper daemon use")
-        .addArgument(argUptimeTrackerAddress)
-        .addArgument(argMiddlewareAddress)
-        .argument("rpcUrl", "RPC URL of the network")
-        .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
-        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId) => {
-            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
-            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-
-            await uptimeSyncLight(
                 config.client,
                 uptimeTracker,
                 middlewareSvc,

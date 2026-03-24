@@ -10,8 +10,8 @@
 .idea
 .vscode
 *.md
-node_modules
-dist
+**/node_modules
+**/dist
 packages/mcp/
 off-chain-actions.md
 claude-code-*

@@ -50,6 +50,7 @@ services:
     environment:
       - NETWORK=${NETWORK:-fuji}
       - RPC_URL=${RPC_URL:-}
+      - UPTIME_RPC_URL=${UPTIME_RPC_URL:-}
       - UPTIME_BLOCKCHAIN_ID=${UPTIME_BLOCKCHAIN_ID:-}
       - SKIP_ABI_VALIDATION=${SKIP_ABI_VALIDATION:-}
       - METRICS_PORT=9090
