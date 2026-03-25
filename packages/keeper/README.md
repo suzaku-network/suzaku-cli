@@ -1,6 +1,6 @@
 # suzaku-keeper
 
-Keeper bot for Suzaku StakingVault contracts. Runs permissionless maintenance operations - epoch processing, withdrawal preparation, harvest, and delegator lifecycle completions - that keep a vault healthy and its withdrawal queue moving.
+Keeper bot for Suzaku StakingVault contracts. Runs permissionless maintenance operations - epoch processing, withdrawal preparation, harvest, and validator/delegator lifecycle completions - that keep a vault healthy and its withdrawal queue moving.
 
 The keeper has two categories of work:
 
