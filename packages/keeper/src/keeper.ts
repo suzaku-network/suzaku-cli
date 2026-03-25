@@ -472,7 +472,6 @@ async function completePendingRegistrations(
     const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } =
         await getValidatorManagerAddress(config, stakingVault);
     const validatorManager = await config.contracts.ValidatorManager(validatorManagerAddress);
-    console.log(rpcUrl)
     const resolvedRpcUrl = rpcUrl || client.chain?.rpcUrls?.default?.http?.[0];
     let resolvedUptimeBlockchainID = uptimeBlockchainID;
     if (!resolvedUptimeBlockchainID) {
@@ -511,7 +510,6 @@ async function completePendingRegistrations(
                 const txHash = await findRegistrationTxHash(
                     client,
                     stakingVault.address,
-                    'delegator',
                     delegationID,
                     delegatorInfo.validationID
                 );
@@ -548,7 +546,6 @@ async function completePendingRegistrations(
 async function findRegistrationTxHash(
     client: ExtendedWalletClient,
     contractAddress: Hex,
-    _type: 'delegator',
     id: Hex,
     validationID?: Hex,
 ): Promise<Hex | null> {
