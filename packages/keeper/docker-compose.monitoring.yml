@@ -26,6 +26,7 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana-dashboard.json:/var/lib/grafana/dashboards/suzaku-keeper.json:ro
     restart: unless-stopped
     networks:
       - keeper-net

@@ -1,14 +1,13 @@
-import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
-import { CurriedSuzakuContractMap, SafeSuzakuContract, SuzakuContract, withSafeWrite } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
-import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
-import { getContract } from 'viem';
+import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress, bytesToCB58 } from './lib/utils';
 import { color } from 'console-log-colors';
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidationUptimeMessage } from './uptime';
-import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from './lib/pChainUtils';
+import { getCurrentValidators, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
 import { GetRegistrationJustification } from './lib/justification';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
@@ -986,7 +985,7 @@ export async function completeDelegatorRegistrationStakingVault(
     logger.log("\nGetting validation uptime message...");
     const signedUptimeMessage = await getValidationUptimeMessage(
         client,
-        `${rpcUrl}/ext/bc/${sourceChainID}`,
+        `${rpcUrl}`,
         nodeId,
         warpNetworkID,
         sourceChainID
@@ -1166,6 +1165,10 @@ export async function completeDelegatorRemovalStakingVault(
         logs: receipt.logs,
     });
 
+    const subnetIdHex = await validatorManager.read.subnetID()
+    const subnetId = utils.base58check.encode(hexToBytes(subnetIdHex))
+    const currentValidators = await getCurrentValidators(client, subnetId)
+
     let lastHash: Hex | undefined;
 
     for (const event of filteredRemovals) {
@@ -1184,85 +1187,70 @@ export async function completeDelegatorRemovalStakingVault(
         const validator = await validatorManager.read.getValidator([validationID]);
         const nodeID = encodeNodeID(validator.nodeID as Hex);
         logger.log(`Processing removal for delegation ${delegationID}, node ${nodeID}`);
+        const currentValidator = currentValidators.find(v => v.nodeID === nodeID);
+        let accessList;
+        if (currentValidator) {
+            // Look for InitiatedValidatorWeightUpdate events from ValidatorManager (similar to completeWeightUpdate)
+            const initiatedValidatorWeightUpdates = parseEventLogs({
+                abi: validatorManager.abi,
+                logs: receipt.logs,
+                eventName: 'InitiatedValidatorWeightUpdate'
+            }).filter((e) => e.args.validationID === validationID);
 
-        let addNodeBlockNumber = receipt.blockNumber;
-
-        if (initiateTxHash) {
-            const addNodeReceipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 0 });
-            if (addNodeReceipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls use another initiate tx`);
-
-            // Check if this delegationID is in the registration event
-            const registrationEvents = parseEventLogs({
-                abi: stakingVault.abi,
-                logs: addNodeReceipt.logs,
-                eventName: 'StakingVault__DelegatorRegistrationInitiated'
-            });
-
-            if (registrationEvents.some((e) => e.args?.delegationID === delegationID)) {
-                addNodeBlockNumber = addNodeReceipt.blockNumber;
+            if (initiatedValidatorWeightUpdates.length === 0) {
+                logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`));
+                continue;
             }
+
+            const weightUpdateEvent = initiatedValidatorWeightUpdates[0];
+            const warpLog = warpLogs.find((w) => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
+            if (!warpLog) {
+                logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`));
+                continue;
+            }
+
+            const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
+
+            const unsignedL1ValidatorWeightMessage = warpLog.args.message;
+            const weight = weightUpdateEvent.args.weight;
+            const nonce = weightUpdateEvent.args.nonce;
+
+            // Aggregate signatures from validators for the weight message
+            logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
+            const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
+            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
+
+            // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
+            logger.log("\nSetting validator weight on P-Chain...");
+            pipe(await setValidatorWeight({
+                client: pchainClient,
+                validationID: validationID,
+                message: signedL1ValidatorWeightMessage
+            }),
+                R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
+                R.tapError(err => {
+                    if (!err.includes('warp message contains stale nonce')) {
+                        logger.error(err);
+                        process.exit(1);
+                    }
+                    logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
+                }));
+            // Pack and sign the P-Chain warp message for weight update
+            const validationIDBytes = hexToBytes(validationID as Hex);
+            const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
+            const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
+
+            // Aggregate signatures from validators for the P-Chain weight message
+            logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
+            const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: unsignedPChainWarpMsgHex, signingSubnetId });
+            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
+
+            // Convert the signed warp message to bytes and pack into access list
+            const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
+            accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
+        } else {
+            logger.log(`No weight update needed for delegation ${delegationID} as its weight is already 0`);
         }
-
-        // Look for InitiatedValidatorWeightUpdate events from ValidatorManager (similar to completeWeightUpdate)
-        const initiatedValidatorWeightUpdates = parseEventLogs({
-            abi: validatorManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedValidatorWeightUpdate'
-        }).filter((e) => e.args.validationID === validationID);
-
-        if (initiatedValidatorWeightUpdates.length === 0) {
-            logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`));
-            continue;
-        }
-
-        const weightUpdateEvent = initiatedValidatorWeightUpdates[0];
-        const warpLog = warpLogs.find((w) => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
-        if (!warpLog) {
-            logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`));
-            continue;
-        }
-
-        const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
-
-        const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-        const weight = weightUpdateEvent.args.weight;
-        const nonce = weightUpdateEvent.args.nonce;
-
-        // Aggregate signatures from validators for the weight message
-        logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-        const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-        logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-
-        // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
-        logger.log("\nSetting validator weight on P-Chain...");
-        pipe(await setValidatorWeight({
-            client: pchainClient,
-            validationID: validationID,
-            message: signedL1ValidatorWeightMessage
-        }),
-            R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
-            R.tapError(err => {
-                if (!err.includes('warp message contains stale nonce')) {
-                    logger.error(err);
-                    process.exit(1);
-                }
-                logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
-            }));
-
-        // Pack and sign the P-Chain warp message for weight update
-        const validationIDBytes = hexToBytes(validationID as Hex);
-        const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
-        const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-
-        // Aggregate signatures from validators for the P-Chain weight message
-        logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-        const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: unsignedPChainWarpMsgHex, signingSubnetId });
-        logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
-
-        // Convert the signed warp message to bytes and pack into access list
-        const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-        const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-
         // messageIndex is always 0 for StakingVaultOperations
         const messageIndex = 0;
 

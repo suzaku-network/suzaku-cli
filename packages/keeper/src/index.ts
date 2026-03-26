@@ -74,9 +74,17 @@ program
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
     .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
-    .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
+    .addOption(new Option('--uptime-rpc-url <uptimeRpcUrl>', 'RPC URL of the uptime-tracking chain (required when completions are enabled)').env('UPTIME_RPC_URL'))
+    .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => v ? ParserHex(v) : undefined))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
+
+        const completionsActive = !!(options.completions || options.pchainTxPrivateKey);
+        if (completionsActive && !options.uptimeRpcUrl) {
+            console.error('Error: --uptime-rpc-url (or UPTIME_RPC_URL) is required when completions are enabled');
+            process.exit(1);
+        }
+
         const client = await generateClient(opts.network as any, opts.privateKey as Hex);
         const config = getConfig(client, opts.wait, opts.skipAbiValidation);
         const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
@@ -93,7 +101,7 @@ program
                 harvest: options.harvest,
                 coreOnly: options.core,
                 completionsOnly: options.completions,
-                rpcUrl: opts.rpcUrl,
+                rpcUrl: options.uptimeRpcUrl,
                 uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
             });
         } finally {
@@ -111,9 +119,17 @@ program
     .addOption(new Option('--pchain-tx-private-key <pchainTxPrivateKey>', 'P-Chain private key for completing registrations/removals').env('PCHAIN_TX_PRIVATE_KEY').argParser(ParserPrivateKey))
     .addOption(new Option('--core', 'Run core operations only').conflicts('completions'))
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
-    .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => ParserHex(v)))
+    .addOption(new Option('--uptime-rpc-url <uptimeRpcUrl>', 'RPC URL of the uptime-tracking chain (required when completions are enabled)').env('UPTIME_RPC_URL'))
+    .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => v ? ParserHex(v) : undefined))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
+
+        const completionsActive = !!(options.completions || options.pchainTxPrivateKey);
+        if (completionsActive && !options.uptimeRpcUrl) {
+            console.error('Error: --uptime-rpc-url (or UPTIME_RPC_URL) is required when completions are enabled');
+            process.exit(1);
+        }
+
         const client = await generateClient(opts.network as any, opts.privateKey as Hex);
         const config = getConfig(client, opts.wait, opts.skipAbiValidation);
         const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
@@ -137,7 +153,7 @@ program
             harvestInterval: options.harvestInterval,
             coreOnly: options.core,
             completionsOnly: options.completions,
-            rpcUrl: opts.rpcUrl,
+            rpcUrl: options.uptimeRpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
             monitor,
             onCleanup: cleanup,

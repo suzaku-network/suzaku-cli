@@ -101,7 +101,6 @@ import {
     isOperatorUptimeSetForEpoch,
     getLastUptimeCheckpoint,
     uptimeSync,
-    uptimeSyncLight
 } from "./uptime";
 
 import {
@@ -2355,7 +2354,7 @@ async function main() {
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
-        .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true)"))
+        .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true) eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .asyncAction({ signer: true }, async (config, delegationID, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateDelegatorRemoval(
@@ -2372,7 +2371,7 @@ async function main() {
         .description("Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .argument("rpcUrl <string>", "RPC URL for getting validator uptime eg. https://<ip>:<port>/ext/bc/<chainID>")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
@@ -2444,7 +2443,7 @@ async function main() {
         .description("Submit uptime proof for a validator")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID of the validator"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .argument("rpcUrl", "RPC URL for getting validator uptime eg. https://<ip>:<port>/ext/bc/<chainID>")
         .asyncAction({ signer: true }, async (config, nodeId, rpcUrl, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await submitUptimeProof(
@@ -2762,7 +2761,7 @@ async function main() {
         .description("Complete delegator registration on the P-Chain and on the StakingVault after initiating registration")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime (e.g. http(s)://domainOrIp:portIfNeeded)")
+        .argument("rpcUrl", "RPC URL for getting validator uptime (eg. https://<ip>:<port>/ext/bc/<chainID>)")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .asyncAction({ signer: true }, async (config, initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
@@ -3322,7 +3321,7 @@ async function main() {
     uptimeCmd
         .command("get-validation-uptime-message")
         .description("Get the validation uptime message for a given validator in the given L1 RPC")
-        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .addArgument(ArgCB58("blockchainId", "Blockchain ID"))
         .addArgument(ArgNodeID())
         .asyncAction(async (config, rpcUrl, blockchainId, nodeId) => {
@@ -3352,7 +3351,7 @@ async function main() {
     uptimeCmd
         .command("report-uptime-validator")
         .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
-        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
         .addArgument(argUptimeTrackerAddress)
@@ -3362,9 +3361,6 @@ async function main() {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-
-
-            rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
                 config.client,
@@ -3490,7 +3486,7 @@ async function main() {
         .description("Report uptime for all validators")
         .addArgument(argUptimeTrackerAddress)
         .addArgument(argMiddlewareAddress)
-        .argument("rpcUrl", "RPC URL of the network")
+        .argument("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>")
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
         .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
@@ -3498,26 +3494,6 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
 
             await uptimeSync(
-                config.client,
-                uptimeTracker,
-                middlewareSvc,
-                rpcUrl,
-                blockchainId
-            );
-        });
-
-    uptimeCmd
-        .command("uptime-sync-light")
-        .description("Report validator uptime only (no operator epoch backfill), for keeper daemon use")
-        .addArgument(argUptimeTrackerAddress)
-        .addArgument(argMiddlewareAddress)
-        .argument("rpcUrl", "RPC URL of the network")
-        .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
-        .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId) => {
-            const uptimeTracker = await config.contracts.UptimeTracker(uptimeTrackerAddress);
-            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
-
-            await uptimeSyncLight(
                 config.client,
                 uptimeTracker,
                 middlewareSvc,
