@@ -23,10 +23,10 @@ export async function getValidatorManagerAddress(config: Config<ExtendedWalletCl
 }
 
 /**
- * Deposit native tokens (AVAX) into the StakingVault
+ * Deposit native tokens (KITE) into the StakingVault
  * @param client - The wallet client
  * @param stakingVault - The StakingVault contract instance
- * @param amount - Amount to deposit in AVAX (will be converted to wei with 9 decimals)
+ * @param amount - Amount to deposit in KITE (will be converted to wei with 9 decimals)
  * @param minShares - Minimum shares expected from the deposit (slippage protection)
  */
 export async function depositStakingVault(
@@ -41,7 +41,7 @@ export async function depositStakingVault(
     const amountWei = parseUnits(amount, 18);
 
     logger.log("\n=== Deposit Details ===");
-    logger.log("Amount:", amount, "AVAX");
+    logger.log("Amount:", amount, "KITE");
     logger.log("Amount in wei:", amountWei.toString());
     logger.log("Minimum shares expected:", minShares.toString());
     logger.log("Vault address:", stakingVault.address);
@@ -244,7 +244,7 @@ export async function processEpochStakingVault(
  * @param blsKey - The BLS public key
  * @param remainingBalanceOwner - P-Chain remaining balance owner struct
  * @param disableOwner - P-Chain disable owner struct
- * @param stakeAmount - The stake amount in AVAX (will be converted to wei with 18 decimals)
+ * @param stakeAmount - The stake amount in KITE (will be converted to wei with 18 decimals)
  */
 export async function initiateValidatorRegistrationStakingVault(
     client: ExtendedWalletClient,
@@ -266,7 +266,7 @@ export async function initiateValidatorRegistrationStakingVault(
     logger.log("\n=== Validator Registration Details ===");
     logger.log("Node ID:", nodeId);
     logger.log("BLS Key:", blsKey);
-    logger.log("Stake amount:", stakeAmount, "AVAX");
+    logger.log("Stake amount:", stakeAmount, "KITE");
     logger.log("Stake amount in wei:", stakeAmountWei.toString());
     logger.log("Remaining balance owner threshold:", remainingBalanceOwner[0]);
     logger.log("Remaining balance owner addresses:", remainingBalanceOwner[1]);
@@ -795,7 +795,7 @@ export async function completeValidatorRemovalStakingVault(
  * @param stakingVault - The StakingVault contract instance
  * @param validatorManager - The ValidatorManager contract instance
  * @param nodeId - The node ID of the validator to delegate to
- * @param amount - The stake amount in AVAX (will be converted to wei with 18 decimals)
+ * @param amount - The stake amount in KITE (will be converted to wei with 18 decimals)
  */
 export async function initiateDelegatorRegistrationStakingVault(
     client: ExtendedWalletClient,
@@ -818,7 +818,7 @@ export async function initiateDelegatorRegistrationStakingVault(
     logger.log("\n=== Delegator Registration Details ===");
     logger.log("Node ID:", nodeId);
     logger.log("Validation ID:", validationID);
-    logger.log("Amount:", amount, "AVAX");
+    logger.log("Amount:", amount, "KITE");
     logger.log("Amount in wei:", amountWei.toString());
     logger.log("Vault address:", stakingVault.address);
 
@@ -1322,18 +1322,18 @@ export async function getGeneralInfo(stakingVault: StakingVaultContract, client:
     logger.log(`  Owner:                   ${owner}`);
     logger.log(`  Paused:                  ${paused}`);
     logger.log(`  Symbol:                  ${symbol}`);
-    logger.log(`  Total Pooled Stake:      ${fmt(totalPooledStake, decimals)} AVAX`);
+    logger.log(`  Total Pooled Stake:      ${fmt(totalPooledStake, decimals)} KITE`);
     logger.log(`  Total Supply (LST):      ${fmt(totalSupply, decimals)} ${symbol}`);
     logger.log(`  Exchange Rate:           ${fmt(exchangeRate, decimals)}`);
-    logger.log(`  Available Stake:         ${fmt(availableStake, decimals)} AVAX`);
-    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} AVAX`);
-    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} AVAX`);
-    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} AVAX`);
-    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} AVAX`);
-    logger.log(`  In-Flight Exiting:       ${fmt(inFlightExiting, decimals)} AVAX`);
+    logger.log(`  Available Stake:         ${fmt(availableStake, decimals)} KITE`);
+    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} KITE`);
+    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} KITE`);
+    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} KITE`);
+    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} KITE`);
+    logger.log(`  In-Flight Exiting:       ${fmt(inFlightExiting, decimals)} KITE`);
     logger.log(`  Current Epoch:           ${currentEpoch}`);
     logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
-    logger.log(`  Contract Balance:        ${formatUnits(contractBalance, 18)} AVAX`);
+    logger.log(`  Contract Balance:        ${formatUnits(contractBalance, 18)} KITE`);
 }
 
 /**
@@ -1351,9 +1351,9 @@ export async function getFeesInfo(stakingVault: StakingVaultContract) {
     logger.log(color.bold(`\n═══ Fees Info ═══`));
     logger.log(`  Protocol Fee:            ${protocolFeeBips} bips (${Number(protocolFeeBips) / 100}%)`);
     logger.log(`  Protocol Fee Recipient:  ${protocolFeeRecipient}`);
-    logger.log(`  Pending Protocol Fees:   ${fmt(pendingProtocolFees, decimals)} AVAX`);
+    logger.log(`  Pending Protocol Fees:   ${fmt(pendingProtocolFees, decimals)} KITE`);
     logger.log(`  Operator Fee:            ${operatorFeeBips} bips (${Number(operatorFeeBips) / 100}%)`);
-    logger.log(`  Total Accrued Op. Fees:  ${fmt(totalAccruedOperatorFees, decimals)} AVAX`);
+    logger.log(`  Total Accrued Op. Fees:  ${fmt(totalAccruedOperatorFees, decimals)} KITE`);
     logger.log(`  Liquidity Buffer:        ${liquidityBufferBips} bips (${Number(liquidityBufferBips) / 100}%)`);
 }
 
@@ -1387,10 +1387,10 @@ export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
         logger.log(`\n  ${color.cyan(operator)}:`);
         logger.log(`    Active:            ${info.active}`);
         logger.log(`    Allocation:        ${info.allocationBips} bips (${Number(info.allocationBips) / 100}%)`);
-        logger.log(`    Active Stake:      ${fmt(info.activeStake, decimals)} AVAX`);
-        logger.log(`    Accrued Fees:      ${fmt(info.accruedFees, decimals)} AVAX`);
+        logger.log(`    Active Stake:      ${fmt(info.activeStake, decimals)} KITE`);
+        logger.log(`    Accrued Fees:      ${fmt(info.accruedFees, decimals)} KITE`);
         logger.log(`    Fee Recipient:     ${info.feeRecipient}`);
-        logger.log(`    Exit Debt:         ${fmt(exitDebt, decimals)} AVAX`);
+        logger.log(`    Exit Debt:         ${fmt(exitDebt, decimals)} KITE`);
         logger.log(`    Validators:        ${validators.length}`);
         logger.log(`    Delegations:       ${delegators.length}`);
     }
@@ -1409,8 +1409,8 @@ export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
     ]);
 
     logger.log(color.bold(`\n═══ Validators Info ═══`));
-    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} AVAX`);
-    logger.log(`  Max Validator Stake:     ${fmt(maxValidatorStake, decimals)} AVAX`);
+    logger.log(`  Total Validator Stake:   ${fmt(totalValidatorStake, decimals)} KITE`);
+    logger.log(`  Max Validator Stake:     ${fmt(maxValidatorStake, decimals)} KITE`);
 
     let totalValidators = 0;
     let totalPendingRemoval = 0;
@@ -1439,7 +1439,7 @@ export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
             if (pendingRemoval) totalPendingRemoval++;
 
             logger.log(`    ${validatorIDs[i]}`);
-            logger.log(`      Stake:           ${fmt(stakeAmount, decimals)} AVAX`);
+            logger.log(`      Stake:           ${fmt(stakeAmount, decimals)} KITE`);
             logger.log(`      Pending Removal: ${pendingRemoval}`);
         }
     }
@@ -1458,8 +1458,8 @@ export async function getDelegatorsInfo(stakingVault: StakingVaultContract) {
     ]);
 
     logger.log(color.bold(`\n═══ Delegators Info ═══`));
-    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} AVAX`);
-    logger.log(`  Max Delegator Stake:     ${fmt(maxDelegatorStake, decimals)} AVAX`);
+    logger.log(`  Total Delegated Stake:   ${fmt(totalDelegatedStake, decimals)} KITE`);
+    logger.log(`  Max Delegator Stake:     ${fmt(maxDelegatorStake, decimals)} KITE`);
 
     let totalDelegations = 0;
 
@@ -1509,9 +1509,9 @@ export async function getWithdrawalsInfo(stakingVault: StakingVaultContract) {
     logger.log(color.bold(`\n═══ Withdrawals Info ═══`));
     logger.log(`  Queue Length:            ${queueLength}`);
     logger.log(`  Queue Head:              ${queueHead}`);
-    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} AVAX`);
-    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} AVAX`);
-    logger.log(`  Total Exit Debt:         ${fmt(totalExitDebt, decimals)} AVAX`);
+    logger.log(`  Pending Withdrawals:     ${fmt(pendingWithdrawals, decimals)} KITE`);
+    logger.log(`  Claimable Withdrawals:   ${fmt(claimableWithdrawals, decimals)} KITE`);
+    logger.log(`  Total Exit Debt:         ${fmt(totalExitDebt, decimals)} KITE`);
     logger.log(`  Current Epoch:           ${currentEpoch}`);
     logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
     logger.log(`  Epoch Duration:          ${epochDuration}s`);
