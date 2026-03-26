@@ -385,7 +385,7 @@ export async function uptimeSyncLight(
     logger.log("No operators found.");
     return;
   }
-  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl + `/ext/bc/${sourceChainID}`);
+  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
 
   if (currentValidators.length === 0) {
     logger.log("No validators found for any operator.");

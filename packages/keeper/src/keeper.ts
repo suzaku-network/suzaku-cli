@@ -305,36 +305,6 @@ async function completePendingRemovals(
 
     for (const operator of operatorList) {
 
-        // Check delegators pending removal
-        const delegatorIDs = await stakingVault.read.getOperatorDelegators([operator]);
-        for (const delegationID of delegatorIDs) {
-            try {
-                // Check delegator info — if the removal was initiated, the delegator
-                // will still be listed but we need to find the removal event
-                const removalTxHash = await findRemovalTxHash(
-                    client,
-                    stakingVault.address,
-                    'StakingVault__DelegatorRemovalInitiated',
-                    delegationID,
-                    43200n // ~1 day lookback for delegators (vs 7 days for validators)
-                );
-
-                if (!removalTxHash) continue; // Not pending removal
-
-                logger.log(`\nFound pending delegator removal: ${delegationID} (operator: ${operator})`);
-                logger.log(`Found initiate removal tx: ${removalTxHash}`);
-
-                await completeDelegatorRemovalStakingVault(
-                    pchainClient, config, stakingVault, validatorManager,
-                    removalTxHash
-                );
-                delegators++;
-                logger.log(color.green(`Completed delegator removal: ${delegationID}`));
-            } catch (error: any) {
-                logger.warn(`Failed to complete delegator removal ${delegationID}: ${error.message || error}`);
-            }
-        }
-
         // Check validators pending removal
         const validatorIDs = await stakingVault.read.getOperatorValidators([operator]);
         for (const validationID of validatorIDs) {
@@ -366,6 +336,36 @@ async function completePendingRemovals(
                 logger.log(color.green(`Completed validator removal: ${validationID}`));
             } catch (error: any) {
                 logger.warn(`Failed to complete validator removal ${validationID}: ${error.message || error}`);
+            }
+        }
+
+        // Check delegators pending removal
+        const delegatorIDs = await stakingVault.read.getOperatorDelegators([operator]);
+        for (const delegationID of delegatorIDs) {
+            try {
+                // Check delegator info — if the removal was initiated, the delegator
+                // will still be listed but we need to find the removal event
+                const removalTxHash = await findRemovalTxHash(
+                    client,
+                    stakingVault.address,
+                    'StakingVault__DelegatorRemovalInitiated',
+                    delegationID,
+                    43200n // ~1 day lookback for delegators (vs 7 days for validators)
+                );
+
+                if (!removalTxHash) continue; // Not pending removal
+
+                logger.log(`\nFound pending delegator removal: ${delegationID} (operator: ${operator})`);
+                logger.log(`Found initiate removal tx: ${removalTxHash}`);
+
+                await completeDelegatorRemovalStakingVault(
+                    pchainClient, config, stakingVault, validatorManager,
+                    removalTxHash
+                );
+                delegators++;
+                logger.log(color.green(`Completed delegator removal: ${delegationID}`));
+            } catch (error: any) {
+                logger.warn(`Failed to complete delegator removal ${delegationID}: ${error.message || error}`);
             }
         }
     }

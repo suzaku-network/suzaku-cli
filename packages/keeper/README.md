@@ -111,7 +111,7 @@ VAULT_ADDRESS=0x...
 RPC_URL=http://host:port/ext/bc/<blockchainID>/rpc
 VAULT_ADDRESS=0x...
 SKIP_ABI_VALIDATION=true
-UPTIME_RPC_URL=http://host:port/ext/bc/<uptimeBlockchainID>/rpc  # required for completions
+UPTIME_RPC_URL=http://host:port/ext/bc/<uptimeBlockchainID>  # required for completions
 # UPTIME_BLOCKCHAIN_ID=0x...    # optional: auto-read from staking manager storage
 
 # Private keys go in secrets/ (mounted as Docker secrets, not env vars)
