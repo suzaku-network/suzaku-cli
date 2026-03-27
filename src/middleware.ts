@@ -7,6 +7,7 @@ import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
+import { completeValidatorRemoval } from './securityModule';
 
 export async function middlewareRegisterOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
@@ -483,6 +484,88 @@ export async function weightSync(
     } else {
       logger.log(`Operator ${prediction.operator} will not lose weight`);
     }
+  }
+  const balancerAddress = await middleware.read.BALANCER();
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
+
+  const pendingRemovalNodes: { operator: Hex, nodeId: string }[] = [];
+
+  // 1. Get nodes length for all operators
+  if (operators.length > 0) {
+    const lengths = await middleware.multicall(operators.map(op => ({
+      name: 'getOperatorNodesLength',
+      args: [op]
+    })));
+
+    // 2. Build multi-call to get all node IDs
+    const nodeQueries: { operator: Hex, index: bigint }[] = [];
+    const nodeIdsResult = await middleware.multicall(operators.flatMap((op, i) => Array.from({ length: Number(lengths[i]) }, (_, j) => {
+      nodeQueries.push({ operator: op as Hex, index: BigInt(j) });
+      return {
+        name: 'operatorNodesArray',
+        args: [op, BigInt(j)]
+      }
+    })));
+
+    const validNodeIds: Hex[] = [];
+    const validQueries: { operator: Hex, index: bigint }[] = [];
+
+    const pendingStatuses = await middleware.multicall(nodeIdsResult.map((id, i) => {
+      validNodeIds.push(id);
+      validQueries.push(nodeQueries[i]);
+      return {
+        name: 'nodePendingRemoval',
+        args: [id]
+      }
+    }));
+
+    for (let i = 0; i < validNodeIds.length; i++) {
+      if (pendingStatuses[i] === true) {
+        pendingRemovalNodes.push({
+          operator: validQueries[i].operator,
+          nodeId: encodeNodeID(validNodeIds[i])
+        });
+      }
+    }
+  }
+
+  if (pendingRemovalNodes.length > 0) {
+    logger.log(`Found ${pendingRemovalNodes.length} nodes pending removal`);
+    const logs = await middleware.getLogs({ event: 'NodeRemoved' });
+    const processedTxHashes: Hex[] = [];
+
+    for (const pendingNode of pendingRemovalNodes) {
+      // Find matching NodeRemoved log for this nodeId
+      const matchingLog = logs.find(log => encodeNodeID(log.args.nodeId!) === pendingNode.nodeId);
+
+      if (matchingLog) {
+        if (processedTxHashes.includes(matchingLog.transactionHash)) {
+          continue;
+        }
+        processedTxHashes.push(matchingLog.transactionHash);
+        logger.log(`Node pending removal found: ${pendingNode.nodeId}`);
+        try {
+          await completeValidatorRemoval(
+            config.client,
+            middleware,
+            balancer,
+            config,
+            matchingLog.transactionHash,
+            false // waitValidatorVisible
+          );
+        } catch (error) {
+          logger.error(error);
+        }
+      } else {
+        logger.warn(color.yellow(`Warning: Node ${pendingNode.nodeId} is pending removal but no matching NodeRemoved log was found.`));
+      }
+    }
+  } else {
+    // Still log NodeRemoved events for info if there were no pending removals
+    const logs = await middleware.getLogs({ event: 'NodeRemoved' });
+    logs.forEach((log) => {
+      logger.log(`Node removed: ${log.transactionHash}`);
+    });
   }
 }
 
