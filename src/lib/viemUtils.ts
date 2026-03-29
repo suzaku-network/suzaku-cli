@@ -1,13 +1,14 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError, GetEventArgs, AbiEvent, ParseEventLogsReturnType, ContractEventName } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError, GetEventArgs, AbiEvent, ParseEventLogsReturnType, ContractEventName, hexToBytes, slice } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient, ExtendedWalletClient } from '../client';
 import { logger } from './logger';
-import { bigintReplacer, bytes32ToAddress } from './utils';
+import { bigintReplacer, bytes32ToAddress, encodeNodeID, unpackGeneric } from './utils';
 import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
 import { isCastMode, logCastCall, logCastSend } from './castUtils';
+import { utils } from '@avalabs/avalanchejs';
 
 export { setCastMode, isCastMode } from './castUtils';
 
@@ -99,6 +100,7 @@ type EventName<T extends SuzakuABINames> = ContractEventName<typeof SuzakuABI[T]
 
 type GetLogsParams<T extends SuzakuABINames, E extends EventName<T> | EventName<T>[] | undefined = undefined> = {
   fromBlock?: bigint
+  blockLookBack?: bigint
   toBlock?: bigint | 'latest'
   hash?: Hex
   event?: E
@@ -345,6 +347,7 @@ if ('read' in contract) {
 
   type WideGetLogsParams = {
     fromBlock?: bigint
+    blockLookBack?: bigint
     toBlock?: bigint | 'latest'
     hash?: Hex
     event?: EventName<T> | EventName<T>[]
@@ -352,7 +355,13 @@ if ('read' in contract) {
   }
 
   const getLogsFn = async (params?: WideGetLogsParams): Promise<ParseEventLogsReturnType<typeof SuzakuABI[T]>> => {
-    const fromBlock = params?.fromBlock ?? 302400n;
+    let fromBlock: bigint | undefined;
+    if (params?.blockLookBack !== undefined) {
+      const currentBlock = await client.getBlockNumber();
+      fromBlock = currentBlock > params.blockLookBack ? currentBlock - params.blockLookBack : 0n;
+    } else {
+      fromBlock = params?.fromBlock;
+    }
     const toBlock = params?.toBlock ?? 'latest';
     const { hash, event, args } = params ?? {};
     const abiList = SuzakuABI[abi] as Abi;

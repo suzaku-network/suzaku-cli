@@ -1,4 +1,4 @@
-import { Hex } from 'viem';
+import { bytesToHex, Hex, hexToBytes } from 'viem';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
@@ -8,6 +8,9 @@ import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
 import { completeValidatorRemoval } from './securityModule';
+import { Validator, ValidatorStatus, ValidatorStatusNames } from './balancer';
+import { getCurrentValidators } from './lib/pChainUtils';
+import { utils } from '@avalabs/avalanchejs';
 
 export async function middlewareRegisterOperator(
   middleware: SafeSuzakuContract['L1Middleware'],
@@ -449,7 +452,6 @@ export async function weightSync(
   }
 
   logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
-
   for (let i = 0; i < loopCount; i++) {
     logger.log(`\nIteration ${i + 1}/${loopCount}`);
     const hash = await middleware.safeWrite.manualProcessNodeStakeCache([epochsPerCall]);
@@ -488,85 +490,62 @@ export async function weightSync(
   const balancerAddress = await middleware.read.BALANCER();
   const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
 
-  const pendingRemovalNodes: { operator: Hex, nodeId: string }[] = [];
+  let pendingRemovalNodes: { nodeID: Hex, validationID: Hex, txHash?: Hex }[] = [];
 
-  // 1. Get nodes length for all operators
   if (operators.length > 0) {
-    const lengths = await middleware.multicall(operators.map(op => ({
-      name: 'getOperatorNodesLength',
-      args: [op]
-    })));
+    // Combine validators and logs to get removed from the two last epochs and check if p-chain registered nodes are still registered.
+    // If there are validator already removed from the p-chain (or disabled) but still registered in the middleware, and their init removal tx is older than 2 epochs, they will !!! NOT !!! be removed from the middleware by this function!!!
+    const subnetId = utils.base58check.encode(hexToBytes(await balancer.read.subnetID()));
+    const validators = await getCurrentValidators(config.client, subnetId);
+    const startBlock = await blockAtTimestamp(config.client, BigInt(await middleware.read.getEpochStartTs([currentEpoch - 2])));
+    const logs = await middleware.getLogs({ event: "NodeRemoved", fromBlock: startBlock });
+    
+    const combinedNodes = Array.from(new Set([...validators.map(v => ({ nodeID: parseNodeID(v.nodeID as NodeId), validationID: bytesToHex(utils.base58check.decode(v.validationID!))  })), ...logs.map(l => ({ nodeID: l.args.nodeId!, validationID: l.args.validationID!, txHash: l.transactionHash! }))]));
 
-    // 2. Build multi-call to get all node IDs
-    const nodeQueries: { operator: Hex, index: bigint }[] = [];
-    const nodeIdsResult = await middleware.multicall(operators.flatMap((op, i) => Array.from({ length: Number(lengths[i]) }, (_, j) => {
-      nodeQueries.push({ operator: op as Hex, index: BigInt(j) });
+    const statuses = await balancer.multicall(combinedNodes.map((v, i) => {
       return {
-        name: 'operatorNodesArray',
-        args: [op, BigInt(j)]
-      }
-    })));
-
-    const validNodeIds: Hex[] = [];
-    const validQueries: { operator: Hex, index: bigint }[] = [];
-
-    const pendingStatuses = await middleware.multicall(nodeIdsResult.map((id, i) => {
-      validNodeIds.push(id);
-      validQueries.push(nodeQueries[i]);
-      return {
-        name: 'nodePendingRemoval',
-        args: [id]
+        name: 'getValidator',
+        args: [v.validationID]
       }
     }));
-
-    for (let i = 0; i < validNodeIds.length; i++) {
-      if (pendingStatuses[i] === true) {
-        pendingRemovalNodes.push({
-          operator: validQueries[i].operator,
-          nodeId: encodeNodeID(validNodeIds[i])
-        });
-      }
-    }
+    statuses.forEach((status, i) => {
+      logger.log(`Node ${combinedNodes[i].nodeID} status: ${status.status}`);
+    });
+    // Filter out nodes that are not pending removal
+    pendingRemovalNodes = combinedNodes.filter((_, i) => statuses[i].status === ValidatorStatus.PendingRemoved);
   }
-
+  const nodesRemoved = []
   if (pendingRemovalNodes.length > 0) {
     logger.log(`Found ${pendingRemovalNodes.length} nodes pending removal`);
-    const logs = await middleware.getLogs({ event: 'NodeRemoved' });
     const processedTxHashes: Hex[] = [];
-
+    
     for (const pendingNode of pendingRemovalNodes) {
-      // Find matching NodeRemoved log for this nodeId
-      const matchingLog = logs.find(log => encodeNodeID(log.args.nodeId!) === pendingNode.nodeId);
-
-      if (matchingLog) {
-        if (processedTxHashes.includes(matchingLog.transactionHash)) {
-          continue;
-        }
-        processedTxHashes.push(matchingLog.transactionHash);
-        logger.log(`Node pending removal found: ${pendingNode.nodeId}`);
-        try {
-          await completeValidatorRemoval(
+      if (!pendingNode.txHash) {
+        pendingNode.txHash = await balancer.safeWrite.resendValidatorRemovalMessage([pendingNode.validationID]);
+        logger.log(`Resent validator removal message for node ${pendingNode.nodeID}, tx hash: ${pendingNode.txHash}`);
+      }
+      if (processedTxHashes.includes(pendingNode.txHash)) {
+        continue;
+      }
+      processedTxHashes.push(pendingNode.txHash);
+      logger.log(`Node pending removal found: ${pendingNode.nodeID}`);
+      try {
+          const { nodes, txHash } = await completeValidatorRemoval(
             config.client,
             middleware,
             balancer,
             config,
-            matchingLog.transactionHash,
+            pendingNode.txHash,
             false // waitValidatorVisible
           );
+          nodesRemoved.push(...nodes);
         } catch (error) {
           logger.error(error);
         }
-      } else {
-        logger.warn(color.yellow(`Warning: Node ${pendingNode.nodeId} is pending removal but no matching NodeRemoved log was found.`));
-      }
     }
-  } else {
-    // Still log NodeRemoved events for info if there were no pending removals
-    const logs = await middleware.getLogs({ event: 'NodeRemoved' });
-    logs.forEach((log) => {
-      logger.log(`Node removed: ${log.transactionHash}`);
-    });
   }
+  logger.log(nodesRemoved)
+  logger.addData("nodesRemoved", nodesRemoved)
 }
 
 export interface OperatorForceUpdatePrediction {
@@ -711,4 +690,94 @@ export async function middlewareInfo(
   logger.logJsonTree(info);
   logger.addData('middlewareInfo', info);
   return info;
+}
+
+export async function operatorsInfo(
+  middleware: SuzakuContract['L1Middleware'],
+  balancer: SuzakuContract['BalancerValidatorManager'],
+) {
+  logger.log("Fetching operators information...");
+
+  const results = await middleware.multicall([
+    'getCurrentEpoch',
+    'getAllOperators',
+    'lastGlobalNodeStakeUpdateEpoch',
+    'getVaultManager',
+    'PRIMARY_ASSET_CLASS',
+    "WEIGHT_SCALE_FACTOR"
+  ]);
+
+  const operatorsInfoFlaten = await middleware.multicall(results[1].flatMap(operator => {
+    return [
+      {
+        name: 'getOperatorStake',
+        args: [operator, results[0], results[4]]
+      },
+      {
+        name: 'getOperatorUsedStakeCached',
+        args: [operator]
+      },
+      {
+        name: 'operatorLockedStake',
+        args: [operator]
+      },
+      {
+        name: 'getActiveNodesForEpoch',
+        args: [operator, results[0]]
+      }
+    ]
+  }))
+
+  const operatorValidatorsValidationIDs = await balancer.multicall(operatorsInfoFlaten.filter(info => Array.isArray(info)).flatMap((activeNodes: Hex[]) => {
+    return activeNodes.map((nodeId) => {
+      return {
+        name: 'getNodeValidationID',
+        args: [nodeId.replace("000000000000000000000000", "") as Hex]
+      }
+    })
+  }))
+
+  const operatorValidators = await balancer.multicall(operatorValidatorsValidationIDs.map((validationID: Hex) => {
+    return {
+      name: 'getValidator',
+      args: [validationID]
+    }
+  }))
+
+  const operatorNodesStake = await middleware.multicall(operatorValidatorsValidationIDs.flatMap((validationID: Hex) => {
+    return [
+      {
+        name: 'getNodeStake',
+        args: [results[2], validationID]
+      }
+    ]
+  }))
+
+  const reducedOperatorValidators = operatorValidators.reduce((acc, validator, index) => {
+    acc[validator.nodeID] = {...validator, validationID: operatorValidatorsValidationIDs[index], stake: Number(operatorNodesStake[index])};
+    return acc;
+  }, {} as Record<Hex, Validator & { validationID: Hex, stake: Number }>);
+
+  const operatorsInfo = results[1].map((operator, index) => {
+    return {
+      operator,
+      stake: Number(operatorsInfoFlaten[index * 4]),
+      usedStake: Number(operatorsInfoFlaten[index * 4 + 1]),
+      lockedStake: Number(operatorsInfoFlaten[index * 4 + 2]),
+      acitveNodes: (operatorsInfoFlaten[index * 4 + 3] as Hex[]).map((nodeId, nodeIndex) => {
+        nodeId = nodeId.replace("000000000000000000000000", "") as Hex;
+        return {
+          nodeID: encodeNodeID(reducedOperatorValidators[nodeId].nodeID),
+          validationID: reducedOperatorValidators[nodeId].validationID,
+          status: ValidatorStatusNames[Number(reducedOperatorValidators[nodeId].status)],
+          startingWeight: Number(reducedOperatorValidators[nodeId].startingWeight),
+          weight: Number(reducedOperatorValidators[nodeId].weight),
+          stake: Number(reducedOperatorValidators[nodeId].weight) * Number(results[5]),
+          startTime: new Date(Number(reducedOperatorValidators[nodeId].startTime) * 1000).toLocaleString()
+        }
+      })
+    }
+  })
+  
+  return {...operatorsInfo, currentEpoch: results[0], lastGlobalNodeStakeUpdateEpoch: results[2], needsStakeUpdate: results[2] !== results[0]};
 }

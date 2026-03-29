@@ -131,7 +131,8 @@ const logs = await vault.getLogs({
 |---|---|---|---|
 | `event` | event name \| event name[] | `undefined` | Event(s) to filter. TypeScript constrains values to this contract's ABI events. |
 | `args` | typed per event | — | Filter by indexed/non-indexed inputs. Only valid when `event` is a single name. |
-| `fromBlock` | `bigint` | `302400n` | Start block |
+| `fromBlock` | `bigint` | `302400n` | Start block (ignored if `blockLookBack` is set) |
+| `blockLookBack` | `bigint` | — | Compute `fromBlock` as `currentBlock - blockLookBack` (clamped to `0n` if current block is smaller) |
 | `toBlock` | `bigint \| 'latest'` | `'latest'` | End block |
 | `hash` | `Hex` | — | If provided, parses logs from the receipt of this tx instead of querying `eth_getLogs`. If the transaction reverted, throws immediately. |
 

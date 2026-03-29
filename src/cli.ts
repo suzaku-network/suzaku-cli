@@ -23,7 +23,8 @@ import {
     removeVault,
     getVaultCount,
     getVaultAtWithTimes,
-    getVaultCollateralClass
+    getVaultCollateralClass,
+    info as VaultManagerInfo
 } from "./vaultManager";
 import {
     depositVault,
@@ -36,7 +37,8 @@ import {
     getVaultTotalSupply,
     getVaultWithdrawalSharesOf,
     getVaultWithdrawalsOf,
-    approveAndDepositCollateral
+    approveAndDepositCollateral,
+    info as VaultInfo
 } from "./vault";
 
 import {
@@ -69,7 +71,8 @@ import {
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
     weightSync,
-    middlewareInfo
+    middlewareInfo,
+    operatorsInfo as getOperatorsInfoMiddleware
 } from "./middleware";
 
 import {
@@ -503,6 +506,16 @@ async function main() {
                 vaultManager,
                 vaultAddress
             );
+        });
+
+    vaultManagerCmd
+        .command("info")
+        .description("Get information about all vaults registered for L1 staking")
+        .addArgument(argMiddlewareVaultManagerAddress)
+        .asyncAction(async (config, middlewareVaultManager) => {
+            const vaultManager = await config.contracts.VaultManager(middlewareVaultManager);
+            const info = await VaultManagerInfo(vaultManager, config);
+            logger.logJsonTree(info);
         });
 
     /* --------------------------------------------------
@@ -1132,7 +1145,6 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
-        .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .asyncAction({ signer: true }, async (config, middlewareAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -1148,8 +1160,7 @@ async function main() {
                 config,
                 removeNodeTxHash,
                 !options.skipWaitApi,
-                options.nodeId.length > 0 ? options.nodeId : undefined,
-                options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
+                options.nodeId.length > 0 ? options.nodeId : undefined
             );
         });
 
@@ -1613,6 +1624,16 @@ async function main() {
             await middlewareSvc.safeWrite.setVaultManager([vaultManagerAddress])
             logger.log(`Set vault manager to ${vaultManagerAddress} on middleware ${middlewareAddress} ok`);
         });
+    
+    middlewareCmd
+        .command("get-vault-manager")
+        .description("Get vault manager")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const vaultManagerAddress = await middlewareSvc.read.getVaultManager();
+            logger.log(`Vault manager for middleware ${middlewareAddress}: ${vaultManagerAddress}`);
+        });
 
     middlewareCmd
         .command("get-operator-validation-ids")
@@ -1626,7 +1647,7 @@ async function main() {
         });
 
     middlewareCmd
-        .command("account-info")
+        .command("info-account")
         .description("Get account info")
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgAddress("account", "Account address"))
@@ -1672,6 +1693,18 @@ async function main() {
         .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareInfo(middlewareSvc);
+        });
+    
+    middlewareCmd
+        .command('info-operators')
+        .description('Get operators info')
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
+            const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
+            const operatorsInfo = await getOperatorsInfoMiddleware(middlewareSvc, balancerSvc);
+            logger.logJsonTree(operatorsInfo);
         });
 
     middlewareCmd
@@ -2084,7 +2117,6 @@ async function main() {
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--node-id <nodeId>", "Node ID of the validator being removed").default([] as NodeId[]).argParser(collectMultiple(ParserNodeID)))
-        .addOption(new Option("--add-node-tx <addNodeTx>", "Add node transaction hash").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
         .asyncAction({ signer: true }, async (config, poaSecurityModuleAddress, removeNodeTxHash, options) => {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
@@ -2102,7 +2134,6 @@ async function main() {
                 removeNodeTxHash,
                 !options.skipWaitApi,
                 options.nodeId.length > 0 ? options.nodeId : undefined,
-                options.addNodeTx.length > 0 ? options.addNodeTx : undefined,
             );
 
             logger.log(`End validation initialized for node . Transaction hash: ${txHash}`);
@@ -2177,7 +2208,7 @@ async function main() {
         });
 
     kiteStakingManagerCmd
-        .command("validator-info")
+        .command("info-validator")
         .description("Get comprehensive information for a validator on KiteStakingManager")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("validationID", "Validation ID of the validator"))
@@ -2188,7 +2219,7 @@ async function main() {
         });
 
     kiteStakingManagerCmd
-        .command("delegator-info")
+        .command("info-delegator")
         .description("Get comprehensive information for a delegator on KiteStakingManager")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID of the delegator"))
@@ -3105,7 +3136,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("fees-info")
+        .command("info-fees")
         .description("Get fees configuration of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3114,7 +3145,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("operators-info")
+        .command("info-operators")
         .description("Get operators details of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3123,7 +3154,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("validators-info")
+        .command("info-validators")
         .description("Get validators details per operator of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3132,7 +3163,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("delegators-info")
+        .command("info-delegators")
         .description("Get delegations details per operator of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3141,7 +3172,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("withdrawals-info")
+        .command("info-withdrawals")
         .description("Get withdrawal queue info of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3150,7 +3181,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("epoch-info")
+        .command("info-epoch")
         .description("Get epoch info of the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
@@ -3159,7 +3190,7 @@ async function main() {
         });
 
     stakingVaultCmd
-        .command("full-info")
+        .command("info-full")
         .description("Get all information about the StakingVault")
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
