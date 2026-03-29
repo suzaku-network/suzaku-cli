@@ -1,6 +1,6 @@
-import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log } from 'viem';
+import { fromBytes, hexToBytes, Hex, parseAbiItem, decodeEventLog, Log, slice } from 'viem';
 import { sha256 } from '@noble/hashes/sha2';
-import { cb58ToBytes, retryWhileError, cb58ToHex } from './utils';
+import { cb58ToBytes, retryWhileError, cb58ToHex, unpackGeneric } from './utils';
 import { PChainOwner } from './justification';
 import { utils } from '@avalabs/avalanchejs';
 import { ExtendedClient, Network } from '../client';
@@ -589,11 +589,110 @@ export function packValidationUptimeMessage(validationId: string, uptimeSeconds:
     return newUnsignedMessage(networkID, sourceChainID, addressedCall);
 }
 
-export function decodeWarpMessage(log: Log) {
-    const abi = parseAbiItem('event SendWarpMessage(address indexed sender, bytes32 indexed messageID, bytes message)')
-    return decodeEventLog({
-        abi: [abi],
-        data: log.data,
-        topics: log.topics,
-    });
+// Enum warp message types
+
+export enum WarpMessageType {
+    RegisterL1ValidatorMessage = 1,
+    L1ValidatorRegistrationMessage = 2,
+    L1ValidatorWeightMessage = 3,
+    ValidationUptimeMessage = 0,
+}
+
+// Helper to decode PChainOwner (threshold + addresses)
+const decodePChainOwner = (hex: Hex) => {
+    const threshold = Number(slice(hex, 0, 4));
+    const addressCount = Number(slice(hex, 4, 8));
+    const addresses: Hex[] = [];
+    for (let i = 0; i < addressCount; i++) {
+        addresses.push(slice(hex, 8 + (i * 20), 8 + ((i + 1) * 20)));
+    }
+    return { threshold, addresses };
+};
+
+// Helper to calculate PChainOwner byte size
+const getOwnerSize = (hex: Hex) => {
+    const addressCount = Number(slice(hex, 4, 8));
+    return 8 + (addressCount * 20);
+};
+
+// Warp message schema
+
+export const WarpMessageSchema = {
+    prefix: {
+        networkID: { bytes: 6, type: Number },
+        sourceChainID: { bytes: 32, type: (v: Hex) => utils.base58check.encode(hexToBytes(v)) },
+        unknown1: { bytes: 4, type: (v: Hex) => v }, // Keep as hex for Address type
+        unknown2: { bytes: 6, type: (v: Hex) => v },
+        unknown3: { bytes: 4, type: (v: Hex) => v },
+        messageID: { bytes: 20, type: (v: Hex) => v },
+        unknown4: { bytes: 4, type: (v: Hex) => v },
+        codec: { bytes: 2, type: Number },
+        type: { bytes: 4, type: Number },
+    },
+    3: {
+        validationID: { bytes: 32, type: (v: Hex) => v },
+        nonce: { bytes: 8, type: Number },
+        weight: { bytes: 8, type: Number },
+
+    },
+    2: {
+        validationID: { bytes: 32, type: (v: Hex) => v },
+        registered: { bytes: 1, type: Boolean },
+
+    },
+    1: {
+        validationID: { bytes: 32, type: (v: Hex) => v },
+        subnetID: { bytes: 32, type: (v: Hex) => utils.base58check.encode(hexToBytes(v)) },
+        nodeID: {
+            bytes: (v: Hex) => 4 + Number(slice(v, 0, 4)),
+            type: (v: Hex) => slice(v, 4) // Returns the actual ID without the length prefix
+        },
+        blsPublicKey: { bytes: 48, type: (v: Hex) => v },
+        expiry: { bytes: 8, type: Number },
+        remainingBalanceOwner: {
+            bytes: getOwnerSize,
+            type: decodePChainOwner
+        },
+        disableOwner: {
+            bytes: getOwnerSize,
+            type: decodePChainOwner
+        },
+    },
+    0: {
+        validationID: { bytes: 32, type: (v: Hex) => v },
+        uptime: { bytes: 8, type: Number },
+
+    }
+} as const;
+
+export type WarpMessage<T extends WarpMessageType> = {
+    networkID: number;
+    sourceChainID: string;
+    unknown1: Hex;
+    unknown2: Hex;
+    unknown3: Hex;
+    messageID: Hex;
+    unknown4: Hex;
+    codec: number;
+    type: T;
+    raw: Hex;
+} & (T extends WarpMessageType.RegisterL1ValidatorMessage ? {
+    validationID: Hex;
+    nonce: number;
+    weight: number;
+} : T extends WarpMessageType.L1ValidatorRegistrationMessage ? {
+    validationID: Hex;
+    registered: boolean;
+} : T extends WarpMessageType.L1ValidatorWeightMessage ? {
+    validationID: Hex;
+    weight: number;
+} : T extends WarpMessageType.ValidationUptimeMessage ? {
+    validationID: Hex;
+    uptime: number;
+} : never);
+
+export function decodeWarpMessage<T extends WarpMessageType>(hex: Hex, type?: T): WarpMessage<T> {
+    const { decoded: prefix, remainder: messageHex } = unpackGeneric(hex, WarpMessageSchema.prefix);
+    const { decoded: message } = unpackGeneric(messageHex!, WarpMessageSchema[prefix.type as 1 | 2 | 3 | 0]);
+    return { ...prefix, ...message, raw: hex } as unknown as WarpMessage<T>;
 }

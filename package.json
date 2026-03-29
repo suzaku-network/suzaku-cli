@@ -2,6 +2,7 @@
   "name": "@suzaku-network/suzaku-cli",
   "version": "1.0.3",
   "homepage": "https://github.com/suzaku-network/suzaku-cli?tab=readme-ov-file#suzaku-cli",
+  "license": "ADDPHO",
   "keywords": [
     "Avalanche",
     "blockchain",

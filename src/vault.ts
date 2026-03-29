@@ -1,4 +1,4 @@
-import { ExtendedWalletClient } from './client';
+import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account, parseUnits } from 'viem';
@@ -188,4 +188,105 @@ export async function approveAndDepositCollateral(
   const depositTx = await collateral.safeWrite.deposit([account.address, amountWei]);
   await client.waitForTransactionReceipt({ hash: depositTx })
   logger.log("Deposit to collateral done, tx hash:", depositTx);
+}
+
+type CollateralClassInfo = {
+  class: number;
+  l1Limit: number;
+  totalOperatorShares: number;
+};
+
+type VaultInfo = {
+  address: Hex;
+  collateral: Hex;
+  collateralLimit: number;
+  collateralAsset: Hex;
+  collateralAssetSymbol: string;
+  decimals: number;
+  delegator: Hex;
+  slasher: Hex;
+  totalStake: number;
+  activeStake: number;
+  epochDuration: number;
+  currentEpoch: number;
+  depositWhitelist: boolean;
+  depositLimit?: number;
+  collateralClasses?: CollateralClassInfo[];
+};
+
+export async function info(
+  vault: SuzakuContract['VaultTokenized'],
+  config: Config<ExtendedPublicClient>,
+  middleware?: SuzakuContract['L1Middleware']
+): Promise<VaultInfo> {
+  const [
+    collateralAddress,
+    delegatorAddress,
+    slasherAddress,
+    totalStake,
+    activeStake,
+    epochDuration,
+    currentEpoch,
+    depositWhitelist,
+    isDepositLimit,
+  ] = await vault.multicall([
+    'collateral',
+    'delegator',
+    'slasher',
+    'totalStake',
+    'activeStake',
+    'epochDuration',
+    'currentEpoch',
+    'depositWhitelist',
+    'isDepositLimit',
+  ] as const);
+
+  const [collateral, depositLimit] = await Promise.all([
+    config.contracts.DefaultCollateral(collateralAddress),
+    isDepositLimit ? vault.read.depositLimit() : Promise.resolve(undefined),
+  ]);
+
+  const [collateralAsset, collateralLimit, decimals] = await collateral.multicall([
+    'asset',
+    'limit',
+    'decimals',
+  ] as const);
+
+  const assetToken = await config.contracts.ERC20(collateralAsset);
+  const collateralAssetSymbol = await assetToken.read.symbol();
+
+  let collateralClasses: CollateralClassInfo[] | undefined;
+  if (middleware) {
+    const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
+    const [[primary, secondaries], l1Address] = await middleware.multicall(['getActiveCollateralClasses', "BALANCER"]);
+    const allClasses = [primary, ...secondaries];
+
+    collateralClasses = await Promise.all(
+      allClasses.map(async (cls): Promise<CollateralClassInfo> => {
+        const [l1Limit, totalOperatorShares] = await Promise.all([
+          delegator.read.l1Limit([l1Address, cls]),
+          delegator.read.totalOperatorL1Shares([l1Address, cls]),
+        ]);
+        return { class: Number(cls), l1Limit: Number(l1Limit), totalOperatorShares: Number(totalOperatorShares) };
+      })
+    );
+  }
+
+  return {
+    address: vault.address,
+    collateral: collateralAddress as Hex,
+    collateralLimit: Number(collateralLimit),
+    collateralAsset: collateralAsset as Hex,
+    collateralAssetSymbol,
+    decimals,
+    delegator: delegatorAddress as Hex,
+    slasher: slasherAddress as Hex,
+    totalStake: Number(totalStake),
+    activeStake: Number(activeStake),
+    epochDuration: Number(epochDuration),
+    currentEpoch: Number(currentEpoch),
+    depositWhitelist,
+    ...(depositLimit !== undefined && { depositLimit: Number(depositLimit) }),
+    ...(collateralClasses && { collateralClasses }),
+  };
 }

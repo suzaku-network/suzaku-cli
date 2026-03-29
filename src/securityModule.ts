@@ -5,11 +5,12 @@ import { SafeSuzakuContract } from "./lib/viemUtils";
 import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
-import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
-import { getCurrentValidators, registerL1Validator, setValidatorWeight } from "./lib/pChainUtils";
+import { collectSignatures, decodeWarpMessage, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList, WarpMessageType } from "./lib/warpUtils";
+import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from "./lib/pChainUtils";
 import { pipe, R } from "@mobily/ts-belt";
 import { GetRegistrationJustification } from "./lib/justification";
 import { utils } from "@avalabs/avalanchejs";
+import { blockAtTimestamp } from "./lib/cChainUtils";
 
 export async function completeValidatorRegistration(
   pchainClient: ExtendedWalletClient,
@@ -114,7 +115,6 @@ export async function completeValidatorRemoval(
   initializeEndValidationTxHash: Hex,
   waitValidatorVisible: boolean,
   nodeIDs?: NodeId[],
-  addNodeTxHash?: Hex[]
 ) {
   logger.log("Completing validator removal...");
   const client = config.client;
@@ -123,100 +123,43 @@ export async function completeValidatorRemoval(
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
 
   // Select the NodeRemoved events from the receipt, filter by nodeIDs if provided and if securityModule is L1Middleware
-  let nodeRemoved: {
-    args: {
-      nodeId: Hex;
-      validationID: Hex;
-    },
-    blockNumber: bigint;
-  }[];
-  if (securityModule.name === "L1Middleware") {
-    nodeRemoved = parseEventLogs({
-      abi: securityModule.abi,
-      logs: receipt.logs,
-      eventName: 'NodeRemoved'
-    }).filter((e) => nodeIDs ? nodeIDs.includes(encodeNodeID(e.args.nodeId)) : true)
-
-    if (nodeRemoved.length === 0) {
-      logger.error(color.red("No matching NodeRemoved event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
-      process.exit(1);
-    }
-  }
-  // If securityModule is PoASecurityModule
-  else {
-    const validationId = parseEventLogs({
-      abi: config.abis.ValidatorManager,
-      logs: receipt.logs,
-      eventName: 'InitiatedValidatorRemoval'
-    })[0].args.validationID
-
-    if (!validationId) {
-      logger.error(color.red("No matching InitiatedValidatorRemoval event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
-      process.exit(1);
-    }
-
-    const nodeID = (await balancerValidatorManager.read.getValidator([validationId])).nodeID;
-
-    nodeRemoved = [{
-      args: {
-        nodeId: nodeID,
-        validationID: validationId
-      },
-      blockNumber: BigInt(receipt.blockNumber), // Not going to be used in GetRegistrationJustification because the justification will be found in the ConvertSubnetToL1Tx
-    }];
-  }
-
-  const initiatedValidatorRemovals = parseEventLogs({
-    abi: balancerValidatorManager.abi,
-    logs: receipt.logs,
-    eventName: 'InitiatedValidatorRemoval'
-  })
   const warpLogs = parseEventLogs({
     abi: config.abis.IWarpMessenger,
     logs: receipt.logs,
   })
 
-  const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLogs[0].args.message);
+  let messages = warpLogs
+    .map((l) => decodeWarpMessage(l.args.message, WarpMessageType.L1ValidatorWeightMessage))
+    .filter((m) => m.weight === 0)
+  
+  if (messages.length === 0) throw new Error("No messages found in the receipt.");
+
+  let validators = await balancerValidatorManager.multicall(messages.map((m) => ({ name: "getValidator", args: [m.validationID] })))
+  
+  if (nodeIDs) {
+    messages = messages.filter((m) => nodeIDs.includes(encodeNodeID(validators[messages.indexOf(m)].nodeID)));
+    if (messages.length === 0) throw new Error("No messages found in the receipt.");
+    validators = validators.filter((v) => nodeIDs.includes(encodeNodeID(v.nodeID)));
+  }
 
   const subnetIDHex = await balancerValidatorManager.read.subnetID();
   const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
   const currentValidators = (await getCurrentValidators(client, subnetID))
+  const signingSubnetId = await validatedBy(client, messages[0].sourceChainID)
+  let completeHash: Hex = "0x0";
+  for (const [messageIndex, message] of messages.entries()) {
 
-  for (const event of nodeRemoved) {
-    const eventIndex = nodeRemoved.indexOf(event);
-    const initiatedValidatorRemoval = initiatedValidatorRemovals.find((e) => e.args.validationID === event.args.validationID)!;
-    const warpLog = warpLogs.find((w) => w.args.messageID === initiatedValidatorRemoval.args.validatorWeightMessageID)!;
-
-    const validationID = event.args.validationID;
-    const nodeID = encodeNodeID(event.args.nodeId); // Convert bytes32 to NodeID format by removing the first 12 bytes
+    const validationID = message.validationID;
+    const nodeID = encodeNodeID(validators[messageIndex].nodeID); // Convert bytes32 to NodeID format by removing the first 12 bytes
     logger.log(nodeID)
-
-    let addNodeBlockNumber = event.blockNumber;
-
-    if (addNodeTxHash && addNodeTxHash.length > eventIndex) {
-      const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash[eventIndex], confirmations: 0 });
-      if (receipt.status === 'reverted') throw new Error(`Transaction ${addNodeTxHash[eventIndex]} reverted, pls use another addNode tx`);
-      const addNodeLogs = parseEventLogs({
-        abi: config.abis.L1Middleware,
-        logs: receipt.logs,
-      })
-      if (!addNodeLogs.some((w) => w.eventName === 'NodeAdded')) {
-        logger.error(color.red("No matching NodeAdded event found for the provided NodeIDs, verify the addNode tx hash."));
-        process.exit(1);
-      }
-      addNodeBlockNumber = receipt.blockNumber;
-    }
 
     // Check if the node is still registered as a validator on the P-Chain
     const isValidator = currentValidators.some((v) => v.nodeID === nodeID);
     if (!isValidator) {
       logger.log(color.yellow("Node is not registered as a validator on the P-Chain."));
     } else {
-      // Get the unsigned L1ValidatorWeightMessage with weight=0 generated by the ValidatorManager from the receipt
-      const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-
       // Aggregate signatures from validators
-      const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
+      const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: message.raw, signingSubnetId });
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
 
       // Call setValidatorWeight on the P-Chain with the signed L1ValidatorWeightMessage
@@ -244,7 +187,7 @@ export async function completeValidatorRemoval(
     const subnetIDC58 = utils.base58check.encode(hexToBytes(subnetIDHex));
 
     // get justification for original register validator tx (the unsigned warp msg emitted)
-    const justification = await GetRegistrationJustification(nodeID, validationID, subnetIDC58, client, addNodeBlockNumber);
+    const justification = await GetRegistrationJustification(nodeID, validationID, subnetIDC58, client, await blockAtTimestamp(client, validators[messageIndex].startTime));
     if (!justification) {
       throw new Error("Justification not found for validator removal");
     }
@@ -267,7 +210,7 @@ export async function completeValidatorRemoval(
     logger.log("Executing completeEndValidation transaction...");
     // TODO: Find a way to use the proper signature of the method
     const method = securityModule.safeWrite.completeValidatorRemoval as any;
-    const completeHash = await method([0],
+    completeHash = await method([0],
       {
         account: client.account!,
         chain: null,
@@ -281,6 +224,7 @@ export async function completeValidatorRemoval(
 
     logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
   }
+  return { nodes: validators.map((n) => encodeNodeID(n.nodeID)), txHash: completeHash };
 }
 
 export async function completeWeightUpdate(

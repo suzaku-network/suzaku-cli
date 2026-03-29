@@ -57,6 +57,7 @@ CommandBase.prototype.asyncAction = function (...fnArgs: any[]) {
     } catch (error: any) {
       error.stack = error.stack?.split("\n").slice(0, -1).join("\n");
       logger.error(error);
+      logger.printJson();
       process.exit(1);
     }
   };

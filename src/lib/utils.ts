@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { Address } from 'micro-eth-signer';
 import { sha256 } from '@noble/hashes/sha2';
 import { base58 } from '@scure/base';
-import { fromBytes, Hex, pad, sliceHex, getAddress, Account } from "viem";
+import { fromBytes, Hex, pad, sliceHex, getAddress, Account, slice } from "viem";
 import { logger } from './logger';
 import { hexToUint8Array } from "./justification";
 import { spawnSync } from "child_process";
@@ -178,4 +178,39 @@ export function setClipboardValue(value: string): void {
         // Linux and others
         spawnSync('echo ' + value + ' | xclip -selection clipboard', { encoding: 'utf-8', shell: false });
     }
+}
+
+/**
+ * Interface for the field configuration
+ */
+interface FieldConfig {
+    // bytes can now be a number OR a function that calculates size based on current data
+    bytes: number | ((currentData: Hex) => number);
+    type: (value: Hex) => any;
+}
+
+export function unpackGeneric<T extends Record<string, FieldConfig>>(
+    data: Hex,
+    config: T
+) {
+    const decoded: any = {};
+    let currentOffset = 0;
+
+    for (const [fieldName, fieldConfig] of Object.entries(config)) {
+        const remainingData = slice(data, currentOffset);
+
+        // Resolve length: if it's a function, call it with the remaining data
+        const length = typeof fieldConfig.bytes === 'function'
+            ? fieldConfig.bytes(remainingData)
+            : fieldConfig.bytes;
+
+        const rawValue = slice(data, currentOffset, currentOffset + length);
+        decoded[fieldName] = fieldConfig.type(rawValue);
+
+        currentOffset += length;
+    }
+    return {
+        decoded: decoded as { [K in keyof T]: ReturnType<T[K]['type']> },
+        remainder: currentOffset === data.length / 2 - 1 ? undefined : slice(data, currentOffset)
+    };
 }
