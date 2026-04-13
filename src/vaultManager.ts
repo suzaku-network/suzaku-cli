@@ -1,6 +1,9 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
+import { Config } from './config';
+import { ExtendedClient, ExtendedPublicClient } from './client';
+import { info as vaultInfo } from './vault';
 
 export async function registerVaultL1(
     vaultManager: SafeSuzakuContract['VaultManager'],
@@ -66,4 +69,23 @@ export async function getVaultCollateralClass(
 
     const val = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
     logger.log("Vault collateral class:", val);
+}
+
+// info: list all vaults and show its collateral class, max limit, and times. Show the l1 stakes
+export async function info(vaultManager: SuzakuContract['VaultManager'], config: Config<ExtendedPublicClient>) {
+
+    const [vaultCount, middlewareAddress] = await vaultManager.multicall(['getVaultCount', "middleware"]);
+
+    const vaults = await vaultManager.multicall(Array.from({ length: Number(vaultCount) }).map((_, i) => ({ name: 'getVaultAtWithTimes', args: [BigInt(i)] })));
+
+    let vaultsWithInfo = [];
+    for (const [addr, enableTime, disableTime] of vaults) {
+        const vault = await config.contracts.VaultTokenized(addr);
+        vaultsWithInfo.push({
+            enableTime: enableTime === 0 ? "Never" : new Date(enableTime * 1000).toLocaleString(),
+            disableTime: disableTime === 0 ? "Never" : new Date(disableTime * 1000).toLocaleString(),
+            ...await vaultInfo(vault, config, await config.contracts.L1Middleware(middlewareAddress))
+        });
+    }
+    return { middleware: middlewareAddress, vaults: vaultsWithInfo };
 }

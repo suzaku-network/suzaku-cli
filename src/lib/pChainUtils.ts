@@ -584,7 +584,7 @@ export async function convertSubnetToL1(params:
         client: ExtendedWalletClient;
         validators: NodeConfig[];
         validatorManagerBlockchainID: string;
-        convertTx?: Hex;
+        convertTx?: string;
         init?: boolean;
         churnPeriodSeconds?: bigint;
         maximumChurnPercentage?: number;
@@ -599,12 +599,14 @@ export async function convertSubnetToL1(params:
         managerAddress,
         validators,
     });
+    logger.log('convertTx', convertTx)
     // 2) collect signatures
 
     const signingSubnetId = await validatedBy(client, params.validatorManagerBlockchainID);
     if (!signingSubnetId) {
         throw new Error("Could not get signing subnet ID");
     }
+    logger.log('signingSubnetId', signingSubnetId)
     const signed = await collectSignaturesInitializeValidatorSet({
         network: client.network,
         subnetId: params.subnetId,
@@ -630,12 +632,13 @@ export async function convertSubnetToL1(params:
         churnPeriodSeconds: params.churnPeriodSeconds || 10n,
         maximumChurnPercentage: params.maximumChurnPercentage || 20,
     }
-    if (params.init) await validatorManager.safeWrite.initialize([init])
+    if (params.init) await validatorManager.safeWrite.initialize([init]) && logger.log('ValidatorManager initialized')
     await validatorManager.safeWrite.initializeValidatorSet(args, {
         account: client.account!,
         chain: null,
         accessList
     });
+    logger.log('ValidatorSet initialized')
 
     return { txHash: convertTx };
 

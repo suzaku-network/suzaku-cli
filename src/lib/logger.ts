@@ -217,7 +217,13 @@ class Logger {
 
   // JSON output method
   public printJson(): void {
-    if (this.config.jsonMode) console.log(JSON.stringify(this.data, bigintReplacer, 2));
+    if (this.config.jsonMode) {
+      if (this.data.error) {
+        console.error(JSON.stringify(this.data, bigintReplacer, 2))
+      } else {
+        console.log(JSON.stringify(this.data, bigintReplacer, 2))
+      }
+    };
   }
 
   // Utility method to get current config

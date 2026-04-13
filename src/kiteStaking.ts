@@ -826,12 +826,12 @@ export async function submitUptimeProof(
 
 const NANOS_PER_AVAX = 1_000_000_000n;
 
-function formatAvax(wei: bigint): string {
+function formatKITE(wei: bigint): string {
     const whole = wei / NANOS_PER_AVAX;
     const frac = wei % NANOS_PER_AVAX;
     return frac === 0n
-        ? `${whole} AVAX`
-        : `${whole}.${frac.toString().padStart(9, '0').replace(/0+$/, '')} AVAX`;
+        ? `${whole} KITE`
+        : `${whole}.${frac.toString().padStart(9, '0').replace(/0+$/, '')} KITE`;
 }
 
 function formatDuration(seconds: bigint): string {
@@ -895,8 +895,8 @@ export async function getKiteStakingManagerInfo(
         MAXIMUM_STAKE_MULTIPLIER_LIMIT: maxStakeMultiplierLimit,
         // Human-readable summaries
         formatted: {
-            minimumStakeAmount: formatAvax(config[0]),
-            maximumStakeAmount: formatAvax(config[1]),
+            minimumStakeAmount: formatKITE(config[0]),
+            maximumStakeAmount: formatKITE(config[1]),
             minimumStakeDuration: formatDuration(config[2]),
             minimumDelegationFeeBips: `${config[3] / 100}%`,
             maximumStakeMultiplier: `${config[4]}x`,
@@ -939,10 +939,10 @@ export async function getValidatorFullInfo(
             minStakeDuration: formatDuration(validator.minStakeDuration),
             uptime: formatDuration(validator.uptimeSeconds),
             lastRewardClaimTime: formatTimestamp(validator.lastRewardClaimTime),
-            stakingReward: formatAvax(pendingRewards[0]),
-            delegationFees: formatAvax(pendingRewards[1]),
-            totalPendingReward: formatAvax(pendingRewards[2]),
-            accruedRewards: formatAvax(accruedRewards),
+            stakingReward: formatKITE(pendingRewards[0]),
+            delegationFees: formatKITE(pendingRewards[1]),
+            totalPendingReward: formatKITE(pendingRewards[2]),
+            accruedRewards: formatKITE(accruedRewards),
         },
     };
 }
@@ -983,10 +983,10 @@ export async function getDelegatorFullInfo(
         formatted: {
             startTime: formatTimestamp(delegator.startTime),
             lastRewardClaimTime: formatTimestamp(delegator.lastRewardClaimTime),
-            grossReward: formatAvax(pendingRewards[0]),
-            validatorFee: formatAvax(pendingRewards[1]),
-            netPendingReward: formatAvax(pendingRewards[2]),
-            accruedRewards: formatAvax(accruedRewards),
+            grossReward: formatKITE(pendingRewards[0]),
+            validatorFee: formatKITE(pendingRewards[1]),
+            netPendingReward: formatKITE(pendingRewards[2]),
+            accruedRewards: formatKITE(accruedRewards),
         },
     };
 }

@@ -1,13 +1,14 @@
-import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError } from 'viem';
+import { getContract, GetContractReturnType, Address, parseEventLogs, Hex, encodeFunctionData, Abi, getAddress, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, ContractFunctionExecutionError, GetEventArgs, AbiEvent, ParseEventLogsReturnType, ContractEventName, hexToBytes, slice } from 'viem';
 import { SuzakuABI } from '../abis';
 import { ExtendedClient, ExtendedWalletClient } from '../client';
 import { logger } from './logger';
-import { bigintReplacer, bytes32ToAddress } from './utils';
+import { bigintReplacer, bytes32ToAddress, encodeNodeID, unpackGeneric } from './utils';
 import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
 import { isCastMode, logCastCall, logCastSend } from './castUtils';
+import { utils } from '@avalabs/avalanchejs';
 
 export { setCastMode, isCastMode } from './castUtils';
 
@@ -30,7 +31,7 @@ type MakeAccountOptionalInWrite<T> = T extends { write: infer W }
   : T;
 
 // Define the type for the contract instances
-export type SuzakuContract = { [K in SuzakuABINames]: MakeAccountOptionalInWrite<GetContractReturnType<typeof SuzakuABI[K], ExtendedClient>> & { address: Hex, name: string, multicall: MulticallFn<K> } };
+export type SuzakuContract = { [K in SuzakuABINames]: MakeAccountOptionalInWrite<GetContractReturnType<typeof SuzakuABI[K], ExtendedClient>> & { address: Hex, name: string, multicall: MulticallFn<K>, getLogs: GetLogsFn<K> } };
 
 // Define the type to use the same signature write methods of each contract
 export type TWriteSuzakuContract = { [K in SuzakuABINames]: SuzakuContract[K] extends { write: infer W } ? W : never };
@@ -91,6 +92,26 @@ type MulticallFn<T extends SuzakuABINames> = {
     options?: MulticallOptions<D, S>
   ): Promise<D extends true ? MulticallResultsDetailed<T, Items> : MulticallResultsSimple<T, Items>>;
 };
+
+// GetLogs Types
+// Alias for ContractEventName tied to a specific ABI — defined as ContractEventName so TypeScript
+// treats EventName<T> and ContractEventName<typeof SuzakuABI[T]> as the same type in constraints.
+type EventName<T extends SuzakuABINames> = ContractEventName<typeof SuzakuABI[T]>
+
+type GetLogsParams<T extends SuzakuABINames, E extends EventName<T> | EventName<T>[] | undefined = undefined> = {
+  fromBlock?: bigint
+  blockLookBack?: bigint
+  toBlock?: bigint | 'latest'
+  hash?: Hex
+  event?: E
+  args?: E extends EventName<T>
+    ? GetEventArgs<typeof SuzakuABI[T], E, { EnableUnion: false; IndexedOnly: false }>
+    : Record<string, unknown>
+}
+
+type GetLogsFn<T extends SuzakuABINames> = <E extends EventName<T> | EventName<T>[] | undefined = undefined>(
+  params?: GetLogsParams<T, E>
+) => Promise<ParseEventLogsReturnType<typeof SuzakuABI[T], E extends EventName<T>[] ? E[number] : E>>
 
 // Define a curried function to create a contract instance progressively (generic to keep type inference)
 export type CurriedContractFn<T extends SuzakuABINames, C extends ExtendedClient> = (address?: Address) => Promise<C extends ExtendedWalletClient ? SafeSuzakuContract[T] : SuzakuContract[T]>;
@@ -319,6 +340,56 @@ if ('read' in contract) {
       } : result.result;
     });
   };
+
+  // GetLogs implementation for batching read operations
+  const findAbiEvent = (name: EventName<T>): AbiEvent | undefined =>
+    (SuzakuABI[abi] as Abi).find((item): item is AbiEvent => item.type === 'event' && (item as AbiEvent).name === name);
+
+  type WideGetLogsParams = {
+    fromBlock?: bigint
+    blockLookBack?: bigint
+    toBlock?: bigint | 'latest'
+    hash?: Hex
+    event?: EventName<T> | EventName<T>[]
+    args?: Record<string, unknown>
+  }
+
+  const getLogsFn = async (params?: WideGetLogsParams): Promise<ParseEventLogsReturnType<typeof SuzakuABI[T]>> => {
+    let fromBlock: bigint | undefined;
+    if (params?.blockLookBack !== undefined) {
+      const currentBlock = await client.getBlockNumber();
+      fromBlock = currentBlock > params.blockLookBack ? currentBlock - params.blockLookBack : 0n;
+    } else {
+      fromBlock = params?.fromBlock;
+    }
+    const toBlock = params?.toBlock ?? 'latest';
+    const { hash, event, args } = params ?? {};
+    const abiList = SuzakuABI[abi] as Abi;
+
+    let result: unknown;
+
+    if (hash) {
+      const receipt = await client.waitForTransactionReceipt({ hash, confirmations: 0 });
+      if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted`);
+      result = parseEventLogs({
+        abi: abiList,
+        logs: receipt.logs,
+        ...(event !== undefined ? { eventName: event as EventName<T> | EventName<T>[] } : {}),
+      });
+    } else if (Array.isArray(event)) {
+      const abiEvents = event.map(findAbiEvent).filter((e): e is AbiEvent => e !== undefined);
+      result = await client.getLogs({ address: contract.address, events: abiEvents, fromBlock, toBlock });
+    } else {
+      const abiEvent = event ? findAbiEvent(event) : undefined;
+      result = abiEvent
+        ? await client.getLogs({ address: contract.address, event: abiEvent, args: args as Record<string, unknown>, fromBlock, toBlock })
+        : await client.getLogs({ address: contract.address, fromBlock, toBlock });
+    }
+
+    return result as ParseEventLogsReturnType<typeof SuzakuABI[T]>;
+  };
+
+  (contract as unknown as { getLogs: GetLogsFn<T> }).getLogs = getLogsFn as GetLogsFn<T>;
 
 }
 return contract as unknown as SuzakuContract[T];
