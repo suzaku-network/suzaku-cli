@@ -38,7 +38,7 @@ const contractMappings = {
   AccessControl: "AccessControl.ts",
   RewardsNativeToken: "RewardsNativeToken.ts",
   Ownable: "Ownable.ts",
-  KiteStaking: "KiteStaking.ts",
+  KiteStakingManager: "KiteStakingManager.ts",
   StakingVault: "StakingVault.ts",
   StakingVaultOperations: "StakingVaultOperations.ts",
 };
