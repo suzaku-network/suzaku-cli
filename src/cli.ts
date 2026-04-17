@@ -131,7 +131,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, prepareWithdrawalsStakingVault, harvestStakingVault, harvestValidatorsStakingVault, harvestDelegatorsStakingVault, claimWithdrawalForStakingVault, claimWithdrawalsStakingVault, claimWithdrawalsForStakingVault, claimPendingProtocolFeesStakingVault, claimOperatorFeesStakingVault, setOperatorFeeRecipientStakingVault, claimEscrowedWithdrawalStakingVault, removeOperatorStakingVault, forceClaimOperatorFeesStakingVault, setProtocolFeeBipsStakingVault, setOperatorFeeBipsStakingVault, setProtocolFeeRecipientStakingVault, setLiquidityBufferBipsStakingVault, setMaximumValidatorStakeStakingVault, setMaximumDelegatorStakeStakingVault, setMaxOperatorsStakingVault, setMaxValidatorsPerOperatorStakingVault, setWithdrawalRequestFeeStakingVault, pauseStakingVault, unpauseStakingVault, setOperationsImplStakingVault, upgradeToAndCallStakingVault, beginDefaultAdminTransferStakingVault, acceptDefaultAdminTransferStakingVault } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, prepareWithdrawalsStakingVault, harvestStakingVault, harvestValidatorsStakingVault, harvestDelegatorsStakingVault, claimWithdrawalForStakingVault, claimWithdrawalsStakingVault, claimWithdrawalsForStakingVault, claimPendingProtocolFeesStakingVault, claimOperatorFeesStakingVault, setOperatorFeeRecipientStakingVault, claimEscrowedWithdrawalStakingVault, removeOperatorStakingVault, forceClaimOperatorFeesStakingVault, setProtocolFeeBipsStakingVault, setOperatorFeeBipsStakingVault, setProtocolFeeRecipientStakingVault, setLiquidityBufferBipsStakingVault, setMaximumValidatorStakeStakingVault, setMaximumDelegatorStakeStakingVault, setMaxOperatorsStakingVault, setMaxValidatorsPerOperatorStakingVault, setWithdrawalRequestFeeStakingVault, pauseStakingVault, unpauseStakingVault, setOperationsImplStakingVault, upgradeToAndCallStakingVault, beginDefaultAdminTransferStakingVault, acceptDefaultAdminTransferStakingVault, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -3243,6 +3243,48 @@ async function main() {
             const config = getConfig(client, opts.wait, opts.skipAbiValidation);
             const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
             await prepareWithdrawalsStakingVault(client, stakingVault);
+        });
+
+    stakingVaultCmd
+        .command("recover-stranded-validator")
+        .description("Recover stranded validator rewards after RewardVault refund (Zenith #23)")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgHex("validationID", "Validation ID (bytes32)"))
+        .action(async (stakingVaultAddress, validationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            try {
+                await recoverStrandedValidatorRewardsStakingVault(client, stakingVault, validationID);
+            } catch (error: any) {
+                if (error.message?.includes("StakingVault__NotYetRemoved")) {
+                    logger.error("Validator is still tracked by the vault (StakingVault__NotYetRemoved). Complete the removal first — validatorToOperator[validationID] must be zero.");
+                    process.exit(1);
+                }
+                throw error;
+            }
+        });
+
+    stakingVaultCmd
+        .command("recover-stranded-delegator")
+        .description("Recover stranded delegator rewards after RewardVault refund (Zenith #23). Run before recover-stranded-validator for the same validator so commission lands in validator rewards.")
+        .addArgument(ArgAddress("stakingVaultAddress", "StakingVault contract address"))
+        .addArgument(ArgHex("delegationID", "Delegation ID (bytes32)"))
+        .action(async (stakingVaultAddress, delegationID) => {
+            const opts = program.opts();
+            const client = await generateClient(opts.network, opts.privateKey!, opts.safe);
+            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+            const stakingVault = await config.contracts.StakingVault(stakingVaultAddress);
+            try {
+                await recoverStrandedDelegatorRewardsStakingVault(client, stakingVault, delegationID);
+            } catch (error: any) {
+                if (error.message?.includes("StakingVault__NotYetRemoved")) {
+                    logger.error("Delegation is still tracked by the vault (StakingVault__NotYetRemoved). Complete the removal first — delegatorInfo[delegationID].operator must be zero.");
+                    process.exit(1);
+                }
+                throw error;
+            }
         });
 
     stakingVaultCmd

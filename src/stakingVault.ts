@@ -1819,6 +1819,40 @@ export async function acceptDefaultAdminTransferStakingVault(
     logger.log("Transaction confirmed in block:", receipt.blockNumber);
 }
 
+export async function recoverStrandedValidatorRewardsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    validationID: Hex
+) {
+    logger.log("Recovering stranded validator rewards in StakingVault...");
+    logger.log("\n=== Recover Stranded Validator Rewards ===");
+    logger.log("Validation ID:", validationID);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.recoverStrandedValidatorRewards([validationID]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
+export async function recoverStrandedDelegatorRewardsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    delegationID: Hex
+) {
+    logger.log("Recovering stranded delegator rewards in StakingVault...");
+    logger.log("\n=== Recover Stranded Delegator Rewards ===");
+    logger.log("Delegation ID:", delegationID);
+    logger.log("Vault address:", stakingVault.address);
+
+    const hash = await stakingVault.safeWrite.recoverStrandedDelegatorRewards([delegationID]);
+    logger.log("TX hash:", hash);
+    logger.log("Waiting for transaction confirmation...");
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    logger.log("Transaction confirmed in block:", receipt.blockNumber);
+}
+
 // ── Info functions ─────────────────────────────────────────────────────
 
 type StakingVaultContract = SafeSuzakuContract['StakingVault'];

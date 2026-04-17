@@ -792,6 +792,24 @@ export async function completeValidatorRemoval(
     }
 }
 
+export async function claimDelegatorRewardsFor(
+    kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
+    delegationID: Hex,
+    includeUptimeProof: boolean,
+    messageIndex: number
+) {
+    logger.log("Claiming delegator rewards for...");
+
+    const hash = await kiteStakingManager.safeWrite.claimDelegatorRewardsFor([
+        delegationID,
+        includeUptimeProof,
+        messageIndex
+    ]);
+
+    logger.log("claimDelegatorRewardsFor executed successfully, tx hash:", hash);
+    return hash;
+}
+
 // ─── Info Aggregators ────────────────────────────────────────────────────────
 
 const NANOS_PER_AVAX = 1_000_000_000n;
