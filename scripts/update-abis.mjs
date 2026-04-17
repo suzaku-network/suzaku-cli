@@ -7,7 +7,7 @@ import { toFunctionSelector } from 'viem';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const targetDir = path.resolve(__dirname, '../src/abis');
+const DEFAULT_TARGET_DIR = path.resolve(__dirname, '../src/abis');
 
 let abiSelectors = {};
 if (fs.existsSync(path.join(targetDir, 'abi-selectors.json'))) {
@@ -46,19 +46,21 @@ const contractMappings = {
 // Default source directory
 const DEFAULT_SOURCE_DIR = "/home/gaetan/Documents/kite-ia/lst-kite/out";
 
-// Parse CLI arguments for --source-dir or -s
+// Parse CLI arguments
 function parseArgs() {
   const args = process.argv.slice(2);
   let sourceDirArg = null;
+  let targetDirArg = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--source-dir' || args[i] === '-s') {
       sourceDirArg = args[i + 1];
-      break;
-    }
-    if (args[i].startsWith('--source-dir=')) {
+    } else if (args[i].startsWith('--source-dir=')) {
       sourceDirArg = args[i].split('=')[1];
-      break;
+    } else if (args[i] === '--target-dir' || args[i] === '-t') {
+      targetDirArg = args[i + 1];
+    } else if (args[i].startsWith('--target-dir=')) {
+      targetDirArg = args[i].split('=')[1];
     }
   }
 
@@ -70,16 +72,19 @@ Usage: update-abis.mjs [options]
 Options:
   -s, --source-dir <path>  Path to the Foundry output directory containing ABIs
                            (default: ${DEFAULT_SOURCE_DIR})
+  -t, --target-dir <path>  Path to the output directory for generated ABI TypeScript files
+                           (default: ${DEFAULT_TARGET_DIR})
   -h, --help               Show this help message
 `);
     process.exit(0);
   }
 
-  return sourceDirArg;
+  return { sourceDirArg, targetDirArg };
 }
 
-const sourceDirArg = parseArgs();
+const { sourceDirArg, targetDirArg } = parseArgs();
 const sourceDir = path.resolve(sourceDirArg || DEFAULT_SOURCE_DIR);
+const targetDir = path.resolve(targetDirArg || DEFAULT_TARGET_DIR);
 
 console.log('🔄 Updating ABI files...');
 console.log(`Source: ${sourceDir}`);
@@ -188,10 +193,10 @@ function main() {
     process.exit(1);
   }
 
-  // Check if target directory exists
+  // Create target directory if it doesn't exist
   if (!fs.existsSync(targetDir)) {
-    console.error(`❌ Target directory not found: ${targetDir}`);
-    process.exit(1);
+    fs.mkdirSync(targetDir, { recursive: true });
+    console.log(`📁 Created target directory: ${targetDir}`);
   }
 
   // Update each contract

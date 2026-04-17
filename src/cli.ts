@@ -188,7 +188,7 @@ async function main() {
     program.hook('preSubcommand', async (thisCommand) => {
         const opts = program.opts();
         if (opts.cast) setCastMode(true);
-        
+
         if (opts.rpcUrl) {
             await setCustomChainRpcUrl(opts.rpcUrl);
             thisCommand.setOptionValue('network', 'custom');
@@ -342,7 +342,7 @@ async function main() {
     l1RegistryCmd
         .command("get-all")
         .description("List all L1s registered in the L1 registry")
-        .asyncAction(async (config, ) => {
+        .asyncAction(async (config,) => {
             const l1Registry = await config.contracts.L1Registry()
             const l1s = await l1Registry.read.getAllL1s()
             // l1s: [balancerAddress[], middleware[], metadataUrl[]]
@@ -406,7 +406,7 @@ async function main() {
     operatorRegistryCmd
         .command("get-all")
         .description("List all operators registered in the operator registry")
-        .asyncAction(async (config, ) => {
+        .asyncAction(async (config,) => {
             const opReg2 = await config.contracts.OperatorRegistry();
             await listOperators(opReg2);
         });
@@ -532,7 +532,7 @@ async function main() {
         .argument("amount", "Amount of token to deposit in the vault")
         .addOption(new Option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, amount, options) => {
-            const onBehalfOf = options.onBehalfOf ?? config.client.account!.address;
+            const onBehalfOf = options.onBehalfOf ?? config.client.addresses.C;
             await depositVault(
                 config,
                 vaultAddress,
@@ -548,7 +548,7 @@ async function main() {
         .argument("amount", "Amount of token to withdraw in the vault")
         .addOption(new Option("--claimer <claimer>", "Optional claimer").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, amount, options) => {
-            const claimer = options.claimer ?? config.client.account!.address;
+            const claimer = options.claimer ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             const amountWei = parseUnits(amount, await vault.read.decimals())
             await withdrawVault(
@@ -565,7 +565,7 @@ async function main() {
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--recipient <recipient>", "Optional recipient").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await claimVault(
                 vault,
@@ -696,7 +696,7 @@ async function main() {
         .addArgument(argVaultAddress)
         .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, options) => {
-            const account = options.account ?? config.client.account!.address;
+            const account = options.account ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultBalanceOf(vault, account);
         });
@@ -707,7 +707,7 @@ async function main() {
         .addArgument(argVaultAddress)
         .addOption(new Option("--account <account>", "Account to check balance for").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, options) => {
-            const account = options.account ?? config.client.account!.address;
+            const account = options.account ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultActiveBalanceOf(vault, account);
         });
@@ -728,7 +728,7 @@ async function main() {
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
-            const account = options.account ?? config.client.account!.address;
+            const account = options.account ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalSharesOf(vault, epoch, account);
         });
@@ -740,7 +740,7 @@ async function main() {
         .addArgument(ArgBigInt("epoch", "Epoch number"))
         .addOption(new Option("--account <account>", "Account to check").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, vaultAddress, epoch, options) => {
-            const account = options.account ?? config.client.account!.address;
+            const account = options.account ?? config.client.addresses.C;
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultWithdrawalsOf(vault, epoch, account);
         });
@@ -1624,7 +1624,7 @@ async function main() {
             await middlewareSvc.safeWrite.setVaultManager([vaultManagerAddress])
             logger.log(`Set vault manager to ${vaultManagerAddress} on middleware ${middlewareAddress} ok`);
         });
-    
+
     middlewareCmd
         .command("get-vault-manager")
         .description("Get vault manager")
@@ -1694,7 +1694,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareInfo(middlewareSvc);
         });
-    
+
     middlewareCmd
         .command('info-operators')
         .description('Get operators info')
@@ -2238,7 +2238,7 @@ async function main() {
         .argument("minimumStakeDuration", "Minimum stake duration in seconds")
         .addArgument(ArgNumber("minimumDelegationFeeBips", "Minimum delegation fee in basis points"))
         .addArgument(ArgNumber("maximumStakeMultiplier", "Maximum stake multiplier"))
-        .asyncAction({signer: true}, async (config, minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, options) => {
+        .asyncAction({ signer: true }, async (config, minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             // Get staking config to determine decimals - typically 18 for native tokens
             // For now, assume 18 decimals (1e18) for stake amounts
@@ -2343,7 +2343,7 @@ async function main() {
         .addArgument(ArgNodeID())
         .addArgument(ArgAddress("rewardRecipient", "Reward recipient address"))
         .argument("stakeAmount", "Initial stake amount")
-        .asyncAction({signer: true}, async (config, nodeId, rewardRecipient, stakeAmount, options) => {
+        .asyncAction({ signer: true }, async (config, nodeId, rewardRecipient, stakeAmount, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
 
             // Get staking config to determine decimals for stake amount
@@ -2434,7 +2434,7 @@ async function main() {
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID())
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
-        .asyncAction({signer: true}, async (config, nodeId, options) => {
+        .asyncAction({ signer: true }, async (config, nodeId, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateValidatorRemoval(
                 kiteStakingManager,
@@ -2508,7 +2508,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .argument("amount", "Amount to deposit in AVAX")
         .addArgument(ArgBigInt("minShares", "Minimum shares expected from the deposit (slippage protection)"))
-        .asyncAction({ signer: true }, async (config,  amount, minShares, options) => {
+        .asyncAction({ signer: true }, async (config, amount, minShares, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             await depositStakingVault(
                 config.client,
@@ -2552,7 +2552,7 @@ async function main() {
         .description("Claim a withdrawal for a request ID (permissionless)")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgBigInt("requestId", "Withdrawal request ID to claim"))
-        .asyncAction({signer: true}, async (config, requestId, options) => {
+        .asyncAction({ signer: true }, async (config, requestId, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimWithdrawalFor([requestId]);
             logger.log("claimWithdrawalFor tx hash:", hash);
@@ -2564,7 +2564,7 @@ async function main() {
         .description("Claim multiple withdrawals for request IDs (permissionless)")
         .addOption(optStakingVaultAddress)
         .argument("requestIds...", "Withdrawal request IDs to claim")
-        .asyncAction({signer: true}, async (config,  requestIds, options) => {
+        .asyncAction({ signer: true }, async (config, requestIds, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const ids = (requestIds as string[]).map((id) => BigInt(id));
             const hash = await stakingVault.safeWrite.claimWithdrawalsFor([ids]);
@@ -2577,7 +2577,7 @@ async function main() {
         .description("Claim escrowed withdrawal to a recipient")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgAddress("recipient", "Recipient address"))
-        .asyncAction({signer: true}, async (config, recipient, options) => {
+        .asyncAction({ signer: true }, async (config, recipient, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
             const hash = await stakingVault.safeWrite.claimEscrowedWithdrawal([recipient]);
             logger.log("claimEscrowedWithdrawal tx hash:", hash);
@@ -2990,7 +2990,7 @@ async function main() {
             const hash = await stakingVault.safeWrite.unpause([]);
             logger.log("unpause executed successfully, tx hash:", hash);
         });
-    
+
     /**     
      * Setters
      */
@@ -3115,7 +3115,7 @@ async function main() {
             const hash = await stakingVault.safeWrite.setProtocolFeeRecipient([protocolFeeRecipient]);
             logger.log("setProtocolFeeRecipient executed successfully, tx hash:", hash);
         });
-    
+
     stakingVaultCmd
         .command("get-withdrawal-request-fee")
         .description("Get the withdrawal request fee")
@@ -3337,7 +3337,7 @@ async function main() {
         .description("Show L1 stakes for a given validator manager")
         .addArgument(argValidatorManagerAddress)
         .description("Show L1 stakes for a given validator manager")
-        .asyncAction(async (config, ) => {
+        .asyncAction(async (config,) => {
             // TODO: Implement
         });
 
@@ -3568,7 +3568,7 @@ async function main() {
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
 
             let hashs: Hex[] = [];
             for (const _ of Array.from({ length: await getRewardsClaimsCount(rewardsContract, config as any, 'Staker', config.client.account!) })) {
@@ -3599,7 +3599,7 @@ async function main() {
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
 
             let hashs: Hex[] = [];
 
@@ -3632,7 +3632,7 @@ async function main() {
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
 
             let hashs: Hex[] = [];
 
@@ -3664,7 +3664,7 @@ async function main() {
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
             const hash = await claimProtocolFee(
                 rewardsContract,
                 recipient
@@ -3692,7 +3692,7 @@ async function main() {
         .addOption(new Option("--recipient <recipient>", "Optional recipient address").argParser(ParserAddress))
         .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const recipient = options.recipient ?? config.client.account!.address;
+            const recipient = options.recipient ?? config.client.addresses.C;
             const hash = await claimUndistributedRewards(
                 rewardsContract,
                 epoch,
@@ -4126,7 +4126,7 @@ async function main() {
     ledgerCmd
         .command('fix-usb-rules')
         .description('Fix ledger usb rules on linux')
-        .asyncAction(async (config, ) => {
+        .asyncAction(async (config,) => {
             logger.log("Fixing ledger usb rules...");
             try {
                 // Execute system command to fix ledger usb rules (https://github.com/LedgerHQ/ledger-live-desktop/issues/2873#issuecomment-674844905)
@@ -4155,7 +4155,7 @@ async function main() {
         .description("Get user role in the safe")
         .addOption(OptAddress("--account <account>", "Account address to check"))
         .asyncAction({ signer: true }, async (config, options) => {
-            const addressToCheck = options.account || config.client.account!.address;
+            const addressToCheck = options.account || config.client.addresses.C;
             const owners = await config.client.safe!.getOwners()
             const delegates = await config.client.safe!.apiKit!.getSafeDelegates({ safeAddress: program.opts().safe! })
             if (owners.find(owner => owner.toLowerCase() === addressToCheck.toLowerCase())) {

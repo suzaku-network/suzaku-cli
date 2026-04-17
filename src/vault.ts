@@ -175,8 +175,6 @@ export async function approveAndDepositCollateral(
 ) {
   const client = config.client;
   logger.log("Approving collateral...");
-  const account = client.account!
-
   const collateral = await config.contracts.DefaultCollateral(collateralAddress);
   const rewardTokenAddress = await collateral.read.asset();
   const rewardToken = await config.contracts.ERC20(rewardTokenAddress);
@@ -185,7 +183,7 @@ export async function approveAndDepositCollateral(
   const hash = await rewardToken.safeWrite.approve([collateralAddress, amountWei]);
   await client.waitForTransactionReceipt({ hash })
   logger.log("Approval done, tx hash:", hash);
-  const depositTx = await collateral.safeWrite.deposit([account.address, amountWei]);
+  const depositTx = await collateral.safeWrite.deposit([client.addresses.C, amountWei]);
   await client.waitForTransactionReceipt({ hash: depositTx })
   logger.log("Deposit to collateral done, tx hash:", depositTx);
 }

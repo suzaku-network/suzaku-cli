@@ -174,15 +174,17 @@ export async function addSigToAllCreds(
 ) {
     const unsignedBytes = unsignedTx.toBytes();
     const hash = '0x' + Buffer.from(sha256(unsignedBytes)).toString('hex') as Hex
-    // Bypass EIP-193
-    let signer: (parameters: { hash: Hex }) => Promise<Hex>;
-    if (client.account!.cSign && cChain) {
-        signer = client.account!.cSign;
+    // For Ledger + P-chain: sign via xpAccount (P-chain derivation path).
+    // For everything else (private key or Ledger + C-chain): sign via evmAccount (ETH path).
+    let rawSig: Hex;
+    if (client.ledger && !cChain) {
+        const sig = await client.signXPMessage({ message: hash });
+        rawSig = (sig.signature.startsWith('0x') ? sig.signature : `0x${sig.signature}`) as Hex;
     } else {
-        signer = client.account!.sign!;
+        rawSig = await client.signMessage({ account: client.account!, message: hash });
     }
 
-    const signatureV2 = hexToBytes(await signer({ hash }))
+    const signatureV2 = hexToBytes(rawSig)
     signatureV2[64] = signatureV2[64] - 27
     if (!signatureV2) {
         throw new Error("Failed to sign message");

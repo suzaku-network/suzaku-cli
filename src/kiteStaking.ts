@@ -819,7 +819,7 @@ export async function submitUptimeProof(
     const txHash = await kiteStakingManager.write.submitUptimeProof([cb58ToHex(validator.validationID), 0], { accessList: uptimeAccessList, chain: null });
 
     logger.log("submitUptimeProof done, tx hash:", txHash);
-        return txHash;
+    return txHash;
 }
 
 // ─── Info Aggregators ────────────────────────────────────────────────────────

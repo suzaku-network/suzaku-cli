@@ -12,6 +12,10 @@ import { utils } from '@avalabs/avalanchejs';
 
 export { setCastMode, isCastMode } from './castUtils';
 
+function isWalletClient(client: ExtendedClient | ExtendedWalletClient): client is ExtendedWalletClient {
+  return 'account' in client;
+}
+
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
 export type TSuzakuABI = { [K in SuzakuABINames]: typeof SuzakuABI[K] };
@@ -105,8 +109,8 @@ type GetLogsParams<T extends SuzakuABINames, E extends EventName<T> | EventName<
   hash?: Hex
   event?: E
   args?: E extends EventName<T>
-    ? GetEventArgs<typeof SuzakuABI[T], E, { EnableUnion: false; IndexedOnly: false }>
-    : Record<string, unknown>
+  ? GetEventArgs<typeof SuzakuABI[T], E, { EnableUnion: false; IndexedOnly: false }>
+  : Record<string, unknown>
 }
 
 type GetLogsFn<T extends SuzakuABINames> = <E extends EventName<T> | EventName<T>[] | undefined = undefined>(
@@ -144,7 +148,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
   // Introspection
   contract.name = abi;
 
-  if ('write' in contract) {
+  if ('write' in contract && isWalletClient(client)) {
 
     // Proxy handler for write methods to add Safe transaction handling and wait for confirmations
     const writeHandler: ProxyHandler<Record<string, any>> = {
@@ -170,12 +174,12 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   args
                 }),
                 chain: null,
-                account: client.account!,
+                account: client.account,
                 ...options,
                 value: options?.value ? options.value : '0',
               }
 
-              const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, client.account!.address as Hex)
+              const selection = await handleTransactionStrategy(transaction, client.safe, SuzakuABI[abi] as Abi, (client as ExtendedWalletClient).addresses.C)
               switch (selection.action) {
                 case 'new':
                   logger.debug(`Sending a new Safe transaction as owner`)
@@ -196,7 +200,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                     safeAddress: await client.safe.getAddress(),
                     safeTransactionData: safeTransaction.data,
                     safeTxHash,
-                    senderAddress: getAddress(client.account!.address),
+                    senderAddress: getAddress((client as ExtendedWalletClient).addresses.C),
                     senderSignature: signature.data
                   })
                   hash = selection.hash!;
@@ -206,7 +210,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   hash = selection.hash!;
               }
             } else {
-              hash = await fn(args, { chain: null, account: client.account!, ...options })
+              hash = await fn(args, { chain: null, account: client.cChainClient.account, ...options })
             }
             const sig = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
             logger.addData('txs', { to: contract.address, invocation: sig, hash, options });
@@ -235,7 +239,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
         }
       },
     };
-    
+
     (contract as any).write = new Proxy(contract.write as Record<string, any>, writeHandler);
 
     // Proxy handler for safeWrite methods to simulate the write operation before executing it
@@ -276,123 +280,123 @@ export function withMulticall<T extends SuzakuABINames>(
 
   // Introspection
   contract.name = abi;
-if ('read' in contract) {
+  if ('read' in contract) {
 
-  // Proxy handler for read methods to catch and format errors
-  const readHandler: ProxyHandler<Record<string, any>> = {
-    get(target, prop,) {
-      const fn = (target as any)[prop]
-      if (typeof fn !== 'function') return fn
-      return async (...args: any[]) => {
-        try {
-          if (isCastMode()) {
-            const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-            logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+    // Proxy handler for read methods to catch and format errors
+    const readHandler: ProxyHandler<Record<string, any>> = {
+      get(target, prop,) {
+        const fn = (target as any)[prop]
+        if (typeof fn !== 'function') return fn
+        return async (...args: any[]) => {
+          try {
+            if (isCastMode()) {
+              const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+              logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+            }
+            const result = await fn(...args)
+            const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
+            logger.addData('receipt', { functionSignature, result });
+            return result
+          } catch (error: any) {
+            handleContractError(error, abi)
           }
-          const result = await fn(...args)
-          const functionSignature = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
-          logger.addData('receipt', { functionSignature, result });
-          return result
-        } catch (error: any) {
-          handleContractError(error, abi)
         }
-      }
-    },
-  };
+      },
+    };
 
-  (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
+    (contract as any).read = new Proxy(contract.read as Record<string, any>, readHandler);
 
-  // Multicall implementation for batching read operations
-  (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>, options?: MulticallOptions) => {
-    const contracts = items.map((item) => {
-      const functionName = typeof item === 'string' ? item : item.name;
-      const args = typeof item === 'object' && 'args' in item ? item.args : [];
-      return {
-        address: contract.address,
-        abi: SuzakuABI[abi] as Abi,
-        functionName,
-        args,
-      };
-    });
-
-    if (isCastMode()) {
-      const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-      for (const c of contracts) {
-        logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
-      }
-    }
-
-    const results = await client.multicall({ contracts: contracts as any });
-
-    return results.map((result, index) => {
-      const item = items[index];
-      const name = typeof item === 'string' ? item : item.name;
-      if (result.status === 'failure') {
-        if (options?.strict) {
-          throw new Error(`Multicall failed for ${name}: ${result.error}`);
-        }
-        logger.warn(`Multicall failed for ${name}: ${result.error}`);
-      }
-      return options?.details ? {
-        name,
-        result: result.status === 'success' ? result.result : undefined,
-        args: typeof item === 'object' && 'args' in item ? item.args : [],
-      } : result.result;
-    });
-  };
-
-  // GetLogs implementation for batching read operations
-  const findAbiEvent = (name: EventName<T>): AbiEvent | undefined =>
-    (SuzakuABI[abi] as Abi).find((item): item is AbiEvent => item.type === 'event' && (item as AbiEvent).name === name);
-
-  type WideGetLogsParams = {
-    fromBlock?: bigint
-    blockLookBack?: bigint
-    toBlock?: bigint | 'latest'
-    hash?: Hex
-    event?: EventName<T> | EventName<T>[]
-    args?: Record<string, unknown>
-  }
-
-  const getLogsFn = async (params?: WideGetLogsParams): Promise<ParseEventLogsReturnType<typeof SuzakuABI[T]>> => {
-    let fromBlock: bigint | undefined;
-    if (params?.blockLookBack !== undefined) {
-      const currentBlock = await client.getBlockNumber();
-      fromBlock = currentBlock > params.blockLookBack ? currentBlock - params.blockLookBack : 0n;
-    } else {
-      fromBlock = params?.fromBlock;
-    }
-    const toBlock = params?.toBlock ?? 'latest';
-    const { hash, event, args } = params ?? {};
-    const abiList = SuzakuABI[abi] as Abi;
-
-    let result: unknown;
-
-    if (hash) {
-      const receipt = await client.waitForTransactionReceipt({ hash, confirmations: 0 });
-      if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted`);
-      result = parseEventLogs({
-        abi: abiList,
-        logs: receipt.logs,
-        ...(event !== undefined ? { eventName: event as EventName<T> | EventName<T>[] } : {}),
+    // Multicall implementation for batching read operations
+    (contract as any).multicall = async (items: Array<string | { name: string; args?: readonly unknown[] }>, options?: MulticallOptions) => {
+      const contracts = items.map((item) => {
+        const functionName = typeof item === 'string' ? item : item.name;
+        const args = typeof item === 'object' && 'args' in item ? item.args : [];
+        return {
+          address: contract.address,
+          abi: SuzakuABI[abi] as Abi,
+          functionName,
+          args,
+        };
       });
-    } else if (Array.isArray(event)) {
-      const abiEvents = event.map(findAbiEvent).filter((e): e is AbiEvent => e !== undefined);
-      result = await client.getLogs({ address: contract.address, events: abiEvents, fromBlock, toBlock });
-    } else {
-      const abiEvent = event ? findAbiEvent(event) : undefined;
-      result = abiEvent
-        ? await client.getLogs({ address: contract.address, event: abiEvent, args: args as Record<string, unknown>, fromBlock, toBlock })
-        : await client.getLogs({ address: contract.address, fromBlock, toBlock });
+
+      if (isCastMode()) {
+        const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
+        for (const c of contracts) {
+          logCastCall(contract.name, c.address, c.abi, c.functionName, c.args as unknown[] ?? [], rpcUrl);
+        }
+      }
+
+      const results = await client.multicall({ contracts: contracts as any });
+
+      return results.map((result, index) => {
+        const item = items[index];
+        const name = typeof item === 'string' ? item : item.name;
+        if (result.status === 'failure') {
+          if (options?.strict) {
+            throw new Error(`Multicall failed for ${name}: ${result.error}`);
+          }
+          logger.warn(`Multicall failed for ${name}: ${result.error}`);
+        }
+        return options?.details ? {
+          name,
+          result: result.status === 'success' ? result.result : undefined,
+          args: typeof item === 'object' && 'args' in item ? item.args : [],
+        } : result.result;
+      });
+    };
+
+    // GetLogs implementation for batching read operations
+    const findAbiEvent = (name: EventName<T>): AbiEvent | undefined =>
+      (SuzakuABI[abi] as Abi).find((item): item is AbiEvent => item.type === 'event' && (item as AbiEvent).name === name);
+
+    type WideGetLogsParams = {
+      fromBlock?: bigint
+      blockLookBack?: bigint
+      toBlock?: bigint | 'latest'
+      hash?: Hex
+      event?: EventName<T> | EventName<T>[]
+      args?: Record<string, unknown>
     }
 
-    return result as ParseEventLogsReturnType<typeof SuzakuABI[T]>;
-  };
+    const getLogsFn = async (params?: WideGetLogsParams): Promise<ParseEventLogsReturnType<typeof SuzakuABI[T]>> => {
+      let fromBlock: bigint | undefined;
+      if (params?.blockLookBack !== undefined) {
+        const currentBlock = await client.getBlockNumber();
+        fromBlock = currentBlock > params.blockLookBack ? currentBlock - params.blockLookBack : 0n;
+      } else {
+        fromBlock = params?.fromBlock;
+      }
+      const toBlock = params?.toBlock ?? 'latest';
+      const { hash, event, args } = params ?? {};
+      const abiList = SuzakuABI[abi] as Abi;
 
-  (contract as unknown as { getLogs: GetLogsFn<T> }).getLogs = getLogsFn as GetLogsFn<T>;
+      let result: unknown;
 
-}
-return contract as unknown as SuzakuContract[T];
+      if (hash) {
+        const receipt = await client.waitForTransactionReceipt({ hash, confirmations: 0 });
+        if (receipt.status === 'reverted') throw new Error(`Transaction ${hash} reverted`);
+        result = parseEventLogs({
+          abi: abiList,
+          logs: receipt.logs,
+          ...(event !== undefined ? { eventName: event as EventName<T> | EventName<T>[] } : {}),
+        });
+      } else if (Array.isArray(event)) {
+        const abiEvents = event.map(findAbiEvent).filter((e): e is AbiEvent => e !== undefined);
+        result = await client.getLogs({ address: contract.address, events: abiEvents, fromBlock, toBlock });
+      } else {
+        const abiEvent = event ? findAbiEvent(event) : undefined;
+        result = abiEvent
+          ? await client.getLogs({ address: contract.address, event: abiEvent, args: args as Record<string, unknown>, fromBlock, toBlock })
+          : await client.getLogs({ address: contract.address, fromBlock, toBlock });
+      }
+
+      return result as ParseEventLogsReturnType<typeof SuzakuABI[T]>;
+    };
+
+    (contract as unknown as { getLogs: GetLogsFn<T> }).getLogs = getLogsFn as GetLogsFn<T>;
+
+  }
+  return contract as unknown as SuzakuContract[T];
 }
 
 export const curriedContract = <T extends SuzakuABINames, C extends ExtendedClient>(abi: T, client: C, wait = 0, skipAbiValidation: boolean = false): CurriedContractFn<T, C> =>
