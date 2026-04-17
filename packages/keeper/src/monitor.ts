@@ -3,6 +3,7 @@ import { formatUnits, type Address, type Hex, type WatchContractEventReturnType 
 import type { ExtendedWalletClient } from 'suzaku-cli/dist/client';
 import { SafeSuzakuContract } from 'suzaku-cli/dist/lib/viemUtils';
 import StakingVaultABI from 'suzaku-cli/dist/abis/StakingVault';
+import KiteStakingManagerABI from 'suzaku-cli/dist/abis/KiteStakingManager';
 import type { KeeperRunResult } from './keeper';
 import * as https from 'node:https';
 import * as http from 'node:http';
@@ -84,6 +85,15 @@ export class Monitor {
     private eventsHarvested: Counter;
     private harvestTotalRewards: Gauge;
 
+    // ── Audit-followup counters (Zenith) ─────────────────────────────
+
+    private thirdPartyScanned: Counter;
+    private thirdPartyCrystallized: Counter;
+    private thirdPartyScanErrors: Counter;
+    private eventsValidatorRemovalAdopted: Counter;
+    private eventsRewardDistributionFailed: Counter;
+    private eventsStrandedRewardsClaimed: Counter;
+
     constructor(thresholds: AlertThresholds, webhookUrl?: string) {
         this.thresholds = thresholds;
         this.webhookUrl = webhookUrl;
@@ -130,6 +140,14 @@ export class Monitor {
         this.eventsEpochProcessed = new Counter({ name: 'suzaku_events_epoch_processed_total', help: 'EpochProcessed events observed', registers: [this.registry] });
         this.eventsHarvested = new Counter({ name: 'suzaku_events_harvested_total', help: 'Harvested events observed', registers: [this.registry] });
         this.harvestTotalRewards = new Gauge({ name: 'suzaku_harvest_total_rewards', help: 'Total rewards from last harvest event (native token)', registers: [this.registry] });
+
+        // Audit-followup counters (Zenith)
+        this.thirdPartyScanned = new Counter({ name: 'suzaku_third_party_commissions_scanned_total', help: 'Third-party delegations scanned for commission crystallization (Zenith #5)', registers: [this.registry] });
+        this.thirdPartyCrystallized = new Counter({ name: 'suzaku_third_party_commissions_crystallized_total', help: 'Third-party commissions successfully crystallized via claimDelegatorRewardsFor (Zenith #5)', registers: [this.registry] });
+        this.thirdPartyScanErrors = new Counter({ name: 'suzaku_third_party_commissions_errors_total', help: 'Errors during third-party commission crystallization (Zenith #5)', registers: [this.registry] });
+        this.eventsValidatorRemovalAdopted = new Counter({ name: 'suzaku_events_validator_removal_adopted_total', help: 'StakingVault__ValidatorRemovalAdopted events observed (Zenith #21)', registers: [this.registry] });
+        this.eventsRewardDistributionFailed = new Counter({ name: 'suzaku_events_reward_distribution_failed_total', help: 'KiteStakingManager RewardDistributionFailed events observed (Zenith #23)', registers: [this.registry] });
+        this.eventsStrandedRewardsClaimed = new Counter({ name: 'suzaku_events_stranded_rewards_claimed_total', help: 'StakingVault__StrandedRewardsClaimed events observed (Zenith #23)', registers: [this.registry] });
     }
 
     // ── Vault metrics collection ─────────────────────────────────────
@@ -224,16 +242,21 @@ export class Monitor {
         if (result.delegatorRegistrationsCompleted > 0) this.delegatorRegsCompleted.inc(result.delegatorRegistrationsCompleted);
         if (result.validatorRemovalsCompleted > 0) this.validatorRemovals.inc(result.validatorRemovalsCompleted);
         if (result.delegatorRemovalsCompleted > 0) this.delegatorRemovals.inc(result.delegatorRemovalsCompleted);
+        if (result.thirdPartyScanned > 0) this.thirdPartyScanned.inc(result.thirdPartyScanned);
+        if (result.thirdPartyCrystallized > 0) this.thirdPartyCrystallized.inc(result.thirdPartyCrystallized);
+        if (result.thirdPartyScanErrors > 0) this.thirdPartyScanErrors.inc(result.thirdPartyScanErrors);
     }
 
     // ── Event watchers ───────────────────────────────────────────────
 
     startEventWatchers(
         client: ExtendedWalletClient,
-        stakingVaultAddress: Address
+        stakingVaultAddress: Address,
+        kiteStakingManagerAddress?: Address
     ): () => void {
         const unwatchers: WatchContractEventReturnType[] = [];
         const abi = StakingVaultABI;
+        const ksmAbi = KiteStakingManagerABI;
         const pollingInterval = 2000;
         const onError = (error: Error) => {
             process.stderr.write(`[monitor] Event watcher error: ${error.message}\n`);
@@ -312,6 +335,68 @@ export class Monitor {
             },
             onError,
         }));
+
+        // Zenith #21 — externally-initiated validator removals adopted by prepareWithdrawals
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__ValidatorRemovalAdopted' as any,
+            pollingInterval,
+            onLogs: (logs: any[]) => {
+                for (const log of logs) {
+                    this.eventsValidatorRemovalAdopted.inc();
+                    const args = log.args ?? {};
+                    process.stderr.write(`[monitor] ValidatorRemovalAdopted operator=${args.operator} validationID=${args.validationID} amount=${args.amount}\n`);
+                }
+            },
+            onError,
+        }));
+
+        // Zenith #23 — stranded rewards recovered by a keeper/operator
+        unwatchers.push(client.watchContractEvent({
+            address: stakingVaultAddress,
+            abi,
+            eventName: 'StakingVault__StrandedRewardsClaimed' as any,
+            pollingInterval,
+            onLogs: (logs: any[]) => {
+                for (const log of logs) {
+                    this.eventsStrandedRewardsClaimed.inc();
+                    const args = log.args ?? {};
+                    process.stderr.write(`[monitor] StrandedRewardsClaimed id=${args.id} amount=${args.amount}\n`);
+                }
+            },
+            onError,
+        }));
+
+        // Zenith #23 — SM couldn't pay out rewards; RewardVault likely underfunded.
+        // Alert-only: the CLI `staking-vault recover-stranded-*` subcommands handle
+        // recovery once the RewardVault is refunded. The event payload only carries
+        // `recipient`, `amount`, and `reason`; it does not distinguish validator
+        // from delegator, so the operator must identify the affected ID off-chain.
+        if (kiteStakingManagerAddress) {
+            unwatchers.push(client.watchContractEvent({
+                address: kiteStakingManagerAddress,
+                abi: ksmAbi,
+                eventName: 'RewardDistributionFailed' as any,
+                pollingInterval,
+                onLogs: (logs: any[]) => {
+                    for (const log of logs) {
+                        const args = log.args ?? {};
+                        this.eventsRewardDistributionFailed.inc();
+                        this.fireWebhook({
+                            severity: 'warning',
+                            title: 'Reward distribution failed',
+                            description: `RewardDistributionFailed: recipient=${args.recipient} amount=${args.amount} reason=${args.reason}. Once RewardVault is refunded, run \`suzaku staking-vault recover-stranded-validator <validationID>\` or \`recover-stranded-delegator <delegationID>\` for the affected ID.`,
+                            value: 0,
+                            threshold: 0,
+                            timestamp: new Date().toISOString(),
+                            vault: this.vaultAddress,
+                        });
+                    }
+                },
+                onError,
+            }));
+        }
 
         return () => {
             for (const unwatch of unwatchers) {
