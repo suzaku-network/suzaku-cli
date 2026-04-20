@@ -55,8 +55,12 @@ CommandBase.prototype.asyncAction = function (...fnArgs: any[]) {
       logger.printJson();
       return result;
     } catch (error: any) {
-      logger.error(error);
+      const msg = error instanceof Error
+        ? (error.stack ?? error.message)
+        : String(error);
+      logger.error(msg);
       logger.printJson();
+      process.exit(1);
     }
   };
   return this.action(wrappedFn as any);

@@ -47,7 +47,7 @@ export async function getCurrentValidatorsFromNode(rpcUrl: string) {
     }),
   });
   const data = await response.json() as getCurrentValidatorsRpcResponse;
-  if (data.error) logger.exitError(["Error from validators.getCurrentValidators:", data.error])
+  if (data.error) throw logger.formatError(["Error from validators.getCurrentValidators:", data.error], 3)
   return data.result.validators;
 }
 

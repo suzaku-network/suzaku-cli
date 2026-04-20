@@ -12,12 +12,16 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "outDir": "./dist",
-        "rootDir": "./src",
         "sourceMap": true,
         "resolveJsonModule": true,
         "types": [
             "node"
         ],
+        "paths": {
+            "@suzaku-sdk/*": [
+                "./packages/suzaku-sdk/src/*"
+            ]
+        }
     },
     "include": [
         "src/**/*"

@@ -119,15 +119,15 @@ export type CurriedSuzakuContractMap<C extends ExtendedClient> = { [key in Suzak
 
 function handleContractError(error: any, abi: SuzakuABINames) {
   if (error instanceof ContractFunctionExecutionError) {
-    throw Error(`${abi} ${error.cause}`)
+    throw logger.formatError([`${abi} ${error.cause}`], 3)
   } else if (error instanceof Error) {
     const eraseToIndex = error.message.indexOf("Docs:")
-    if (eraseToIndex === -1) throw error;
-    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
+    if (eraseToIndex === -1) throw logger.formatError([error], 3);
+    throw logger.formatError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
   } else if (error instanceof Object) {
     const eraseToIndex = error.message.indexOf("Docs:")
-    if (eraseToIndex === -1) throw error;
-    throw Error(`${abi} ${error.message.slice(0, eraseToIndex - 1)}`)
+    if (eraseToIndex === -1) throw logger.formatError([error], 3);
+    throw logger.formatError([`${abi} ${error.message.slice(0, eraseToIndex - 1)}`], 3)
   } else {
     throw error
   }
@@ -440,8 +440,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
 
   let contractByteCode = await client.getCode({ address })
   if (!contractByteCode || contractByteCode === '0x') {
-    logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
-    return [];
+    throw logger.formatError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
   }
 
   // Check for EIP-1167 minimal proxy
@@ -450,8 +449,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
     logger.debug(`Detected EIP-1167 minimal proxy. Using implementation at address ${implementationAddress} for ABI validation.`);
     contractByteCode = await client.getCode({ address: implementationAddress as Address });
     if (!contractByteCode || contractByteCode === '0x') {
-      logger.exitError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
-      return [];
+      throw logger.formatError([`No contract found at address ${address} for ABIs ${abis.join(', ')}`], 3);
     }
   }
 
@@ -484,7 +482,7 @@ export async function contractAbiValidation<T extends SuzakuABINames>(client: Ex
   }, [] as { name: T, ratio: number, valid: boolean }[])
 
   if (result.every(r => !r.valid)) {
-    logger.exitError([`The contract at address ${address} does not match the expected ABI for ${abis.join(', ')} contract.`], 3)
+    throw logger.formatError([`The contract at address ${address} does not match the expected ABI for ${abis.join(', ')} contract.`], 3);
   }
   return result;
 }

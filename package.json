@@ -29,7 +29,7 @@
   "scripts": {
     "suzaku-cli": "node dist/cli.js",
     "cli": "pnpx ts-node src/cli.ts",
-    "build": "tsc",
+    "build": "tsup",
     "prepare": "pnpm build",
     "add-shell-completion": "pnpm link && suzaku-cli completion install"
   },

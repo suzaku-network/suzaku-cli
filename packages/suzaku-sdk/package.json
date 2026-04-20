@@ -1,0 +1,97 @@
+{
+  "name": "@suzaku-network/suzaku-sdk",
+  "version": "0.1.0",
+  "license": "ADDPHO",
+  "keywords": [
+    "Avalanche",
+    "blockchain",
+    "defi",
+    "suzaku",
+    "staking",
+    "restaking"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suzaku-network/suzaku-cli.git"
+  },
+  "type": "module",
+  "exports": {
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "update-abis": "node ../../scripts/update-abis.mjs"
+  },
+  "peerDependencies": {
+    "@avalabs/avalanchejs": ">=5.0.0",
+    "viem": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "wagmi": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@avalabs/hw-app-avalanche": "1.1.1",
+    "@ledgerhq/hw-app-eth": "7.1.1",
+    "@ledgerhq/hw-transport-node-hid": "6.29.16",
+    "@mobily/ts-belt": "^3.13.1",
+    "@noble/hashes": "1.8.0",
+    "@safe-global/sdk-starter-kit": "3.0.2",
+    "@scure/base": "1.2.6",
+    "cli-progress": "^3.12.0",
+    "console-log-colors": "^0.5.0",
+    "permissionless": "0.3.2"
+  },
+  "devDependencies": {
+    "@avalabs/avalanchejs": "5.0.0",
+    "@types/cli-progress": "^3.11.6",
+    "@types/node": "24.10.1",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "viem": "2.42.1"
+  }
+}
