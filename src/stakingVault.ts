@@ -1330,6 +1330,26 @@ export async function claimWithdrawalsForStakingVault(
     await client.waitForTransactionReceipt({ hash });
 }
 
+export async function recoverStrandedValidatorRewardsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    validationID: Hex
+) {
+    const hash = await stakingVault.safeWrite.recoverStrandedValidatorRewards([validationID]);
+    logger.log("recoverStrandedValidatorRewards tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
+}
+
+export async function recoverStrandedDelegatorRewardsStakingVault(
+    client: ExtendedWalletClient,
+    stakingVault: SafeSuzakuContract['StakingVault'],
+    delegationID: Hex
+) {
+    const hash = await stakingVault.safeWrite.recoverStrandedDelegatorRewards([delegationID]);
+    logger.log("recoverStrandedDelegatorRewards tx hash:", hash);
+    await client.waitForTransactionReceipt({ hash });
+}
+
 // ── Info functions ─────────────────────────────────────────────────────
 
 type StakingVaultContract = SuzakuContract['StakingVault'];

@@ -23,6 +23,7 @@ import { generateClient } from 'suzaku-cli/dist/client';
 import { getConfig } from 'suzaku-cli/dist/config';
 import { chainList, setCustomChainRpcUrl } from 'suzaku-cli/dist/lib/chainList';
 import { ParserPrivateKey, ParserNumber, ArgAddress, ParserHex } from 'suzaku-cli/dist/lib/cliParser';
+import { getValidatorManagerAddress } from 'suzaku-cli/dist/stakingVault';
 import { keeperRun, keeperWatch } from './keeper';
 import { Monitor } from './monitor';
 import { startServer } from './server';
@@ -76,6 +77,7 @@ program
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
     .addOption(new Option('--uptime-rpc-url <uptimeRpcUrl>', 'RPC URL of the uptime-tracking chain (required when completions are enabled)').env('UPTIME_RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => v ? ParserHex(v) : undefined))
+    .addOption(new Option('--no-third-party-crystallize', 'Skip third-party commission crystallization during harvest (Zenith #5)'))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
 
@@ -103,6 +105,7 @@ program
                 completionsOnly: options.completions,
                 rpcUrl: options.uptimeRpcUrl,
                 uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
+                thirdPartyCrystallize: options.thirdPartyCrystallize,
             });
         } finally {
             server?.close();
@@ -121,6 +124,7 @@ program
     .addOption(new Option('--completions', 'Run P-Chain completions only').conflicts('core'))
     .addOption(new Option('--uptime-rpc-url <uptimeRpcUrl>', 'RPC URL of the uptime-tracking chain (required when completions are enabled)').env('UPTIME_RPC_URL'))
     .addOption(new Option('--uptime-blockchain-id <uptimeBlockchainID>', 'Blockchain ID for uptime proofs (auto-read from storage if omitted)').env('UPTIME_BLOCKCHAIN_ID').argParser((v: string) => v ? ParserHex(v) : undefined))
+    .addOption(new Option('--no-third-party-crystallize', 'Skip third-party commission crystallization during harvest (Zenith #5)'))
     .action(async (stakingVaultAddress, options) => {
         const opts = program.opts();
 
@@ -144,7 +148,10 @@ program
             server = startServer(monitor, opts.metricsPort, options.pollInterval);
         }
 
-        const stopWatchers = monitor.startEventWatchers(client, stakingVaultAddress);
+        const { stakingManager } = await getValidatorManagerAddress(config, stakingVault);
+        const kiteStakingManagerAddress = stakingManager.address as Hex;
+
+        const stopWatchers = monitor.startEventWatchers(client, stakingVaultAddress, kiteStakingManagerAddress);
 
         const cleanup = () => { stopWatchers(); server?.close(); };
 
@@ -155,6 +162,7 @@ program
             completionsOnly: options.completions,
             rpcUrl: options.uptimeRpcUrl,
             uptimeBlockchainID: options.uptimeBlockchainId as Hex | undefined,
+            thirdPartyCrystallize: options.thirdPartyCrystallize,
             monitor,
             onCleanup: cleanup,
             tickTimeoutMs: options.tickTimeout > 0 ? options.tickTimeout * 1000 : 0,
