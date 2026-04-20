@@ -17,6 +17,7 @@ import {
     completeDelegatorRegistrationStakingVault,
     getValidatorManagerAddress,
 } from 'suzaku-cli/dist/stakingVault';
+import { crystallizeThirdPartyCommissions } from './thirdParty';
 
 export interface KeeperRunResult {
     epochProcessed: boolean;
@@ -28,6 +29,9 @@ export interface KeeperRunResult {
     delegatorRegistrationsCompleted: number;
     validatorRemovalsCompleted: number;
     delegatorRemovalsCompleted: number;
+    thirdPartyScanned: number;
+    thirdPartyCrystallized: number;
+    thirdPartyScanErrors: number;
     errors: string[];
 }
 
@@ -97,6 +101,7 @@ export async function keeperRun(
         completionsOnly?: boolean;
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
+        thirdPartyCrystallize?: boolean;
     } = {}
 ): Promise<KeeperRunResult> {
     const result: KeeperRunResult = {
@@ -109,6 +114,9 @@ export async function keeperRun(
         delegatorRegistrationsCompleted: 0,
         validatorRemovalsCompleted: 0,
         delegatorRemovalsCompleted: 0,
+        thirdPartyScanned: 0,
+        thirdPartyCrystallized: 0,
+        thirdPartyScanErrors: 0,
         errors: [],
     };
 
@@ -194,6 +202,24 @@ export async function keeperRun(
 
     if (!options.completionsOnly) {
         if (options.harvest) {
+            if (options.thirdPartyCrystallize) {
+                try {
+                    logger.log("\nCrystallizing third-party commissions...");
+                    const { stakingManager } = await getValidatorManagerAddress(config, stakingVault);
+                    const crystallizeResult = await crystallizeThirdPartyCommissions(client, stakingVault, stakingManager);
+                    result.thirdPartyScanned = crystallizeResult.scanned;
+                    result.thirdPartyCrystallized = crystallizeResult.crystallized;
+                    result.thirdPartyScanErrors = crystallizeResult.errors;
+                    logger.log(color.green(
+                        `Crystallized ${crystallizeResult.crystallized}/${crystallizeResult.scanned} third-party commissions (${crystallizeResult.errors} errors)`
+                    ));
+                } catch (error: any) {
+                    const msg = `Third-party crystallization failed: ${error.message || error}`;
+                    logger.error(msg);
+                    result.errors.push(msg);
+                }
+            }
+
             try {
                 logger.log("\nRunning batched harvest...");
                 await batchedHarvest(client, stakingVault);
@@ -229,6 +255,7 @@ export async function keeperRun(
     logger.log(`  Epoch processed:              ${result.epochProcessed} (${result.epochIterations} iterations)`);
     logger.log(`  prepareWithdrawals:           ${result.prepareWithdrawalsCalled}`);
     logger.log(`  Harvest:                      ${result.harvestCalled}`);
+    logger.log(`  Third-party crystallized:     ${result.thirdPartyCrystallized}/${result.thirdPartyScanned} (errors: ${result.thirdPartyScanErrors})`);
     logger.log(`  Queue cleanup:                ${result.queueCleanupCount} entries`);
     logger.log(`  Validator registrations:      ${result.validatorRegistrationsCompleted}`);
     logger.log(`  Delegator registrations:      ${result.delegatorRegistrationsCompleted}`);
@@ -591,6 +618,7 @@ export async function keeperWatch(
         completionsOnly?: boolean;
         rpcUrl?: string;
         uptimeBlockchainID?: Hex;
+        thirdPartyCrystallize?: boolean;
         monitor?: Monitor;
         onCleanup?: () => void;
         tickTimeoutMs?: number;
@@ -652,6 +680,7 @@ export async function keeperWatch(
                     completionsOnly: options.completionsOnly,
                     rpcUrl: options.rpcUrl,
                     uptimeBlockchainID: options.uptimeBlockchainID,
+                    thirdPartyCrystallize: options.thirdPartyCrystallize,
                 });
 
                 let result: KeeperRunResult;
@@ -677,7 +706,9 @@ export async function keeperWatch(
                                 epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
                                 harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
                                 delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
-                                delegatorRemovalsCompleted: 0, errors: ['Tick timed out'],
+                                delegatorRemovalsCompleted: 0,
+                                thirdPartyScanned: 0, thirdPartyCrystallized: 0, thirdPartyScanErrors: 0,
+                                errors: ['Tick timed out'],
                             };
                             monitor?.recordTickResult(timeoutResult, durationMs, true);
                             await monitor?.checkAlerts(options.pollInterval);
@@ -720,7 +751,9 @@ export async function keeperWatch(
                     epochProcessed: false, epochIterations: 0, prepareWithdrawalsCalled: false,
                     harvestCalled: false, queueCleanupCount: 0, validatorRegistrationsCompleted: 0,
                     delegatorRegistrationsCompleted: 0, validatorRemovalsCompleted: 0,
-                    delegatorRemovalsCompleted: 0, errors: [error.message || String(error)],
+                    delegatorRemovalsCompleted: 0,
+                    thirdPartyScanned: 0, thirdPartyCrystallized: 0, thirdPartyScanErrors: 0,
+                    errors: [error.message || String(error)],
                 };
                 monitor?.recordTickResult(emptyResult, durationMs, true);
                 await monitor?.checkAlerts(options.pollInterval);
