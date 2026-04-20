@@ -31,7 +31,7 @@
     "cli": "pnpx ts-node src/cli.ts",
     "build": "tsc",
     "prepare": "pnpm build",
-    "add-shell-completion": "complete -C 'suzaku-cli' suzaku-cli"
+    "add-shell-completion": "pnpm link && suzaku-cli completion install"
   },
   "bin": {
     "suzaku-cli": "bin/cli.js"
@@ -39,7 +39,7 @@
   "author": "",
   "dependencies": {
     "@avalanche-sdk/client": "0.1.1",
-    "@avalabs/avalanchejs": "5.0.0",
+    "@avalabs/avalanchejs": "^5.1.0-alpha.1",
     "@avalabs/hw-app-avalanche": "1.1.1",
     "@commander-js/extra-typings": "^14.0.0",
     "@ledgerhq/hw-app-eth": "7.1.1",

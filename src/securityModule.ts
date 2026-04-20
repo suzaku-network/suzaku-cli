@@ -2,15 +2,16 @@ import { Account, bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "./client";
 import { Config, pChainChainID } from "./config";
 import { SafeSuzakuContract } from "./lib/viemUtils";
-import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
+import { bigintReplacer, encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
 import { logger } from './lib/logger';
 import { color } from "console-log-colors";
-import { collectSignatures, decodeWarpMessage, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList, WarpMessageType } from "./lib/warpUtils";
+import { collectSignatures, decodeWarpMessage, decodeWarpMessages, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList, WarpMessageType } from "./lib/warpUtils";
 import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from "./lib/pChainUtils";
 import { pipe, R } from "@mobily/ts-belt";
 import { GetRegistrationJustification } from "./lib/justification";
 import { utils } from "@avalabs/avalanchejs";
 import { blockAtTimestamp } from "./lib/cChainUtils";
+import { ValidatorStatus } from "./balancer";
 
 export async function completeValidatorRegistration(
   pchainClient: ExtendedWalletClient,
@@ -26,7 +27,7 @@ export async function completeValidatorRegistration(
   const client = config.client;
   // Wait for transaction receipt to extract warp message and validation ID
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
-
+  // TODO: Use the warp message to extract the validation ID
   const InitiatedValidatorRegistration = parseEventLogs({
     abi: balancer.abi,
     logs: receipt.logs,
@@ -38,11 +39,15 @@ export async function completeValidatorRegistration(
     process.exit(1);
   }
 
+  const validator = await balancer.read.getValidator([InitiatedValidatorRegistration.args.validationID])
+  if (validator.status === ValidatorStatus.Active) {
+    logger.log(color.yellow("Node is already registered as a validator on the balancer, skipping registerL1Validator call."));
+    return;
+  }
   const warpLogs = parseEventLogs({
     abi: config.abis.IWarpMessenger,
     logs: receipt.logs,
   })[0]
-
   const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLogs.args.message);
 
   const nodeId = encodeNodeID(InitiatedValidatorRegistration.args.nodeID); // Convert bytes32 to NodeID format by removing the first 12 bytes
@@ -128,13 +133,20 @@ export async function completeValidatorRemoval(
     logs: receipt.logs,
   })
 
-  let messages = warpLogs
-    .map((l) => decodeWarpMessage(l.args.message, WarpMessageType.L1ValidatorWeightMessage))
+  let messages = decodeWarpMessages(warpLogs.map((l) => l.args.message), WarpMessageType.L1ValidatorWeightMessage)
     .filter((m) => m.weight === 0)
 
   if (messages.length === 0) throw new Error("No messages found in the receipt.");
 
   let validators = await balancerValidatorManager.multicall(messages.map((m) => ({ name: "getValidator", args: [m.validationID] })))
+
+  validators = validators
+    .filter((v) => {
+      if (v.status !== ValidatorStatus.PendingRemoved) logger.log(color.yellow(`Node ${encodeNodeID(v.nodeID)} (status: ${ValidatorStatus[v.status]}) is not pending removed, skipping. `))
+      return v.status === ValidatorStatus.PendingRemoved
+    });
+
+  if (validators.length === 0) throw new Error("No validators found in the receipt.");
 
   if (nodeIDs) {
     messages = messages.filter((m) => nodeIDs.includes(encodeNodeID(validators[messages.indexOf(m)].nodeID)));

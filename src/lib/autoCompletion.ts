@@ -7,25 +7,55 @@ function getShell() {
   const shell = process.env.SHELL || "";
   if (shell.includes("zsh")) return "zsh";
   if (shell.includes("bash")) return "bash";
-  return "bash"; // fallback safe
+  return "bash";
+}
+
+function collectTree(cmd: Command): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+
+  function walk(node: Command, prefix: string) {
+    const children = node.commands as Command[];
+    if (children.length === 0) return;
+    result[prefix] = children.map(c => c.name());
+    for (const child of children) {
+      const childPrefix = prefix ? `${prefix} ${child.name()}` : child.name();
+      walk(child, childPrefix);
+    }
+  }
+
+  walk(cmd, "");
+  return result;
 }
 
 export function generateCompletion(program: Command): string {
   const cli = program.name();
+  const tree = collectTree(program);
+
+  const cases = Object.entries(tree)
+    .map(([key, children]) => `    "${key}") suggestions="${children.join(" ")}" ;;`)
+    .join("\n");
 
   return `
 _${cli}_completions() {
-  local cur line
+  local cur i key=""
   cur="\${COMP_WORDS[COMP_CWORD]}"
-  line="\${COMP_LINE}"
 
-  COMPREPLY=( $(compgen -W "$(${cli} __complete --line "$line")" -- "$cur") )
+  for ((i=1; i<COMP_CWORD; i++)); do
+    [ -n "\$key" ] && key="\$key \${COMP_WORDS[\$i]}" || key="\${COMP_WORDS[\$i]}"
+  done
+
+  local suggestions=""
+  case "\$key" in
+${cases}
+    *) suggestions="" ;;
+  esac
+
+  COMPREPLY=( \$(compgen -W "\${suggestions}" -- "\${cur}") )
 }
 
 complete -F _${cli}_completions ${cli}
 `.trim();
 }
-
 
 export async function installCompletion(program: Command) {
   const shell = getShell();
@@ -50,8 +80,5 @@ export async function installCompletion(program: Command) {
 
   console.log(`✅ Auto-completion ${shell} installed : ${file}`);
   console.log("⚠️ Restart your terminal or :");
-  console.log(shell === "zsh"
-    ? `  source ${file}`
-    : `  source ${file}`
-  );
+  console.log(`  source ${file}`);
 }

@@ -186,6 +186,8 @@ async function main() {
 
     // Set cast mode and handle --rpc-url/custom network before any command runs
     program.hook('preSubcommand', async (thisCommand) => {
+        console.log(thisCommand.name())
+        if (['verify-abi', '__complete'].includes(thisCommand.name())) return;
         const opts = program.opts();
         if (opts.cast) setCastMode(true);
 

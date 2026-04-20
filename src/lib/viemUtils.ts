@@ -12,10 +12,6 @@ import { utils } from '@avalabs/avalanchejs';
 
 export { setCastMode, isCastMode } from './castUtils';
 
-function isWalletClient(client: ExtendedClient | ExtendedWalletClient): client is ExtendedWalletClient {
-  return 'account' in client;
-}
-
 // Define the type for the Suzaku ABI
 export type SuzakuABINames = keyof typeof SuzakuABI;
 export type TSuzakuABI = { [K in SuzakuABINames]: typeof SuzakuABI[K] };
@@ -148,7 +144,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
   // Introspection
   contract.name = abi;
 
-  if ('write' in contract && isWalletClient(client)) {
+  if ('write' in contract) {
 
     // Proxy handler for write methods to add Safe transaction handling and wait for confirmations
     const writeHandler: ProxyHandler<Record<string, any>> = {
@@ -210,7 +206,7 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   hash = selection.hash!;
               }
             } else {
-              hash = await fn(args, { chain: null, account: client.cChainClient.account, ...options })
+              hash = await fn(args, { chain: null, account: client.account, ...options })
             }
             const sig = `${contract.name}.${prop as string}(${args.join ? args.join(', ') : args})`
             logger.addData('txs', { to: contract.address, invocation: sig, hash, options });

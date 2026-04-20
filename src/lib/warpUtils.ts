@@ -691,8 +691,12 @@ export type WarpMessage<T extends WarpMessageType> = {
     uptime: number;
 } : never);
 
-export function decodeWarpMessage<T extends WarpMessageType>(hex: Hex, type?: T): WarpMessage<T> {
-    const { decoded: prefix, remainder: messageHex } = unpackGeneric(hex, WarpMessageSchema.prefix);
+export function decodeWarpMessage<T extends WarpMessageType>(hex: Hex): WarpMessage<T> {
+    const { decoded: prefix, remainder: messageHex } = unpackGeneric(hex, WarpMessageSchema.prefix); decodeWarpMessages
     const { decoded: message } = unpackGeneric(messageHex!, WarpMessageSchema[prefix.type as 1 | 2 | 3 | 0]);
     return { ...prefix, ...message, raw: hex } as unknown as WarpMessage<T>;
+}
+
+export function decodeWarpMessages<T extends WarpMessageType>(hexs: Hex[], type: T): WarpMessage<T>[] {
+    return hexs.map((hex) => decodeWarpMessage<T>(hex)).filter((m) => m.type === type);
 }

@@ -3,7 +3,7 @@ import { utils } from "@avalabs/avalanchejs";
 import { Hex, parseUnits } from 'viem';
 import { NodeId } from './utils';
 import { Pass } from "./pass";
-import { passPath } from "../keyStore";
+import { buildCommands, passPath } from "../keyStore";
 
 export function collectMultiple<T>(parser: (value: string) => T) {
   return (value: string, previous: T[]): T[] => previous.concat([parser(value)]);
@@ -57,7 +57,7 @@ export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
     return parseSecretName(value,).trim() as Hex;
   }
   if (process.argv.includes('mainnet')) {
-    throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
+    throw new Error(`Using private key on mainnet is not allowed. Use the secret keystore instead ${process.env.PK ? '(unset "PK" env var)' : ""}.`);
   }
   return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
 };

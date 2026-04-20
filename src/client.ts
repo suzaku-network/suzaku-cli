@@ -1,6 +1,6 @@
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 import { type Hex, type WalletClient, type PublicActions, Account } from 'viem'
-import { createAvalancheClient, createAvalancheWalletClient, type AvalancheWalletClient, type AvalancheClient } from '@avalanche-sdk/client'
+import { createAvalancheClient, createAvalancheWalletClient, type AvalancheWalletClient, type AvalancheClient, type PChainActions, type CChainActions } from '@avalanche-sdk/client'
 import { privateKeyToAvalancheAccount, type AvalancheAccount } from '@avalanche-sdk/client/accounts'
 import { getLedgerAccount, toSafeProvider, type Network } from './lib/ledgerUtils';
 import { chainList } from './lib/chainList';
@@ -27,17 +27,21 @@ export type Addresses = { P: PChainAddress, C: Hex };
 export type ExtendedWalletClient = AvalancheWalletClient & {
     network: Network;
     addresses: Addresses;
+    pChain: PChainActions;
+    cChain: CChainActions;
     safe?: SafeClient;
     ledger?: boolean;
 };
 
 /**
  * Read-only client backed by @avalanche-sdk/client.
- * Includes pChain / xChain / cChain sub-clients for Avalanche chains.
+ * Includes pChain / cChain sub-clients unconditionally (app always targets Avalanche/Fuji).
  */
 export type ExtendedPublicClient = AvalancheClient & {
     network: Network;
     safe?: SafeClient;
+    pChain: PChainActions;
+    cChain: CChainActions;
 };
 
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;

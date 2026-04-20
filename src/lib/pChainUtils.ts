@@ -1,10 +1,9 @@
-import { utils, pvm, Context, UnsignedTx, secp256k1, L1Validator, pvmSerial, PChainOwner, networkIDs } from "@avalabs/avalanchejs";
-import { cb58ToHex, getAddresses, NodeId } from "./utils";
+import { utils, pvm, UnsignedTx, networkIDs } from "@avalabs/avalanchejs";
+import { cb58ToHex, NodeId } from "./utils";
 import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { requirePChainBallance } from "./transferUtils";
-import { Chain, createWalletClient, defineChain, Hex, hexToBytes, http, publicActions, toBytes } from "viem";
+import { Hex, bytesToHex, hexToBytes } from "viem";
 import { collectSignaturesInitializeValidatorSet, packL1ConversionMessage, PackL1ConversionMessageArgs, packWarpIntoAccessList } from "./warpUtils";
-import { SafeSuzakuContract } from "./viemUtils";
 import { isCastMode, logPChainIssueTx } from "./castUtils";
 import { color } from "console-log-colors";
 import { pipe, R, Result } from "@mobily/ts-belt";
@@ -146,9 +145,6 @@ interface TransactionResult {
     encoding: string;
 }
 
-interface ConversionDataResponse {
-    result: TransactionResult;
-}
 
 type InitializeValidatorSetArgs = [{ subnetID: `0x${string}`; validatorManagerBlockchainID: `0x${string}`; validatorManagerAddress: `0x${string}`; initialValidators: readonly { nodeID: `0x${string}`; blsPublicKey: `0x${string}`; weight: bigint; }[]; }, number]
 
@@ -156,308 +152,113 @@ export function add0x(hex: string) {
     return /^0x/i.test(hex) ? hex : `0x${hex}`;
 }
 
-export const getRPCEndpoint = (client: ExtendedClient): string => {
-    const url = new URL(client.chain!.rpcUrls.default.http[0]);
-    return `${url.protocol}//${url.host}`;
-};
-
-export const getPchainBaseUrl = (client: ExtendedClient): string => {
-    const url = new URL(client.network === 'fuji' ? avalancheFuji.rpcUrls.default.http[0] : avalanche.rpcUrls.default.http[0])
-    return `${url.protocol}//${url.host}`;
-}
-
-
-export async function addSigToAllCreds(
-    unsignedTx: UnsignedTx,
-    client: ExtendedWalletClient,
-    cChain = false
-) {
-    const unsignedBytes = unsignedTx.toBytes();
-    const hash = '0x' + Buffer.from(sha256(unsignedBytes)).toString('hex') as Hex
-    // For Ledger + P-chain: sign via xpAccount (P-chain derivation path).
-    // For everything else (private key or Ledger + C-chain): sign via evmAccount (ETH path).
-    let rawSig: Hex;
-    if (client.ledger && !cChain) {
-        const sig = await client.signXPMessage({ message: hash });
-        rawSig = (sig.signature.startsWith('0x') ? sig.signature : `0x${sig.signature}`) as Hex;
-    } else {
-        rawSig = await client.signMessage({ account: client.account!, message: hash });
-    }
-
-    const signatureV2 = hexToBytes(rawSig)
-    signatureV2[64] = signatureV2[64] - 27
-    if (!signatureV2) {
-        throw new Error("Failed to sign message");
-    }
-    for (let i = 0; i < unsignedTx.getCredentials().length; i++) {
-        unsignedTx.addSignatureAt(signatureV2, i, 0);
-    }
-}
-
 export async function createSubnet(params: PChainBaseParams): Promise<Hex> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-
     const { P: pAddress } = params.client.addresses;
-    const addressBytes = utils.bech32ToBytes(pAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pAddress]
+    const tx = await params.client.pChain.prepareCreateSubnetTxn({
+        subnetOwners: { addresses: [pAddress], threshold: 1 },
+        fromAddresses: [pAddress],
     });
-
-    const tx = pvm.e.newCreateSubnetTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            utxos,
-            subnetOwners: [addressBytes],
-        },
-        context,
-    );
-    await addSigToAllCreds(tx, params.client);
-    const res = await issueSignedTx(pvmApi, tx)
-    const txID = R.getExn(res)
-
-    return txID;
+    return R.getExn(await issuePchainTx(params.client, tx));
 }
 
 export async function createChain(params: CreateChainParams): Promise<Hex> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-
     const { P: pAddress } = params.client.addresses;
-    const addressBytes = utils.bech32ToBytes(pAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pAddress]
+    const vmId = params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN";
+    logger.log(`Using default EVM VM ID: ${vmId}`);
+    const tx = await params.client.pChain.prepareCreateChainTxn({
+        subnetId: params.subnetId,
+        vmId,
+        chainName: params.chainName,
+        genesisData: JSON.parse(params.genesisData),
+        subnetAuth: [0],
+        fromAddresses: [pAddress],
     });
-    logger.log(`Using default EVM VM ID: ${params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN"}`);
-    const tx = pvm.e.newCreateChainTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            utxos,
-            chainName: params.chainName,
-            subnetAuth: [0],
-            subnetId: params.subnetId,
-            vmId: params.SubnetEVMId || "dkr3SJRCf2QfRUaepreGf2PtfEtpLHuPixeBMNrf1QQBxWLNN", // Default to EVM VM ID
-            fxIds: [],
-            genesisData: JSON.parse(params.genesisData),
-        },
-        context,
-    );
-
-    await addSigToAllCreds(tx, params.client);
-    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
-
+    const txID = R.getExn(await issuePchainTx(params.client, tx));
     logger.log('Created chain: ', txID);
     return txID;
 }
 
 export async function convertToL1(params: ConvertToL1Params): Promise<Hex> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-
     const { P: pAddress } = params.client.addresses;
-    const addressBytes = utils.bech32ToBytes(pAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pAddress]
+    const owner = { addresses: [pAddress], threshold: 1 };
+    const tx = await params.client.pChain.prepareConvertSubnetToL1Txn({
+        subnetId: params.subnetId,
+        blockchainId: params.chainId,
+        managerContractAddress: params.managerAddress,
+        validators: params.validators.map(v => ({
+            nodeId: v.nodeID,
+            nodePoP: { publicKey: v.blsPublicKey, proofOfPossession: v.blsProofOfPossession },
+            weight: BigInt(v.weight),
+            initialBalanceInAvax: BigInt(v.balance),
+            remainingBalanceOwner: owner,
+            deactivationOwner: owner,
+        })),
+        subnetAuth: [0],
+        fromAddresses: [pAddress],
     });
-
-    const pChainOwner = PChainOwner.fromNative([addressBytes], 1);
-
-    const validators: L1Validator[] = params.validators.map(validator => L1Validator.fromNative(
-        validator.nodeID,
-        BigInt(validator.weight),
-        BigInt(validator.balance),
-        new pvmSerial.ProofOfPossession(utils.hexToBuffer(validator.blsPublicKey), utils.hexToBuffer(validator.blsProofOfPossession)),
-        pChainOwner,
-        pChainOwner
-    ));
-
-    const tx = pvm.e.newConvertSubnetToL1Tx(
-        {
-            feeState,
-            fromAddressesBytes: [utils.bech32ToBytes(pAddress)],
-            subnetId: params.subnetId,
-            utxos,
-            chainId: params.chainId,
-            validators,
-            subnetAuth: [0],
-            address: utils.hexToBuffer(params.managerAddress.replace('0x', '')),
-        },
-        context,
-    );
-
-    await addSigToAllCreds(tx, params.client);
-    const txID = R.getExn(await issueSignedTx(pvmApi, tx))
-
-    return txID;
+    return R.getExn(await issuePchainTx(params.client, tx));
 }
 
 export async function registerL1Validator(params: RegisterL1ValidatorParams): Promise<Result<Hex, string>> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-    const { P: pChainAddress } = params.client.addresses;
-
-    const addressBytes = utils.bech32ToBytes(pChainAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pChainAddress]
+    const { P: pAddress } = params.client.addresses;
+    const tx = await params.client.pChain.prepareRegisterL1ValidatorTxn({
+        initialBalanceInAvax: params.initialBalance,
+        blsSignature: params.blsProofOfPossession,
+        message: params.signedMessage,
+        fromAddresses: [pAddress],
     });
-
-    // Create a new register validator transaction
-    const tx = pvm.e.newRegisterL1ValidatorTx({
-        balance: params.initialBalance,
-        blsSignature: new Uint8Array(Buffer.from(params.blsProofOfPossession.slice(2), 'hex')),
-        message: new Uint8Array(Buffer.from(params.signedMessage, 'hex')),
-        feeState,
-        fromAddressesBytes: [addressBytes],
-        utxos,
-    }, context);
-
-    // Sign the transaction
-    await addSigToAllCreds(tx, params.client);
-
-    // Issue the signed transaction
-    const txID = await issueSignedTx(pvmApi, tx);
-
-    return txID;
+    return issuePchainTx(params.client, tx);
 }
 
 export async function removeL1Validator(params: RemoveL1ValidatorParams): Promise<Result<string, string>> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-
-    const { P: pChainAddress } = params.client.addresses;
-    const addressBytes = utils.bech32ToBytes(pChainAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pChainAddress]
+    const { P: pAddress } = params.client.addresses;
+    const tx = await params.client.pChain.prepareDisableL1ValidatorTxn({
+        validationId: params.validationID,
+        disableAuth: [0],
+        fromAddresses: [pAddress],
     });
-
-    // Create a new disable validator transaction
-    const tx = pvm.e.newDisableL1ValidatorTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            disableAuth: [0],
-            validationId: params.validationID,
-            utxos,
-        },
-        context,
-    );
-
-    // Sign the transaction
-    await addSigToAllCreds(tx, params.client);
-
-    // Issue the signed transaction
-    const txID = await issueSignedTx(pvmApi, tx);
-
-    return txID;
+    return issuePchainTx(params.client, tx);
 }
 
 export type ValidatorsResponsePatched = (pvm.GetCurrentValidatorsResponse['validators'][number] & { balance?: number, validationID?: string })[];
 
 export async function getCurrentValidators(client: ExtendedClient, subnetId: string): Promise<ValidatorsResponsePatched> {
-    const rpcUrl = getPchainBaseUrl(client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    // Fetch the L1 validator at the specified index
-    const response = await pvmApi.getCurrentValidators({
-        subnetID: subnetId
-    });
-    return response.validators;
+    const response = await client.pChain.getCurrentValidators({ subnetID: subnetId });
+    return response.validators as ValidatorsResponsePatched;
 }
 
 export async function getValidatorsAt(client: ExtendedClient, subnetId: string): Promise<GetValidatorAtObject> {
-    const rpcUrl = getPchainBaseUrl(client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const currentHeight = await pvmApi.getHeight();
-    // Fetch the L1 validator at the specified index
-    const response = await pvmApi.getValidatorsAt({
-        subnetID: subnetId,
-        height: currentHeight.height,
-    });
-
+    const { height } = await client.pChain.getHeight();
+    const response = await client.pChain.getValidatorsAt({ subnetID: subnetId, height });
     if (!response.validators) {
         return {};
     }
-
-    return response.validators as GetValidatorAtObject;
+    return response.validators as unknown as GetValidatorAtObject;
 }
 
 export async function validates(client: ExtendedClient, subnetId: string): Promise<string | undefined> {
-    const rpcUrl = getPchainBaseUrl(client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    // Fetch the L1 validator at the specified index
-    const response = await pvmApi.validates({
-        subnetID: subnetId,
-    });
-
+    const response = await client.pChain.validates({ subnetID: subnetId });
     if (!response.blockchainIDs || response.blockchainIDs.length === 0) {
         return undefined;
     }
-
-    return response.blockchainIDs[0]; // Return the first blockchain ID (usually the only one)
+    return response.blockchainIDs[0];
 }
 
 export async function validatedBy(client: ExtendedClient, blockchainId: string): Promise<string | undefined> {
-    const rpcUrl = getPchainBaseUrl(client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    // Fetch the L1 validator at the specified index
-    const response = await pvmApi.validatedBy({
-        blockchainID: blockchainId,
-    });
-
+    const response = await client.pChain.validatedBy({ blockchainID: blockchainId });
     if (!response.subnetID) {
         return undefined;
     }
-
     return response.subnetID;
 }
 
 export async function setValidatorWeight(params: SetValidatorWeightParams): Promise<Result<string, string>> {
-    const rpcUrl = getPchainBaseUrl(params.client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-    const { P: pChainAddress } = params.client.addresses;
-    const addressBytes = utils.bech32ToBytes(pChainAddress);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pChainAddress]
+    const { P: pAddress } = params.client.addresses;
+    const tx = await params.client.pChain.prepareSetL1ValidatorWeightTxn({
+        message: params.message,
+        fromAddresses: [pAddress],
     });
-
-    // Create a new set validator weight transaction
-    const tx = pvm.e.newSetL1ValidatorWeightTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            message: new Uint8Array(Buffer.from(params.message, 'hex')),
-            utxos,
-        },
-        context,
-    );
-
-    // Sign the transaction
-    await addSigToAllCreds(tx, params.client);
-
-    // Issue the signed transaction
-    const txID = await issueSignedTx(pvmApi, tx);
-
-    return txID;
+    return issuePchainTx(params.client, tx);
 }
 
 export async function increasePChainValidatorBalance(
@@ -466,107 +267,49 @@ export async function increasePChainValidatorBalance(
     validationId: string,
     check: boolean = true
 ): Promise<Result<Hex, string>> {
-    const rpcUrl = getPchainBaseUrl(client);
-    const pvmApi = new pvm.PVMApi(rpcUrl);
-    const feeState = await pvmApi.getFeeState();
-    const context = await Context.getContextFromURI(rpcUrl);
-
-    const { P: pChainAddress } = client.addresses;
-    const addressBytes = utils.bech32ToBytes(pChainAddress);
-    const nAVAX = BigInt(Math.floor(amount * 1e9)); // Convert AVAX to nAVAX
-    // Ensure the P-Chain address has enough balance
+    const { P: pAddress } = client.addresses;
+    const nAVAX = BigInt(Math.floor(amount * 1e9));
     if (check) await requirePChainBallance(client, nAVAX);
-
-    const { utxos } = await pvmApi.getUTXOs({
-        addresses: [pChainAddress]
+    const tx = await client.pChain.prepareIncreaseL1ValidatorBalanceTxn({
+        balanceInAvax: nAVAX,
+        validationId,
+        fromAddresses: [pAddress],
     });
-
-    // Create a new increase balance transaction
-    const tx = pvm.e.newIncreaseL1ValidatorBalanceTx(
-        {
-            feeState,
-            fromAddressesBytes: [addressBytes],
-            utxos,
-            balance: nAVAX, // Convert to nAVAX
-            validationId
-        },
-        context,
-    );
-
-    // Sign the transaction
-    await addSigToAllCreds(tx, client);
-
-    // Issue the signed transaction
-    const txID = await issueSignedTx(pvmApi, tx);
-
-    return txID;
-}
-
-// Wait p chain tx until it is confirmed with a timeout
-export async function waitPChainTx(txID: string, pvmApi: pvm.PVMApi, pollingInterval: number = 3, retryCount: number = 10) {
-    let response = await pvmApi.getTxStatus({ txID });
-    let retry = 0;
-    while (response.status !== 'Committed' && retry < retryCount) {
-        response = await pvmApi.getTxStatus({ txID });
-        await new Promise(resolve => setTimeout(resolve, pollingInterval * 1000));
-        retry++;
-    }
-    if (response.status !== 'Committed') {
-        throw new Error(`P-Chain transaction ${txID} not committed after ${retryCount} retries`);
-    }
+    const signedTx = await client.signXPTransaction(tx);
+    return issuePchainTx(client, signedTx);
 }
 
 export async function extractWarpMessageFromPChainTx(subnetId: string, txId: string, client: ExtendedClient): Promise<ExtractWarpMessageFromTxResponse> {
-    const rpcEndpoint = getPchainBaseUrl(client);
     const networkId = client.network === 'fuji' ? networkIDs.FujiID : networkIDs.MainnetID;
-    //Fixme: here we do a direct call instead of using avalanchejs, because we need to get the raw response from the node
-    const response = await fetch(rpcEndpoint + "/ext/bc/P", {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'platform.getTx',
-            params: {
-                txID: txId,
-                encoding: 'json'
-            },
-            id: 1
-        })
-    });
+    const data = await client.pChain.getTx({ txID: txId, encoding: 'json' }) as unknown as TransactionResult;
 
-    const data = await response.json() as ConversionDataResponse
-
-    if (!data?.result?.tx?.unsignedTx?.subnetID || !data?.result?.tx?.unsignedTx?.chainID || !data?.result?.tx?.unsignedTx?.address || !data?.result?.tx?.unsignedTx?.validators) {
+    if (!data?.tx?.unsignedTx?.subnetID || !data?.tx?.unsignedTx?.chainID || !data?.tx?.unsignedTx?.address || !data?.tx?.unsignedTx?.validators) {
         logger.log('txId', txId)
         logger.log('data', data)
         throw new Error("Invalid transaction data, are you sure this is a conversion transaction?");
     }
 
     const conversionArgs: PackL1ConversionMessageArgs = {
-        subnetId: data.result.tx.unsignedTx.subnetID,
-        managerChainID: data.result.tx.unsignedTx.chainID,
-        managerAddress: data.result.tx.unsignedTx.address as Hex,
-        validators: data.result.tx.unsignedTx.validators.map((validator) => {
-            return {
-                nodeID: validator.nodeID,
-                nodePOP: validator.signer,
-                weight: validator.weight
-            }
-        })
+        subnetId: data.tx.unsignedTx.subnetID,
+        managerChainID: data.tx.unsignedTx.chainID,
+        managerAddress: data.tx.unsignedTx.address as Hex,
+        validators: data.tx.unsignedTx.validators.map((validator) => ({
+            nodeID: validator.nodeID,
+            nodePOP: validator.signer,
+            weight: validator.weight
+        }))
     };
 
-    const [message, justification] = packL1ConversionMessage(conversionArgs, networkId, data.result.tx.unsignedTx.blockchainID);
+    const [message, justification] = packL1ConversionMessage(conversionArgs, networkId, data.tx.unsignedTx.blockchainID);
     return {
         message: utils.bufferToHex(message) as Hex,
         justification: utils.bufferToHex(justification) as Hex,
-        subnetId: data.result.tx.unsignedTx.subnetID,
+        subnetId: data.tx.unsignedTx.subnetID,
         signingSubnetId: subnetId,
         networkId,
-        validators: data.result.tx.unsignedTx.validators,
-        chainId: data.result.tx.unsignedTx.chainID,
-        managerAddress: data.result.tx.unsignedTx.address as Hex,
+        validators: data.tx.unsignedTx.validators,
+        chainId: data.tx.unsignedTx.chainID,
+        managerAddress: data.tx.unsignedTx.address as Hex,
     }
 }
 
@@ -678,15 +421,18 @@ export async function getValidatorManagerInitializationArgsFromWarpTx(conversion
     ];
 }
 
-export async function issueSignedTx(pvmApi: pvm.PVMApi, tx: UnsignedTx, testnet: boolean = true): Promise<Result<Hex, string>> {
+export async function issuePchainTx(client: ExtendedWalletClient, tx: any, testnet: boolean = true): Promise<Result<Hex, string>> {
     if (isCastMode()) {
         const rpcUrl = testnet ? avalancheFuji.rpcUrls.default.http[0] : avalanche.rpcUrls.default.http[0];
-        return R.Ok(logPChainIssueTx(tx.getSignedTx().toBytes(), rpcUrl));
+        return R.Ok(logPChainIssueTx(tx.signedTxHex, rpcUrl));
     }
-    const result = pipe(await R.fromPromise(pvmApi.issueSignedTx(tx.getSignedTx())),
-        R.map(res => res.txID as Hex),
-        R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${err.message}`)
+    const result = pipe(await R.fromPromise(client.sendXPTransaction(tx)),
+        R.map(res => res),
+        R.mapError(err => "\n" + color.red(`Error issuing P-Chain Signed Tx:`) + `\n${(err as Error).message}`)
     )
-    if (R.isOk(result)) await waitPChainTx(result._0, pvmApi);// else await logger.exitError([result._0])
+    if (R.isOk(result)) {
+        await client.waitForTxn({ ...result._0, maxRetries: 10 });
+        return R.Ok(result._0.txHash as Hex);
+    }
     return result;
 }

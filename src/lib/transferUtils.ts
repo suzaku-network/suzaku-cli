@@ -1,133 +1,50 @@
-import { pvm, evm, Context, utils, avaxSerial } from "@avalabs/avalanchejs";
-import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from "../client";
-import { addSigToAllCreds, getPchainBaseUrl, waitPChainTx } from "./pChainUtils";
+import { ExtendedClient, ExtendedWalletClient } from "../client";
 import { logger } from './logger';
-import { parseEventLogs, formatUnits, hexToBytes, Hex } from "viem";
+import { parseEventLogs, formatUnits, Hex } from "viem";
 import { Config } from "../config";
 
-// Wait c chain tx until it is confirmed with a timeout
-export async function waitCChainTx(txID: string, evmApi: evm.EVMApi, pollingInterval: number = 6, retryCount: number = 10) {
-  let tx = await evmApi.getAtomicTxStatus(txID);
-  let retry = 0;
-  while (tx.status !== 'Committed' && tx.status !== 'Accepted' && retry < retryCount) {
-    logger.log(`Waiting for C-Chain transaction ${txID} to be committed... (current status: ${tx.status})`);
-    await new Promise(resolve => setTimeout(resolve, pollingInterval * 1000));
-    tx = await evmApi.getAtomicTxStatus(txID);
-    retry++;
-  }
-}
-
-/*
-* @notice Prepare a C-Chain export transaction
-* @param privateKeyHex - The private key of the user in hex format
-* @param pAddress - The P-Chain address to export AVAX from
-* @param cAddress - The C-Chain address to export AVAX to
-* @param client - The ExtendedWalletClient instance
-* @param amount - The amount of AVAX (9 decimals as supported by the p-chain) to export
-* @returns - A promise that resolves to a tuple of the signed transaction and the export fees
-*/
-async function prepareCchainExport(pAddress: string, cAddress: `0x${string}`, client: ExtendedWalletClient, amount: bigint): Promise<[avaxSerial.SignedTx, bigint]> {
-  const rpcUrl: string = getPchainBaseUrl(client);
-  const evmapi = new evm.EVMApi(rpcUrl);
-  const context = await Context.getContextFromURI(rpcUrl);
-  const txCount = await client.getTransactionCount({ address: cAddress });
-  const baseFee = await evmapi.getBaseFee();
-  const pAddressBytes = utils.bech32ToBytes(pAddress);
-
-  const exportFees = evm.estimateExportCost(
-    context,
-    baseFee,
-    amount,
-    context.pBlockchainID,
-    utils.hexToBuffer(cAddress),
-    [pAddressBytes],
-    BigInt(txCount),
-  )
-
-  const tx = evm.newExportTx(
-    context,
-    amount + exportFees,
-    context.pBlockchainID,
-    utils.hexToBuffer(cAddress),
-    [pAddressBytes],
-    exportFees,
-    BigInt(txCount),
-  );
-  await addSigToAllCreds(tx, client, true);
-
-  return [tx.getSignedTx(), exportFees]
-}
-
 export async function pChainImport(client: ExtendedWalletClient): Promise<{ txID: string }> {
-
   const { P: pAddress } = client.addresses;
-  const rpcUrl = getPchainBaseUrl(client);
-  const pvmApi = new pvm.PVMApi(rpcUrl);
-  const context = await Context.getContextFromURI(rpcUrl);
-  const feeState = await pvmApi.getFeeState();
-
-  const { utxos } = await pvmApi.getUTXOs({
+  const importTxnRequest = await client.pChain.prepareImportTxn({
     sourceChain: 'C',
-    addresses: [pAddress],
+    importedOutput: { addresses: [pAddress] },
   });
-  const importTx = pvm.newImportTx(
-    {
-      feeState,
-      sourceChainId: context.cBlockchainID,
-      utxos,
-      toAddressesBytes: [utils.bech32ToBytes(pAddress)],
-      fromAddressesBytes: [utils.bech32ToBytes(pAddress.replace('P-', 'C-'))], // Convert P-Chain address to C-Chain address
-    },
-    context
-  );
+  const response = await client.sendXPTransaction(importTxnRequest);
+  await client.waitForTxn(response);
+  return { txID: response.txHash };
+}
 
-  await addSigToAllCreds(importTx, client);
+export async function requirePChainBallance(client: ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, checkRetry: number = 3) {
 
-  return pvmApi.issueSignedTx(importTx.getSignedTx());
-};
-
-// @notice Check if the user has enough AVAX in the P-Chain address to cover the amount
-// @param privateKeyHex - The private key of the user in hex format (not the address because automatic C to P Chain transfer may be supported in the future)
-// @param network - The network to use (mainnet or fuji)
-// @param amount - The amount of AVAX to check for (9 decimals as supported by the p-chain)
-// @param signedTx - The signed transaction to check for (calculate the fees)
-// @param checkRetry - The number of times to check for the amount (default: 3)
-// @returns - A promise that resolves when the user has enough AVAX in the P-Chain address
-// @throws - An error if the user doesn't have enough AVAX in the P-Chain address
-export async function requirePChainBallance(client: ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, signedTx?: avaxSerial.SignedTx, checkRetry: number = 3) {
-
-  const rpcUrl = getPchainBaseUrl(client);
-  const pvmApi = new pvm.PVMApi(rpcUrl);
-  const evmapi = new evm.EVMApi(rpcUrl);
   const { P: pAddress, C: cAddress } = client.addresses;
-  // Check on the P-Chain
-  let pBalance = await pvmApi.getBalance({ addresses: [pAddress] })
+  let pBalance = await client.pChain.getBalance({ addresses: [pAddress] });
   let remainingPBalance = pBalance.unlocked - amount;
 
-  // If not enough found on the P-Chain, check the C-Chain
   for (let pTry = 0; remainingPBalance < BigInt(0) && pTry < checkRetry; pTry++) {
-    if (pTry === checkRetry) throw new Error(`You don't have enough AVAX in your P-Chain address`);// Stop if too more retries on the P-Chain
+    if (pTry === checkRetry) throw new Error(`You don't have enough AVAX in your P-Chain address`);
     logger.log(`You have only ${formatUnits(pBalance.unlocked, 9)}/${formatUnits(amount, 9)} AVAX in your P-Chain address ${pAddress}`);
 
-    const [cChainSignedExportTx, transferFees] = await prepareCchainExport(pAddress, cAddress, client, - remainingPBalance);
-    const neededOnCchain = (transferFees - remainingPBalance) * BigInt(10 ** 9)// // Negative amount to positive (from 9 (p-chain) to 18 (c-chain) decimals) and add exportfees to get the needed amount on the C-Chain
+    // P-chain import fee is deducted from the imported UTXO — export more than the deficit
+    const feeState = await client.pChain.getFeeState();
+    const estimatedImportFee = BigInt(feeState.price) * 4135n; // ~4135 gas units for a basic import
+    const exportedNAVAX = -remainingPBalance + estimatedImportFee;
 
-    // Ask user to transfer AVAX to its C-Chain address if not enough found
-    await requireCChainBallance(client, neededOnCchain, promptUser, checkRetry);
+    // requireCChainBallance adds the EVM gas buffer on top of the requested amount
+    await requireCChainBallance(client, exportedNAVAX * BigInt(10 ** 9), promptUser, checkRetry);
 
-    let cChainExportTxResponse, pChainImportTxResponse;
-
-    switch (promptUser ? await logger.prompt(`C-Chain address ${cAddress} have enough founds to transfer ${formatUnits(neededOnCchain, 18)} to the P-Chain address.. Do you want to transfer it automatically (y/n)`) : 'y') {
+    switch (promptUser ? await logger.prompt(`C-Chain address ${cAddress} has enough funds to transfer ${formatUnits(-remainingPBalance, 9)} AVAX to the P-Chain. Do you want to transfer it automatically? (y/n)`) : 'y') {
       case 'y':
         logger.log(`Exporting AVAX from C-Chain...`);
-        cChainExportTxResponse = await evmapi.issueSignedTx(cChainSignedExportTx)
-        logger.log(cChainExportTxResponse.txID)
-        await waitCChainTx(cChainExportTxResponse.txID, evmapi);
+        const exportTxnRequest = await client.cChain.prepareExportTxn({
+          destinationChain: 'P',
+          fromAddress: cAddress,
+          exportedOutput: { addresses: [pAddress], amount: exportedNAVAX },
+        });
+        const exportResponse = await client.sendXPTransaction(exportTxnRequest);
+        await client.waitForTxn(exportResponse);
         logger.log(`Importing AVAX to P-Chain...`);
-        pChainImportTxResponse = await pChainImport(client);
-        await waitPChainTx(pChainImportTxResponse.txID, pvmApi);
-        logger.log("Transfer successfully completed !")
-        // Call the transfer function here
+        await pChainImport(client);
+        logger.log("Transfer successfully completed!");
         break;
       case 'n':
         await logger.prompt(`Please transfer ${formatUnits(amount, 9)} AVAX to the P-Chain address (${pAddress}) manually and press enter to continue...`);
@@ -136,12 +53,10 @@ export async function requirePChainBallance(client: ExtendedWalletClient, amount
         throw new Error(`Canceled by the user`);
     }
 
-    pBalance = await pvmApi.getBalance({ addresses: [pAddress] })
+    pBalance = await client.pChain.getBalance({ addresses: [pAddress] });
     remainingPBalance = pBalance.unlocked - amount;
   }
-  // TODO: Fix small diff issue: "Sufficient found on the P-Chain (0.099953453/0.010000000 AVAX)"
-  logger.log(`Sufficient found on the P-Chain (${formatUnits(pBalance.unlocked, 9)}/${formatUnits(amount, 9)} AVAX)`)
-
+  logger.log(`Sufficient found on the P-Chain (${formatUnits(pBalance.unlocked, 9)}/${formatUnits(amount, 9)} AVAX)`);
 }
 
 export async function requireCChainBallance(client: ExtendedWalletClient, amount: bigint = BigInt(0), promptUser: boolean = true, checkRetry: number = 3) {
@@ -157,10 +72,10 @@ export async function requireCChainBallance(client: ExtendedWalletClient, amount
       throw new Error(`You don't have enough AVAX in your C-Chain address ${cAddress}`);
     }
     await logger.prompt(`Please transfer ${formatUnits(amount, 18)} AVAX to the C-Chain address (${cAddress}) manually and press enter to continue...`);
-    cBalance = await client.getBalance({ address: cAddress });// ETH to AVAX decimals
+    cBalance = await client.getBalance({ address: cAddress });
     remainingCBalance = cBalance - amount;
   }
-  logger.log(`Sufficient found on the C-Chain address ${cAddress} (${formatUnits(cBalance, 18)}/${formatUnits(amount, 18)} AVAX)`)
+  logger.log(`Sufficient found on the C-Chain address ${cAddress} (${formatUnits(cBalance, 18)}/${formatUnits(amount, 18)} AVAX)`);
   return cBalance;
 }
 

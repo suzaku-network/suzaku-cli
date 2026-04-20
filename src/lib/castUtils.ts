@@ -85,8 +85,7 @@ export function logCastSend(
 }
 
 /** Log a `curl` command for a P-Chain signed transaction and return a dummy tx hash. */
-export function logPChainIssueTx(signedTxBytes: Uint8Array, rpcUrl: string): Hex {
-  const signedTxHex = '0x' + Buffer.from(signedTxBytes).toString('hex');
+export function logPChainIssueTx(signedTxHex: Hex, rpcUrl: string): Hex {
   const endpoint = rpcUrl.replace('C/rpc', 'P');
   const body = JSON.stringify({
     jsonrpc: '2.0',

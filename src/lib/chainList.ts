@@ -1,7 +1,6 @@
 import { info } from "@avalabs/avalanchejs";
 import { Chain, defineChain } from "viem";
 import { anvil, avalanche, avalancheFuji } from "viem/chains";
-import { getPchainBaseUrl } from "./pChainUtils";
 import { getChainId } from "./cChainUtils";
 // Used in client
 avalanche.testnet = false
