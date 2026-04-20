@@ -7,3 +7,6 @@ export { SuzakuABI, withErrors } from './abis/index';
 
 export { chainList } from './client/index';
 export type { Network, Chains, PChainAddress, Addresses, ExtendedWalletClient, ExtendedPublicClient, ExtendedClient } from './client/index';
+
+export { withSafeWrite, withMulticall, curriedContract, contractAbiValidation, bigintReplacer, bytes32ToAddress } from './viemUtils';
+export type { SuzakuABINames, TSuzakuABI, SuzakuContract, SafeSuzakuContract, TWriteSuzakuContract, CurriedContractFn, CurriedSuzakuContractMap, MulticallOptions, AbiValidationClient } from './viemUtils';

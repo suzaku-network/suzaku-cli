@@ -82,6 +82,7 @@
     "@mobily/ts-belt": "^3.13.1",
     "@noble/hashes": "1.8.0",
     "@safe-global/sdk-starter-kit": "3.0.2",
+    "modern-ahocorasick": "^2.0.4",
     "@scure/base": "1.2.6",
     "cli-progress": "^3.12.0",
     "console-log-colors": "^0.5.0",
