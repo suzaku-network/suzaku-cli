@@ -1,5 +1,6 @@
 import { Chain, defineChain } from 'viem';
 import { anvil, avalanche, avalancheFuji } from 'viem/chains';
+import { info } from '@avalabs/avalanchejs';
 
 avalanche.testnet = false;
 avalancheFuji.testnet = true;
@@ -45,3 +46,31 @@ export const chainList: Record<string, Chain> & { custom: Chain } = {
     rpcUrls: { default: { http: ['http://localhost:9650/ext/bc/C/rpc'] } },
   }),
 };
+
+async function getChainId(rpcUrl: string): Promise<number> {
+  const ret = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+  });
+  const data = await ret.json();
+  return data.result;
+}
+
+export async function setCustomChainRpcUrl(rpcUrl: string): Promise<void> {
+  const url = new URL(rpcUrl);
+  const infoApi = new info.InfoApi(`${url.protocol}//${url.host}`);
+  try {
+    const networkIDresp = await infoApi.getNetworkId();
+    const chainId = await getChainId(rpcUrl);
+    chainList.custom = defineChain({
+      ...chainList.custom,
+      testnet: networkIDresp.networkID === '1' ? false : true,
+      network: networkIDresp.networkID === '1' ? 'mainnet' : 'fuji',
+      id: Number(chainId),
+      rpcUrls: { default: { http: [rpcUrl] } },
+    });
+  } catch (error) {
+    throw new Error(`Custom RPC seems to be down or infoAPI is not available: ${rpcUrl}`, { cause: error });
+  }
+}

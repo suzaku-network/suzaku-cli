@@ -2,7 +2,7 @@ import { SuzakuABI } from '../core/abis/index';
 import { type ExtendedClient } from './client/types';
 import { curriedContract, type CurriedSuzakuContractMap, type SuzakuABINames, type TSuzakuABI } from './viemUtils';
 
-export const pChainChainID = '11111111111111111111111111111111LpoYY';
+export { pChainChainID } from '../core/avalancheUtils';
 
 export interface Config<T extends ExtendedClient> {
   abis: TSuzakuABI;
