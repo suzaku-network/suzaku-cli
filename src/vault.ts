@@ -143,6 +143,18 @@ export async function getVaultTotalSupply(
   return totalSupply;
 }
 
+export async function getVaultTotalSupplyAtEpoch(
+  vault: SuzakuContract['VaultTokenized'],
+  epoch: bigint
+) {
+  logger.log(`Reading vault total supply at epoch ${epoch}...`);
+  const [epochDuration, StartTs] = await vault.multicall(["epochDuration", "epochDurationInit"])
+  const epochEndTs = StartTs + epochDuration * (Number(epoch) + 1);
+  const totalSupply = await vault.read.activeSharesAt([epochEndTs, '0x']);
+  logger.log("Total supply:", totalSupply.toString());
+  return totalSupply;
+}
+
 export async function getVaultWithdrawalSharesOf(
   vault: SuzakuContract['VaultTokenized'],
   epoch: bigint,

@@ -38,7 +38,8 @@ import {
     getVaultWithdrawalSharesOf,
     getVaultWithdrawalsOf,
     approveAndDepositCollateral,
-    info as VaultInfo
+    info as VaultInfo,
+    getVaultTotalSupplyAtEpoch
 } from "./vault";
 
 import {
@@ -719,6 +720,16 @@ async function main() {
         .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultTotalSupply(vault);
+        });
+
+    vaultCmd
+        .command("get-total-supply-at-epoch")
+        .description("Get total supply of vault tokens at a specific epoch")
+        .addArgument(argVaultAddress)
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .asyncAction(async (config, vaultAddress, epoch) => {
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
+            await getVaultTotalSupplyAtEpoch(vault, epoch);
         });
 
     vaultCmd
