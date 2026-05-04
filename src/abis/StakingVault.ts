@@ -1825,19 +1825,6 @@ export default [
     },
     {
         "type": "function",
-        "name": "OPERATOR_MANAGER_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "UPGRADE_INTERFACE_VERSION",
         "inputs": [],
         "outputs": [
@@ -1845,19 +1832,6 @@ export default [
                 "name": "",
                 "type": "string",
                 "internalType": "string"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "VAULT_ADMIN_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
             }
         ],
         "stateMutability": "view"
