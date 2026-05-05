@@ -38,7 +38,10 @@ import {
     getVaultWithdrawalSharesOf,
     getVaultWithdrawalsOf,
     approveAndDepositCollateral,
-    info as VaultInfo
+    info as VaultInfo,
+    getVaultTotalSupplyAtEpoch,
+    getActiveStake,
+    getActiveStakeAtEpoch
 } from "./vault";
 
 import {
@@ -719,6 +722,35 @@ async function main() {
         .asyncAction(async (config, vaultAddress) => {
             const vault = await config.contracts.VaultTokenized(vaultAddress);
             await getVaultTotalSupply(vault);
+        });
+
+    vaultCmd
+        .command("get-total-supply-at-epoch")
+        .description("Get total supply of vault tokens at a specific epoch")
+        .addArgument(argVaultAddress)
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .asyncAction(async (config, vaultAddress, epoch) => {
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
+            await getVaultTotalSupplyAtEpoch(vault, epoch);
+        });
+
+    vaultCmd
+        .command("get-active-stake")
+        .description("Get active stake for a vault")
+        .addArgument(argVaultAddress)
+        .asyncAction(async (config, vaultAddress) => {
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
+            await getActiveStake(vault);
+        });
+
+    vaultCmd
+        .command("get-active-stake-at-epoch")
+        .description("Get active stake for a vault at a specific epoch")
+        .addArgument(argVaultAddress)
+        .addArgument(ArgBigInt("epoch", "Epoch number"))
+        .asyncAction(async (config, vaultAddress, epoch) => {
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
+            await getActiveStakeAtEpoch(vault, epoch);
         });
 
     vaultCmd
