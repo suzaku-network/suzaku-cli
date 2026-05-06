@@ -3,7 +3,6 @@ import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
-import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
@@ -284,7 +283,7 @@ export async function getActiveCollateralClasses(
 export async function middlewareGetNodeLogs(
   client: ExtendedClient,
   middleware: SuzakuContract['L1Middleware'],
-  config: Config<ExtendedPublicClient>,
+  config: ExtendedPublicClient,
   nodeId?: NodeId,
   snowscanApiKey?: string,
   quiet?: boolean
@@ -423,7 +422,7 @@ export async function middlewareLastValidationId(
 
 export async function weightSync(
   middleware: SafeSuzakuContract['L1Middleware'],
-  config: Config<ExtendedWalletClient>,
+  client: ExtendedWalletClient,
   options: {
     epochs?: number;
     loopEpochs?: number;
@@ -470,7 +469,7 @@ export async function weightSync(
     }
   }
   // TODO: fix type (too complex for now)
-  const predictions = await predictForceUpdateImpact(config as any, middleware, operators as Hex[]);
+  const predictions = await predictForceUpdateImpact(client, middleware, operators as Hex[]);
 
   for (const prediction of predictions) {
     if (prediction.willLoseWeight) {
@@ -487,7 +486,7 @@ export async function weightSync(
     }
   }
   const balancerAddress = await middleware.read.BALANCER();
-  const balancer = await getBalancerValidatorManager(config, balancerAddress);
+  const balancer = await getBalancerValidatorManager(client, balancerAddress);
 
   let pendingRemovalNodes: { nodeID: Hex, validationID: Hex, txHash?: Hex }[] = [];
 
@@ -495,8 +494,8 @@ export async function weightSync(
     // Combine validators and logs to get removed from the two last epochs and check if p-chain registered nodes are still registered.
     // If there are validator already removed from the p-chain (or disabled) but still registered in the middleware, and their init removal tx is older than 2 epochs, they will !!! NOT !!! be removed from the middleware by this function!!!
     const subnetId = utils.base58check.encode(hexToBytes(await balancer.read.subnetID()));
-    const validators = await getCurrentValidators(config.client, subnetId);
-    const startBlock = await blockAtTimestamp(config.client, BigInt(await middleware.read.getEpochStartTs([currentEpoch - 2])));
+    const validators = await getCurrentValidators(client, subnetId);
+    const startBlock = await blockAtTimestamp(client, BigInt(await middleware.read.getEpochStartTs([currentEpoch - 2])));
     const logs = await middleware.getLogs({ event: "NodeRemoved", fromBlock: startBlock });
 
     const combinedNodes = Array.from(new Set([...validators.map(v => ({ nodeID: parseNodeID(v.nodeID as NodeId), validationID: bytesToHex(utils.base58check.decode(v.validationID!)) })), ...logs.map(l => ({ nodeID: l.args.nodeId!, validationID: l.args.validationID!, txHash: l.transactionHash! }))]));
@@ -507,7 +506,7 @@ export async function weightSync(
         args: [v.validationID]
       }
     }));
-    statuses.forEach((status, i) => {
+    statuses.forEach((status: any, i: number) => {
       logger.log(`Node ${combinedNodes[i].nodeID} status: ${status.status}`);
     });
     // Filter out nodes that are not pending removal
@@ -530,10 +529,10 @@ export async function weightSync(
       logger.log(`Node pending removal found: ${pendingNode.nodeID}`);
       try {
         const { nodes, txHash } = await completeValidatorRemoval(
-          config.client,
+          client,
           middleware,
           balancer,
-          config,
+          client,
           pendingNode.txHash,
           false // waitValidatorVisible
         );
@@ -558,7 +557,7 @@ export interface OperatorForceUpdatePrediction {
 }
 
 export async function predictForceUpdateImpact(
-  config: Config<ExtendedClient>,
+  client: ExtendedClient,
   middleware: SafeSuzakuContract['L1Middleware'],
   operators: Hex[]
 ): Promise<OperatorForceUpdatePrediction[]> {
@@ -577,7 +576,7 @@ export async function predictForceUpdateImpact(
     'PRIMARY_ASSET_CLASS'
   ]);
 
-  const balancer = await getBalancerValidatorManager(config, balancerAddress)
+  const balancer = await getBalancerValidatorManager(client, balancerAddress)
 
   const [, securityModuleMaxWeight] = await balancer.read.getSecurityModuleWeights([middleware.address])
 

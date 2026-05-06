@@ -1,9 +1,15 @@
 import type { Address } from 'viem';
 import { getContract } from '../client/viemUtils';
-import type { Config } from '../config';
 import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
+
+export async function getStakingVault<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'StakingVault', client, address, selectors);
+}
 
 const abi = [
     {
@@ -3756,12 +3762,5 @@ const abi = [
         "stateMutability": "payable"
     }
 ] as const;
+export type TStakingVaultABI = typeof abi;
 export default abi;
-
-export async function getStakingVault<C extends ExtendedClient>(
-  config: Config<C>,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'StakingVault', config, address, selectors) as any;
-  // as any: TypeScript cannot resolve conditional return type from a generic function
-}

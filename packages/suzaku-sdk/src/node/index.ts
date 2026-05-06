@@ -16,9 +16,6 @@ export type { CastCommandOptions } from './castUtils';
 export { withSafeWrite, withMulticall, getContract, contractAbiValidation, withGnosisSafe, withCastMode, handleContractError } from './viemUtils';
 export type { EnhancedContract, SafeEnhancedContract } from './viemUtils';
 
-export { getConfig, pChainChainID } from './config';
-export type { Config } from './config';
-
 export { getAddresses, getCchainAddress, retryWhileError } from './avalancheUtils';
 
 export { collectSignatures, collectSignaturesInitializeValidatorSet } from '../core/lib/warpUtils';

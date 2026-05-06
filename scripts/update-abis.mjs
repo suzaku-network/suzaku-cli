@@ -139,24 +139,22 @@ function deduplicateOverloadedFunctions(abi) {
 function generateSdkAbiContent(abi, sdkName, selectors) {
   const fnName = `get${sdkName}`;
   const abiJson = JSON.stringify(abi, null, 4);
-  const selectorsJson = JSON.stringify(selectors);
   return `import type { Address } from 'viem';
 import { getContract } from '../client/viemUtils';
-import type { Config } from '../config';
 import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-const abi = ${abiJson} as const;
-export default abi;
-
 export async function ${fnName}<C extends ExtendedClient>(
-  config: Config<C>,
+  client: C,
   address?: Address,
 ): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, '${sdkName}', config, address, selectors) as any;
-  // as any: TypeScript cannot resolve conditional return type from a generic function
+  return getContract(abi, '${sdkName}', client, address, selectors);
 }
+
+const abi = ${abiJson} as const;
+export type T${sdkName}ABI = typeof abi;
+export default abi;
 `;
 }
 
@@ -217,7 +215,7 @@ function updateAbiFile(contractName, outputFileName) {
       if (!fs.existsSync(indexPath)) {
         fs.writeFileSync(
           indexPath,
-          `export { default as ${sdkName}ABI, get${sdkName} } from './abi';\nexport * from './selectors';\n`,
+          `export { default as ${sdkName}ABI, get${sdkName}, T${sdkName}ABI } from './abi';\nexport * from './selectors';\n`,
         );
       }
 

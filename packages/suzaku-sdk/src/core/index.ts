@@ -68,3 +68,5 @@ export { ValidatorStatus } from './BalancerValidatorManager/types';
 export { GetRegistrationJustification } from './lib/justification';
 
 export { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule/index';
+export type { ISecurityModuleReader, ISecurityModuleWriter } from './securityModule/interfaces';
+export type { IBalancerValidatorManagerReader } from './BalancerValidatorManager/interfaces';

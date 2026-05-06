@@ -1,9 +1,15 @@
 import type { Address } from 'viem';
 import { getContract } from '../client/viemUtils';
-import type { Config } from '../config';
 import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
+
+export async function getValidatorManager<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'ValidatorManager', client, address, selectors);
+}
 
 const abi = [
     {
@@ -1078,19 +1084,6 @@ const abi = [
     },
     {
         "type": "function",
-        "name": "setOwner",
-        "inputs": [
-            {
-                "name": "_owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "subnetID",
         "inputs": [],
         "outputs": [
@@ -1116,12 +1109,5 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
+export type TValidatorManagerABI = typeof abi;
 export default abi;
-
-export async function getValidatorManager<C extends ExtendedClient>(
-  config: Config<C>,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'ValidatorManager', config, address, selectors) as any;
-  // as any: TypeScript cannot resolve conditional return type from a generic function
-}

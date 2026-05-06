@@ -1,7 +1,5 @@
 import { bytesToHex, Hex, hexToBytes, parseEventLogs } from "viem";
 import { ExtendedWalletClient } from "../client/types";
-import { Config } from "../config";
-import { SafeEnhancedContract } from "../client/viemUtils";
 import { getBalancerValidatorManager } from "../BalancerValidatorManager/abi";
 import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "../lib/avalancheUtils";
 import { logger } from '../logger';
@@ -15,31 +13,26 @@ import { utils } from "@avalabs/avalanchejs";
 import { blockAtTimestamp } from "../lib/cChainUtils";
 import { ValidatorStatus } from "../BalancerValidatorManager/types";
 import { pChainChainID } from "../lib/avalancheUtils";
-import PoASecurityModuleAbi from "../PoASecurityModule/abi";
-import L1MiddlewareAbi from "../L1Middleware/abi";
-import BalancerValidatorManagerAbi from "../BalancerValidatorManager/abi";
 import IWarpMessengerAbi from "../IWarpMessenger/abi";
+import { IContract } from "../client/contract";
+import { TL1MiddlewareABI } from "../L1Middleware/abi";
+import BalancerValidatorManagerAbi, { TBalancerValidatorManagerABI } from "../BalancerValidatorManager/abi";
+import { TPoASecurityModuleABI } from "../PoASecurityModule/abi";
 
-type SecurityModuleContract =
-  SafeEnhancedContract<typeof PoASecurityModuleAbi, ExtendedWalletClient> |
-  SafeEnhancedContract<typeof L1MiddlewareAbi, ExtendedWalletClient>;
-type BalancerContract = SafeEnhancedContract<typeof BalancerValidatorManagerAbi, ExtendedWalletClient>;
-
-export async function completeValidatorRegistration<T extends ExtendedWalletClient>(
-  pchainClient: T,
-  securityModule: SecurityModuleContract,
-  balancer: BalancerContract,
-  config: Config<T>,
+export async function completeValidatorRegistration(
+  pchainClient: ExtendedWalletClient,
+  securityModule: IContract<TL1MiddlewareABI, "completeValidatorRegistration"> | IContract<TPoASecurityModuleABI, "completeValidatorRegistration">,
+  balancer: IContract<TBalancerValidatorManagerABI, "getValidator" | "subnetID">,
+  client: ExtendedWalletClient,
   blsProofOfPossession: string,
   addNodeTxHash: Hex,
   initialBalance: bigint,
   waitValidatorVisible: boolean
 ) {
   logger.log("Completing validator registration...");
-  const client = config.client;
   const receipt = await client.waitForTransactionReceipt({ hash: addNodeTxHash });
   const InitiatedValidatorRegistration = parseEventLogs({
-    abi: balancer.abi,
+    abi: BalancerValidatorManagerAbi,
     logs: receipt.logs,
     eventName: 'InitiatedValidatorRegistration'
   })[0]
@@ -96,14 +89,11 @@ export async function completeValidatorRegistration<T extends ExtendedWalletClie
   const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
   logger.log("\nCalling function completeValidatorRegistration...");
-  // TODO: Find a way to use the proper signature of the method
-  const method = securityModule.safeWrite.completeValidatorRegistration as any;
-  const hash = await method([0],
-    {
-      account: client.account!,
-      chain: null,
-      accessList
-    });
+  const hash = await securityModule.safeWrite.completeValidatorRegistration([0], {
+    account: client.account!,
+    chain: null,
+    accessList
+  });
 
   if (waitValidatorVisible) {
     logger.log("Waiting for the validator to be visible on the P-Chain (may take a while)...");
@@ -113,17 +103,16 @@ export async function completeValidatorRegistration<T extends ExtendedWalletClie
   logger.log("completeValidatorRegistration executed successfully, tx hash:", hash);
 }
 
-export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
-  pchainClient: T,
-  securityModule: SecurityModuleContract,
-  balancerValidatorManager: BalancerContract,
-  config: Config<T>,
+export async function completeValidatorRemoval(
+  pchainClient: ExtendedWalletClient,
+  securityModule: IContract<TL1MiddlewareABI, "completeValidatorRemoval"> | IContract<TPoASecurityModuleABI, "completeValidatorRemoval">,
+  balancer: IContract<TBalancerValidatorManagerABI, "getValidator" | "subnetID">,
+  client: ExtendedWalletClient,
   initializeEndValidationTxHash: Hex,
   waitValidatorVisible: boolean,
   nodeIDs?: NodeId[],
 ) {
   logger.log("Completing validator removal...");
-  const client = config.client;
   const receipt = await client.waitForTransactionReceipt({ hash: initializeEndValidationTxHash, confirmations: 1 });
   if (receipt.status === 'reverted') throw new Error(`Transaction ${initializeEndValidationTxHash} reverted, pls resend the removeNode transaction`);
 
@@ -137,8 +126,7 @@ export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
 
   if (messages.length === 0) throw new Error("No messages found in the receipt.");
 
-  let validators = await balancerValidatorManager.multicall(messages.map((m) => ({ name: "getValidator" as const, args: [m.validationID] as const })))
-
+  let validators = await balancer.multicall(messages.map((m) => ({name: "getValidator", args: [m.validationID]})))
   validators = validators
     .filter((v) => {
       if (v.status !== ValidatorStatus.PendingRemoved) logger.log(color.yellow(`Node ${encodeNodeID(v.nodeID)} (status: ${ValidatorStatus[v.status]}) is not pending removed, skipping. `))
@@ -153,7 +141,7 @@ export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
     validators = validators.filter((v) => nodeIDs.includes(encodeNodeID(v.nodeID)));
   }
 
-  const subnetIDHex = await balancerValidatorManager.read.subnetID();
+  const subnetIDHex = await balancer.read.subnetID();
   const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
   const currentValidators = (await getCurrentValidators(client, subnetID))
   const signingSubnetId = await validatedBy(client, messages[0].sourceChainID)
@@ -187,8 +175,8 @@ export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
       );
     }
 
-    const subnetIDHex = await balancerValidatorManager.read.subnetID();
-    const subnetIDC58 = utils.base58check.encode(hexToBytes(subnetIDHex));
+    const subnetIDHexLoop = await balancer.read.subnetID();
+    const subnetIDC58 = utils.base58check.encode(hexToBytes(subnetIDHexLoop));
 
     const justification = await GetRegistrationJustification(nodeID, validationID, subnetIDC58, client, await blockAtTimestamp(client, validators[messageIndex].startTime));
     if (!justification) {
@@ -206,14 +194,11 @@ export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
 
     logger.log("Executing completeEndValidation transaction...");
-    // TODO: Find a way to use the proper signature of the method
-    const method = securityModule.safeWrite.completeValidatorRemoval as any;
-    completeHash = await method([0],
-      {
-        account: client.account!,
-        chain: null,
-        accessList
-      });
+    completeHash = await securityModule.safeWrite.completeValidatorRemoval([0], {
+      account: client.account!,
+      chain: null,
+      accessList
+    });
 
     if (waitValidatorVisible) {
       logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
@@ -225,39 +210,38 @@ export async function completeValidatorRemoval<T extends ExtendedWalletClient>(
   return { nodes: validators.map((n) => encodeNodeID(n.nodeID)), txHash: completeHash };
 }
 
-export async function completeWeightUpdate<T extends ExtendedWalletClient>(
-  pchainClient: T,
-  securityModule: SecurityModuleContract,
-  config: Config<T>,
+export async function completeWeightUpdate(
+  pchainClient: ExtendedWalletClient,
+  securityModule: IContract<TL1MiddlewareABI, "completeValidatorWeightUpdate" | "balancerValidatorManager"> | IContract<TPoASecurityModuleABI, "completeValidatorWeightUpdate" | "balancerValidatorManager">,
+  client: ExtendedWalletClient,
   validatorWeightUpdateTxHash: Hex,
   nodeIDs?: NodeId[]
 ) {
   logger.log("Completing node stake update...");
-  const client = config.client;
   const receipt = await client.waitForTransactionReceipt({ hash: validatorWeightUpdateTxHash })
 
   const balancerAddress = await securityModule.read.balancerValidatorManager();
-  const balancer = await getBalancerValidatorManager(config, balancerAddress);
-  let validationIds;
+  const balancer = await getBalancerValidatorManager(client, balancerAddress);
+
+  let validationIds: Hex[] | undefined;
   if (nodeIDs) {
-    validationIds = (await client.multicall({
-      contracts: nodeIDs.map((id) => {
-        return {
-          address: balancer.address,
-          abi: balancer.abi,
-          functionName: 'getNodeValidationID',
-          args: [parseNodeID(id)]
-        }
-      })
-    })).reduce((acc: Hex[], res: any) => {
-      if (res.result) {
-        acc.push(res.result as Hex)
+    const rawResults = await client.multicall({
+      contracts: nodeIDs.map(id => ({
+        address: balancer.address,
+        abi: BalancerValidatorManagerAbi,
+        functionName: 'getNodeValidationID' as const,
+        args: [parseNodeID(id)] as const
+      }))
+    });
+    validationIds = rawResults.reduce<Hex[]>((acc, res, i) => {
+      if (res.status === 'success') {
+        acc.push(res.result);
       } else {
-        logger.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[acc.length]}`))
-      };
+        logger.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[i]}`));
+      }
       return acc;
-    }, [] as Hex[]);
-  } else validationIds = undefined;
+    }, []);
+  }
 
   const InitiatedValidatorWeightUpdates = parseEventLogs({
     abi: BalancerValidatorManagerAbi,
@@ -309,11 +293,10 @@ export async function completeWeightUpdate<T extends ExtendedWalletClient>(
 
     const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
     const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-    // TODO: Find a way to use the proper signature of the method
-    const method = securityModule.safeWrite.completeValidatorWeightUpdate as any;
-    const hash = await method([0],
-      { chain: client.chain, accessList }
-    );
+    const hash = await securityModule.safeWrite.completeValidatorWeightUpdate([0], {
+      chain: client.chain,
+      accessList
+    });
     logger.log("completeStakeUpdate done, tx hash:", hash);
   }
 }

@@ -15,17 +15,20 @@ import {
   type ContractEventName,
 } from 'viem';
 import { type ExtendedClient, type ExtendedWalletClient } from './types';
+import { type SafeWriteFn, type MulticallFn, type MulticallOptions } from './contract';
+export type { MulticallOptions } from './contract';
 import { logger } from '../logger/index';
 import AhoCorasick from 'modern-ahocorasick';
-import type { Config } from '../config';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-// EnhancedContract: adds address, name, multicall, getLogs on top of viem's GetContractReturnType
+// EnhancedContract: replaces viem's options-style `read` with direct-args signatures,
+// adds address, name, multicall, getLogs.
 export type EnhancedContract<TAbi extends Abi, C extends ExtendedClient> =
-  GetContractReturnType<TAbi, C> & {
+  Omit<GetContractReturnType<TAbi, C>, 'read'> & {
     address: Hex;
     name: string;
+    read: ContractReadMap<TAbi>;
     multicall: MulticallFn<TAbi>;
     getLogs: GetLogsFn<TAbi>;
   };
@@ -33,51 +36,20 @@ export type EnhancedContract<TAbi extends Abi, C extends ExtendedClient> =
 export type SafeEnhancedContract<TAbi extends Abi, C extends ExtendedClient> =
   EnhancedContract<TAbi, C> & { safeWrite: SafeWriteFn<TAbi> };
 
-// Internal helpers for multicall / getLogs typing
+// MulticallFn / MulticallOptions / SafeWriteFn all imported from contract.ts — single source
+// of truth, eliminates "two different types with this name" errors when SafeEnhancedContract ⊆ IContract.
 
-type ReadFunctionNames<TAbi extends Abi> = ContractFunctionName<TAbi, 'view' | 'pure'>;
-
-type HasArgs<TAbi extends Abi, FName extends ReadFunctionNames<TAbi>> =
-  ContractFunctionArgs<TAbi, 'view' | 'pure', FName> extends readonly [] ? false : true;
-
-type MulticallItem<TAbi extends Abi, FName extends ReadFunctionNames<TAbi> = ReadFunctionNames<TAbi>> =
-  FName extends ReadFunctionNames<TAbi>
-  ? HasArgs<TAbi, FName> extends true
-  ? { name: FName; args: ContractFunctionArgs<TAbi, 'view' | 'pure', FName> }
-  : FName | { name: FName }
-  : never;
-
-type ExtractFunctionName<TAbi extends Abi, Item> =
-  Item extends string ? Item :
-  Item extends { name: infer N } ? N extends ReadFunctionNames<TAbi> ? N : never :
-  never;
-
-type MulticallItemResult<TAbi extends Abi, Item> =
-  ExtractFunctionName<TAbi, Item> extends ReadFunctionNames<TAbi>
-  ? ContractFunctionReturnType<TAbi, 'view' | 'pure', ExtractFunctionName<TAbi, Item>>
-  : never;
-
-type MulticallResultsDetailed<TAbi extends Abi, Items extends readonly MulticallItem<TAbi>[]> = {
-  [K in keyof Items]: { name: ExtractFunctionName<TAbi, Items[K]>; result: MulticallItemResult<TAbi, Items[K]> }
+// Direct-args read map — overrides viem's options-style signatures so that
+// SafeEnhancedContract.read is assignable to IContract.read.
+type ContractReadMap<TAbi extends Abi> = {
+  [K in ContractFunctionName<TAbi, 'view' | 'pure'>]:
+    ContractFunctionArgs<TAbi, 'view' | 'pure', K> extends readonly []
+    ? () => Promise<ContractFunctionReturnType<TAbi, 'view' | 'pure', K>>
+    : (args: ContractFunctionArgs<TAbi, 'view' | 'pure', K>) => Promise<ContractFunctionReturnType<TAbi, 'view' | 'pure', K>>;
 };
 
-type MulticallResultsSimple<TAbi extends Abi, Items extends readonly MulticallItem<TAbi>[]> = {
-  [K in keyof Items]: MulticallItemResult<TAbi, Items[K]>
-};
-
-export interface MulticallOptions<D extends boolean = false, S extends boolean = true> {
-  strict?: S;
-  details?: D;
-}
-
-type MulticallFn<TAbi extends Abi> = {
-  <const Items extends readonly MulticallItem<TAbi>[], D extends boolean = false, S extends boolean = true>(
-    items: Items,
-    options?: MulticallOptions<D, S>
-  ): Promise<D extends true ? MulticallResultsDetailed<TAbi, Items> : MulticallResultsSimple<TAbi, Items>>;
-};
-
-type SafeWriteFn<TAbi extends Abi> = Record<string, (...args: any[]) => Promise<Hex>>;
+// SafeWriteFn is imported from contract.ts — properly maps each write function name to its
+// typed signature, which lets TypeScript verify SafeEnhancedContract ⊆ IContract.
 
 type EventName<TAbi extends Abi> = ContractEventName<TAbi>
 
@@ -355,11 +327,11 @@ export function withSafeWrite<const TAbi extends Abi, C extends ExtendedClient>(
 export const getContract = async <const TAbi extends Abi, C extends ExtendedClient>(
   abi: TAbi,
   abiName: string,
-  config: Config<C>,
+  client: C,
   address?: Address,
   selectors?: readonly string[],
 ): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<TAbi, C> : EnhancedContract<TAbi, C>> => {
-  const { client, wait = 0, skipAbiValidation = false } = config;
+  const { wait = 0, skipAbiValidation = false } = client;
   const envVar = abiName.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
   if (!address) {
     if (process.env[envVar]) address = process.env[envVar] as Address;

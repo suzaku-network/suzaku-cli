@@ -15,14 +15,14 @@ import path from 'path';
 
 export type { Network, Chains, Addresses, PChainAddress, ExtendedClient, ExtendedWalletClient, ExtendedPublicClient };
 
-export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient>;
+export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedWalletClient>;
+export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex): Promise<ExtendedPublicClient>;
-export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedClient> {
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedClient> {
   const envFileBase = path.resolve(__dirname, '..', 'defaults', '.env.');
   const network: Network = chainList[chain].testnet ? 'fuji' : 'mainnet';
   configDotenv({ path: envFileBase + network });
   if ((network as string) !== chain) configDotenv({ path: envFileBase + chain });
-  return _generateClient(chain, privateKey as any, safe);
+  return _generateClient(chain, privateKey as any, safe, options);
 }

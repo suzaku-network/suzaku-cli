@@ -1,6 +1,5 @@
 import type { Address } from 'viem';
 import { getContract } from '../client/viemUtils';
-import type { Config } from '../config';
 import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
@@ -1891,7 +1890,7 @@ const abi = [
 export default abi;
 
 export async function getKiteStakingManager<C extends ExtendedClient>(
-  config: Config<C>,
+  config: C,
   address?: Address,
 ): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
   return getContract(abi, 'KiteStakingManager', config, address, selectors) as any;

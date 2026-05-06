@@ -1,4 +1,4 @@
-import { encodeFunctionData, getAddress, parseEventLogs, type Abi, type Hex } from 'viem';
+import { encodeFunctionData, getAddress, parseEventLogs, type Abi, type Hex, type ContractFunctionName } from 'viem';
 import { type Address } from 'viem';
 import { getContract as viemGetContract } from 'viem';
 import {
@@ -16,7 +16,7 @@ import { nodeLogger as logger } from './nodeLogger';
 import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './client/safeUtils';
 import { isCastMode, logCastCall, logCastSend, CAST_DUMMY_HASH } from './castUtils';
-import type { Config } from '../core/config';
+import type { Config } from './config';
 
 export * from '../core/client/viemUtils';
 export { setCastMode, isCastMode } from './castUtils';
@@ -218,3 +218,46 @@ export const getContract = async <const TAbi extends Abi, C extends ExtendedClie
     : withSW;
   return withCastMode(withGS as SafeEnhancedContract<TAbi, C>, abi, client) as any;
 };
+
+// ── fromContract ──────────────────────────────────────────────────────────────
+// Maps an EnhancedContract to any interface T:
+//   - "xyzBatch" keys → contract.multicall with function name "xyz"
+//   - other keys     → contract.read[key] or contract.safeWrite[key]
+//
+// TypeScript verifies that all required function names exist in the ABI:
+//   - non-batch keys of T must be ContractFunctionName<TAbi>
+//   - base names of "XxxBatch" keys must be ContractFunctionName<TAbi>
+
+type NonBatchKeys<T> = { [K in keyof T & string]: K extends `${string}Batch` ? never : K }[keyof T & string];
+type BatchBaseNames<T> = { [K in keyof T & string]: K extends `${infer B}Batch` ? B : never }[keyof T & string];
+type RequiredFnNames<T> = NonBatchKeys<T> | BatchBaseNames<T>;
+
+type ContractAccessor = {
+  read?: Record<string, (...args: readonly unknown[]) => Promise<unknown>>;
+  safeWrite?: Record<string, (...args: readonly unknown[]) => Promise<Hex>>;
+  multicall: (items: readonly { name: string; args: readonly unknown[] }[]) => Promise<readonly unknown[]>;
+};
+
+export function fromContract<T, TAbi extends Abi, C extends ExtendedClient>(
+  contract: [RequiredFnNames<T>] extends [ContractFunctionName<TAbi>]
+    ? EnhancedContract<TAbi, C>
+    : never
+): T;
+export function fromContract<T, TAbi extends Abi, C extends ExtendedClient>(
+  contract: EnhancedContract<TAbi, C>
+): T {
+  const c = contract as unknown as ContractAccessor;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Proxy({} as any, {
+    get(_, prop: string | symbol): unknown {
+      if (typeof prop !== 'string') return undefined;
+      if (prop.endsWith('Batch')) {
+        const fnName = prop.slice(0, -5);
+        return (argsBatch: readonly (readonly unknown[])[]) =>
+          c.multicall(argsBatch.map(args => ({ name: fnName, args })));
+      }
+      if (c.read && prop in c.read) return c.read[prop];
+      if (c.safeWrite && prop in c.safeWrite) return c.safeWrite[prop];
+    },
+  }) as T;
+}

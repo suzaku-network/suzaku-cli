@@ -8,11 +8,12 @@ import { type ExtendedWalletClient, type ExtendedPublicClient, type ExtendedClie
 import { getLedgerAccount, toSafeProvider } from './ledgerUtils';
 import { logger } from '../../core/logger/index';
 
-export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex): Promise<ExtendedWalletClient>;
-export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex): Promise<ExtendedPublicClient>;
-export async function generateClient(chain: Chains): Promise<ExtendedPublicClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedClient>;
-export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex): Promise<ExtendedClient> {
+type ClientOptions = { wait?: number; skipAbiValidation?: boolean };
+
+export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', safe?: Hex, options?: ClientOptions): Promise<ExtendedWalletClient>;
+export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex, options?: ClientOptions): Promise<ExtendedPublicClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: ClientOptions): Promise<ExtendedClient>;
+export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: ClientOptions): Promise<ExtendedClient> {
   const network: Network = chainList[chain].testnet ? 'fuji' : 'mainnet';
 
   if (network !== chain && safe) {
@@ -54,6 +55,7 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
       ledger: isLedger,
       safe: safeClient,
       addresses: { C: cChainAddress, P: pChainAddress },
+      ...options,
     } as ExtendedWalletClient;
   }
 
@@ -76,5 +78,6 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
     ...publicClient,
     network,
     safe: safeClient,
+    ...options,
   } as ExtendedPublicClient;
 }

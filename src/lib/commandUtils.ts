@@ -2,25 +2,23 @@ import { logger } from "./logger";
 import { Command as CommandBase, OptionValues } from "@commander-js/extra-typings";
 import { ExtendedClient, ExtendedWalletClient, ExtendedPublicClient } from "../client";
 import { generateClient } from "../client";
-import { Config, getConfig } from "../config";
 import { Hex } from "viem";
 
 declare module "@commander-js/extra-typings" {
   interface Command<
     Args extends any[] = [],
-    Opts extends OptionValues = {},
-    GlobalOpts extends OptionValues = {}
+    Opts extends OptionValues = {}
   > {
     asyncAction(
       options: { signer: true },
-      fn: (this: this, config: Config<ExtendedWalletClient>, ...args: [...Args, Opts, this]) => void | Promise<void>,
+      fn: (this: this, client: ExtendedWalletClient, ...args: [...Args, Opts, this]) => void | Promise<void>,
     ): this;
     asyncAction(
       options: { signer?: false },
-      fn: (this: this, config: Config<ExtendedPublicClient>, ...args: [...Args, Opts, this]) => void | Promise<void>,
+      fn: (this: this, client: ExtendedPublicClient, ...args: [...Args, Opts, this]) => void | Promise<void>,
     ): this;
     asyncAction(
-      fn: (this: this, config: Config<ExtendedPublicClient>, ...args: [...Args, Opts, this]) => void | Promise<void>,
+      fn: (this: this, client: ExtendedPublicClient, ...args: [...Args, Opts, this]) => void | Promise<void>,
     ): this;
   }
 }
@@ -49,9 +47,8 @@ CommandBase.prototype.asyncAction = function (...fnArgs: any[]) {
         wait?: number;
         skipAbiValidation?: boolean;
       };
-      const client = await generateClient(opts.network, options.signer ? opts.privateKey : undefined, opts.safe);
-      const config = getConfig(client, opts.wait, opts.skipAbiValidation);
-      const result = await (fn as any).call(this, config, ...args);
+      const client = await generateClient(opts.network, options.signer ? opts.privateKey : undefined, opts.safe, { wait: opts.wait, skipAbiValidation: opts.skipAbiValidation });
+      const result = await (fn as any).call(this, client, ...args);
       logger.printJson();
       return result;
     } catch (error: any) {
