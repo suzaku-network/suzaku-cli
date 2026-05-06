@@ -4,7 +4,7 @@ import { Address } from 'micro-eth-signer';
 import { type Hex } from 'viem';
 import { type Addresses } from '../core/client/types';
 
-export * from '../core/avalancheUtils';
+export * from '../core/lib/avalancheUtils';
 
 export function getAddresses(privateKeyHex: string, network: string): Addresses {
     const networkPrefix = network === 'mainnet' ? 'avax' : 'fuji';

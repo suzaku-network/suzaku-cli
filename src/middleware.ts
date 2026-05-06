@@ -7,8 +7,7 @@ import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
 import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
-import { completeValidatorRemoval } from './securityModule';
-import { Validator, ValidatorStatus, ValidatorStatusNames } from './balancer';
+import { completeValidatorRemoval, Validator, ValidatorStatus, ValidatorStatusNames, L1MiddlewareABI, BalancerValidatorManagerABI, getBalancerValidatorManager } from '@suzaku-sdk/core';
 import { getCurrentValidators } from './lib/pChainUtils';
 import { utils } from '@avalabs/avalanchejs';
 
@@ -306,7 +305,7 @@ export async function middlewareGetNodeLogs(
     middleware.address,
     Number(from),
     Number(to),
-    config.abis.L1Middleware,
+    L1MiddlewareABI,
     ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
     snowscanApiKey,
     snowscanApiKey ? false : true,
@@ -323,14 +322,14 @@ export async function middlewareGetNodeLogs(
       completeEventsContractAddress,
       Number(from),
       Number(to),
-      config.abis.BalancerValidatorManager,
+      BalancerValidatorManagerABI,
       undefined,
       snowscanApiKey,
       snowscanApiKey ? false : true,
       bar
     ));
   }
-  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress as Hex);
+  const balancer = await getBalancerValidatorManager(config, balancerAddress as Hex);
 
   const allLogs = await Promise.all(logsProm);
   let logs = allLogs.flat().sort((a, b) => Number(a.blockNumber - b.blockNumber));
@@ -488,7 +487,7 @@ export async function weightSync(
     }
   }
   const balancerAddress = await middleware.read.BALANCER();
-  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress);
+  const balancer = await getBalancerValidatorManager(config, balancerAddress);
 
   let pendingRemovalNodes: { nodeID: Hex, validationID: Hex, txHash?: Hex }[] = [];
 
@@ -499,8 +498,8 @@ export async function weightSync(
     const validators = await getCurrentValidators(config.client, subnetId);
     const startBlock = await blockAtTimestamp(config.client, BigInt(await middleware.read.getEpochStartTs([currentEpoch - 2])));
     const logs = await middleware.getLogs({ event: "NodeRemoved", fromBlock: startBlock });
-    
-    const combinedNodes = Array.from(new Set([...validators.map(v => ({ nodeID: parseNodeID(v.nodeID as NodeId), validationID: bytesToHex(utils.base58check.decode(v.validationID!))  })), ...logs.map(l => ({ nodeID: l.args.nodeId!, validationID: l.args.validationID!, txHash: l.transactionHash! }))]));
+
+    const combinedNodes = Array.from(new Set([...validators.map(v => ({ nodeID: parseNodeID(v.nodeID as NodeId), validationID: bytesToHex(utils.base58check.decode(v.validationID!)) })), ...logs.map(l => ({ nodeID: l.args.nodeId!, validationID: l.args.validationID!, txHash: l.transactionHash! }))]));
 
     const statuses = await balancer.multicall(combinedNodes.map((v, i) => {
       return {
@@ -518,7 +517,7 @@ export async function weightSync(
   if (pendingRemovalNodes.length > 0) {
     logger.log(`Found ${pendingRemovalNodes.length} nodes pending removal`);
     const processedTxHashes: Hex[] = [];
-    
+
     for (const pendingNode of pendingRemovalNodes) {
       if (!pendingNode.txHash) {
         pendingNode.txHash = await balancer.safeWrite.resendValidatorRemovalMessage([pendingNode.validationID]);
@@ -530,18 +529,18 @@ export async function weightSync(
       processedTxHashes.push(pendingNode.txHash);
       logger.log(`Node pending removal found: ${pendingNode.nodeID}`);
       try {
-          const { nodes, txHash } = await completeValidatorRemoval(
-            config.client,
-            middleware,
-            balancer,
-            config,
-            pendingNode.txHash,
-            false // waitValidatorVisible
-          );
-          nodesRemoved.push(...nodes);
-        } catch (error) {
-          logger.error(error);
-        }
+        const { nodes, txHash } = await completeValidatorRemoval(
+          config.client,
+          middleware,
+          balancer,
+          config,
+          pendingNode.txHash,
+          false // waitValidatorVisible
+        );
+        nodesRemoved.push(...nodes);
+      } catch (error) {
+        logger.error(error);
+      }
     }
   }
   logger.log(nodesRemoved)
@@ -578,7 +577,7 @@ export async function predictForceUpdateImpact(
     'PRIMARY_ASSET_CLASS'
   ]);
 
-  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress)
+  const balancer = await getBalancerValidatorManager(config, balancerAddress)
 
   const [, securityModuleMaxWeight] = await balancer.read.getSecurityModuleWeights([middleware.address])
 
@@ -754,7 +753,7 @@ export async function operatorsInfo(
   }))
 
   const reducedOperatorValidators = operatorValidators.reduce((acc, validator, index) => {
-    acc[validator.nodeID] = {...validator, validationID: operatorValidatorsValidationIDs[index], stake: Number(operatorNodesStake[index])};
+    acc[validator.nodeID] = { ...validator, validationID: operatorValidatorsValidationIDs[index], stake: Number(operatorNodesStake[index]) };
     return acc;
   }, {} as Record<Hex, Validator & { validationID: Hex, stake: Number }>);
 
@@ -778,6 +777,6 @@ export async function operatorsInfo(
       })
     }
   })
-  
-  return {...operatorsInfo, currentEpoch: results[0], lastGlobalNodeStakeUpdateEpoch: results[2], needsStakeUpdate: results[2] !== results[0]};
+
+  return { ...operatorsInfo, currentEpoch: results[0], lastGlobalNodeStakeUpdateEpoch: results[2], needsStakeUpdate: results[2] !== results[0] };
 }

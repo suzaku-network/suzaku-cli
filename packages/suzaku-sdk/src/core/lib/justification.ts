@@ -3,9 +3,9 @@ import { Buffer } from 'buffer';
 import { parseAbiItem, Hex, hexToBytes } from 'viem';
 import { utils } from '@avalabs/avalanchejs';
 import { sha256 } from '@noble/hashes/sha2';
-import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from './warpUtils';
-import { ExtendedPublicClient } from '../client';
-import { logger } from './logger';
+import { SolidityValidationPeriod, packRegisterL1ValidatorPayload, unpackRegisterL1ValidatorPayload } from '../lib/warpUtils';
+import { ExtendedPublicClient } from '../client/types';
+import { logger } from '../logger/index';
 
 const codecVersion = 0;
 const REGISTER_L1_VALIDATOR_MESSAGE_TYPE_ID = 1;

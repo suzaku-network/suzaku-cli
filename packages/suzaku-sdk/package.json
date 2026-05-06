@@ -17,6 +17,7 @@
     "type": "git",
     "url": "https://github.com/suzaku-network/suzaku-cli.git"
   },
+  "sideEffects": false,
   "type": "module",
   "exports": {
     "./core": {

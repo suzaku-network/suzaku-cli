@@ -13,15 +13,15 @@ export type { ExtendedWalletClient, ExtendedPublicClient, ExtendedClient } from 
 export { setCastMode, isCastMode, logCastCall, logCastSend, logPChainIssueTx, formatCastCommand, CAST_DUMMY_HASH } from './castUtils';
 export type { CastCommandOptions } from './castUtils';
 
-export { withSafeWrite, withMulticall, curriedContract, contractAbiValidation, withGnosisSafe, withCastMode, handleContractError } from './viemUtils';
-export type { SuzakuABINames, TSuzakuABI, SuzakuContract, SafeSuzakuContract, TWriteSuzakuContract, CurriedContractFn, CurriedSuzakuContractMap } from './viemUtils';
+export { withSafeWrite, withMulticall, getContract, contractAbiValidation, withGnosisSafe, withCastMode, handleContractError } from './viemUtils';
+export type { EnhancedContract, SafeEnhancedContract } from './viemUtils';
 
 export { getConfig, pChainChainID } from './config';
 export type { Config } from './config';
 
 export { getAddresses, getCchainAddress, retryWhileError } from './avalancheUtils';
 
-export { collectSignatures, collectSignaturesInitializeValidatorSet } from './warpUtils';
+export { collectSignatures, collectSignaturesInitializeValidatorSet } from '../core/lib/warpUtils';
 
 export {
     pChainImport, requirePChainBallance, requireCChainBallance, getERC20Events,

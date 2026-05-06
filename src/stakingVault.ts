@@ -1,6 +1,7 @@
 import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { Config } from './config';
-import { CurriedSuzakuContractMap, SafeSuzakuContract, SuzakuContract, withSafeWrite } from './lib/viemUtils';
+import { SafeSuzakuContract, SuzakuContract, withSafeWrite } from './lib/viemUtils';
+import { getKiteStakingManager } from '@suzaku-sdk/core';
 import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
 import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
@@ -9,14 +10,15 @@ import { color } from 'console-log-colors';
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
 import { getValidationUptimeMessage } from './uptime';
 import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from './lib/pChainUtils';
-import { GetRegistrationJustification } from './lib/justification';
+import { GetRegistrationJustification } from '@suzaku-sdk/core/lib/justification';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
 import { pChainChainID } from './config';
+import { IWarpMessengerABI } from '@suzaku-sdk/core';
 
 export async function getValidatorManagerAddress(config: Config<ExtendedWalletClient>, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
     const stakingManagerAddress = await stakingVault.read.getStakingManager();
-    const stakingManager = await config.contracts.KiteStakingManager(stakingManagerAddress);
+    const stakingManager = await getKiteStakingManager(config, stakingManagerAddress);
     const stakingManagerStorageLocation = await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION() as Hex
     const validatorManagerAddress = bytes32ToAddress((await config.client.getStorageAt({ address: stakingManagerAddress, slot: stakingManagerStorageLocation })) as Hex) as Hex;
     return { validatorManagerAddress, stakingManager, stakingManagerStorageLocation };
@@ -431,7 +433,7 @@ export async function completeValidatorRegistrationStakingVault(
 
     // Parse IWarpMessenger event to get the unsigned warp message
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -661,7 +663,7 @@ export async function completeValidatorRemovalStakingVault(
     }
 
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -932,7 +934,7 @@ export async function completeDelegatorRegistrationStakingVault(
 
     // Get warp logs to find the weight message
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -1159,7 +1161,7 @@ export async function completeDelegatorRemovalStakingVault(
 
     // Get warp logs
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -1362,8 +1364,8 @@ export async function getFeesInfo(stakingVault: StakingVaultContract) {
  */
 export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
     const [operatorList, maxOperators, maxValidatorsPerOp, decimals, symbol] = await stakingVault.multicall([
-        'getOperatorList', 'getMaxOperators', 'getMaxValidatorsPerOperator', 'decimals', 'symbol',
-    ]);
+        'getOperatorList', 'getMaxOperators', 'getMaxValidatorsPerOperator', 'decimals', 'symbol',]
+    );
 
     logger.log(color.bold(`\n═══ Operators Info ═══`));
     logger.log(`  Max Operators:               ${maxOperators}`);

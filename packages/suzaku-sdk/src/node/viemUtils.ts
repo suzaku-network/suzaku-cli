@@ -1,32 +1,31 @@
 import { encodeFunctionData, getAddress, parseEventLogs, type Abi, type Hex } from 'viem';
 import { type Address } from 'viem';
-import { SuzakuABI } from '../core/abis/index';
-import { getContract } from 'viem';
+import { getContract as viemGetContract } from 'viem';
 import {
   withSafeWrite as coreWithSafeWrite,
   withMulticall,
   contractAbiValidation,
   bigintReplacer,
-  type SuzakuABINames,
-  type SuzakuContract,
-  type SafeSuzakuContract,
-  type CurriedContractFn,
-} from '../core/viemUtils';
+  getContract as coreGetContract,
+  type EnhancedContract,
+  type SafeEnhancedContract,
+} from '../core/client/viemUtils';
 import { type ExtendedWalletClient } from './client/types';
 import { type ExtendedClient } from '../core/client/types';
 import { nodeLogger as logger } from './nodeLogger';
 import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './client/safeUtils';
-import { isCastMode, logCastCall, logCastSend } from './castUtils';
+import { isCastMode, logCastCall, logCastSend, CAST_DUMMY_HASH } from './castUtils';
+import type { Config } from '../core/config';
 
-export * from '../core/viemUtils';
+export * from '../core/client/viemUtils';
 export { setCastMode, isCastMode } from './castUtils';
 
 // ── handleContractError (node version — colored output) ───────────────────────
 
-export function handleContractError(error: any, abi: SuzakuABINames): never {
+export function handleContractError(error: any, abiName: string): never {
   throw logger.formatError(
-    error?.cause ?? error instanceof Error ? [`${abi} ${error.cause ?? error}`] : [error],
+    error?.cause ?? error instanceof Error ? [`${abiName} ${error.cause ?? error}`] : [error],
     3,
   );
 }
@@ -37,12 +36,13 @@ export function handleContractError(error: any, abi: SuzakuABINames): never {
 // for the non-Safe path (delegated to the core-proxied write).
 // Also overrides contract.safeWrite to simulate from the Safe's address.
 
-export function withGnosisSafe<T extends SuzakuABINames>(
-  contract: SafeSuzakuContract[T],
-  abi: T,
-  client: ExtendedWalletClient,
+export function withGnosisSafe<const TAbi extends Abi, C extends ExtendedWalletClient>(
+  contract: SafeEnhancedContract<TAbi, C>,
+  abi: TAbi,
+  abiName: string,
+  client: C,
   confirmations = 1,
-): SafeSuzakuContract[T] {
+): SafeEnhancedContract<TAbi, C> {
   if (!('write' in contract) || !('safe' in client)) return contract;
 
   const gnosisWriteHandler: ProxyHandler<Record<string, any>> = {
@@ -54,7 +54,7 @@ export function withGnosisSafe<T extends SuzakuABINames>(
 
         const transaction = {
           to: contract.address,
-          data: encodeFunctionData({ abi: SuzakuABI[abi] as Abi, functionName: prop as string, args }),
+          data: encodeFunctionData({ abi: abi as Abi, functionName: prop as string, args }),
           chain: null,
           account: client.account,
           ...options,
@@ -64,7 +64,7 @@ export function withGnosisSafe<T extends SuzakuABINames>(
         const selection = await handleTransactionStrategy(
           transaction,
           client.safe,
-          SuzakuABI[abi] as Abi,
+          abi as Abi,
           (client as ExtendedWalletClient).addresses.C,
         );
 
@@ -95,10 +95,10 @@ export function withGnosisSafe<T extends SuzakuABINames>(
           }
           default:
             logger.debug('Skipping a Safe transaction');
-            return undefined;
+            return CAST_DUMMY_HASH;
         }
 
-        if (!hash) return undefined;
+        if (!hash) throw new Error(`Safe transaction returned no hash for ${contract.name}.${prop as string}`);
 
         const sig = `${contract.name}.${prop as string}(${args?.join ? args.join(', ') : args})`;
         logger.addData('txs', { to: contract.address, invocation: sig, hash, options });
@@ -106,7 +106,7 @@ export function withGnosisSafe<T extends SuzakuABINames>(
         if (receipt.status === 'reverted') {
           throw logger.formatError([`Transaction ${color.red(sig)} (hash: ${hash}) reverted:\n` + JSON.stringify(receipt.logs, bigintReplacer)], 3);
         }
-        const logs = parseEventLogs({ abi: SuzakuABI[abi], logs: receipt.logs });
+        const logs = parseEventLogs({ abi: abi as Abi, logs: receipt.logs });
         if (logs.length > 0) {
           logger.log('\nLogs emitted during the transaction:');
           logger.log(logs.map((log: any) => `  ${color.magenta(log.eventName)}${JSON.stringify(log.args, bigintReplacer)}`).join('\n'));
@@ -134,7 +134,7 @@ export function withGnosisSafe<T extends SuzakuABINames>(
           }
           return await (contract as any).write[prop as string](args, options);
         } catch (error: any) {
-          handleContractError(error, abi);
+          handleContractError(error, abiName);
         }
       };
     },
@@ -146,11 +146,11 @@ export function withGnosisSafe<T extends SuzakuABINames>(
 // ── withCastMode ──────────────────────────────────────────────────────────────
 // Outermost wrapper: intercepts write and read in cast mode to log cast commands.
 
-export function withCastMode<T extends SuzakuABINames>(
-  contract: SafeSuzakuContract[T],
-  abi: T,
-  client: ExtendedClient,
-): SafeSuzakuContract[T] {
+export function withCastMode<const TAbi extends Abi, C extends ExtendedClient>(
+  contract: SafeEnhancedContract<TAbi, C>,
+  abi: TAbi,
+  client: C,
+): SafeEnhancedContract<TAbi, C> {
   if ('write' in contract) {
     (contract as any).write = new Proxy((contract as any).write as Record<string, any>, {
       get(target, prop) {
@@ -159,8 +159,8 @@ export function withCastMode<T extends SuzakuABINames>(
         return async (args: any, options: any) => {
           if (isCastMode()) {
             const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-            logCastSend(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, Array.isArray(args) ? args : args != null ? [args] : [], rpcUrl, options);
-            return undefined;
+            logCastSend(contract.name, contract.address, abi as any, prop as string, Array.isArray(args) ? args : args != null ? [args] : [], rpcUrl, options);
+            return CAST_DUMMY_HASH;
           }
           return fn(args, options);
         };
@@ -176,7 +176,7 @@ export function withCastMode<T extends SuzakuABINames>(
         return async (...args: any[]) => {
           if (isCastMode()) {
             const rpcUrl = client.chain?.rpcUrls?.default?.http?.[0];
-            logCastCall(contract.name, contract.address, SuzakuABI[abi] as any, prop as string, args, rpcUrl);
+            logCastCall(contract.name, contract.address, abi as any, prop as string, args, rpcUrl);
           }
           return fn(...args);
         };
@@ -187,32 +187,34 @@ export function withCastMode<T extends SuzakuABINames>(
   return contract;
 }
 
-// ── curriedContract (node — composes core + Gnosis + cast mode) ───────────────
+// ── getContract (node — composes core + Gnosis + cast mode) ──────────────────
 
-export const curriedContract = <T extends SuzakuABINames, C extends ExtendedClient>(
-  abi: T,
-  client: C,
-  wait = 0,
-  skipAbiValidation: boolean = false,
-): CurriedContractFn<T, C> =>
-  async (address?: Address) => {
-    const envVar = abi.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
-    if (!address) {
-      if (process.env[envVar]) address = process.env[envVar] as Address;
-      else throw new Error(`Address is required to create a contract instance for ${abi}. Please provide associated option or set as environment variable ${envVar}`);
-    }
-    if (!skipAbiValidation) {
-      await contractAbiValidation(client, abi.includes('StakingVault') ? (['StakingVault'] as T[]) : [abi], address);
-    }
+export const getContract = async <const TAbi extends Abi, C extends ExtendedClient>(
+  abi: TAbi,
+  abiName: string,
+  config: Config<C>,
+  address?: Address,
+  selectors?: readonly string[],
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<TAbi, C> : EnhancedContract<TAbi, C>> => {
+  const { client, wait = 0, skipAbiValidation = false } = config;
+  const envVar = abiName.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+  if (!address) {
+    if (process.env[envVar]) address = process.env[envVar] as Address;
+    else throw new Error(`Address is required to create a contract instance for ${abiName}. Please provide associated option or set as environment variable ${envVar}`);
+  }
+  if (!skipAbiValidation && selectors) {
+    await contractAbiValidation(client, selectors, abiName, address);
+  }
 
-    const base = withMulticall(
-      getContract({ abi: SuzakuABI[abi], address, client }) as SuzakuContract[T],
-      abi,
-      client,
-    );
-    const withSW = coreWithSafeWrite(base, abi, client, wait);
-    const withGS = 'safe' in client
-      ? withGnosisSafe(withSW, abi, client as unknown as ExtendedWalletClient, wait)
-      : withSW;
-    return withCastMode(withGS, abi, client) as any;
-  };
+  const base = withMulticall(
+    viemGetContract({ abi, address, client }) as any,
+    abi,
+    abiName,
+    client,
+  );
+  const withSW = coreWithSafeWrite(base, abi, client, wait);
+  const withGS = 'safe' in client
+    ? withGnosisSafe(withSW as any, abi, abiName, client as unknown as ExtendedWalletClient, wait)
+    : withSW;
+  return withCastMode(withGS as SafeEnhancedContract<TAbi, C>, abi, client) as any;
+};

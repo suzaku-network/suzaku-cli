@@ -1,19 +1,20 @@
 import { hexToBytes, type Hex } from 'viem';
 import { type ExtendedWalletClient } from './client/types';
 import { requirePChainBallance } from './transferUtils';
-import { collectSignaturesInitializeValidatorSet, packWarpIntoAccessList } from './warpUtils';
+import { collectSignaturesInitializeValidatorSet, packWarpIntoAccessList } from '../core/lib/warpUtils';
 import { nodeLogger as logger } from './nodeLogger';
 import { getConfig } from './config';
+import { getValidatorManager } from '../core/ValidatorManager/abi';
 import { type Result } from '@mobily/ts-belt';
-import type NodeConfig from '../core/pChainUtils';
+import type NodeConfig from '../core/lib/pChainUtils';
 import {
     convertToL1,
     validatedBy,
     getValidatorManagerInitializationArgsFromWarpTx,
     issuePchainTx,
-} from '../core/pChainUtils';
+} from '../core/lib/pChainUtils';
 
-export * from '../core/pChainUtils';
+export * from '../core/lib/pChainUtils';
 
 export async function increasePChainValidatorBalance(
     client: ExtendedWalletClient,
@@ -76,7 +77,7 @@ export async function convertSubnetToL1(params: {
     const args = await getValidatorManagerInitializationArgsFromWarpTx(convertTxId, params.subnetId, client);
 
     const config = getConfig(client, 1, true);
-    const validatorManager = await config.contracts.ValidatorManager(params.validatorManager);
+    const validatorManager = await getValidatorManager(config, params.validatorManager);
     const init = {
         admin: client.addresses.C,
         subnetID: args[0].subnetID,

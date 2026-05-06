@@ -87,7 +87,7 @@ export async function computeValidatorUptime(
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
 
-  const txHash = await uptimeTracker.write.computeValidatorUptime([0], { accessList, chain: null });
+  const txHash = await uptimeTracker.safeWrite.computeValidatorUptime([0], { accessList });
 
   logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;

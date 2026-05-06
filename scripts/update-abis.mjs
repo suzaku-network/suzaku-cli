@@ -8,11 +8,12 @@ import { toFunctionSelector } from 'viem';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_TARGET_DIR = path.resolve(__dirname, '../src/abis');
+const SDK_CORE_DIR = path.resolve(__dirname, '../packages/suzaku-sdk/src/core');
 
 let abiSelectors = {};
-if (fs.existsSync(path.join(targetDir, 'abi-selectors.json'))) {
+if (fs.existsSync(path.join(DEFAULT_TARGET_DIR, 'abi-selectors.json'))) {
   console.log("Using existing ABI selectors from src/abis/abi-selectors.json");
-  abiSelectors = JSON.parse(fs.readFileSync(path.join(targetDir, 'abi-selectors.json')));
+  abiSelectors = JSON.parse(fs.readFileSync(path.join(DEFAULT_TARGET_DIR, 'abi-selectors.json')));
 }
 
 const selectorUpdated = Object.keys(abiSelectors).length > 0;
@@ -43,6 +44,16 @@ const contractMappings = {
   StakingVaultOperations: "StakingVaultOperations.ts",
 };
 
+// Maps output basename to SDK name (only when they differ)
+const sdkNameOverrides = {
+  KiteStaking: 'KiteStakingManager',
+};
+
+function getSdkName(outputFileName) {
+  const baseName = outputFileName.replace('.ts', '');
+  return sdkNameOverrides[baseName] ?? baseName;
+}
+
 // Default source directory
 const DEFAULT_SOURCE_DIR = "/home/gaetan/Documents/kite-ia/lst-kite/out";
 
@@ -64,7 +75,6 @@ function parseArgs() {
     }
   }
 
-  // Show help if requested
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
 Usage: update-abis.mjs [options]
@@ -72,7 +82,7 @@ Usage: update-abis.mjs [options]
 Options:
   -s, --source-dir <path>  Path to the Foundry output directory containing ABIs
                            (default: ${DEFAULT_SOURCE_DIR})
-  -t, --target-dir <path>  Path to the output directory for generated ABI TypeScript files
+  -t, --target-dir <path>  Path to the CLI output directory for generated ABI TypeScript files
                            (default: ${DEFAULT_TARGET_DIR})
   -h, --help               Show this help message
 `);
@@ -88,14 +98,13 @@ const targetDir = path.resolve(targetDirArg || DEFAULT_TARGET_DIR);
 
 console.log('🔄 Updating ABI files...');
 console.log(`Source: ${sourceDir}`);
-console.log(`Target: ${targetDir}`);
+console.log(`Target (CLI): ${targetDir}`);
+console.log(`Target (SDK): ${SDK_CORE_DIR}/<ContractFolder>/`);
 
 /**
  * Removes duplicate overloaded functions from an ABI, keeping only the one with the fewest parameters.
- * This helps avoid issues with viem's union type handling for overloaded functions.
  */
 function deduplicateOverloadedFunctions(abi) {
-  // Group functions by name
   const functionsByName = new Map();
   const otherItems = [];
 
@@ -111,13 +120,11 @@ function deduplicateOverloadedFunctions(abi) {
     }
   }
 
-  // For each function name, keep only the one with the fewest inputs
   const deduplicatedFunctions = [];
   for (const [name, functions] of functionsByName) {
     if (functions.length === 1) {
       deduplicatedFunctions.push(functions[0]);
     } else {
-      // Sort by number of inputs (ascending) and keep the first one
       functions.sort((a, b) => (a.inputs?.length || 0) - (b.inputs?.length || 0));
       const kept = functions[0];
       const removed = functions.slice(1);
@@ -129,54 +136,96 @@ function deduplicateOverloadedFunctions(abi) {
   return [...otherItems, ...deduplicatedFunctions];
 }
 
-function convertAbiToTypeScript(contractName, abi) {
-  const tsContent = `export default ${JSON.stringify(abi, null, 4)} as const;\n`;
-  return tsContent;
+function generateSdkAbiContent(abi, sdkName, selectors) {
+  const fnName = `get${sdkName}`;
+  const abiJson = JSON.stringify(abi, null, 4);
+  const selectorsJson = JSON.stringify(selectors);
+  return `import type { Address } from 'viem';
+import { getContract } from '../client/viemUtils';
+import type { Config } from '../config';
+import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
+import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
+import { selectors } from './selectors';
+
+const abi = ${abiJson} as const;
+export default abi;
+
+export async function ${fnName}<C extends ExtendedClient>(
+  config: Config<C>,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, '${sdkName}', config, address, selectors) as any;
+  // as any: TypeScript cannot resolve conditional return type from a generic function
+}
+`;
 }
 
 function updateAbiFile(contractName, outputFileName) {
   const jsonPath = path.join(sourceDir, `${contractName}.sol`, `${contractName}.json`);
   const tsPath = path.join(targetDir, outputFileName);
 
-  let selectors = [];
-  
   try {
-    // Check if the source JSON file exists
     if (!fs.existsSync(jsonPath)) {
       console.log(`⚠️  Source file not found: ${jsonPath}`);
       return false;
     }
 
-    // Read and parse the JSON file
     const jsonContent = fs.readFileSync(jsonPath, 'utf8');
     const contractData = JSON.parse(jsonContent);
-    
+
     if (!contractData.abi) {
       console.log(`⚠️  No ABI found in ${jsonPath}`);
       return false;
     }
 
-    // Deduplicate overloaded functions (keep only the one with fewest params)
     const deduplicatedAbi = deduplicateOverloadedFunctions(contractData.abi);
 
-    // Convert to TypeScript format
-    const tsContent = convertAbiToTypeScript(contractName, deduplicatedAbi);
+    // Write CLI ABI file (simple export default)
+    const cliContent = `export default ${JSON.stringify(deduplicatedAbi, null, 4)} as const;\n`;
+    fs.writeFileSync(tsPath, cliContent);
+    console.log(`✅ Updated CLI: ${outputFileName}`);
 
-    // process all functions and events selectors (to validate contract ABI on instantiation)
-    selectors = contractData.abi.reduce((acc, item) => {
+    // Compute selectors
+    const selectors = contractData.abi.reduce((acc, item) => {
       if (item.type === 'function') {
         acc.push(toFunctionSelector(item).replace('0x', '').replace(/^(00)+/, ''));
-      } else if (item.type === 'event') {
-        // acc.push(toEventSelector(item).replace("0x", ""));
       }
       return acc;
     }, []);
-    
-    // Write the TypeScript file
-    fs.writeFileSync(tsPath, tsContent);
-    console.log(`✅ Updated: ${outputFileName}`);
+
+    // Write SDK contract folder files
+    const outputBaseName = outputFileName.replace('.ts', '');
+    const sdkName = getSdkName(outputFileName);
+    const contractFolder = path.join(SDK_CORE_DIR, outputBaseName);
+    if (fs.existsSync(SDK_CORE_DIR)) {
+      fs.mkdirSync(contractFolder, { recursive: true });
+
+      // abi.ts
+      fs.writeFileSync(
+        path.join(contractFolder, 'abi.ts'),
+        generateSdkAbiContent(deduplicatedAbi, sdkName, selectors),
+      );
+
+      // selectors.ts
+      fs.writeFileSync(
+        path.join(contractFolder, 'selectors.ts'),
+        `export const selectors = ${JSON.stringify(selectors)} as const;\n`,
+      );
+
+      // index.ts — only if it doesn't already exist
+      const indexPath = path.join(contractFolder, 'index.ts');
+      if (!fs.existsSync(indexPath)) {
+        fs.writeFileSync(
+          indexPath,
+          `export { default as ${sdkName}ABI, get${sdkName} } from './abi';\nexport * from './selectors';\n`,
+        );
+      }
+
+      console.log(`✅ Updated SDK: ${outputBaseName}/`);
+    }
+
     return new Set(selectors);
-    
+
   } catch (error) {
     console.error(`❌ Error updating ${contractName}:`, error.message);
     return false;
@@ -187,19 +236,16 @@ function main() {
   let updatedCount = 0;
   let totalCount = 0;
 
-  // Check if source directory exists
   if (!fs.existsSync(sourceDir)) {
     console.error(`❌ Source directory not found: ${sourceDir}`);
     process.exit(1);
   }
 
-  // Create target directory if it doesn't exist
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
     console.log(`📁 Created target directory: ${targetDir}`);
   }
 
-  // Update each contract
   for (const [contractName, outputFileName] of Object.entries(contractMappings)) {
     totalCount++;
     const contractSelectors = updateAbiFile(contractName, outputFileName);
@@ -209,13 +255,13 @@ function main() {
     }
   }
 
-  // Write selectors to a JSON file for reference
+  // Write CLI selectors JSON
   const selectorsPath = path.join(targetDir, 'abi-selectors.json');
   fs.writeFileSync(selectorsPath, JSON.stringify(abiSelectors, null, 4));
   console.log(`✅ ABI selectors ${selectorUpdated ? 'updated' : 'written'} to: abi-selectors.json`);
 
   console.log(`\n📊 Summary: ${updatedCount}/${totalCount} ABI files updated successfully`);
-  
+
   if (updatedCount === totalCount) {
     console.log('🎉 All ABI files updated successfully!');
   } else {

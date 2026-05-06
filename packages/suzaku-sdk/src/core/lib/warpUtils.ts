@@ -2,7 +2,7 @@ import { fromBytes, hexToBytes, Hex, slice } from 'viem';
 import { sha256 } from '@noble/hashes/sha2';
 import { utils } from '@avalabs/avalanchejs';
 import { cb58ToBytes, cb58ToHex, unpackGeneric, retryWhileError, pChainChainID } from './avalancheUtils';
-import { type Network } from './client/types';
+import { type Network } from '../client/types';
 
 export interface PChainOwner {
     threshold: number;

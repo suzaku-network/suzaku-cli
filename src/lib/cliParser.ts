@@ -3,7 +3,7 @@ import { utils } from "@avalabs/avalanchejs";
 import { Hex, parseUnits } from 'viem';
 import { NodeId } from './utils';
 import { Pass } from "./pass";
-import { buildCommands, passPath } from "../keyStore";
+import { addKeyStoreCommands as buildCommands, passPath } from "../keyStore";
 
 export function collectMultiple<T>(parser: (value: string) => T) {
   return (value: string, previous: T[]): T[] => previous.concat([parser(value)]);

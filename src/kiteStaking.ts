@@ -8,9 +8,10 @@ import { color } from "console-log-colors";
 import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
 import { getCurrentValidators, registerL1Validator, setValidatorWeight } from "./lib/pChainUtils";
 import { pipe, R } from "@mobily/ts-belt";
-import { GetRegistrationJustification } from "./lib/justification";
+import { GetRegistrationJustification } from "../packages/suzaku-sdk/src/core/lib/justification";
 import { utils } from "@avalabs/avalanchejs";
 import { getCurrentValidatorsFromNode, getValidationUptimeMessage } from "./uptime";
+import { getValidatorManager, IWarpMessengerABI } from "@suzaku-sdk/core";
 
 export async function updateStakingConfig(
     kiteStakingManager: SafeSuzakuContract['KiteStakingManager'],
@@ -81,7 +82,7 @@ export async function initiateDelegatorRegistration(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
     const nodeIdBytes = parseNodeID(nodeId, false);
@@ -124,7 +125,7 @@ export async function initiateDelegatorRemoval(
 
         // Get ValidatorManager from settings
         const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+        const validatorManager = await getValidatorManager(config, settings.manager);
 
         // Get delegator info to get validationID
         const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]);
@@ -178,7 +179,7 @@ export async function initiateValidatorRemoval(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse NodeID to bytes format (20 bytes, no padding)
     const nodeIdBytes = parseNodeID(nodeId, false);
@@ -214,7 +215,7 @@ export async function completeDelegatorRegistration(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse InitiatedDelegatorRegistration event from KiteStakingManager
     const initiatedDelegatorRegistration = parseEventLogs({
@@ -240,7 +241,7 @@ export async function completeDelegatorRegistration(
 
     // Get warp logs to find the weight message
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -352,7 +353,7 @@ export async function completeDelegatorRemoval(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse InitiatedDelegatorRemoval events from KiteStakingManager
     const initiatedDelegatorRemovals = parseEventLogs({
@@ -381,7 +382,7 @@ export async function completeDelegatorRemoval(
 
     // Get warp logs
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -535,7 +536,7 @@ export async function completeValidatorRegistration(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse InitiatedValidatorRegistration event from ValidatorManager
     const initiatedValidatorRegistration = parseEventLogs({
@@ -553,7 +554,7 @@ export async function completeValidatorRegistration(
     const messageIndex = 0;
 
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     })[0];
 
@@ -645,7 +646,7 @@ export async function completeValidatorRemoval(
 
     // Get ValidatorManager from settings
     const settings = await kiteStakingManager.read.getStakingManagerSettings();
-    const validatorManager = await config.contracts.ValidatorManager(settings.manager);
+    const validatorManager = await getValidatorManager(config, settings.manager);
 
     // Parse InitiatedValidatorRemoval events from ValidatorManager
     const initiatedValidatorRemovals = parseEventLogs({
@@ -677,7 +678,7 @@ export async function completeValidatorRemoval(
     }
 
     const warpLogs = parseEventLogs({
-        abi: config.abis.IWarpMessenger,
+        abi: IWarpMessengerABI,
         logs: receipt.logs,
     });
 
@@ -816,7 +817,7 @@ export async function submitUptimeProof(
     const validator = validators.find(v => v.nodeID === nodeId);
     if (!validator) throw new Error(`Validator with nodeID ${nodeId} not found in the current validator set`);
 
-    const txHash = await kiteStakingManager.write.submitUptimeProof([cb58ToHex(validator.validationID), 0], { accessList: uptimeAccessList, chain: null });
+    const txHash = await kiteStakingManager.safeWrite.submitUptimeProof([cb58ToHex(validator.validationID), 0], { accessList: uptimeAccessList });
 
     logger.log("submitUptimeProof done, tx hash:", txHash);
     return txHash;

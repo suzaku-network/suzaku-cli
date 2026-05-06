@@ -7,7 +7,7 @@ import { ParserAddress } from './lib/cliParser';
 
 export const passPath = confPath + '/.password-store'
 
-export function buildCommands(program: Command) {
+export function addKeyStoreCommands(program: Command) {
   program
     .command("list-gpg-ids")
     .description("List available gpg key ids installed on the system")

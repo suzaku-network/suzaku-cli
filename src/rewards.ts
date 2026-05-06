@@ -1,4 +1,5 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
+import { getL1Middleware } from '@suzaku-sdk/core';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
@@ -28,7 +29,7 @@ export async function getRewardsClaimsCount(
     rewards.read.middleware(),
     rewards.read.MAX_EPOCHS_PER_CLAIM()
   ]);
-  const middleware = await config.contracts.L1Middleware(middlewareAddress);
+  const middleware = await getL1Middleware(config, middlewareAddress);
   const epoch = await middleware.read.getCurrentEpoch();
   return Math.ceil((epoch - lastEpoch) / maxEpochPerClaim);
 }

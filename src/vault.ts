@@ -3,6 +3,7 @@ import { Config } from './config';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { type Hex, type Account, parseUnits } from 'viem';
 import { logger } from './lib/logger';
+import { getVaultTokenized, getDefaultCollateral, getERC20, getL1RestakeDelegator } from '@suzaku-sdk/node';
 
 // deposit
 export async function depositVault(
@@ -14,9 +15,9 @@ export async function depositVault(
   logger.log("Depositing...");
   const client = config.client;
   // Get the collateral token address
-  const vault = await config.contracts.VaultTokenized(vaultAddress);
+  const vault = await getVaultTokenized(config, vaultAddress);
   const collateralAddress = await vault.read.collateral();
-  const collateral = await config.contracts.DefaultCollateral(collateralAddress);
+  const collateral = await getDefaultCollateral(config, collateralAddress);
   const decimals = await collateral.read.decimals();
   // Calculate human-readable amount
   const amountWei = parseUnits(amount, decimals)
@@ -53,7 +54,7 @@ export async function depositVault(
   logger.log("Waiting for deposit confirmation...");
   const depositReceipt = await client.waitForTransactionReceipt({ hash: hash });
   logger.log("Deposit confirmed in block:", depositReceipt.blockNumber);
-  logger.log("✅ Deposit completed successfully!");
+  logger.log("Deposit completed successfully!");
 
 }
 
@@ -66,7 +67,7 @@ export async function withdrawVault(
 
   const hash = await vault.safeWrite.withdraw([claimer, amountWei]);
   logger.log("Withdraw done, tx hash:", hash);
-  logger.log("✅ Withdrawal completed successfully!");
+  logger.log("Withdrawal completed successfully!");
 }
 
 // claim
@@ -79,7 +80,7 @@ export async function claimVault(
 
   const hash = await vault.safeWrite.claim([recipient, epoch]);
   logger.log("Claim done, tx hash:", hash);
-  logger.log("✅ Claim completed successfully!");
+  logger.log("Claim completed successfully!");
 }
 
 export async function getVaultDelegator(
@@ -175,9 +176,9 @@ export async function approveAndDepositCollateral(
 ) {
   const client = config.client;
   logger.log("Approving collateral...");
-  const collateral = await config.contracts.DefaultCollateral(collateralAddress);
+  const collateral = await getDefaultCollateral(config, collateralAddress);
   const rewardTokenAddress = await collateral.read.asset();
-  const rewardToken = await config.contracts.ERC20(rewardTokenAddress);
+  const rewardToken = await getERC20(config, rewardTokenAddress);
   const decimals = await collateral.read.decimals();
   const amountWei = parseUnits(amount, decimals)
   const hash = await rewardToken.safeWrite.approve([collateralAddress, amountWei]);
@@ -240,7 +241,7 @@ export async function info(
   ] as const);
 
   const [collateral, depositLimit] = await Promise.all([
-    config.contracts.DefaultCollateral(collateralAddress),
+    getDefaultCollateral(config, collateralAddress),
     isDepositLimit ? vault.read.depositLimit() : Promise.resolve(undefined),
   ]);
 
@@ -248,14 +249,14 @@ export async function info(
     'asset',
     'limit',
     'decimals',
-  ] as const);
+  ]);
 
-  const assetToken = await config.contracts.ERC20(collateralAsset);
+  const assetToken = await getERC20(config, collateralAsset);
   const collateralAssetSymbol = await assetToken.read.symbol();
 
   let collateralClasses: CollateralClassInfo[] | undefined;
   if (middleware) {
-    const delegator = await config.contracts.L1RestakeDelegator(delegatorAddress);
+    const delegator = await getL1RestakeDelegator(config, delegatorAddress);
     const [[primary, secondaries], l1Address] = await middleware.multicall(['getActiveCollateralClasses', "BALANCER"]);
     const allClasses = [primary, ...secondaries];
 

@@ -3,9 +3,9 @@ import { hexToBytes, type Hex } from 'viem';
 import { avalanche, avalancheFuji } from 'viem/chains';
 import { pipe, R, type Result } from '@mobily/ts-belt';
 import { type NodeId, cb58ToHex } from './avalancheUtils';
-import { type ExtendedClient, type ExtendedWalletClient } from './client/types';
+import { type ExtendedClient, type ExtendedWalletClient } from '../client/types';
 import { isCastMode, CAST_DUMMY_HASH } from './castUtils';
-import { logger } from './logger/index';
+import { logger } from '../logger/index';
 import { packL1ConversionMessage, type PackL1ConversionMessageArgs } from './warpUtils';
 
 // ── Types & interfaces ────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ interface ValidatorSigner {
     proofOfPossession: string;
 }
 
-export interface Validator {
+interface Validator {
     nodeID: string;
     weight: number;
     balance: number;

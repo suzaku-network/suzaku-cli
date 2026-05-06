@@ -1,7 +1,8 @@
 import { decodeEventLog, type Hex, type Abi } from 'viem';
-import { type ExtendedClient } from './client/types';
-import { type SuzakuContract } from './viemUtils';
-import { logger } from './logger/index';
+import { type ExtendedClient } from '../client/types';
+import { type EnhancedContract } from '../client/viemUtils';
+import { logger } from '../logger/index';
+import type BalancerValidatorManagerAbi from '../BalancerValidatorManager/abi';
 
 interface ProgressBar {
     start(total: number, startValue: number): void;
@@ -70,7 +71,7 @@ export async function PatchEventsTimestamp(
 }
 
 export async function fillEventsNodeId(
-    balancer: SuzakuContract['BalancerValidatorManager'],
+    balancer: EnhancedContract<typeof BalancerValidatorManagerAbi, ExtendedClient>,
     events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
     const validationIdMap: Record<string, string> = {};

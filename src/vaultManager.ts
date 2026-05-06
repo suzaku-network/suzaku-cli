@@ -1,4 +1,5 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
+import { getVaultTokenized, getL1Middleware } from '@suzaku-sdk/core';
 import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
@@ -80,11 +81,11 @@ export async function info(vaultManager: SuzakuContract['VaultManager'], config:
 
     let vaultsWithInfo = [];
     for (const [addr, enableTime, disableTime] of vaults) {
-        const vault = await config.contracts.VaultTokenized(addr);
+        const vault = await getVaultTokenized(config, addr);
         vaultsWithInfo.push({
             enableTime: enableTime === 0 ? "Never" : new Date(enableTime * 1000).toLocaleString(),
             disableTime: disableTime === 0 ? "Never" : new Date(disableTime * 1000).toLocaleString(),
-            ...await vaultInfo(vault, config, await config.contracts.L1Middleware(middlewareAddress))
+            ...await vaultInfo(vault, config, await getL1Middleware(config, middlewareAddress))
         });
     }
     return { middleware: middlewareAddress, vaults: vaultsWithInfo };

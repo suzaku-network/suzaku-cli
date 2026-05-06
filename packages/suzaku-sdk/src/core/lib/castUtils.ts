@@ -1,5 +1,5 @@
 import { type Address, type Abi, type AbiFunction, type Hex } from 'viem';
-import { logger } from './logger/index';
+import { logger } from '../logger/index';
 
 let _castMode = false;
 export function setCastMode(enabled: boolean) { _castMode = enabled; }
