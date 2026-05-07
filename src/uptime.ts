@@ -1,13 +1,19 @@
 import { packValidationUptimeMessage, collectSignatures, packWarpIntoAccessList } from "./lib/warpUtils";
 import { bytesToHex } from '@noble/hashes/utils';
 import { hexToBytes, Hex } from 'viem';
-import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
-import { ExtendedClient, Network } from "./client";
+import { SafeSuzakuContract } from './lib/viemUtils';
+import { ExtendedClient } from "./client";
 import { logger } from './lib/logger';
-import { getCurrentValidators, validatedBy } from "./lib/pChainUtils";
-import { utils } from "@avalabs/avalanchejs";
+import { validatedBy } from "./lib/pChainUtils";
 import { cb58ToHex } from "./lib/utils";
-import { pChainChainID } from "./config";
+import { ArgAddress, ArgCB58, ArgHex, ArgNodeID, ArgNumber, ArgURI, ParserNumber } from "./lib/cliParser";
+import { SuzakuCliProgram } from "./cli";
+import { argMiddlewareAddress } from "./middleware";
+import { getL1Middleware, getUptimeTracker } from "@suzaku-sdk/core";
+import { argOperatorAddress } from "./operator";
+import { Option } from "@commander-js/extra-typings";
+
+export const argUptimeTrackerAddress = ArgAddress("uptimeTrackerAddress", "UptimeTracker contract address");
 
 type getCurrentValidatorsRpcResponse = {
   result: {
@@ -58,7 +64,6 @@ export async function getValidationUptimeMessage(
   networkID: number,
   sourceChainID: string
 ) {
-  // Perform a POST request to rpcUrl/validators, payload is {jsonrpc: "2.0", method: "validators.getCurrentValidators", params: { nodeIDs: [...] }, id: 1}
   const validators = await getCurrentValidatorsFromNode(rpcUrl);
   const validator = validators.find(v => v.nodeID === nodeId);
   if (!validator) throw new Error("Validator not found for nodeID: " + nodeId);
@@ -77,290 +82,276 @@ export async function getValidationUptimeMessage(
   return signedValidationUptimeMessage;
 }
 
-
-export async function computeValidatorUptime(
+async function computeValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],
   signedUptimeHex: Hex
 ) {
-
-  // 2) Convert aggregator signature => bytes => accessList
   const warpBytes = hexToBytes(signedUptimeHex);
   const accessList = packWarpIntoAccessList(warpBytes);
-
   const txHash = await uptimeTracker.safeWrite.computeValidatorUptime([0], { accessList });
-
   logger.log("computeValidatorUptime done, tx hash:", txHash);
   return txHash;
 }
 
+export function addUptimeCommands(program: SuzakuCliProgram) {
+  const uptimeCmd = program
+    .command("uptime")
+    .description("Commands related to validator uptime reporting");
 
-// New orchestrator function
-export async function reportAndSubmitValidatorUptime(
-  // Parameters for getting the uptime message
-  client: ExtendedClient,
-  rpcUrl: string,
-  nodeId: string,
-  sourceChainID: string, // The chain ID for which uptime is being reported
-  // Parameters for submitting to the contract
-  uptimeTracker: SafeSuzakuContract['UptimeTracker']
-) {
-  logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${sourceChainID} via RPC ${rpcUrl}`);
-  logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
+  uptimeCmd
+    .command("get-validation-uptime-message")
+    .description("Get the validation uptime message for a given validator in the given L1 RPC")
+    .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+    .addArgument(ArgCB58("blockchainId", "Blockchain ID"))
+    .addArgument(ArgNodeID())
+    .asyncAction(async (client, rpcUrl, blockchainId, nodeId) => {
+      rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
+      await getValidationUptimeMessage(
+        client,
+        rpcUrl,
+        nodeId,
+        client.network === "fuji" ? 5 : 1,
+        blockchainId);
+    });
 
-  const warpNetworkID = client.network === 'mainnet' ? 1 : 5; // Mainnet or Fuji
+  uptimeCmd
+    .command('compute-validator-uptime')
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(ArgHex("signedUptimeHex", "Signed uptime hex"))
+    .asyncAction({ signer: true }, async (client, uptimeTrackerAddress, signedUptimeHex) => {
+      await computeValidatorUptime(
+        await getUptimeTracker(client, uptimeTrackerAddress),
+        signedUptimeHex
+      );
+    });
 
-  // Step 1: Get the signed validation uptime message
-  let signedUptimeHex = await getValidationUptimeMessage(
-    client,
-    rpcUrl,
-    nodeId,
-    warpNetworkID,
-    sourceChainID
-  );
+  uptimeCmd
+    .command("report-uptime-validator")
+    .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
+    .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+    .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
+    .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
+    .addArgument(argUptimeTrackerAddress)
+    .asyncAction({ signer: true }, async (client, rpcUrl, blockchainId, nodeId, uptimeTrackerAddress) => {
+      const opts = program.opts();
+      if (!opts.privateKey!) {
+        logger.error("Error: Private key is required. Use -k or set PK environment variable.");
+        process.exit(1);
+      }
 
-  logger.log(`Raw Signed Uptime Message from getValidationUptimeMessage: ${signedUptimeHex}`); // Log raw value for debugging
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${blockchainId} via RPC ${rpcUrl}`);
+      logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
-  // Ensure signedUptimeHex is a string and normalize it to have "0x" prefix
-  if (typeof signedUptimeHex === 'string') {
-    if (!signedUptimeHex.startsWith('0x')) {
-      signedUptimeHex = `0x${signedUptimeHex}`; // Prepend "0x" if missing
-    }
-  } else {
-    // If it's not a string at all (e.g., undefined, null from a failed collectSignatures)
-    logger.error("getValidationUptimeMessage did not return a string for the signed message.");
-    throw new Error("Failed to obtain a valid signed uptime hex message (not a string).");
-  }
+      const warpNetworkID = client.network === 'mainnet' ? 1 : 5;
+      let signedUptimeHex = await getValidationUptimeMessage(client, rpcUrl, nodeId, warpNetworkID, blockchainId);
 
-  // Now the check should pass if it was only about the "0x" prefix
-  if (!signedUptimeHex || typeof signedUptimeHex !== 'string' || !signedUptimeHex.startsWith('0x') || signedUptimeHex.length <= 2) { // Added length check
-    // This error should ideally not be hit if the above normalization works
-    // and if getValidationUptimeMessage returns a non-empty hex string.
-    logger.error(`Problematic signedUptimeHex after normalization: '${signedUptimeHex}'`);
-    throw new Error("Failed to obtain a valid signed uptime hex message (post-normalization check failed).");
-  }
+      logger.log(`Raw Signed Uptime Message from getValidationUptimeMessage: ${signedUptimeHex}`);
 
-  logger.log(`\nStep 1 complete. Normalized Signed Uptime Hex: ${signedUptimeHex}`);
-
-  // Step 2: Submit this message to the UptimeTracker contract
-  logger.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
-  const txHash = await computeValidatorUptime(
-    uptimeTracker,
-    signedUptimeHex as Hex
-  );
-
-  logger.log("\nValidator uptime report and submission complete.");
-  logger.log("Final Transaction Hash:", txHash);
-  return txHash;
-}
-
-/**
- * Compute uptime for an operator at a specific epoch
- */
-export async function computeOperatorUptimeAtEpoch(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  operator: Hex,
-  epoch: number
-) {
-
-
-  const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
-
-  logger.log(`computeOperatorUptimeAt for epoch ${epoch} done, tx hash: ${txHash}`);
-  return txHash;
-}
-
-/**
- * Compute uptime for an operator across multiple epochs
- */
-export async function computeOperatorUptimeForEpochs(
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  operator: Hex,
-  startEpoch: number,
-  endEpoch: number,
-  initialNonce?: number
-) {
-
-  let currentNonce = initialNonce ?? 0;
-
-  for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
-    await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
-    currentNonce++;
-  }
-}
-
-/**
- * Get validator uptime for a specific epoch
- */
-export async function getValidatorUptimeForEpoch(
-  uptimeTracker: SuzakuContract['UptimeTracker'],
-  validationID: Hex,
-  epoch: number
-) {
-  return await uptimeTracker.read.validatorUptimePerEpoch(
-    [epoch, validationID]
-  );
-}
-
-/**
- * Check if validator uptime is set for a specific epoch
- */
-export async function isValidatorUptimeSetForEpoch(
-  uptimeTracker: SuzakuContract['UptimeTracker'],
-  validationID: Hex,
-  epoch: number
-) {
-  return await uptimeTracker.read.isValidatorUptimeSet(
-    [epoch, validationID]
-  );
-}
-
-/**
- * Get operator uptime for a specific epoch
- */
-export async function getOperatorUptimeForEpoch(
-  uptimeTracker: SuzakuContract['UptimeTracker'],
-  operator: Hex,
-  epoch: number
-) {
-  return await uptimeTracker.read.operatorUptimePerEpoch(
-    [epoch, operator]
-  );
-}
-
-/**
- * Check if operator uptime is set for a specific epoch
- */
-export async function isOperatorUptimeSetForEpoch(
-  uptimeTracker: SuzakuContract['UptimeTracker'],
-  operator: Hex,
-  epoch: number
-) {
-  return await uptimeTracker.read.isOperatorUptimeSet(
-    [epoch, operator]
-  );
-}
-
-/**
- * Get last uptime checkpoint for a validator
- */
-export async function getLastUptimeCheckpoint(
-  uptimeTracker: SuzakuContract['UptimeTracker'],
-  validationID: Hex
-) {
-  return await uptimeTracker.read.getLastUptimeCheckpoint(
-    [validationID]
-  );
-}
-
-/**
- * Check if all alive validators from all operators have reported its uptime for the epoch and then check if all operators have reported their uptime for each epoch in the last 50 epochs (or since genesis if less than 50 epochs have passed). If not, report the uptime for the operators that haven't reported yet.
- */
-export async function uptimeSync(
-  client: ExtendedClient,
-  uptimeTracker: SafeSuzakuContract['UptimeTracker'],
-  middleware: SafeSuzakuContract['L1Middleware'],
-  rpcUrl: string,
-  sourceChainID: string
-) {
-
-  const targetEpoch = Number(await middleware.read.getCurrentEpoch());
-  logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
-
-  const operators = await middleware.read.getAllOperators();
-  if (operators.length === 0) {
-    logger.log("No operators found.");
-    return;
-  }
-
-  let currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
-  if (currentValidators.length === 0) {
-    logger.log("No validators found for any operator.");
-    return;
-  }
-
-  // filter PoA validators
-  const allValidationIDs = (await middleware.multicall(operators.map(op => ({ name: "getOperatorValidationIDs", args: [op] })))).flat();
-  currentValidators = currentValidators.filter(v => allValidationIDs.includes(cb58ToHex(v.validationID)));
-
-  // Check uptime status and get validator details in parallel structure
-  const uptimeStatus = await uptimeTracker.multicall(
-    currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
-  )
-
-  const signingSubnetId = await validatedBy(client, sourceChainID);
-  const networkID = client.network === 'mainnet' ? 1 : 5;
-
-  for (const [index, validator] of currentValidators.entries()) {
-    const { validationID, nodeID, uptimeSeconds } = validator;
-    const status = uptimeStatus[index];
-
-    if (!status) {
-      // get validator uptime
-      logger.log(`Reporting uptime for validator ${validationID} (${nodeID})...`);
-      const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
-      const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
-      let signedUptimeHex = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
-      // compute validator uptime
-
-      // Ensure signedUptimeHex is a string and normalize it to have "0x" prefix
       if (typeof signedUptimeHex === 'string') {
         if (!signedUptimeHex.startsWith('0x')) {
-          signedUptimeHex = `0x${signedUptimeHex}`; // Prepend "0x" if missing
+          signedUptimeHex = `0x${signedUptimeHex}`;
         }
       } else {
-        // If it's not a string at all (e.g., undefined, null from a failed collectSignatures)
         logger.error("getValidationUptimeMessage did not return a string for the signed message.");
         throw new Error("Failed to obtain a valid signed uptime hex message (not a string).");
       }
 
-      // Now the check should pass if it was only about the "0x" prefix
-      if (!signedUptimeHex || typeof signedUptimeHex !== 'string' || !signedUptimeHex.startsWith('0x') || signedUptimeHex.length <= 2) { // Added length check
-        // This error should ideally not be hit if the above normalization works
-        // and if getValidationUptimeMessage returns a non-empty hex string.
+      if (!signedUptimeHex || typeof signedUptimeHex !== 'string' || !signedUptimeHex.startsWith('0x') || signedUptimeHex.length <= 2) {
         logger.error(`Problematic signedUptimeHex after normalization: '${signedUptimeHex}'`);
         throw new Error("Failed to obtain a valid signed uptime hex message (post-normalization check failed).");
       }
 
-      const warpBytes = hexToBytes(signedUptimeHex);
-      const accessList = packWarpIntoAccessList(warpBytes);
+      logger.log(`\nStep 1 complete. Normalized Signed Uptime Hex: ${signedUptimeHex}`);
+      logger.log("\nStep 2: Submitting uptime to the UptimeTracker contract...");
+      const txHash = await computeValidatorUptime(uptimeTracker, signedUptimeHex as Hex);
+      logger.log("\nValidator uptime report and submission complete.");
+      logger.log("Final Transaction Hash:", txHash);
+    });
 
-      const txHash = await uptimeTracker.safeWrite.computeValidatorUptime([0], { accessList, chain: null });
-      logger.log(`computeValidatorUptime done, tx hash: ${txHash}`);
-      logger.addData('computeValidatorUptime', { validationID, nodeID, txHash });
-    }
-  };
-
-  logger.log("All validators have reported their uptime for epoch " + targetEpoch);
-  // Report all operators uptime status for each epoch (check if it's needed)
-
-  // build an indexing of operators status upon 50 epochs (except if the targetEpoch is less than 50.
-  const epochsToCheck = targetEpoch < 50 ? targetEpoch : 50;
-  const epochRange = Array.from({ length: epochsToCheck }, (_, i) => targetEpoch - i - 1);
-  let operatorUptimeStatus = await uptimeTracker.multicall(
-    operators.flatMap(op => epochRange.map(epoch => ({ name: 'isOperatorUptimeSet', args: [epoch, op] })))
-  );
-
-  // If the operator had no validator for that epoch, we consider uptime as "set" to avoid reverting on `UptimeTracker__NoValidators`
-  const operatorHadValidator = await middleware.multicall(operators.flatMap(op => epochRange.map(epoch => ({ name: 'getActiveNodesForEpoch', args: [op, epoch] }))));
-  operatorUptimeStatus = operatorUptimeStatus.map((activeNodes, index) => operatorHadValidator[index].length > 0 ? activeNodes : true);
-
-  // scan all epoch for all operator and report the uptime for each epoch the operator has uptime set to false
-  for (const [index, operator] of operators.entries()) {
-    const operatorEpochStatus = operatorUptimeStatus.slice(index * epochsToCheck, (index + 1) * epochsToCheck);
-    const operatorEpochsWithoutUptime = epochRange.filter((_, i) => !operatorEpochStatus[i]);
-    if (operatorEpochsWithoutUptime.length > 0) {
-      logger.log(`Operator ${operator} has missing uptime reports`);
-      logger.addData("missingOperatorUptime", { operator, epochs: operatorEpochsWithoutUptime });
-      try {
-        for (const epoch of operatorEpochsWithoutUptime) {
-          await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
-        }
-      } catch (error) {
-        logger.error(`Error computing uptime for operator ${operator}:`, error);
+  uptimeCmd
+    .command("compute-operator-uptime")
+    .description("Compute uptime for an operator at a specific epoch")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(argOperatorAddress)
+    .addArgument(ArgNumber("epoch", "Epoch number"))
+    .asyncAction({ signer: true }, async (client, uptimeTrackerAddress, operator, epoch) => {
+      const opts = program.opts();
+      if (!opts.privateKey!) {
+        logger.error("Error: Private key is required. Use -k or set PK environment variable.");
+        process.exit(1);
       }
-    } else {
-      logger.log(`Operator ${operator} has uptime reports for all of the last ${epochsToCheck} epochs.`);
-    }
-  }
-  logger.log("All operators have their uptime reported for the last " + epochsToCheck + " epochs from " + targetEpoch + ".");
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const txHash = await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
+      logger.log(`computeOperatorUptimeAt for epoch ${epoch} done, tx hash: ${txHash}`);
+    });
+
+  uptimeCmd
+    .command("compute-operator-uptime-range")
+    .description("Compute uptime for an operator over a range of epochs (client-side looping)")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(argOperatorAddress)
+    .addArgument(ArgNumber("startEpoch", "Starting epoch number"))
+    .addArgument(ArgNumber("endEpoch", "Ending epoch number"))
+    .asyncAction({ signer: true }, async (client, uptimeTrackerAddress, operator, startEpoch, endEpoch) => {
+      const opts = program.opts();
+      if (!opts.privateKey!) {
+        logger.error("Error: Private key is required. Use -k or set PK environment variable.");
+        process.exit(1);
+      }
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
+        await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
+      }
+    });
+
+  uptimeCmd
+    .command("get-validator-uptime")
+    .description("Get the recorded uptime for a validator at a specific epoch")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(ArgHex("validationID", "Validation ID of the validator"))
+    .addArgument(ArgNumber("epoch", "Epoch number"))
+    .asyncAction(async (client, uptimeTrackerAddress, validationID, epoch) => {
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const uptime = await uptimeTracker.read.validatorUptimePerEpoch([epoch, validationID]);
+      logger.log(`Validator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+    });
+
+  uptimeCmd
+    .command("check-validator-uptime-set")
+    .description("Check if uptime data is set for a validator at a specific epoch")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(ArgHex("validationID", "Validation ID of the validator"))
+    .addArgument(ArgNumber("epoch", "Epoch number"))
+    .asyncAction(async (client, uptimeTrackerAddress, validationID, epoch) => {
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const isSet = await uptimeTracker.read.isValidatorUptimeSet([epoch, validationID]);
+      logger.log(`Validator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+    });
+
+  uptimeCmd
+    .command("get-operator-uptime")
+    .description("Get the recorded uptime for an operator at a specific epoch")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(argOperatorAddress)
+    .addArgument(ArgNumber("epoch", "Epoch number"))
+    .asyncAction(async (client, uptimeTrackerAddress, operator, epoch) => {
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const uptime = await uptimeTracker.read.operatorUptimePerEpoch([epoch, operator]);
+      logger.log(`Operator uptime for epoch ${epoch}: ${uptime.toString()} seconds`);
+    });
+
+  uptimeCmd
+    .command("check-operator-uptime-set")
+    .description("Check if uptime data is set for an operator at a specific epoch")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(argOperatorAddress)
+    .addArgument(ArgNumber("epoch", "Epoch number"))
+    .asyncAction(async (client, uptimeTrackerAddress, operator, epoch) => {
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const isSet = await uptimeTracker.read.isOperatorUptimeSet([epoch, operator]);
+      logger.log(`Operator uptime is ${isSet ? 'set' : 'not set'} for epoch ${epoch}`);
+    });
+
+  uptimeCmd
+    .command("uptime-sync")
+    .description("Report uptime for all validators")
+    .addArgument(argUptimeTrackerAddress)
+    .addArgument(argMiddlewareAddress)
+    .argument("rpcUrl", "RPC URL of the network")
+    .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
+    .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
+    .asyncAction({ signer: true }, async (client, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
+      const uptimeTracker = await getUptimeTracker(client, uptimeTrackerAddress);
+      const middleware = await getL1Middleware(client, middlewareAddress);
+      const sourceChainID = blockchainId;
+
+      const targetEpoch = Number(await middleware.read.getCurrentEpoch());
+      logger.log(`Checking uptime status for epoch ${targetEpoch}...`);
+
+      const operators = await middleware.read.getAllOperators();
+      if (operators.length === 0) {
+        logger.log("No operators found.");
+        return;
+      }
+
+      let currentValidators = await getCurrentValidatorsFromNode(rpcUrl);
+      if (currentValidators.length === 0) {
+        logger.log("No validators found for any operator.");
+        return;
+      }
+
+      const allValidationIDs = (await middleware.multicall(operators.map(op => ({ name: "getOperatorValidationIDs", args: [op] })))).flat();
+      currentValidators = currentValidators.filter(v => allValidationIDs.includes(cb58ToHex(v.validationID)));
+
+      const uptimeStatus = await uptimeTracker.multicall(
+        currentValidators.map(v => ({ name: 'isValidatorUptimeSet', args: [targetEpoch, cb58ToHex(v.validationID)] }))
+      )
+
+      const signingSubnetId = await validatedBy(client, sourceChainID);
+      const networkID = client.network === 'mainnet' ? 1 : 5;
+
+      for (const [index, validator] of currentValidators.entries()) {
+        const { validationID, nodeID, uptimeSeconds } = validator;
+        const status = uptimeStatus[index];
+
+        if (!status) {
+          logger.log(`Reporting uptime for validator ${validationID} (${nodeID})...`);
+          const unsignedValidationUptimeMessage = packValidationUptimeMessage(validationID, uptimeSeconds, networkID, sourceChainID);
+          const unsignedValidationUptimeMessageHex = bytesToHex(unsignedValidationUptimeMessage);
+          let signedUptimeHex = await collectSignatures({ network: client.network, message: unsignedValidationUptimeMessageHex, signingSubnetId });
+
+          if (typeof signedUptimeHex === 'string') {
+            if (!signedUptimeHex.startsWith('0x')) {
+              signedUptimeHex = `0x${signedUptimeHex}`;
+            }
+          } else {
+            logger.error("getValidationUptimeMessage did not return a string for the signed message.");
+            throw new Error("Failed to obtain a valid signed uptime hex message (not a string).");
+          }
+
+          if (!signedUptimeHex || typeof signedUptimeHex !== 'string' || !signedUptimeHex.startsWith('0x') || signedUptimeHex.length <= 2) {
+            logger.error(`Problematic signedUptimeHex after normalization: '${signedUptimeHex}'`);
+            throw new Error("Failed to obtain a valid signed uptime hex message (post-normalization check failed).");
+          }
+
+          const warpBytes = hexToBytes(signedUptimeHex);
+          const accessList = packWarpIntoAccessList(warpBytes);
+          const txHash = await uptimeTracker.safeWrite.computeValidatorUptime([0], { accessList, chain: null });
+          logger.log(`computeValidatorUptime done, tx hash: ${txHash}`);
+          logger.addData('computeValidatorUptime', { validationID, nodeID, txHash });
+        }
+      };
+
+      logger.log("All validators have reported their uptime for epoch " + targetEpoch);
+
+      const epochsToCheck = targetEpoch < 50 ? targetEpoch : 50;
+      const epochRange = Array.from({ length: epochsToCheck }, (_, i) => targetEpoch - i - 1);
+      let operatorUptimeStatus = await uptimeTracker.multicall(
+        operators.flatMap(op => epochRange.map(epoch => ({ name: 'isOperatorUptimeSet', args: [epoch, op] })))
+      );
+
+      const operatorHadValidator = await middleware.multicall(operators.flatMap(op => epochRange.map(epoch => ({ name: 'getActiveNodesForEpoch', args: [op, epoch] }))));
+      operatorUptimeStatus = operatorUptimeStatus.map((activeNodes, index) => operatorHadValidator[index].length > 0 ? activeNodes : true);
+
+      for (const [index, operator] of operators.entries()) {
+        const operatorEpochStatus = operatorUptimeStatus.slice(index * epochsToCheck, (index + 1) * epochsToCheck);
+        const operatorEpochsWithoutUptime = epochRange.filter((_, i) => !operatorEpochStatus[i]);
+        if (operatorEpochsWithoutUptime.length > 0) {
+          logger.log(`Operator ${operator} has missing uptime reports`);
+          logger.addData("missingOperatorUptime", { operator, epochs: operatorEpochsWithoutUptime });
+          try {
+            for (const epoch of operatorEpochsWithoutUptime) {
+              await uptimeTracker.safeWrite.computeOperatorUptimeAt([operator, epoch]);
+            }
+          } catch (error) {
+            logger.error(`Error computing uptime for operator ${operator}:`, error);
+          }
+        } else {
+          logger.log(`Operator ${operator} has uptime reports for all of the last ${epochsToCheck} epochs.`);
+        }
+      }
+      logger.log("All operators have their uptime reported for the last " + epochsToCheck + " epochs from " + targetEpoch + ".");
+    });
+  return uptimeCmd;
 }

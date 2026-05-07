@@ -1,62 +1,92 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { Hex } from 'viem';
 import { logger } from './lib/logger';
+import { argValidatorManagerAddress, SuzakuCliProgram } from './cli';
+import { getOperatorL1OptInService, getOperatorVaultOptInService } from '@suzaku-sdk/core';
+import { argOperatorAddress } from './operator';
+import { argVaultAddress } from './vault';
 
-// L1 opt-in functionality
-export async function optInL1(
-  optInService: SafeSuzakuContract['OperatorL1OptInService'],
-  l1Address: Hex
-) {
-  logger.log("Opting in to L1...");
-  const hash = await optInService.safeWrite.optIn([l1Address]);
-  logger.log("L1 opt-in successful, tx hash:", hash);
-}
+export function addOperatorOptInCommands(program: SuzakuCliProgram) {
+const operatorOptInCmd = program
+    .command("opt-in")
+    .description("Commands for operator opt-in services");
 
-export async function optOutL1(
-  optInService: SafeSuzakuContract['OperatorL1OptInService'],
-  l1Address: Hex
-) {
-  const hash = await optInService.safeWrite.optOut([l1Address]);
-  logger.log("L1 opt-out successful, tx hash:", hash);
-}
+  /**
+ * --------------------------------------------------
+ * OPERATOR → L1: optIn / optOut / check
+ * --------------------------------------------------
+ */
+operatorOptInCmd
+    .command("l1-in")
+    .description("Operator opts in to a given L1")
+    .addArgument(argValidatorManagerAddress)
+    .asyncAction({ signer: true }, async (client, l1Address) => {
+        const service = await getOperatorL1OptInService(client);
+      logger.log("Opting in to L1...");
+      const hash = await service.safeWrite.optIn([l1Address]);
+      logger.log("L1 opt-in successful, tx hash:", hash);
+    });
 
-export async function checkOptInL1(
-  optInService: SuzakuContract['OperatorL1OptInService'],
-  operator: Hex,
-  l1Address: Hex
-) {
-  const result = await optInService.read.isOptedIn(
-    [operator, l1Address]
-  );
-  logger.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
-  return result;
-}
+operatorOptInCmd
+    .command("l1-out")
+    .description("Operator opts out from a given L1")
+    .addArgument(argValidatorManagerAddress)
+    .asyncAction({ signer: true }, async (client, l1Address) => {
+        const service = await getOperatorL1OptInService(client);
+      const hash = await service.safeWrite.optOut([l1Address]);
+      logger.log("L1 opt-out successful, tx hash:", hash);
+    });
 
-// Vault opt-in functionality
-export async function optInVault(
-  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
-  vaultAddress: Hex
-) {
-  const hash = await optInService.safeWrite.optIn([vaultAddress]);
-  logger.log("Vault opt-in successful, tx hash:", hash);
-}
+operatorOptInCmd
+    .command("check-l1")
+    .description("Check if an operator is opted in to a given L1")
+    .addArgument(argOperatorAddress)
+    .addArgument(argValidatorManagerAddress)
+    .asyncAction(async (client, operator, l1Address) => {
+        const service = await getOperatorL1OptInService(client);
+      const result = await service.read.isOptedIn(
+        [operator, l1Address]
+      );
+      logger.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
+    });
 
-export async function optOutVault(
-  optInService: SafeSuzakuContract['OperatorVaultOptInService'],
-  vaultAddress: Hex
-) {
-  const hash = await optInService.safeWrite.optOut([vaultAddress]);
-  logger.log("Vault opt-out successful, tx hash:", hash);
-}
+  /**
+   * --------------------------------------------------
+   * OPERATOR → Vault: optIn / optOut / check
+   * --------------------------------------------------
+   */
+  operatorOptInCmd
+      .command("vault-in")
+      .description("Operator opts in to a given Vault")
+      .addArgument(argVaultAddress)
+      .asyncAction({ signer: true }, async (client, vaultAddress) => {
+          const service = await getOperatorVaultOptInService(client);
+        const hash = await service.safeWrite.optIn([vaultAddress]);
+        logger.log("Vault opt-in successful, tx hash:", hash);
+      });
+  
+  operatorOptInCmd
+      .command("vault-out")
+      .description("Operator opts out from a given Vault")
+      .addArgument(argVaultAddress)
+      .asyncAction({ signer: true }, async (client, vaultAddress) => {
+          const service = await getOperatorVaultOptInService(client);
+        const hash = await service.safeWrite.optOut([vaultAddress]);
+        logger.log("Vault opt-out successful, tx hash:", hash);
+      });
+  
+  operatorOptInCmd
+      .command("check-vault")
+      .description("Check if an operator is opted in to a given Vault")
+      .addArgument(argOperatorAddress)
+      .addArgument(argVaultAddress)
+      .asyncAction(async (client, operator, vaultAddress) => {
+          const service = await getOperatorVaultOptInService(client);
+        const result = await service.read.isOptedIn(
+          [operator, vaultAddress]
+        );
+        logger.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
+      });
 
-export async function checkOptInVault(
-  optInService: SuzakuContract['OperatorVaultOptInService'],
-  operator: Hex,
-  vaultAddress: Hex
-) {
-  const result = await optInService.read.isOptedIn(
-    [operator, vaultAddress]
-  );
-  logger.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
-  return result;
+  return operatorOptInCmd;
 }
