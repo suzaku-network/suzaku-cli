@@ -1,15 +1,8 @@
-import { bytesToHex, fromBytes, Hex, hexToBytes, parseEventLogs, parseUnits } from "viem";
+import { type Hex, parseUnits } from "viem";
 import { generateClient } from "./client";
-import { cb58ToHex, encodeNodeID, NodeId, parseNodeID, retryWhileError } from "./lib/utils";
-import { logger } from './lib/logger';
+import { logger } from "./lib/logger";
 import { color } from "console-log-colors";
-import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from "./lib/warpUtils";
-import { getCurrentValidators, registerL1Validator, setValidatorWeight } from "./lib/pChainUtils";
-import { pipe, R } from "@mobily/ts-belt";
-import { GetRegistrationJustification } from "../packages/suzaku-sdk/src/core/lib/justification";
-import { utils } from "@avalabs/avalanchejs";
-import { getCurrentValidatorsFromNode, getValidationUptimeMessage } from "./uptime";
-import { chainList, getKiteStakingManager, getValidatorManager, IWarpMessengerABI, pChainChainID } from "@suzaku-sdk/core";
+import { chainList, getKiteStakingManager, ksmInitiateValidatorRegistration, ksmCompleteValidatorRegistration, ksmInitiateDelegatorRegistration, ksmCompleteDelegatorRegistration, ksmInitiateDelegatorRemoval, ksmCompleteDelegatorRemoval, ksmInitiateValidatorRemoval, ksmCompleteValidatorRemoval, ksmSubmitUptimeProof, type NodeId } from "@suzaku-sdk/core";
 import { ArgAddress, ArgBLSPOP, ArgHex, ArgNodeID, ArgNumber, collectMultiple, OptAddress, ParserAddress, ParserHex, ParserNodeID, ParserNumber, ParserPrivateKey, ParseUnits } from "./lib/cliParser";
 import { SuzakuCliProgram } from "./cli";
 import { Option } from '@commander-js/extra-typings'
@@ -232,29 +225,17 @@ kiteStakingManagerCmd
     .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
     .asyncAction({ signer: true }, async (client, nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, options) => {
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
-        const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
-
-        const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
-        const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
-        const remainingBalanceOwner: [number, Hex[]] = [Number(options.pchainRemainingBalanceOwnerThreshold), remainingBalanceOwnerAddress];
-        const disableOwner: [number, Hex[]] = [Number(options.pchainDisableOwnerThreshold), disableOwnerAddress];
-
-        const stakeAmountWei = parseUnits(stakeAmount, 18);
-        const minStakeDurationBigInt = BigInt(minStakeDuration);
-
-        logger.log("Initiating validator registration...");
-        const nodeIdHex32 = parseNodeID(nodeId, false);
-        const hash = await kiteStakingManager.safeWrite.initiateValidatorRegistration(
-            [
-                nodeIdHex32,
-                blsKey,
-                { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] },
-                { threshold: disableOwner[0], addresses: disableOwner[1] },
-                delegationFeeBips,
-                minStakeDurationBigInt,
-                rewardRecipient
-            ],
-            { value: stakeAmountWei, chain: null }
+        const hash = await ksmInitiateValidatorRegistration(
+            client,
+            kiteStakingManager,
+            nodeId,
+            blsKey,
+            delegationFeeBips,
+            BigInt(minStakeDuration),
+            rewardRecipient,
+            parseUnits(stakeAmount, 18),
+            { threshold: options.pchainRemainingBalanceOwnerThreshold, addresses: options.pchainRemainingBalanceOwnerAddress },
+            { threshold: options.pchainDisableOwnerThreshold, addresses: options.pchainDisableOwnerAddress },
         );
         logger.log("initiateValidatorRegistration executed successfully, tx hash:", hash);
     });
@@ -274,87 +255,15 @@ kiteStakingManagerCmd
         const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
         const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-
-        logger.log("Completing validator registration...");
-        const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash });
-
-        const initiatedStakingRegistration = parseEventLogs({
-            abi: kiteStakingManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedStakingValidatorRegistration'
-        })[0];
-        if (!initiatedStakingRegistration) {
-            logger.error(color.red("No InitiatedStakingValidatorRegistration event found in the transaction logs, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-
-        const initiatedValidatorRegistration = parseEventLogs({
-            abi: validatorManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedValidatorRegistration'
-        })[0];
-        if (!initiatedValidatorRegistration) {
-            logger.error(color.red("No InitiatedValidatorRegistration event found in the transaction logs, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const messageIndex = 0;
-        const warpLogs = parseEventLogs({ abi: IWarpMessengerABI, logs: receipt.logs })[0];
-        if (!warpLogs) {
-            logger.error(color.red("No IWarpMessenger event found in the transaction logs."));
-            process.exit(1);
-        }
-
-        const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLogs.args.message);
-        const validationIDHex = initiatedValidatorRegistration.args.validationID;
-        const nodeId = encodeNodeID(initiatedValidatorRegistration.args.nodeID as Hex);
-
-        const subnetIDHex = await validatorManager.read.subnetID();
-        const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
-        const isValidator = (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeId);
-
-        if (isValidator) {
-            logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
-        } else {
-            const RegisterL1ValidatorUnsignedWarpMsg = warpLogs.args.message;
-            logger.log("\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...");
-            const signedMessage = await collectSignatures({ network: client.network, message: RegisterL1ValidatorUnsignedWarpMsg, signingSubnetId });
-            logger.log("\nRegistering validator on P-Chain...");
-            pipe(await registerL1Validator({
-                client: pchainClient,
-                blsProofOfPossession: blsProofOfPossession,
-                signedMessage,
-                initialBalance: initialBalance
-            }),
-                R.tap(pChainTxId => logger.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId)),
-                R.tapError(err => { logger.error(err); process.exit(1) })
-            );
-        }
-
-        const validationIDBytes = hexToBytes(validationIDHex as Hex);
-        const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, client.network === 'fuji' ? 5 : 1, pChainChainID);
-        const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-
-        logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-        const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, signingSubnetId });
-
-        const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-        const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-
-        logger.log("\nCalling function completeValidatorRegistration...");
-        const hash = await kiteStakingManager.safeWrite.completeValidatorRegistration(
-            [messageIndex],
-            { account: client.account!, chain: null, accessList }
+        const hash = await ksmCompleteValidatorRegistration(
+            client,
+            kiteStakingManager,
+            pchainClient,
+            initiateTxHash,
+            blsProofOfPossession,
+            initialBalance,
+            !options.skipWaitApi,
         );
-
-        if (!options.skipWaitApi) {
-            logger.log("Waiting for the validator to be visible on the P-Chain (may take a while)...");
-            await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeId), 5000, 180000, (res) => res === true);
-        }
-
         logger.log("completeValidatorRegistration executed successfully, tx hash:", hash);
     });
 
@@ -367,17 +276,14 @@ kiteStakingManagerCmd
     .argument("stakeAmount", "Initial stake amount")
     .asyncAction({ signer: true }, async (client, nodeId, rewardRecipient, stakeAmount, options) => {
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
-        const stakeAmountWei = parseUnits(stakeAmount, 18);
-
         logger.log("Initiating delegator registration...");
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-        const nodeIdBytes = parseNodeID(nodeId, false);
-        const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
-        const txHash = await kiteStakingManager.safeWrite.initiateDelegatorRegistration([
-            validationID,
-            rewardRecipient
-        ], { value: stakeAmountWei, chain: null });
+        const txHash = await ksmInitiateDelegatorRegistration(
+            client,
+            kiteStakingManager,
+            nodeId,
+            rewardRecipient,
+            parseUnits(stakeAmount, 18),
+        );
         logger.log("initiateDelegatorRegistration executed successfully, tx hash:", txHash);
     });
 
@@ -393,90 +299,13 @@ kiteStakingManagerCmd
         if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
         const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-
         logger.log("Completing delegator registration...");
-        const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 1 });
-        if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
-
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-
-        const initiatedDelegatorRegistration = parseEventLogs({
-            abi: kiteStakingManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedDelegatorRegistration'
-        })[0];
-        if (!initiatedDelegatorRegistration) {
-            logger.error(color.red("No InitiatedDelegatorRegistration event found in the transaction logs, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const delegationID = initiatedDelegatorRegistration.args.delegationID;
-        const validationID = initiatedDelegatorRegistration.args.validationID;
-        const validatorWeight = initiatedDelegatorRegistration.args.validatorWeight;
-        const nonce = initiatedDelegatorRegistration.args.nonce;
-        const setWeightMessageID = initiatedDelegatorRegistration.args.setWeightMessageID;
-
-        const validator = await validatorManager.read.getValidator([validationID]);
-        const nodeId = encodeNodeID(validator.nodeID as Hex);
-
-        const warpLogs = parseEventLogs({ abi: IWarpMessengerABI, logs: receipt.logs });
-        const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLogs[0].args.message);
-
-        const weightWarpLog = warpLogs.find((w) => w.args.messageID === setWeightMessageID);
-        if (!weightWarpLog) {
-            logger.error(color.red("No matching warp message found for setWeightMessageID, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const unsignedL1ValidatorWeightMessage = weightWarpLog.args.message;
-
-        logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-        const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-        logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-
-        logger.log("\nSetting validator weight on P-Chain...");
-        pipe(await setValidatorWeight({
-            client: pchainClient,
-            validationID: validationID,
-            message: signedL1ValidatorWeightMessage
-        }),
-            R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
-            R.tapError(err => {
-                if (!err.includes('warp message contains stale nonce')) {
-                    logger.error(err);
-                    process.exit(1);
-                }
-                logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
-            }));
-
-        const validationIDBytes = hexToBytes(validationID as Hex);
-        const unsignedPChainWeightWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(validatorWeight), client.network === 'fuji' ? 5 : 1, pChainChainID);
-        const unsignedPChainWeightWarpMsgHex = bytesToHex(unsignedPChainWeightWarpMsg);
-
-        logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-        const signedPChainWeightMessage = await collectSignatures({ network: client.network, message: unsignedPChainWeightWarpMsgHex, signingSubnetId });
-        logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
-
-        const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-        const sourceChainID = utils.base58check.encode(hexToBytes(settings.uptimeBlockchainID));
-        logger.log("\nGetting validation uptime message...");
-        const signedUptimeMessage = await getValidationUptimeMessage(client, rpcUrl, nodeId, warpNetworkID, sourceChainID);
-        const signedUptimeMessageHex = signedUptimeMessage.startsWith('0x') ? signedUptimeMessage : `0x${signedUptimeMessage}`;
-
-        const signedPChainWeightWarpMsgBytes = hexToBytes(`0x${signedPChainWeightMessage}`);
-        const signedUptimeMessageBytes = hexToBytes(signedUptimeMessageHex as Hex);
-        const weightAccessList = packWarpIntoAccessList(signedPChainWeightWarpMsgBytes);
-        const uptimeAccessList = packWarpIntoAccessList(signedUptimeMessageBytes);
-        const combinedAccessList = [weightAccessList[0], uptimeAccessList[0]];
-
-        const messageIndex = 0;
-        const uptimeMessageIndex = 1;
-
-        logger.log("\nCalling function completeDelegatorRegistration...");
-        const hash = await kiteStakingManager.safeWrite.completeDelegatorRegistration(
-            [delegationID, messageIndex, uptimeMessageIndex],
-            { account: client.account!, chain: null, accessList: combinedAccessList }
+        const hash = await ksmCompleteDelegatorRegistration(
+            client,
+            kiteStakingManager,
+            pchainClient,
+            initiateTxHash,
+            rpcUrl,
         );
         logger.log("completeDelegatorRegistration executed successfully, tx hash:", hash);
     });
@@ -490,34 +319,17 @@ kiteStakingManagerCmd
     .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true)"))
     .asyncAction({ signer: true }, async (client, delegationID, options) => {
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
-        logger.log("Initiating delegator removal...");
-        const messageIndex = 0;
-        let accessList: Array<{ address: Hex; storageKeys: Hex[] }> | undefined = undefined;
-
-        if (options.includeUptimeProof) {
-            if (!options.rpcUrl) {
-                logger.error(color.red("RPC URL is required when includeUptimeProof is true."));
-                process.exit(1);
-            }
-            const settings = await kiteStakingManager.read.getStakingManagerSettings();
-            const validatorManager = await getValidatorManager(client, settings.manager);
-            const delegatorInfo = await kiteStakingManager.read.getDelegatorInfo([delegationID]);
-            const validationID = delegatorInfo.validationID;
-            const validator = await validatorManager.read.getValidator([validationID]);
-            const nodeId = encodeNodeID(validator.nodeID as Hex);
-            const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-            const sourceChainID = utils.base58check.encode(hexToBytes(settings.uptimeBlockchainID));
-            logger.log("\nGetting validation uptime message...");
-            const signedUptimeMessage = await getValidationUptimeMessage(client, options.rpcUrl, nodeId, warpNetworkID, sourceChainID);
-            const signedUptimeMessageHex = signedUptimeMessage.startsWith('0x') ? signedUptimeMessage : `0x${signedUptimeMessage}`;
-            const signedUptimeMessageBytes = hexToBytes(signedUptimeMessageHex as Hex);
-            const uptimeAccessList = packWarpIntoAccessList(signedUptimeMessageBytes);
-            accessList = [uptimeAccessList[0]];
+        if (options.includeUptimeProof && !options.rpcUrl) {
+            logger.error(color.red("RPC URL is required when includeUptimeProof is true."));
+            process.exit(1);
         }
-
-        const hash = await kiteStakingManager.safeWrite.initiateDelegatorRemoval(
-            [delegationID, options.includeUptimeProof, messageIndex],
-            accessList ? { account: client.account!, chain: null, accessList } : undefined
+        logger.log("Initiating delegator removal...");
+        const hash = await ksmInitiateDelegatorRemoval(
+            client,
+            kiteStakingManager,
+            delegationID,
+            options.includeUptimeProof,
+            options.rpcUrl,
         );
         logger.log("initiateDelegatorRemoval executed successfully, tx hash:", hash);
     });
@@ -527,129 +339,24 @@ kiteStakingManagerCmd
     .description("Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal")
     .addOption(optKiteStakingManagerAddress)
     .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
-    .argument("rpcUrl", "RPC URL for getting validator uptime")
     .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
     .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
     .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
-    .addOption(new Option("--initiate-tx <initiateTx>", "Initiate delegator registration transaction hash"))
-    .asyncAction({ signer: true }, async (client, initiateRemovalTxHash, rpcUrl, options) => {
+    .asyncAction({ signer: true }, async (client, initiateRemovalTxHash, options) => {
         const opts = program.opts();
         if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
         await requirePChainBallance(client, 50000n, opts.yes);
         const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-        const delegationIDs = options.delegationId.length > 0 ? options.delegationId : undefined;
-        const initiateTxHash = options.initiateTx ? (options.initiateTx as Hex) : undefined;
-
         logger.log("Completing delegator removal...");
-        const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
-        if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
-
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-
-        const initiatedDelegatorRemovals = parseEventLogs({
-            abi: kiteStakingManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedDelegatorRemoval'
-        });
-        if (initiatedDelegatorRemovals.length === 0) {
-            logger.error(color.red("No InitiatedDelegatorRemoval event found in the transaction logs, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const filteredRemovals = delegationIDs
-            ? initiatedDelegatorRemovals.filter((e) => delegationIDs.includes(e.args.delegationID))
-            : initiatedDelegatorRemovals;
-        if (filteredRemovals.length === 0) {
-            logger.error(color.red("No matching InitiatedDelegatorRemoval event found for the provided delegationIDs, verify the transaction hash and delegationIDs."));
-            process.exit(1);
-        }
-
-        const warpLogs = parseEventLogs({ abi: IWarpMessengerABI, logs: receipt.logs });
-        let lastHash: Hex | undefined;
-
-        for (const event of filteredRemovals) {
-            const delegationID = event.args.delegationID;
-            const validationID = event.args.validationID;
-            const validator = await validatorManager.read.getValidator([validationID]);
-            const nodeID = encodeNodeID(validator.nodeID as Hex);
-            logger.log(`Processing removal for delegation ${delegationID}, node ${nodeID}`);
-
-            let addNodeBlockNumber = receipt.blockNumber;
-            if (initiateTxHash) {
-                const addNodeReceipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 0 });
-                if (addNodeReceipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls use another initiate tx`);
-                const registrationEvents = parseEventLogs({ abi: kiteStakingManager.abi, logs: addNodeReceipt.logs, eventName: 'InitiatedDelegatorRegistration' });
-                if (registrationEvents.some((e) => e.args.delegationID === delegationID)) {
-                    addNodeBlockNumber = addNodeReceipt.blockNumber;
-                }
-            }
-
-            const initiatedValidatorWeightUpdates = parseEventLogs({
-                abi: validatorManager.abi,
-                logs: receipt.logs,
-                eventName: 'InitiatedValidatorWeightUpdate'
-            }).filter((e) => e.args.validationID === validationID);
-
-            if (initiatedValidatorWeightUpdates.length === 0) {
-                logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`));
-                continue;
-            }
-
-            const weightUpdateEvent = initiatedValidatorWeightUpdates[0];
-            const warpLog = warpLogs.find((w) => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
-            if (!warpLog) {
-                logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`));
-                continue;
-            }
-
-            const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-            const weight = weightUpdateEvent.args.weight;
-            const nonce = weightUpdateEvent.args.nonce;
-            const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, unsignedL1ValidatorWeightMessage);
-
-            logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-            const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-
-            logger.log("\nSetting validator weight on P-Chain...");
-            pipe(await setValidatorWeight({ client: pchainClient, validationID: validationID, message: signedL1ValidatorWeightMessage }),
-                R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
-                R.tapError(err => {
-                    if (!err.includes('warp message contains stale nonce')) { logger.error(err); process.exit(1); }
-                    logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
-                }));
-
-            const validationIDBytes = hexToBytes(validationID as Hex);
-            const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
-            const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-
-            logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-            const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, signingSubnetId });
-            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
-
-            const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-            const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-            const messageIndex = 0;
-
-            logger.log("\nCalling function completeDelegatorRemoval...");
-            const hash = await kiteStakingManager.safeWrite.completeDelegatorRemoval(
-                [delegationID, messageIndex],
-                { account: client.account!, chain: null, accessList }
-            );
-
-            if (!options.skipWaitApi) {
-                const subnetIDHex = await validatorManager.read.subnetID();
-                logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-                await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
-            }
-
-            logger.log("completeDelegatorRemoval executed successfully, tx hash:", hash);
-            lastHash = hash;
-        }
-
-        if (!lastHash) throw new Error("No delegator removals processed");
+        await ksmCompleteDelegatorRemoval(
+            client,
+            kiteStakingManager,
+            pchainClient,
+            initiateRemovalTxHash,
+            options.delegationId.length > 0 ? options.delegationId : undefined,
+            !options.skipWaitApi,
+        );
     });
 
 kiteStakingManagerCmd
@@ -661,16 +368,7 @@ kiteStakingManagerCmd
     .asyncAction({ signer: true }, async (client, nodeId, options) => {
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
         logger.log("Initiating validator removal...");
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-        const nodeIdBytes = parseNodeID(nodeId, false);
-        const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
-        const messageIndex = 0;
-        const hash = await kiteStakingManager.safeWrite.initiateValidatorRemoval([
-            validationID,
-            options.includeUptimeProof,
-            messageIndex
-        ]);
+        const hash = await ksmInitiateValidatorRemoval(client, kiteStakingManager, nodeId, options.includeUptimeProof);
         logger.log("initiateValidatorRemoval executed successfully, tx hash:", hash);
     });
 
@@ -689,106 +387,16 @@ kiteStakingManagerCmd
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
         await requirePChainBallance(client, 50000n, opts.yes);
         const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-        const nodeIDs = options.nodeId.length > 0 ? options.nodeId : undefined;
-        const initiateTxHashes = options.initiateTx.length > 0 ? options.initiateTx : undefined;
-
         logger.log("Completing validator removal...");
-        const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
-        if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
-
-        const settings = await kiteStakingManager.read.getStakingManagerSettings();
-        const validatorManager = await getValidatorManager(client, settings.manager);
-
-        const initiatedValidatorRemovals = parseEventLogs({
-            abi: validatorManager.abi,
-            logs: receipt.logs,
-            eventName: 'InitiatedValidatorRemoval'
-        });
-        if (initiatedValidatorRemovals.length === 0) {
-            logger.error(color.red("No InitiatedValidatorRemoval event found in the transaction logs, verify the transaction hash."));
-            process.exit(1);
-        }
-
-        const filteredRemovals = nodeIDs
-            ? (await Promise.all(
-                initiatedValidatorRemovals.map(async (e) => {
-                    const validator = await validatorManager.read.getValidator([e.args.validationID]);
-                    return { event: e, nodeId: encodeNodeID(validator.nodeID as Hex) };
-                })
-            )).filter(({ nodeId }) => nodeIDs.includes(nodeId)).map(({ event }) => event)
-            : initiatedValidatorRemovals;
-
-        if (filteredRemovals.length === 0) {
-            logger.error(color.red("No matching InitiatedValidatorRemoval event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
-            process.exit(1);
-        }
-
-        const warpLogs = parseEventLogs({ abi: IWarpMessengerABI, logs: receipt.logs });
-        const subnetIDHex = await validatorManager.read.subnetID();
-        const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
-        const currentValidators = await getCurrentValidators(client, subnetID);
-
-        for (const event of filteredRemovals) {
-            const eventIndex = filteredRemovals.indexOf(event);
-            const validationID = event.args.validationID;
-            const validator = await validatorManager.read.getValidator([validationID]);
-            const nodeID = encodeNodeID(validator.nodeID as Hex);
-            logger.log(`Processing removal for node ${nodeID}`);
-
-            const warpLog = warpLogs.find((w) => w.args.messageID === event.args.validatorWeightMessageID);
-            if (!warpLog) {
-                logger.error(color.red(`No matching warp log found for validationID ${validationID}`));
-                continue;
-            }
-
-            const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
-            let addNodeBlockNumber = receipt.blockNumber;
-            if (initiateTxHashes && initiateTxHashes.length > eventIndex) {
-                const addNodeReceipt = await client.waitForTransactionReceipt({ hash: initiateTxHashes[eventIndex], confirmations: 0 });
-                if (addNodeReceipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHashes[eventIndex]} reverted, pls use another initiate tx`);
-                addNodeBlockNumber = addNodeReceipt.blockNumber;
-            }
-
-            const isValidator = currentValidators.some((v) => v.nodeID === nodeID);
-            if (!isValidator) {
-                logger.log(color.yellow("Node is not registered as a validator on the P-Chain."));
-            } else {
-                const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-                const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-                logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-                pipe(
-                    await setValidatorWeight({ client: pchainClient, validationID: validationID, message: signedL1ValidatorWeightMessage }),
-                    R.tapError((error) => { throw new Error("SetL1ValidatorWeightTx failed on P-Chain: " + error + '\n'); }),
-                    R.tap((txId) => { logger.log("SetL1ValidatorWeightTx executed on P-Chain: " + txId); })
-                );
-            }
-
-            const justification = await GetRegistrationJustification(nodeID, validationID, subnetID, client, addNodeBlockNumber);
-            if (!justification) throw new Error("Justification not found for validator removal");
-
-            const validationIDBytes = hexToBytes(validationID);
-            const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, client.network === 'fuji' ? 5 : 1, pChainChainID);
-            const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-            const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: bytesToHex(justification), signingSubnetId });
-            logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
-
-            const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-            const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-            const messageIndex = 0;
-
-            logger.log("Executing completeValidatorRemoval transaction...");
-            const completeHash = await kiteStakingManager.safeWrite.completeValidatorRemoval(
-                [messageIndex],
-                { account: client.account!, chain: null, accessList }
-            );
-
-            if (!options.skipWaitApi) {
-                logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-                await retryWhileError(async () => (await getCurrentValidators(client, utils.base58check.encode(hexToBytes(subnetIDHex)))).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
-            }
-
-            logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
-        }
+        await ksmCompleteValidatorRemoval(
+            client,
+            kiteStakingManager,
+            pchainClient,
+            initiateRemovalTxHash,
+            options.nodeId.length > 0 ? options.nodeId : undefined,
+            !options.skipWaitApi,
+            options.initiateTx.length > 0 ? options.initiateTx : undefined,
+        );
     });
 
 kiteStakingManagerCmd
@@ -799,17 +407,7 @@ kiteStakingManagerCmd
     .argument("rpcUrl", "RPC URL for getting validator uptime")
     .asyncAction({ signer: true }, async (client, nodeId, rpcUrl, options) => {
         const kiteStakingManager = await getKiteStakingManager(client, options.stakingManagerAddress);
-        const [uptimeBlockchainID, manager] = await kiteStakingManager.read.getStakingManagerSettings().then((settings) => [settings.uptimeBlockchainID, settings.manager]);
-        const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-        const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID as Hex));
-        logger.log("\nGetting validation uptime message...");
-        const signedUptimeMessage = await getValidationUptimeMessage(client, rpcUrl, nodeId, warpNetworkID, sourceChainID);
-        const signedUptimeMessageHex = signedUptimeMessage.startsWith('0x') ? signedUptimeMessage : `0x${signedUptimeMessage}`;
-        const uptimeAccessList = packWarpIntoAccessList(hexToBytes(signedUptimeMessageHex as Hex));
-        const validators = await getCurrentValidatorsFromNode(rpcUrl);
-        const validator = validators.find(v => v.nodeID === nodeId);
-        if (!validator) throw new Error(`Validator with nodeID ${nodeId} not found in the current validator set`);
-        const txHash = await kiteStakingManager.safeWrite.submitUptimeProof([cb58ToHex(validator.validationID), 0], { accessList: uptimeAccessList });
+        const txHash = await ksmSubmitUptimeProof(client, kiteStakingManager, nodeId, rpcUrl);
         logger.log("submitUptimeProof done, tx hash:", txHash);
     });
 

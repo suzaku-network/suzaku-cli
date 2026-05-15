@@ -1,19 +1,17 @@
-import { Abi, bytesToHex, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from 'viem';
-import { SafeSuzakuContract } from './lib/viemUtils';
-import { ExtendedClient, generateClient } from './client';
+import { Abi, formatUnits, getAbiItem, Hex, hexToBytes, parseUnits } from 'viem';
+import { generateClient } from './client';
 import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
-import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
-import { completeValidatorRemoval, Validator, ValidatorStatus, ValidatorStatusNames, L1MiddlewareABI, BalancerValidatorManagerABI, getBalancerValidatorManager, getL1Middleware, getDefaultCollateral, completeValidatorRegistration, completeWeightUpdate, getVaultTokenized, getAccessControl } from '@suzaku-sdk/core';
+import { completeValidatorRemoval, Validator, ValidatorStatus, ValidatorStatusNames, L1MiddlewareABI, BalancerValidatorManagerABI, getBalancerValidatorManager, getL1Middleware, getDefaultCollateral, completeValidatorRegistration, completeWeightUpdate, getVaultTokenized, getAccessControl, addNode, initStakeUpdate, processNodeStakeCache, getLastNodeValidationId, getValidatorsToTopUp, weightSync } from '@suzaku-sdk/core';
 import { getCurrentValidators } from './lib/pChainUtils';
 import { utils } from '@avalabs/avalanchejs';
 import { ArgAddress, ArgBigInt, ArgBLSPOP, ArgHex, ArgNodeID, ArgNumber, collectMultiple, ParserAddress, ParserAVAX, ParserNodeID, ParserNumber, ParserPrivateKey, ParseUnits } from './lib/cliParser';
 import { SuzakuCliProgram } from './cli';
 import { Option } from '@commander-js/extra-typings';
 import { increasePChainValidatorBalance, requirePChainBallance } from '@suzaku-sdk/node';
-import { hexToUint8Array } from '@suzaku-sdk/core/lib/justification';
 import { A, pipe, R } from '@mobily/ts-belt';
 import { argVaultAddress } from './vault';
 import { argMiddlewareVaultManagerAddress } from './vaultManager';
@@ -39,83 +37,6 @@ export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { so
     }
     return acc;
   }, {} as Record<string, { source: string; event: string; hash: string; executionTime: string }[]>);
-}
-
-export interface OperatorForceUpdatePrediction {
-  operator: Hex;
-  willLoseWeight: boolean;
-  currentTotalStake: bigint;
-  cappedTotalStake: bigint;
-  registeredStake: bigint;
-  stakeDeficit: bigint;
-  activeNodesCount: number;
-}
-
-export async function predictForceUpdateImpact(
-  client: ExtendedClient,
-  middleware: SafeSuzakuContract['L1Middleware'],
-  operators: Hex[]
-): Promise<OperatorForceUpdatePrediction[]> {
-  if (operators.length === 0) return [];
-
-  const [
-    currentEpoch,
-    weightScaleFactor,
-    balancerAddress,
-    primaryAssetClass
-  ] = await middleware.multicall([
-    'getCurrentEpoch',
-    'WEIGHT_SCALE_FACTOR',
-    'BALANCER',
-    'PRIMARY_ASSET_CLASS'
-  ]);
-
-  const balancer = await getBalancerValidatorManager(client, balancerAddress)
-  const [, securityModuleMaxWeight] = await balancer.read.getSecurityModuleWeights([middleware.address])
-  const maxStakeCap = BigInt(securityModuleMaxWeight) * weightScaleFactor;
-
-  const results = await middleware.multicall(operators.flatMap(op => [
-    { name: 'getOperatorStake', args: [op, currentEpoch, primaryAssetClass] },
-    { name: 'getOperatorUsedStakeCached', args: [op] },
-    { name: 'operatorLockedStake', args: [op] },
-    { name: 'getActiveNodesForEpoch', args: [op, currentEpoch] }
-  ]));
-
-  const predictions: OperatorForceUpdatePrediction[] = [];
-
-  for (let i = 0; i < operators.length; i++) {
-    const baseIndex = i * 4;
-    const operator = operators[i];
-    const theoreticalStake = results[baseIndex] as bigint;
-    const usedStake = results[baseIndex + 1] as bigint;
-    const lockedStake = results[baseIndex + 2] as bigint;
-    const activeNodes = results[baseIndex + 3] as readonly `0x${string}`[];
-
-    let cappedStake = theoreticalStake;
-    if (cappedStake > maxStakeCap) cappedStake = maxStakeCap;
-
-    const registeredStake = usedStake + lockedStake;
-    let stakeDeficit = 0n;
-    let willLoseWeight = false;
-    if (cappedStake < registeredStake) {
-      stakeDeficit = registeredStake - cappedStake;
-      if (stakeDeficit >= weightScaleFactor && activeNodes.length > 0) {
-        willLoseWeight = true;
-      }
-    }
-
-    predictions.push({
-      operator,
-      willLoseWeight,
-      currentTotalStake: theoreticalStake,
-      cappedTotalStake: cappedStake,
-      registeredStake,
-      stakeDeficit,
-      activeNodesCount: activeNodes.length
-    });
-  }
-
-  return predictions;
 }
 
 /* --------------------------------------------------
@@ -271,33 +192,7 @@ middlewareCmd
     .addOption(new Option("--delay <milliseconds>", "Delay between loop iterations in milliseconds (default: 1000)").default(1000).argParser(ParserNumber))
     .asyncAction({ signer: true }, async (client, middlewareAddress, options) => {
         const middlewareSvc = await getL1Middleware(client, middlewareAddress);
-
-        let epochsPerCall;
-        let loopCount;
-        if (options.epochs || options.loopEpochs) {
-            epochsPerCall = options.epochs || 1;
-            loopCount = options.loopEpochs || 1;
-        } else {
-            epochsPerCall = await middlewareSvc.read.getCurrentEpoch() - await middlewareSvc.read.lastGlobalNodeStakeUpdateEpoch();
-            loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1;
-            epochsPerCall = Math.ceil(epochsPerCall / loopCount);
-        }
-
-        logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
-
-        for (let i = 0; i < loopCount; i++) {
-            logger.log(`\nIteration ${i + 1}/${loopCount}`);
-            logger.log("Processing node stake cache...");
-            const hash = await middlewareSvc.safeWrite.manualProcessNodeStakeCache([epochsPerCall]);
-            logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
-
-            if (i < loopCount - 1 && options.delay > 0) {
-                logger.log(`Waiting ${options.delay}ms before next iteration...`);
-                await new Promise(resolve => setTimeout(resolve, options.delay));
-            }
-        }
-
-        logger.log(`\nCompleted processing ${loopCount * epochsPerCall} total epochs`);
+        await processNodeStakeCache(middlewareSvc, options.epochs || undefined, options.loopEpochs, options.delay);
     });
 
 middlewareCmd
@@ -314,26 +209,11 @@ middlewareCmd
     .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
     .asyncAction({ signer: true }, async (client, middlewareAddress, nodeId, blsKey, options) => {
         const middlewareSvc = await getL1Middleware(client, middlewareAddress);
-        const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
-
-        const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
-        const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
-        const remainingBalanceOwner: [number, Hex[]] = [
-            Number(options.pchainRemainingBalanceOwnerThreshold),
-            remainingBalanceOwnerAddress
-        ];
-        const disableOwner: [number, Hex[]] = [
-            Number(options.pchainDisableOwnerThreshold),
-            disableOwnerAddress
-        ];
-
-        const primaryCollateralAddress = await middlewareSvc.read.PRIMARY_ASSET();
-        const primaryCollateral = await getDefaultCollateral(client, primaryCollateralAddress);
-        const initialStakeWei = parseUnits(options.initialStake.toString(), await primaryCollateral.read.decimals());
-
-        logger.log("Calling function addNode...");
-        const nodeIdHex32 = parseNodeID(nodeId);
-        const hash = await middlewareSvc.safeWrite.addNode([nodeIdHex32, blsKey, { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] }, { threshold: disableOwner[0], addresses: disableOwner[1] }, initialStakeWei]);
+        const hash = await addNode(
+            client, middlewareSvc, nodeId, blsKey, options.initialStake.toString(),
+            { threshold: options.pchainRemainingBalanceOwnerThreshold, addresses: options.pchainRemainingBalanceOwnerAddress },
+            { threshold: options.pchainDisableOwnerThreshold, addresses: options.pchainDisableOwnerAddress },
+        );
         logger.log("addNode executed successfully, tx hash:", hash);
     });
 
@@ -415,13 +295,7 @@ middlewareCmd
     .argument("newStake", "New stake amount")
     .asyncAction({ signer: true }, async (client, middlewareAddress, nodeId, newStake) => {
         const middlewareSvc = await getL1Middleware(client, middlewareAddress);
-        const primaryCollateral = await middlewareSvc.read.PRIMARY_ASSET();
-        const collateral = await getDefaultCollateral(client, primaryCollateral);
-        const decimals = await collateral.read.decimals();
-        const newStakeWei = parseUnits(newStake, decimals);
-        logger.log("Calling function initializeValidatorStakeUpdate...");
-        const nodeIdHex32 = parseNodeID(nodeId);
-        const hash = await middlewareSvc.safeWrite.initializeValidatorStakeUpdate([nodeIdHex32, newStakeWei]);
+        const hash = await initStakeUpdate(client, middlewareSvc, nodeId, newStake);
         logger.log("initializeValidatorStakeUpdate executed successfully, tx hash:", hash);
     });
 
@@ -502,38 +376,12 @@ middlewareCmd
     .asyncAction({ signer: true }, async (client, middlewareAddress, operator, targetBalance) => {
         const middlewareSvc = await getL1Middleware(client, middlewareAddress);
         const targetBalanceWei = parseUnits(targetBalance, 9);
-        if (targetBalanceWei <= BigInt(1e7)) {
-            throw new Error("Target balance must be greater than 0.01 AVAX");
-        }
-        const balancerAddress = await middlewareSvc.read.BALANCER()
-        const balancer = await getBalancerValidatorManager(client, balancerAddress);
-        const [nodeCount, subnetID] = await Promise.all([middlewareSvc.read.getOperatorNodesLength([operator]), balancer.read.subnetID()]);
-        const validators = await getCurrentValidators(client, utils.base58check.encode(hexToUint8Array(subnetID)))
-
-        const validatorsToCheck = await Promise.all(
-            A.range(0, Number(nodeCount) - 1)
-                .map(async (index) => {
-                    const nodeIdHex = await middlewareSvc.read.operatorNodesArray([operator, BigInt(index)]);
-                    return validators.find(v => v.nodeID === encodeNodeID(nodeIdHex));
-                }))
-
-        const validatorsToTopUp = validatorsToCheck.reduce((acc, validator) => {
-            if (validator && validator.balance! < targetBalanceWei - BigInt(1e7)) {
-                acc.push({
-                    validationId: validator.validationID! as Hex,
-                    topup: targetBalanceWei - BigInt(validator.balance!),
-                });
-            }
-            return acc
-        }, [] as { validationId: Hex; topup: bigint }[])
-
-        const totalTopUp = validatorsToTopUp.reduce((acc, v) => acc + v.topup, 0n);
-
+        if (targetBalanceWei <= BigInt(1e7)) throw new Error("Target balance must be greater than 0.01 AVAX");
+        const { validatorsToTopUp, totalTopUp, nodeCount } = await getValidatorsToTopUp(client, middlewareSvc, operator, targetBalanceWei);
         if (validatorsToTopUp.length === 0) {
             logger.log("All operator validators have sufficient balance. No top-up needed.");
             return;
         }
-
         logger.log(`${validatorsToTopUp.length} validators to top-up for a total of ${formatUnits(totalTopUp, 9)} AVAX.`);
         await requirePChainBallance(client, totalTopUp + BigInt(2e4) * nodeCount, program.opts().yes);
         if (!program.opts().yes) {
@@ -543,21 +391,14 @@ middlewareCmd
                 process.exit(0);
             }
         }
-
         for (const { validationId, topup } of validatorsToTopUp) {
             logger.log(`\nTopping up validator ${validationId}`);
-            const amount = Number(topup) / 1e9
-            pipe(await increasePChainValidatorBalance(
-                client,
-                amount,
-                validationId,
-                false
-            ),
-                R.tapError(err => { logger.error(err); process.exit(1) }),)
+            pipe(await increasePChainValidatorBalance(client, Number(topup) / 1e9, validationId, false),
+                R.tapError(err => { logger.error(err); process.exit(1) }))
         }
         logger.log("\nCompleted top-up of operator validators.");
-        logger.addData('total_amount', totalTopUp)
-        logger.addData('validators', validatorsToTopUp)
+        logger.addData('total_amount', totalTopUp);
+        logger.addData('validators', validatorsToTopUp);
     });
 
 middlewareCmd
@@ -812,24 +653,7 @@ middlewareCmd
     .addArgument(ArgNodeID())
     .asyncAction(async (client, middlewareAddress, nodeId) => {
         const middlewareSvc = await getL1Middleware(client, middlewareAddress);
-        const balancerAddress = await middlewareSvc.read.balancerValidatorManager();
-        const balancerSvc = await getBalancerValidatorManager(client, balancerAddress);
-        logger.log(`Fetching last validation ID`);
-
-        const nodeIdHex = parseNodeID(nodeId);
-        const rawValidationId = await balancerSvc.read.getNodeValidationID([nodeIdHex]);
-        let validationId: Hex;
-        if (parseInt(rawValidationId, 16) === 0) {
-            const toBlock = await blockAtTimestamp(client, BigInt(await middlewareSvc.read.START_TIME()));
-            const fromBlock = await client.getBlockNumber();
-            const event = await collectEventsInRange(fromBlock, toBlock, 1, (opts) => middlewareSvc.getEvents.NodeAdded({ nodeId: nodeIdHex }, opts));
-            if (event.length === 0) {
-                throw new Error(`Node ID ${nodeId} never registered in the middleware`);
-            }
-            validationId = event[0].args.validationID!;
-        } else {
-            validationId = rawValidationId;
-        }
+        const validationId = await getLastNodeValidationId(client, middlewareSvc, nodeId);
         logger.log(`Last validationID: ${validationId}`);
     });
 
@@ -1067,112 +891,9 @@ middlewareCmd
     .addOption(new Option('-l, --loop-epochs <number>', 'Number of epochs to loop').argParser(Number))
     .asyncAction({ signer: true }, async (client, middlewareAddress, options) => {
         const middleware = await getL1Middleware(client, middlewareAddress);
-
-        const [lastGlobalNodeStakeUpdateEpoch, currentEpoch, updateWindow] = await middleware.multicall(['lastGlobalNodeStakeUpdateEpoch', 'getCurrentEpoch', 'UPDATE_WINDOW']);
-        let epochsPerCall;
-        let loopCount;
-        if (options.epochs || options.loopEpochs) {
-            epochsPerCall = options.epochs || 1;
-            loopCount = options.loopEpochs || 1;
-        } else {
-            epochsPerCall = currentEpoch - lastGlobalNodeStakeUpdateEpoch;
-            loopCount = epochsPerCall > 50 ? Math.ceil(epochsPerCall / 50) : 1;
-            epochsPerCall = Math.ceil(epochsPerCall / loopCount);
-        }
-
-        const startEpoch = await middleware.read.getEpochStartTs([currentEpoch]);
-        const now = Date.now() / 1000;
-
-        if (now < startEpoch + updateWindow) {
-            throw new Error(`Not enough time has passed since the start of the current epoch. Please wait until the update window has passed(${startEpoch + updateWindow - now} seconds)`);
-        }
-
-        logger.log(`Processing node stake cache: ${loopCount} iterations of ${epochsPerCall} epoch(s) each`);
-        for (let i = 0; i < loopCount; i++) {
-            logger.log(`\nIteration ${i + 1}/${loopCount}`);
-            const hash = await middleware.safeWrite.manualProcessNodeStakeCache([epochsPerCall]);
-            logger.log("manualProcessNodeStakeCache done, tx hash:", hash);
-        }
-
-        const processedEpochs = Math.max(epochsPerCall * loopCount, currentEpoch - lastGlobalNodeStakeUpdateEpoch);
-
-        const [collateralClasses, operators] = await middleware.multicall(['getCollateralClassIds', 'getAllOperators']);
-
-        const processedEpochsRange: number[] = Array.from({ length: processedEpochs }, (_, i) => i + lastGlobalNodeStakeUpdateEpoch)
-        for (const epoch of processedEpochsRange) {
-            for (const collateralClass of collateralClasses) {
-                logger.log(`Processing epoch ${epoch} for collateral class ${collateralClass}`);
-                await middleware.safeWrite.calcAndCacheStakes([epoch, collateralClass]);
-            }
-        }
-
-        const predictions = await predictForceUpdateImpact(client, middleware, operators as Hex[]);
-
-        for (const prediction of predictions) {
-            if (prediction.willLoseWeight) {
-                logger.log(`Operator ${prediction.operator} will ${prediction.willLoseWeight ? 'lose' : 'gain'} weight`);
-                logger.log(`Current total stake: ${prediction.currentTotalStake}`);
-                logger.log(`Capped total stake: ${prediction.cappedTotalStake}`);
-                logger.log(`Registered stake: ${prediction.registeredStake}`);
-                logger.log(`Stake deficit: ${prediction.stakeDeficit}`);
-                logger.log(`Active nodes count: ${prediction.activeNodesCount}`);
-                const hash = await middleware.safeWrite.forceUpdateNodes([prediction.operator, 0n]);
-                logger.addData('forceUpdateNodes', { operator: prediction.operator, stakeDeficit: prediction.stakeDeficit.toString(), txHash: hash });
-            } else {
-                logger.log(`Operator ${prediction.operator} will not lose weight`);
-            }
-        }
-        const balancerAddress = await middleware.read.BALANCER();
-        const balancer = await getBalancerValidatorManager(client, balancerAddress);
-
-        let pendingRemovalNodes: { nodeID: Hex, validationID: Hex, txHash?: Hex }[] = [];
-
-        if (operators.length > 0) {
-            const subnetId = utils.base58check.encode(hexToBytes(await balancer.read.subnetID()));
-            const validators = await getCurrentValidators(client, subnetId);
-            const startBlock = await blockAtTimestamp(client, BigInt(await middleware.read.getEpochStartTs([currentEpoch - 2])));
-            const logs = await middleware.getLogs({ event: "NodeRemoved", fromBlock: startBlock });
-
-            const combinedNodes = Array.from(new Set([...validators.map(v => ({ nodeID: parseNodeID(v.nodeID as NodeId), validationID: bytesToHex(utils.base58check.decode(v.validationID!)) })), ...logs.map(l => ({ nodeID: l.args.nodeId!, validationID: l.args.validationID!, txHash: l.transactionHash! }))]));
-
-            const statuses = await balancer.multicall(combinedNodes.map((v) => {
-                return { name: 'getValidator', args: [v.validationID] }
-            }));
-            statuses.forEach((status: any, i: number) => {
-                logger.log(`Node ${combinedNodes[i].nodeID} status: ${status.status}`);
-            });
-            pendingRemovalNodes = combinedNodes.filter((_, i) => statuses[i].status === ValidatorStatus.PendingRemoved);
-        }
-        const nodesRemoved = []
-        if (pendingRemovalNodes.length > 0) {
-            logger.log(`Found ${pendingRemovalNodes.length} nodes pending removal`);
-            const processedTxHashes: Hex[] = [];
-
-            for (const pendingNode of pendingRemovalNodes) {
-                if (!pendingNode.txHash) {
-                    pendingNode.txHash = await balancer.safeWrite.resendValidatorRemovalMessage([pendingNode.validationID]);
-                    logger.log(`Resent validator removal message for node ${pendingNode.nodeID}, tx hash: ${pendingNode.txHash}`);
-                }
-                if (processedTxHashes.includes(pendingNode.txHash)) continue;
-                processedTxHashes.push(pendingNode.txHash);
-                logger.log(`Node pending removal found: ${pendingNode.nodeID}`);
-                try {
-                    const { nodes } = await completeValidatorRemoval(
-                        client,
-                        middleware,
-                        balancer,
-                        client,
-                        pendingNode.txHash,
-                        false
-                    );
-                    nodesRemoved.push(...nodes);
-                } catch (error) {
-                    logger.error(error);
-                }
-            }
-        }
-        logger.log(nodesRemoved)
-        logger.addData("nodesRemoved", nodesRemoved)
+        const nodesRemoved = await weightSync(client, middleware, options.epochs, options.loopEpochs);
+        logger.log(nodesRemoved);
+        logger.addData("nodesRemoved", nodesRemoved);
     });
 
     return middlewareCmd;

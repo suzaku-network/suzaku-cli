@@ -1,1 +1,1 @@
-export * from './securityModule';
+export * from './service';

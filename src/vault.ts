@@ -1,8 +1,6 @@
-import { ExtendedPublicClient } from './client';
-import { SuzakuContract } from './lib/viemUtils';
-import { type Hex, parseUnits, formatUnits } from 'viem';
+import { parseUnits, formatUnits } from 'viem';
 import { logger } from './lib/logger';
-import { getVaultTokenized, getDefaultCollateral, getERC20, getL1RestakeDelegator } from '@suzaku-sdk/node';
+import { getVaultTokenized, getDefaultCollateral, getL1RestakeDelegator, getVaultInfo, deposit, setDepositLimit, increaseCollateralLimit, depositToCollateral, setL1Limit } from '@suzaku-sdk/core';
 import { ArgAddress, ArgBigInt, ParserAddress } from './lib/cliParser';
 import { argValidatorManagerAddress, SuzakuCliProgram } from './cli';
 import { Option } from '@commander-js/extra-typings'
@@ -10,107 +8,8 @@ import { argOperatorAddress } from './operator';
 
 export const argVaultAddress = ArgAddress("vaultAddress", "Vault contract address");
 
-type CollateralClassInfo = {
-  class: number;
-  l1Limit: number;
-  totalOperatorShares: number;
-};
-
-type VaultInfo = {
-  address: Hex;
-  collateral: Hex;
-  collateralLimit: number;
-  collateralAsset: Hex;
-  collateralAssetSymbol: string;
-  decimals: number;
-  delegator: Hex;
-  slasher: Hex;
-  totalStake: number;
-  activeStake: number;
-  epochDuration: number;
-  currentEpoch: number;
-  depositWhitelist: boolean;
-  depositLimit?: number;
-  collateralClasses?: CollateralClassInfo[];
-};
-
-export async function info(
-  vault: SuzakuContract['VaultTokenized'],
-  client: ExtendedPublicClient,
-  middleware?: SuzakuContract['L1Middleware']
-): Promise<VaultInfo> {
-  const [
-    collateralAddress,
-    delegatorAddress,
-    slasherAddress,
-    totalStake,
-    activeStake,
-    epochDuration,
-    currentEpoch,
-    depositWhitelist,
-    isDepositLimit,
-  ] = await vault.multicall([
-    'collateral',
-    'delegator',
-    'slasher',
-    'totalStake',
-    'activeStake',
-    'epochDuration',
-    'currentEpoch',
-    'depositWhitelist',
-    'isDepositLimit',
-  ] as const);
-
-  const [collateral, depositLimit] = await Promise.all([
-    getDefaultCollateral(client, collateralAddress),
-    isDepositLimit ? vault.read.depositLimit() : Promise.resolve(undefined),
-  ]);
-
-  const [collateralAsset, collateralLimit, decimals] = await collateral.multicall([
-    'asset',
-    'limit',
-    'decimals',
-  ]);
-
-  const assetToken = await getERC20(client, collateralAsset);
-  const collateralAssetSymbol = await assetToken.read.symbol();
-
-  let collateralClasses: CollateralClassInfo[] | undefined;
-  if (middleware) {
-    const delegator = await getL1RestakeDelegator(client, delegatorAddress);
-    const [[primary, secondaries], l1Address] = await middleware.multicall(['getActiveCollateralClasses', "BALANCER"]);
-    const allClasses = [primary, ...secondaries];
-
-    collateralClasses = await Promise.all(
-      allClasses.map(async (cls): Promise<CollateralClassInfo> => {
-        const [l1Limit, totalOperatorShares] = await Promise.all([
-          delegator.read.l1Limit([l1Address, cls]),
-          delegator.read.totalOperatorL1Shares([l1Address, cls]),
-        ]);
-        return { class: Number(cls), l1Limit: Number(l1Limit), totalOperatorShares: Number(totalOperatorShares) };
-      })
-    );
-  }
-
-  return {
-    address: vault.address,
-    collateral: collateralAddress as Hex,
-    collateralLimit: Number(collateralLimit),
-    collateralAsset: collateralAsset as Hex,
-    collateralAssetSymbol,
-    decimals,
-    delegator: delegatorAddress as Hex,
-    slasher: slasherAddress as Hex,
-    totalStake: Number(totalStake),
-    activeStake: Number(activeStake),
-    epochDuration: Number(epochDuration),
-    currentEpoch: Number(currentEpoch),
-    depositWhitelist,
-    ...(depositLimit !== undefined && { depositLimit: Number(depositLimit) }),
-    ...(collateralClasses && { collateralClasses }),
-  };
-}
-
+export { getVaultInfo };
+export type { VaultInfo, CollateralClassInfo } from '@suzaku-sdk/core';
 
 /* --------------------------------------------------
 * VAULT DEPOSIT/WITHDRAW/CLAIM/GRANT
@@ -128,43 +27,11 @@ vaultCmd
     .addOption(new Option("--onBehalfOf <behalfOf>", "Optional onBehalfOf address").argParser(ParserAddress))
     .asyncAction({ signer: true }, async (client, vaultAddress, amount, options) => {
         const onBehalfOf = options.onBehalfOf ?? client.addresses.C;
-      logger.log("Depositing...");
-
-      const vault = await getVaultTokenized(client, vaultAddress);
-      const collateralAddress = await vault.read.collateral();
-      const collateral = await getDefaultCollateral(client, collateralAddress);
-      const decimals = await collateral.read.decimals();
-      const amountWei = parseUnits(amount, decimals)
-      logger.log("\n=== Deposit Details ===");
-      logger.log("Amount:", amount, "tokens");
-      logger.log("Amount in wei:", amountWei.toString());
-      logger.log("Decimals used:", decimals);
-
-      logger.log("Collateral address:", collateralAddress);
-      logger.log("Vault address:", vault.address);
-
-      logger.log("\n=== Collateral Approval ===");
-      logger.log("Approving:", amount, "tokens");
-      logger.log("Approval amount in wei:", amountWei.toString());
-      logger.log("Spender (vault):", vault.address);
-      const approveTx = await collateral.safeWrite.approve([vault.address, amountWei]);
-      logger.log("Approval tx hash:", approveTx);
-
-      logger.log("Waiting for approval confirmation...");
-      const approvalReceipt = await client.waitForTransactionReceipt({ hash: approveTx });
-      logger.log("Approval confirmed in block:", approvalReceipt.blockNumber);
-
-      logger.log("\n=== Executing Deposit ===");
-      logger.log("Depositing:", amount, "tokens");
-      logger.log("Deposit amount in wei:", amountWei.toString());
-      logger.log("On behalf of:", onBehalfOf);
-      const hash = await vault.safeWrite.deposit([onBehalfOf, amountWei]);
-      logger.log("Deposit tx hash:", hash);
-
-      logger.log("Waiting for deposit confirmation...");
-      const depositReceipt = await client.waitForTransactionReceipt({ hash: hash });
-      logger.log("Deposit confirmed in block:", depositReceipt.blockNumber);
-      logger.log("Deposit completed successfully!");
+        const vault = await getVaultTokenized(client, vaultAddress);
+        logger.log("Depositing...");
+        const { approveTxHash, depositTxHash } = await deposit(client, vault, onBehalfOf, amount);
+        logger.log("Approval tx hash:", approveTxHash);
+        logger.log("Deposit completed, tx hash:", depositTxHash);
     });
 
 vaultCmd
@@ -180,7 +47,6 @@ vaultCmd
         logger.log("Withdrawing...");
         const hash = await vault.safeWrite.withdraw([claimer, amountWei]);
         logger.log("Withdraw done, tx hash:", hash);
-        logger.log("Withdrawal completed successfully!");
     });
 
 vaultCmd
@@ -195,7 +61,6 @@ vaultCmd
         logger.log("Claiming...");
         const hash = await vault.safeWrite.claim([recipient, epoch]);
         logger.log("Claim done, tx hash:", hash);
-        logger.log("Claim completed successfully!");
     });
 
 vaultCmd
@@ -234,18 +99,11 @@ vaultCmd
     .addArgument(ArgAddress("collateralAddress", "Collateral contract address"))
     .argument("amount", "Amount of token to deposit in the collateral")
     .asyncAction({ signer: true }, async (client, collateralAddress, amount) => {
-        logger.log("Approving collateral...");
         const collateral = await getDefaultCollateral(client, collateralAddress);
-        const rewardTokenAddress = await collateral.read.asset();
-        const rewardToken = await getERC20(client, rewardTokenAddress);
-        const decimals = await collateral.read.decimals();
-        const amountWei = parseUnits(amount, decimals)
-        const hash = await rewardToken.safeWrite.approve([collateralAddress, amountWei]);
-        await client.waitForTransactionReceipt({ hash })
-        logger.log("Approval done, tx hash:", hash);
-        const depositTx = await collateral.safeWrite.deposit([client.addresses.C, amountWei]);
-        await client.waitForTransactionReceipt({ hash: depositTx })
-        logger.log("Deposit to collateral done, tx hash:", depositTx);
+        logger.log("Depositing to collateral...");
+        const { approveTxHash, depositTxHash } = await depositToCollateral(client, collateral, client.addresses.C, amount);
+        logger.log("Approval tx hash:", approveTxHash);
+        logger.log("Deposit to collateral done, tx hash:", depositTxHash);
     });
 
 vaultCmd
@@ -255,23 +113,8 @@ vaultCmd
     .argument("limit", "Deposit limit amount")
     .asyncAction({ signer: true }, async (client, vaultAddress, limit) => {
         const vault = await getVaultTokenized(client, vaultAddress);
-        const limitWei = parseUnits(limit, await vault.read.decimals())
-        const isLimitShouldBeEnabled = limitWei > 0n;
-        const isLimitEnabled = await vault.read.isDepositLimit();
-        if (isLimitShouldBeEnabled !== isLimitEnabled) {
-            await vault.safeWrite.setIsDepositLimit([isLimitShouldBeEnabled],
-                {
-                    chain: null,
-                    account: client.account!,
-                })
-            logger.log(`Set deposit limit enabled to ${isLimitShouldBeEnabled} for vault (${await vault.read.name()}) ${vaultAddress}`);
-        }
-        await vault.safeWrite.setDepositLimit([limitWei],
-            {
-                chain: null,
-                account: client.account!,
-            })
-        logger.log(`Set deposit limit to ${limit} for vault (${await vault.read.name()}) ${vaultAddress}`);
+        const hash = await setDepositLimit(client, vault, limit);
+        logger.log(`Set deposit limit to ${limit}, tx hash: ${hash}`);
     });
 
 vaultCmd
@@ -281,15 +124,8 @@ vaultCmd
     .argument("limit", "Deposit limit amount")
     .asyncAction({ signer: true }, async (client, vaultAddress, limit) => {
         const vault = await getVaultTokenized(client, vaultAddress);
-        const collateralAddress = await vault.read.collateral();
-        const collateral = await getDefaultCollateral(client, collateralAddress);
-        const limitWei = parseUnits(limit, await collateral.read.decimals())
-        await collateral.safeWrite.increaseLimit([limitWei],
-            {
-                chain: null,
-                account: client.account!,
-            })
-        logger.log(`Collateral (${collateralAddress}) limit increased to ${limit} (${await collateral.read.name()})`);
+        const hash = await increaseCollateralLimit(client, vault, limit);
+        logger.log(`Collateral limit increased to ${limit}, tx hash: ${hash}`);
     });
 
 /* --------------------------------------------------
@@ -404,11 +240,8 @@ vaultCmd
     .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
     .asyncAction({ signer: true }, async (client, vaultAddress, l1Address, limit, collateralClass) => {
         const vault = await getVaultTokenized(client, vaultAddress);
-        const delegatorAddress = await vault.read.delegator();
-        const delegator = await getL1RestakeDelegator(client, delegatorAddress);
-        const limitWei = parseUnits(limit, await vault.read.decimals())
         logger.log("Setting L1 limit...");
-        const hash = await delegator.safeWrite.setL1Limit([l1Address, collateralClass, limitWei]);
+        const hash = await setL1Limit(client, vault, l1Address, collateralClass, limit);
         logger.log("setL1Limit done, tx hash:", hash);
     });
 

@@ -1,15 +1,15 @@
 import {
   Abi,
-  ExtractAbiFunction,
   ExtractAbiFunctionNames,
-  AbiParametersToPrimitiveTypes
 } from 'abitype';
-import { type ContractFunctionReturnType, type ContractFunctionName } from 'viem';
+import { type Address, type ContractFunctionReturnType, type ContractFunctionName, type ContractFunctionArgs } from 'viem';
 
 // --- Utilitaires de typage interne ---
 
 type GetAbiArgs<TAbi extends Abi, TName extends string> =
-  AbiParametersToPrimitiveTypes<ExtractAbiFunction<TAbi, TName>['inputs'], 'inputs'>;
+  TName extends ContractFunctionName<TAbi>
+  ? ContractFunctionArgs<TAbi, 'view' | 'pure' | 'nonpayable' | 'payable', TName>
+  : never;
 
 // Utilise ContractFunctionReturnType de viem pour que les addresses soient typées Address
 // et non Hex (`0x${string}` brut).
@@ -107,18 +107,25 @@ export type SafeWriteFn<
   WriteSignature<GetAbiArgs<TAbi, K>>;
 };
 
-// --- Interface Globale ---
+// --- Interfaces Globales ---
 
-export interface IContract<
+export interface IReadContract<
   TAbi extends Abi,
   TSelectedMethods extends ExtractAbiFunctionNames<TAbi> = ExtractAbiFunctionNames<TAbi>
 > {
+  address: Address;
+
   read: {
     [K in TSelectedMethods & ExtractAbiFunctionNames<TAbi, 'view' | 'pure'>]:
     ReadSignature<GetAbiArgs<TAbi, K>, GetAbiReturn<TAbi, K>>;
   };
 
-  safeWrite: SafeWriteFn<TAbi, TSelectedMethods>;
-
   multicall: MulticallFn<TAbi, TSelectedMethods>;
+}
+
+export interface IContract<
+  TAbi extends Abi,
+  TSelectedMethods extends ExtractAbiFunctionNames<TAbi> = ExtractAbiFunctionNames<TAbi>
+> extends IReadContract<TAbi, TSelectedMethods> {
+  safeWrite: SafeWriteFn<TAbi, TSelectedMethods>;
 }

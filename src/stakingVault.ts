@@ -1,18 +1,10 @@
 import { ExtendedClient, ExtendedWalletClient, generateClient } from './client';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
-import { chainList, getKiteStakingManager, getStakingVault, getValidatorManager } from '@suzaku-sdk/core';
-import { parseUnits, parseEventLogs, Hex, hexToBytes, bytesToHex, formatUnits, fromBytes } from 'viem';
+import { chainList, getStakingVault, svInitiateValidatorRegistration, svInitiateValidatorRemoval, svForceRemoveValidator, svInitiateDelegatorRegistration, svCompleteValidatorRegistration, svCompleteDelegatorRegistration, svCompleteValidatorRemoval, svCompleteDelegatorRemoval } from '@suzaku-sdk/core';
+import { parseUnits, parseEventLogs, Hex, formatUnits } from 'viem';
 import { logger } from './lib/logger';
-import { parseNodeID, NodeId, encodeNodeID, retryWhileError, bytes32ToAddress } from './lib/utils';
+import { NodeId, encodeNodeID } from './lib/utils';
 import { color } from 'console-log-colors';
-import { collectSignatures, getSigningSubnetIdFromWarpMessage, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList } from './lib/warpUtils';
-import { getValidationUptimeMessage } from './uptime';
-import { getCurrentValidators, registerL1Validator, setValidatorWeight } from './lib/pChainUtils';
-import { GetRegistrationJustification } from '@suzaku-sdk/core/lib/justification';
-import { pipe, R } from '@mobily/ts-belt';
-import { utils } from '@avalabs/avalanchejs';
-import { pChainChainID } from '@suzaku-sdk/core';
-import { IWarpMessengerABI } from '@suzaku-sdk/core';
 import { ArgAddress, ArgBigInt, ArgBLSPOP, ArgHex, ArgNodeID, collectMultiple, OptAddress, ParserAddress, ParserHex, ParserNodeID, ParserNumber, ParserPrivateKey, ParseUnits } from './lib/cliParser';
 import { SuzakuCliProgram } from './cli';
 import { Option } from '@commander-js/extra-typings'
@@ -20,14 +12,6 @@ import { argOperatorAddress } from './operator';
 import { requirePChainBallance } from '@suzaku-sdk/node';
 
 export const optStakingVaultAddress = OptAddress("--staking-vault-address <address>", "Staking vault contract address");
-
-async function getValidatorManagerAddress(client: ExtendedWalletClient, stakingVault: SafeSuzakuContract['StakingVault']): Promise<{ validatorManagerAddress: Hex, stakingManager: SafeSuzakuContract['KiteStakingManager'], stakingManagerStorageLocation: Hex }> {
-    const stakingManagerAddress = await stakingVault.read.getStakingManager();
-    const stakingManager = await getKiteStakingManager(client, stakingManagerAddress);
-    const stakingManagerStorageLocation = await stakingManager.read.STAKING_MANAGER_STORAGE_LOCATION() as Hex
-    const validatorManagerAddress = bytes32ToAddress((await client.getStorageAt({ address: stakingManagerAddress, slot: stakingManagerStorageLocation })) as Hex) as Hex;
-    return { validatorManagerAddress, stakingManager, stakingManagerStorageLocation };
-}
 
 // ── Info helpers ──────────────────────────────────────────────────────────────
 
@@ -463,59 +447,13 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
         .addOption(new Option("--pchain-disable-owner-address <address>", "P-Chain disable owner address").default([] as Hex[]).argParser(collectMultiple(ParserAddress)))
         .asyncAction({ signer: true }, async (client, nodeId, blsKey, stakeAmount, options) => {
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const defaultOwnerAddress = fromBytes(utils.bech32ToBytes(client.addresses.P), 'hex');
-            const remainingBalanceOwnerAddress = options.pchainRemainingBalanceOwnerAddress.length > 0 ? options.pchainRemainingBalanceOwnerAddress : [defaultOwnerAddress];
-            const disableOwnerAddress = options.pchainDisableOwnerAddress.length > 0 ? options.pchainDisableOwnerAddress : [defaultOwnerAddress];
-            const remainingBalanceOwner: [number, Hex[]] = [
-                Number(options.pchainRemainingBalanceOwnerThreshold),
-                remainingBalanceOwnerAddress
-            ];
-            const disableOwner: [number, Hex[]] = [
-                Number(options.pchainDisableOwnerThreshold),
-                disableOwnerAddress
-            ];
-            logger.log("Initiating validator registration in StakingVault...");
             const stakeAmountWei = parseUnits(stakeAmount, 18);
-            const nodeIdBytes = parseNodeID(nodeId, false);
-            logger.log("\n=== Validator Registration Details ===");
-            logger.log("Node ID:", nodeId);
-            logger.log("BLS Key:", blsKey);
-            logger.log("Stake amount:", stakeAmount, "KITE");
-            logger.log("Stake amount in wei:", stakeAmountWei.toString());
-            logger.log("Remaining balance owner threshold:", remainingBalanceOwner[0]);
-            logger.log("Remaining balance owner addresses:", remainingBalanceOwner[1]);
-            logger.log("Disable owner threshold:", disableOwner[0]);
-            logger.log("Disable owner addresses:", disableOwner[1]);
-            logger.log("Vault address:", stakingVault.address);
-            const hash = await stakingVault.safeWrite.initiateValidatorRegistration([
-                nodeIdBytes,
-                blsKey,
-                { threshold: remainingBalanceOwner[0], addresses: remainingBalanceOwner[1] },
-                { threshold: disableOwner[0], addresses: disableOwner[1] },
-                stakeAmountWei
-            ]);
+            const hash = await svInitiateValidatorRegistration(
+                client, stakingVault, nodeId, blsKey, stakeAmountWei,
+                { threshold: options.pchainRemainingBalanceOwnerThreshold, addresses: options.pchainRemainingBalanceOwnerAddress },
+                { threshold: options.pchainDisableOwnerThreshold, addresses: options.pchainDisableOwnerAddress },
+            );
             logger.log("Initiate validator registration tx hash:", hash);
-            logger.log("Waiting for transaction confirmation...");
-            const receipt = await client.waitForTransactionReceipt({ hash });
-            logger.log("Transaction confirmed in block:", receipt.blockNumber);
-            try {
-                const validatorRegisteredEvents = parseEventLogs({
-                    abi: stakingVault.abi,
-                    eventName: 'StakingVault__ValidatorRegistrationInitiated',
-                    logs: receipt.logs,
-                });
-                if (validatorRegisteredEvents.length > 0) {
-                    const event = validatorRegisteredEvents[0];
-                    logger.log("✅ Validator registration initiated successfully!");
-                    logger.log("Validation ID:", event.args?.validationID || 'N/A');
-                    logger.log("Operator:", event.args?.operator || 'N/A');
-                } else {
-                    logger.log("✅ Validator registration initiated successfully!");
-                }
-            } catch (error) {
-                logger.log("✅ Validator registration initiated successfully!");
-                logger.log("Note: Could not parse validator registration initiated event");
-            }
         });
 
     stakingVaultCmd
@@ -589,77 +527,8 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const initialBalance = ParseUnits(options.initialBalance, 9, 'Invalid initial balance');
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
             const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-            const waitValidatorVisible = !options.skipWaitApi;
-
-            logger.log("Completing validator registration in StakingVault...");
-            const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash });
-            const validatorRegisteredEvents = parseEventLogs({
-                abi: stakingVault.abi,
-                logs: receipt.logs,
-                eventName: 'StakingVault__ValidatorRegistrationInitiated'
-            });
-            if (!validatorRegisteredEvents || validatorRegisteredEvents.length === 0) {
-                logger.error(color.red("No StakingVault__ValidatorRegistrationInitiated event found in the transaction logs, verify the transaction hash."));
-                process.exit(1);
-            }
-            const validatorRegisteredEvent = validatorRegisteredEvents[0];
-            const validationIDHex = validatorRegisteredEvent.args?.validationID;
-            if (!validationIDHex) {
-                logger.error(color.red("No validationID found in StakingVault__ValidatorRegistrationInitiated event."));
-                process.exit(1);
-            }
-            const validator = await validatorManager.read.getValidator([validationIDHex]);
-            const nodeId = encodeNodeID(validator.nodeID as Hex);
-            const subnetIDHex = await validatorManager.read.subnetID();
-            const messageIndex = 0;
-            const warpLogs = parseEventLogs({
-                abi: IWarpMessengerABI,
-                logs: receipt.logs,
-            });
-            if (!warpLogs || warpLogs.length === 0) {
-                logger.error(color.red("No IWarpMessenger event found in the transaction logs."));
-                process.exit(1);
-            }
-            const warpLog = warpLogs[0];
-            const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
-            const subnetIDStr = utils.base58check.encode(hexToBytes(subnetIDHex));
-            const isValidator = (await getCurrentValidators(client, subnetIDStr)).some((v) => v.nodeID === nodeId);
-            if (isValidator) {
-                logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
-            } else {
-                const RegisterL1ValidatorUnsignedWarpMsg = warpLog.args.message;
-                logger.log("\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...");
-                const signedMessage = await collectSignatures({ network: client.network, message: RegisterL1ValidatorUnsignedWarpMsg, signingSubnetId });
-                logger.log("\nRegistering validator on P-Chain...");
-                pipe(await registerL1Validator({
-                    client: pchainClient,
-                    blsProofOfPossession: blsProofOfPossession,
-                    signedMessage,
-                    initialBalance
-                }),
-                    R.tap(pChainTxId => logger.log("RegisterL1ValidatorTx executed on P-Chain:", pChainTxId)),
-                    R.tapError(err => { logger.error(err); process.exit(1) })
-                );
-            }
-            const validationIDBytes = hexToBytes(validationIDHex as Hex);
-            const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, true, client.network === 'fuji' ? 5 : 1, pChainChainID);
-            const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-            logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-            const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, signingSubnetId });
-            const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-            const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-            logger.log("\nCalling function completeValidatorRegistration on the staking vault...");
-            const hash = await stakingVault.safeWrite.completeValidatorRegistration(
-                [messageIndex],
-                { chain: null, accessList }
-            );
-            if (waitValidatorVisible) {
-                logger.log("Waiting for the validator to be visible on the P-Chain (may take a while)...");
-                await retryWhileError(async () => (await getCurrentValidators(client, subnetIDStr)).some((v) => v.nodeID === nodeId), 5000, 180000, (res) => res === true);
-            }
+            const hash = await svCompleteValidatorRegistration(client, stakingVault, pchainClient, initiateTxHash, blsProofOfPossession, initialBalance, !options.skipWaitApi);
             logger.log("completeValidatorRegistration executed successfully, tx hash:", hash);
         });
 
@@ -670,38 +539,10 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
         .addArgument(ArgNodeID())
         .asyncAction({ signer: true }, async (client, nodeId, options) => {
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
-            logger.log("Initiating validator removal in StakingVault...");
-            const nodeIdBytes = parseNodeID(nodeId, false);
-            const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
-            logger.log("\n=== Validator Removal Initiation Details ===");
-            logger.log("Node ID:", nodeId);
-            logger.log("Validation ID:", validationID);
-            logger.log("Vault address:", stakingVault.address);
-            const hash = await stakingVault.safeWrite.initiateValidatorRemoval([validationID]);
+            const { hash, validationID } = await svInitiateValidatorRemoval(client, stakingVault, nodeId);
             logger.log("Initiate validator removal tx hash:", hash);
-            logger.log("Waiting for transaction confirmation...");
-            const receipt = await client.waitForTransactionReceipt({ hash });
-            logger.log("Transaction confirmed in block:", receipt.blockNumber);
-            try {
-                const validatorRemovalInitiatedEvents = parseEventLogs({
-                    abi: stakingVault.abi,
-                    eventName: 'StakingVault__ValidatorRemovalInitiated',
-                    logs: receipt.logs,
-                });
-                if (validatorRemovalInitiatedEvents.length > 0) {
-                    const event = validatorRemovalInitiatedEvents[0];
-                    logger.log("✅ Validator removal initiated successfully!");
-                    logger.log("Validation ID:", event.args?.validationID || 'N/A');
-                    logger.log("Operator:", event.args?.operator || 'N/A');
-                } else {
-                    logger.log("✅ Validator removal initiated successfully!");
-                }
-            } catch (error) {
-                logger.log("✅ Validator removal initiated successfully!");
-                logger.log("Note: Could not parse validator removal initiated event");
-            }
+            logger.log("✅ Validator removal initiated successfully!");
+            logger.log("Validation ID:", validationID);
         });
 
     stakingVaultCmd
@@ -717,133 +558,10 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
             await requirePChainBallance(client, 50000n, opts.yes);
             const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
             const nodeIDs = options.nodeId.length > 0 ? options.nodeId : undefined;
-            const initiateTxHash = options.initiateTx;
-            const waitValidatorVisible = !options.skipWaitApi;
-
-            logger.log("Completing validator removal in StakingVault...");
-            const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
-            const validatorRemovalInitiatedEvents = parseEventLogs({
-                abi: stakingVault.abi,
-                logs: receipt.logs,
-                eventName: 'StakingVault__ValidatorRemovalInitiated'
-            });
-            if (validatorRemovalInitiatedEvents.length === 0) {
-                logger.error(color.red("No StakingVault__ValidatorRemovalInitiated event found in the transaction logs, verify the transaction hash."));
-                process.exit(1);
-            }
-            const filteredRemovals = nodeIDs
-                ? (await Promise.all(
-                    validatorRemovalInitiatedEvents.map(async (e) => {
-                        const validationID = e.args?.validationID;
-                        if (!validationID) return null;
-                        const validator = await validatorManager.read.getValidator([validationID]);
-                        const nodeId = encodeNodeID(validator.nodeID as Hex);
-                        return { event: e, nodeId };
-                    })
-                )).filter((item): item is { event: any; nodeId: NodeId } => item !== null && nodeIDs.includes(item.nodeId)).map(({ event }) => event)
-                : validatorRemovalInitiatedEvents;
-            if (filteredRemovals.length === 0) {
-                logger.error(color.red("No matching StakingVault__ValidatorRemovalInitiated event found for the provided NodeIDs, verify the transaction hash and NodeIDs."));
-                process.exit(1);
-            }
-            const warpLogs = parseEventLogs({
-                abi: IWarpMessengerABI,
-                logs: receipt.logs,
-            });
-            const subnetIDHex = await validatorManager.read.subnetID();
-            const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
-            const currentValidators = await getCurrentValidators(client, subnetID);
-            const validatorManagerRemovalEvents = parseEventLogs({
-                abi: validatorManager.abi,
-                logs: receipt.logs,
-                eventName: 'InitiatedValidatorRemoval'
-            });
-            for (const event of filteredRemovals) {
-                const validationID = event.args?.validationID;
-                if (!validationID) {
-                    logger.error(color.red("No validationID found in StakingVault__ValidatorRemovalInitiated event."));
-                    continue;
-                }
-                const validator = await validatorManager.read.getValidator([validationID]);
-                const nodeID = encodeNodeID(validator.nodeID as Hex);
-                logger.log(`Processing removal for node ${nodeID}`);
-                const validatorManagerEvent = validatorManagerRemovalEvents.find((e) => e.args?.validationID === validationID);
-                if (!validatorManagerEvent) {
-                    logger.error(color.red(`No matching ValidatorManager InitiatedValidatorRemoval event found for validationID ${validationID}`));
-                    continue;
-                }
-                const warpLog = warpLogs.find((w) => {
-                    return w.args.messageID === validatorManagerEvent.args.validatorWeightMessageID;
-                });
-                if (!warpLog) {
-                    logger.error(color.red(`No matching warp log found for validationID ${validationID}`));
-                    continue;
-                }
-                const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
-                let addNodeBlockNumber = receipt.blockNumber;
-                if (initiateTxHash) {
-                    const addNodeReceipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 0 });
-                    if (addNodeReceipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls use another initiate tx`);
-                    addNodeBlockNumber = addNodeReceipt.blockNumber;
-                }
-                const isValidator = currentValidators.some((v) => v.nodeID === nodeID);
-                if (!isValidator) {
-                    logger.log(color.yellow("Node is not registered as a validator on the P-Chain."));
-                } else {
-                    const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-                    logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-                    const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-                    logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-                    logger.log("\nSetting validator weight on P-Chain...");
-                    pipe(
-                        await setValidatorWeight({
-                            client: pchainClient,
-                            validationID: validationID,
-                            message: signedL1ValidatorWeightMessage
-                        }),
-                        R.tapError(
-                            (error) => {
-                                throw new Error("SetL1ValidatorWeightTx failed on P-Chain: " + error + '\n');
-                            }),
-                        R.tap((txId) => {
-                            logger.log("SetL1ValidatorWeightTx executed on P-Chain: " + txId);
-                        })
-                    );
-                }
-                const justification = await GetRegistrationJustification(nodeID, validationID, pChainChainID, client, addNodeBlockNumber);
-                if (!justification) {
-                    throw new Error("Justification not found for validator removal");
-                }
-                const validationIDBytes = hexToBytes(validationID as Hex);
-                const unsignedPChainWarpMsg = packL1ValidatorRegistration(validationIDBytes, false, client.network === 'fuji' ? 5 : 1, pChainChainID);
-                const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-                logger.log("\nAggregating signatures for the L1ValidatorRegistrationMessage from the P-Chain...");
-                const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: bytesToHex(justification as Uint8Array), signingSubnetId });
-                logger.log("Aggregated signatures for the L1ValidatorRegistrationMessage from the P-Chain");
-                const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-                const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-                const messageIndex = 0;
-                logger.log("Executing completeValidatorRemoval transaction...");
-                const completeHash = await stakingVault.safeWrite.completeValidatorRemoval(
-                    [messageIndex],
-                    {
-                        account: client.account!,
-                        chain: null,
-                        accessList
-                    }
-                );
-                if (waitValidatorVisible) {
-                    logger.log("Waiting for the validator to be removed from the P-Chain (may take a while)...");
-                    await retryWhileError(async () => (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeID), 5000, 180000, (res) => res === false);
-                }
-                logger.log("completeValidatorRemoval executed successfully, tx hash:", completeHash);
-            }
+            await svCompleteValidatorRemoval(client, stakingVault, pchainClient, initiateRemovalTxHash, nodeIDs, !options.skipWaitApi, options.initiateTx);
         });
 
     stakingVaultCmd
@@ -853,20 +571,8 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
         .addArgument(ArgNodeID())
         .asyncAction({ signer: true }, async (client, nodeId, options) => {
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
-            logger.log("Force removing validator from StakingVault...");
-            const nodeIdBytes = parseNodeID(nodeId, false);
-            const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
-            logger.log("\n=== Force Remove Validator Details ===");
-            logger.log("Node ID:", nodeId);
-            logger.log("Validation ID:", validationID);
-            logger.log("Vault address:", stakingVault.address);
-            const hash = await stakingVault.safeWrite.forceRemoveValidator([validationID]);
+            const hash = await svForceRemoveValidator(client, stakingVault, nodeId);
             logger.log("Force remove validator tx hash:", hash);
-            logger.log("Waiting for transaction confirmation...");
-            const receipt = await client.waitForTransactionReceipt({ hash });
-            logger.log("Transaction confirmed in block:", receipt.blockNumber);
             logger.log("✅ Validator force-removed successfully!");
         });
 
@@ -878,46 +584,11 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
         .argument("amount", "Stake amount in AVAX")
         .asyncAction({ signer: true }, async (client, nodeId, amount, options) => {
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
-            logger.log("Initiating delegator registration in StakingVault...");
             const amountWei = parseUnits(amount, 18);
-            const nodeIdBytes = parseNodeID(nodeId, false);
-            const validationID = await validatorManager.read.getNodeValidationID([nodeIdBytes]);
-            logger.log("\n=== Delegator Registration Details ===");
-            logger.log("Node ID:", nodeId);
-            logger.log("Validation ID:", validationID);
-            logger.log("Amount:", amount, "KITE");
-            logger.log("Amount in wei:", amountWei.toString());
-            logger.log("Vault address:", stakingVault.address);
-            const hash = await stakingVault.safeWrite.initiateDelegatorRegistration([
-                validationID,
-                amountWei
-            ]);
+            const { hash, validationID } = await svInitiateDelegatorRegistration(client, stakingVault, nodeId, amountWei);
             logger.log("Initiate delegator registration tx hash:", hash);
-            logger.log("Waiting for transaction confirmation...");
-            const receipt = await client.waitForTransactionReceipt({ hash });
-            logger.log("Transaction confirmed in block:", receipt.blockNumber);
-            try {
-                const delegatorRegisteredEvents = parseEventLogs({
-                    abi: stakingVault.abi,
-                    eventName: 'StakingVault__DelegatorRegistrationInitiated',
-                    logs: receipt.logs,
-                });
-                if (delegatorRegisteredEvents.length > 0) {
-                    const event = delegatorRegisteredEvents[0];
-                    logger.log("✅ Delegator registration initiated successfully!");
-                    logger.log("Delegation ID:", event.args?.delegationID || 'N/A');
-                    logger.log("Validation ID:", event.args?.validationID || 'N/A');
-                    logger.log("Operator:", event.args?.operator || 'N/A');
-                    logger.log("Amount:", event.args?.amount?.toString() || 'N/A');
-                } else {
-                    logger.log("✅ Delegator registration initiated successfully!");
-                }
-            } catch (error) {
-                logger.log("✅ Delegator registration initiated successfully!");
-                logger.log("Note: Could not parse delegator registration initiated event");
-            }
+            logger.log("✅ Delegator registration initiated successfully!");
+            logger.log("Validation ID:", validationID);
         });
 
     stakingVaultCmd
@@ -931,109 +602,9 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress, stakingManager, stakingManagerStorageLocation } = await getValidatorManagerAddress(client, stakingVault);
-            const uptimeBlockchainID = await client.getStorageAt({ address: stakingManager.address, slot: `0x${(BigInt(stakingManagerStorageLocation) + 6n).toString(16).padStart(64, '0')}` })
-            if (!uptimeBlockchainID || uptimeBlockchainID === "0x0") {
-                throw new Error("Could not get uptime blockchain ID");
-            }
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
             const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
-
-            logger.log("Completing delegator registration in StakingVault...");
-            const receipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 1 });
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls resend the initiate delegator registration transaction`);
-            const delegatorRegisteredEvents = parseEventLogs({
-                abi: stakingVault.abi,
-                logs: receipt.logs,
-                eventName: 'StakingVault__DelegatorRegistrationInitiated'
-            });
-            if (!delegatorRegisteredEvents || delegatorRegisteredEvents.length === 0) {
-                logger.error(color.red("No StakingVault__DelegatorRegistrationInitiated event found in the transaction logs, verify the transaction hash."));
-                process.exit(1);
-            }
-            const delegatorRegisteredEvent = delegatorRegisteredEvents[0];
-            const delegationID = delegatorRegisteredEvent.args?.delegationID;
-            const validationID = delegatorRegisteredEvent.args?.validationID;
-            if (!delegationID || !validationID) {
-                logger.error(color.red("No delegationID or validationID found in StakingVault__DelegatorRegistrationInitiated event."));
-                process.exit(1);
-            }
-            const validator = await validatorManager.read.getValidator([validationID]);
-            const nodeId = encodeNodeID(validator.nodeID as Hex);
-            const weightUpdateEvents = parseEventLogs({
-                abi: validatorManager.abi,
-                logs: receipt.logs,
-                eventName: 'InitiatedValidatorWeightUpdate'
-            });
-            const weightUpdateEvent = weightUpdateEvents.find((e) => e.args?.validationID === validationID);
-            if (!weightUpdateEvent) {
-                logger.error(color.red("No InitiatedValidatorWeightUpdate event found for validationID, verify the transaction hash."));
-                process.exit(1);
-            }
-            const validatorWeight = weightUpdateEvent.args?.weight;
-            const nonce = weightUpdateEvent.args?.nonce;
-            const setWeightMessageID = weightUpdateEvent.args?.weightUpdateMessageID;
-            const warpLogs = parseEventLogs({
-                abi: IWarpMessengerABI,
-                logs: receipt.logs,
-            });
-            const weightWarpLog = warpLogs.find((w) => w.args.messageID === setWeightMessageID);
-            if (!weightWarpLog) {
-                logger.error(color.red("No matching warp message found for setWeightMessageID, verify the transaction hash."));
-                process.exit(1);
-            }
-            const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, weightWarpLog.args.message);
-            const unsignedL1ValidatorWeightMessage = weightWarpLog.args.message;
-            logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-            const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-            logger.log("\nSetting validator weight on P-Chain...");
-            pipe(await setValidatorWeight({
-                client: pchainClient,
-                validationID: validationID,
-                message: signedL1ValidatorWeightMessage
-            }),
-                R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
-                R.tapError(err => {
-                    if (!err.includes('warp message contains stale nonce')) {
-                        logger.error(err);
-                        process.exit(1);
-                    }
-                    logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
-                }));
-            const validationIDBytes = hexToBytes(validationID as Hex);
-            const unsignedPChainWeightWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(validatorWeight), client.network === 'fuji' ? 5 : 1, pChainChainID);
-            const unsignedPChainWeightWarpMsgHex = bytesToHex(unsignedPChainWeightWarpMsg);
-            const sourceChainID = utils.base58check.encode(hexToBytes(uptimeBlockchainID));
-            logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-            const signedPChainWeightMessage = await collectSignatures({ network: client.network, message: unsignedPChainWeightWarpMsgHex, signingSubnetId });
-            logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
-            const warpNetworkID = client.network === 'fuji' ? 5 : 1;
-            logger.log("\nGetting validation uptime message...");
-            const signedUptimeMessage = await getValidationUptimeMessage(
-                client,
-                `${rpcUrl}`,
-                nodeId,
-                warpNetworkID,
-                sourceChainID
-            );
-            const signedUptimeMessageHex = signedUptimeMessage.startsWith('0x') ? signedUptimeMessage : `0x${signedUptimeMessage}`;
-            const signedPChainWeightWarpMsgBytes = hexToBytes(`0x${signedPChainWeightMessage}`);
-            const signedUptimeMessageBytes = hexToBytes(signedUptimeMessageHex as Hex);
-            const weightAccessList = packWarpIntoAccessList(signedPChainWeightWarpMsgBytes);
-            const uptimeAccessList = packWarpIntoAccessList(signedUptimeMessageBytes);
-            const combinedAccessList = [weightAccessList[0], uptimeAccessList[0]];
-            const messageIndex = 0;
-            const uptimeMessageIndex = 1;
-            logger.log("\nCalling function completeDelegatorRegistration...");
-            const hash = await stakingVault.safeWrite.completeDelegatorRegistration(
-                [delegationID, messageIndex, uptimeMessageIndex],
-                {
-                    account: client.account!,
-                    chain: null,
-                    accessList: combinedAccessList
-                }
-            );
+            const bypassToken = process.env.RPC_BYPASS_TOKEN;
+            const hash = await svCompleteDelegatorRegistration(client, stakingVault, pchainClient, initiateTxHash, rpcUrl, bypassToken);
             logger.log("completeDelegatorRegistration executed successfully, tx hash:", hash);
         });
 
@@ -1104,124 +675,10 @@ export function addStakingVaultCommands(program: SuzakuCliProgram) {
             const opts = program.opts();
             if (!options.pchainTxPrivateKey) options.pchainTxPrivateKey = opts.privateKey!;
             const stakingVault = await getStakingVault(client, options.stakingVaultAddress);
-            const { validatorManagerAddress } = await getValidatorManagerAddress(client, stakingVault);
-            const validatorManager = await getValidatorManager(client, validatorManagerAddress);
             await requirePChainBallance(client, 50000n, opts.yes);
             const pchainClient = options.pchainTxPrivateKey ? await generateClient(opts.network, options.pchainTxPrivateKey) : client;
             const delegationIDs = options.delegationId.length > 0 ? options.delegationId : undefined;
-            const initiateTxHash = options.initiateTx;
-
-            logger.log("Completing delegator removal in StakingVault...");
-            const receipt = await client.waitForTransactionReceipt({ hash: initiateRemovalTxHash, confirmations: 1 });
-            if (receipt.status === 'reverted') throw new Error(`Transaction ${initiateRemovalTxHash} reverted, pls resend the removal transaction`);
-            const delegatorRemovalInitiatedEvents = parseEventLogs({
-                abi: stakingVault.abi,
-                logs: receipt.logs,
-                eventName: 'StakingVault__DelegatorRemovalInitiated'
-            });
-            if (delegatorRemovalInitiatedEvents.length === 0) {
-                logger.error(color.red("No StakingVault__DelegatorRemovalInitiated event found in the transaction logs, verify the transaction hash."));
-                process.exit(1);
-            }
-            const filteredRemovals = delegationIDs
-                ? delegatorRemovalInitiatedEvents.filter((e) => {
-                    const delegationID = e.args?.delegationID;
-                    return delegationID && delegationIDs.includes(delegationID);
-                })
-                : delegatorRemovalInitiatedEvents;
-            if (filteredRemovals.length === 0) {
-                logger.error(color.red("No matching StakingVault__DelegatorRemovalInitiated event found for the provided delegationIDs, verify the transaction hash and delegationIDs."));
-                process.exit(1);
-            }
-            const warpLogs = parseEventLogs({
-                abi: IWarpMessengerABI,
-                logs: receipt.logs,
-            });
-            let lastHash: Hex | undefined;
-            for (const event of filteredRemovals) {
-                const delegationID = event.args?.delegationID;
-                if (!delegationID) {
-                    logger.error(color.red("No delegationID found in StakingVault__DelegatorRemovalInitiated event."));
-                    continue;
-                }
-                const delegatorInfo = await stakingVault.read.getDelegatorInfo([delegationID]);
-                const validationID = delegatorInfo.validationID;
-                const validator = await validatorManager.read.getValidator([validationID]);
-                const nodeID = encodeNodeID(validator.nodeID as Hex);
-                logger.log(`Processing removal for delegation ${delegationID}, node ${nodeID}`);
-                let addNodeBlockNumber = receipt.blockNumber;
-                if (initiateTxHash) {
-                    const addNodeReceipt = await client.waitForTransactionReceipt({ hash: initiateTxHash, confirmations: 0 });
-                    if (addNodeReceipt.status === 'reverted') throw new Error(`Transaction ${initiateTxHash} reverted, pls use another initiate tx`);
-                    const registrationEvents = parseEventLogs({
-                        abi: stakingVault.abi,
-                        logs: addNodeReceipt.logs,
-                        eventName: 'StakingVault__DelegatorRegistrationInitiated'
-                    });
-                    if (registrationEvents.some((e) => e.args?.delegationID === delegationID)) {
-                        addNodeBlockNumber = addNodeReceipt.blockNumber;
-                    }
-                }
-                const initiatedValidatorWeightUpdates = parseEventLogs({
-                    abi: validatorManager.abi,
-                    logs: receipt.logs,
-                    eventName: 'InitiatedValidatorWeightUpdate'
-                }).filter((e) => e.args.validationID === validationID);
-                if (initiatedValidatorWeightUpdates.length === 0) {
-                    logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`));
-                    continue;
-                }
-                const weightUpdateEvent = initiatedValidatorWeightUpdates[0];
-                const warpLog = warpLogs.find((w) => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
-                if (!warpLog) {
-                    logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`));
-                    continue;
-                }
-                const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
-                const unsignedL1ValidatorWeightMessage = warpLog.args.message;
-                const weight = weightUpdateEvent.args.weight;
-                const nonce = weightUpdateEvent.args.nonce;
-                logger.log("\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...");
-                const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: unsignedL1ValidatorWeightMessage, signingSubnetId });
-                logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
-                logger.log("\nSetting validator weight on P-Chain...");
-                pipe(await setValidatorWeight({
-                    client: pchainClient,
-                    validationID: validationID,
-                    message: signedL1ValidatorWeightMessage
-                }),
-                    R.tap(pChainSetWeightTxId => logger.log("SetL1ValidatorWeightTx executed on P-Chain:", pChainSetWeightTxId)),
-                    R.tapError(err => {
-                        if (!err.includes('warp message contains stale nonce')) {
-                            logger.error(err);
-                            process.exit(1);
-                        }
-                        logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
-                    }));
-                const validationIDBytes = hexToBytes(validationID as Hex);
-                const unsignedPChainWarpMsg = packL1ValidatorWeightMessage(validationIDBytes, BigInt(nonce), BigInt(weight), client.network === 'fuji' ? 5 : 1, pChainChainID);
-                const unsignedPChainWarpMsgHex = bytesToHex(unsignedPChainWarpMsg);
-                logger.log("\nAggregating signatures for the L1ValidatorWeightMessage from the P-Chain...");
-                const signedPChainMessage = await collectSignatures({ network: client.network, message: unsignedPChainWarpMsgHex, justification: unsignedPChainWarpMsgHex, signingSubnetId });
-                logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the P-Chain");
-                const signedPChainWarpMsgBytes = hexToBytes(`0x${signedPChainMessage}`);
-                const accessList = packWarpIntoAccessList(signedPChainWarpMsgBytes);
-                const messageIndex = 0;
-                logger.log("\nCalling function completeDelegatorRemoval...");
-                const hash = await stakingVault.safeWrite.completeDelegatorRemoval(
-                    [delegationID, messageIndex],
-                    {
-                        account: client.account!,
-                        chain: null,
-                        accessList
-                    }
-                );
-                logger.log("completeDelegatorRemoval executed successfully, tx hash:", hash);
-                lastHash = hash;
-            }
-            if (!lastHash) {
-                throw new Error("No delegator removals processed");
-            }
+            await svCompleteDelegatorRemoval(client, stakingVault, pchainClient, initiateRemovalTxHash, delegationIDs);
         });
 
     stakingVaultCmd

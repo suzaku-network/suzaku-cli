@@ -2,7 +2,7 @@ import { Option } from "@commander-js/extra-typings";
 import { ArgHex, ArgNodeID, ParserPrivateKey, ParserNumber, collectMultiple, ParserAddress, ArgAddress, ArgBLSPOP, ParserNodeID } from "./lib/cliParser";
 import { logger } from "./lib/logger";
 import { ArgBigInt, ParseUnits } from "./lib/cliParser";
-import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate, getBalancerValidatorManager, getPoASecurityModule, NodeId, parseNodeID } from "@suzaku-sdk/core";
+import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate, getBalancerValidatorManager, getPoASecurityModule, initiateValidatorRemoval, NodeId, parseNodeID } from "@suzaku-sdk/core";
 import { fromBytes, Hex } from 'viem';
 import { SuzakuCliProgram } from "./cli";
 import { utils } from "@avalanche-sdk/client/utils";
@@ -109,18 +109,8 @@ export function addPOACommands(program: SuzakuCliProgram) {
     .addArgument(ArgNodeID())
     .asyncAction({ signer: true }, async (client, poaSecurityModuleAddress, nodeID) => {
       const poaSecurityModule = await getPoASecurityModule(client, poaSecurityModuleAddress);
-      const balancerValidatorManagerAddress = await poaSecurityModule.read.balancerValidatorManager();
-      const balancer = await getBalancerValidatorManager(client, balancerValidatorManagerAddress);
-      // Convert nodeID to Hex if necessary
-      const nodeIdHex = parseNodeID(nodeID, false);
-      logger.log(nodeIdHex)
-      const validationId = await balancer.read.getNodeValidationID([nodeIdHex]);
-      const txHash = await poaSecurityModule.safeWrite.initiateValidatorRemoval([validationId], {
-        chain: null,
-        account: client.account!,
-      })
+      const txHash = await initiateValidatorRemoval(client, poaSecurityModule, nodeID);
       logger.log(`End validation initialized for node ${nodeID}. Transaction hash: ${txHash}`);
-
     });
 
   poaCmd

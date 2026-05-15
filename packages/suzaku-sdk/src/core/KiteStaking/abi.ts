@@ -1888,6 +1888,7 @@ const abi = [
     }
 ] as const;
 export default abi;
+export type TKiteStakingManagerABI = typeof abi;
 
 export async function getKiteStakingManager<C extends ExtendedClient>(
   config: C,

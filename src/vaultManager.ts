@@ -1,9 +1,9 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
-import { getVaultTokenized, getL1Middleware, getVaultManager, getL1Registry, getL1RestakeDelegator, getOperatorL1OptInService } from '@suzaku-sdk/core';
+import { getVaultTokenized, getL1Middleware, getVaultManager, getL1Registry, getOperatorL1OptInService, getOperatorStakes } from '@suzaku-sdk/core';
 import { type Hex, type Account, parseUnits } from 'viem';
 import { logger } from './lib/logger';
 import { ExtendedPublicClient } from './client';
-import { argVaultAddress, info as vaultInfo } from './vault';
+import { argVaultAddress, getVaultInfo } from './vault';
 import { SuzakuCliProgram } from './cli';
 import { ArgAddress, ArgBigInt } from './lib/cliParser';
 import { argOperatorAddress } from './operator';
@@ -21,7 +21,7 @@ export async function info(vaultManager: SuzakuContract['VaultManager'], client:
         vaultsWithInfo.push({
             enableTime: enableTime === 0 ? "Never" : new Date(enableTime * 1000).toLocaleString(),
             disableTime: disableTime === 0 ? "Never" : new Date(disableTime * 1000).toLocaleString(),
-            ...await vaultInfo(vault, client, await getL1Middleware(client, middlewareAddress))
+            ...await getVaultInfo(client, vault, await getL1Middleware(client, middlewareAddress))
         });
     }
     return { middleware: middlewareAddress, vaults: vaultsWithInfo };
@@ -147,81 +147,31 @@ export function addVaultManagerCommands(program: SuzakuCliProgram) {
         .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
         .addArgument(argMiddlewareVaultManagerAddress)
         .addArgument(argOperatorAddress)
-        .description("Show operator stakes across L1s, enumerating each L1 the operator is opted into.")
         .asyncAction(async (client, middlewareVaultManager, operatorAddress) => {
-    
-            const operator = operatorAddress;
-            logger.log(`Operator: ${operator}`);
-    
-            // 1) Read total vaults from VaultManager
+            logger.log(`Operator: ${operatorAddress}`);
+
             const vaultManager = await getVaultManager(client, middlewareVaultManager);
-            const vaultCount = await vaultManager.read.getVaultCount()
-    
-            logger.log(`Found ${vaultCount} vault(s).`);
-    
-            // This map accumulates the total stake for each collateral
-            const totalStakesByCollateral: Record<string, bigint> = {};
-    
-            // 2) Let's get all L1 addresses from the L1Registry
             const l1Registry = await getL1Registry(client);
-            const totalL1s = await l1Registry.read.totalL1s();
-    
-            // We'll store them in an array
-            const l1Array: Hex[] = [];
-            for (let i = 0n; i < totalL1s; i++) {
-                const [l1Address, _] = await l1Registry.read.getL1At([i]);
-                l1Array.push(l1Address as Hex);
+            const operatorL1OptInService = await getOperatorL1OptInService(client);
+
+            const { totalStakesByCollateral, details } = await getOperatorStakes(
+                client,
+                vaultManager,
+                l1Registry,
+                operatorL1OptInService,
+                operatorAddress
+            );
+
+            for (const { vaultAddress, l1Address, stakeValue } of details) {
+                logger.log(`    L1: ${l1Address} => stake = ${stakeValue.toString()} (vault=${vaultAddress})`);
             }
-    
-            // 3) For each vault in [0..vaultCount-1], read collateralClass, delegator, collateral
-            for (let i = 0n; i < vaultCount; i++) {
-                const [vaultAddress] = await vaultManager.read.getVaultAtWithTimes([i]);
-    
-                logger.log(`\nVault #${i}: ${vaultAddress}`);
-    
-                // read the collateralClass
-                const collateralClass = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
-    
-                // read delegator
-                const vaultTokenized = await getVaultTokenized(client, vaultAddress);
-                const delegator = await vaultTokenized.read.delegator();
-    
-                if (delegator === '0x0000000000000000000000000000000000000000') {
-                    logger.log("    (No delegator set, skipping)");
-                    continue;
-                }
-                const l1RestakeDelegator = await getL1RestakeDelegator(client, delegator);
-                // read collateral
-                const collateral = await vaultTokenized.read.collateral();
-    
-                // 4) For each L1 in l1Array, check if operator is opted in
-                for (const l1Address of l1Array) {
-                    const operatorL1OptInService = await getOperatorL1OptInService(client);
-                    const isOptedIn = await operatorL1OptInService.read.isOptedIn([operator, l1Address]);
-    
-                    if (isOptedIn) {
-                        const stakeValue = await l1RestakeDelegator.read.stake([l1Address, collateralClass, operator]);
-    
-                        if (stakeValue > 0n) {
-                            logger.log(
-                                `    L1: ${l1Address} => stake = ${stakeValue.toString()} (vault=${vaultAddress})`
-                            );
-    
-                            const oldVal = totalStakesByCollateral[collateral] || 0n;
-                            totalStakesByCollateral[collateral] = oldVal + stakeValue;
-                        }
-                    }
-                }
-            }
-    
-            // 5) Finally, print aggregated totals
+
             logger.log("\nAggregated stakes by collateral:");
             if (Object.keys(totalStakesByCollateral).length === 0) {
                 logger.log("   No stakes found or operator not opted into any L1s this way.");
             } else {
                 for (const [collateralAddr, totalWei] of Object.entries(totalStakesByCollateral)) {
-                    const decimals = 18;
-                    const floatAmount = Number(totalWei) / 10 ** decimals;
+                    const floatAmount = Number(totalWei) / 10 ** 18;
                     logger.log(`   Collateral=${collateralAddr} totalStakeWei=${totalWei} => ${floatAmount}`);
                 }
             }
