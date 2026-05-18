@@ -1,6 +1,5 @@
 import { parseEventLogs, formatUnits, type Hex } from 'viem';
 import { type ExtendedClient, type ExtendedWalletClient } from './client/types';
-import { type Config } from './config';
 import { nodeLogger as logger } from './nodeLogger';
 import { ERC20ABI } from '../core/ERC20';
 
@@ -84,8 +83,8 @@ export async function requireCChainBallance(
     return cBalance;
 }
 
-export async function getERC20Events(hash: Hex, config: Config<ExtendedClient>) {
-    const receipt = await config.client.getTransactionReceipt({ hash });
+export async function getERC20Events(hash: Hex, client: ExtendedClient) {
+    const receipt = await client.getTransactionReceipt({ hash });
     const logs = parseEventLogs({
         abi: ERC20ABI,
         logs: receipt.logs,

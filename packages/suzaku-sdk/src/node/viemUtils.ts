@@ -6,7 +6,6 @@ import {
   withMulticall,
   contractAbiValidation,
   bigintReplacer,
-  getContract as coreGetContract,
   type EnhancedContract,
   type SafeEnhancedContract,
 } from '../core/client/viemUtils';
@@ -16,7 +15,6 @@ import { nodeLogger as logger } from './nodeLogger';
 import { color } from 'console-log-colors';
 import { handleTransactionStrategy } from './client/safeUtils';
 import { isCastMode, logCastCall, logCastSend, CAST_DUMMY_HASH } from './castUtils';
-import type { Config } from './config';
 
 export * from '../core/client/viemUtils';
 export { setCastMode, isCastMode } from './castUtils';
@@ -192,11 +190,11 @@ export function withCastMode<const TAbi extends Abi, C extends ExtendedClient>(
 export const getContract = async <const TAbi extends Abi, C extends ExtendedClient>(
   abi: TAbi,
   abiName: string,
-  config: Config<C>,
+  client: C,
   address?: Address,
   selectors?: readonly string[],
 ): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<TAbi, C> : EnhancedContract<TAbi, C>> => {
-  const { client, wait = 0, skipAbiValidation = false } = config;
+  const { wait = 0, skipAbiValidation = false } = client;
   const envVar = abiName.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
   if (!address) {
     if (process.env[envVar]) address = process.env[envVar] as Address;
