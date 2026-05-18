@@ -1,6 +1,8 @@
 export { SuzakuProviders } from "./Providers.js";
 export type { SuzakuProvidersProps } from "./Providers.js";
 
+export { ClientOnly, useMounted } from "./useMounted.js";
+
 export { useAvalancheWalletClient } from "./useAvalancheWalletClient.js";
 export type { UseAvalancheWalletClientResult } from "./useAvalancheWalletClient.js";
 

@@ -15,16 +15,10 @@ const shared = {
   ],
 }
 
+// Two parallel tsup configs share `dist/`. Only the first one cleans so
+// the React build doesn't get wiped after the fact. Order is irrelevant
+// for output because each config writes distinct file names.
 export default defineConfig([
-  {
-    ...shared,
-    entry: {
-      core: "src/core/index.ts",
-      node: "src/node/index.ts",
-      "react-config": "src/react/config-entry.ts",
-    },
-    clean: true,
-  },
   {
     ...shared,
     entry: { react: "src/react/index.ts" },
@@ -33,6 +27,15 @@ export default defineConfig([
     // can import it from server components. The server-safe
     // `react/config` entry stays banner-less.
     banner: { js: '"use client";' },
+    clean: true,
+  },
+  {
+    ...shared,
+    entry: {
+      core: "src/core/index.ts",
+      node: "src/node/index.ts",
+      "react-config": "src/react/config-entry.ts",
+    },
     clean: false,
   },
 ])

@@ -257,7 +257,12 @@ export async function toSafeProvider(client: WalletClient & PublicActions, accou
             account: account.evmAccount,
             chain: client.chain,
           });
-          const signedTx = await account.evmAccount.signTransaction!(prepared);
+          // `prepared` is a wide PrepareTransactionRequestReturnType union that
+          // TS can't narrow to viem's `OneOf<TransactionSerializable>`. We
+          // forward it as-is — runtime is identical.
+          const signedTx = await account.evmAccount.signTransaction!(
+            prepared as Parameters<NonNullable<typeof account.evmAccount.signTransaction>>[0],
+          );
           return client.request({ method: 'eth_sendRawTransaction', params: [signedTx] });
         }
         default:

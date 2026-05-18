@@ -1,12 +1,13 @@
 'use client'
 
 import { Activity, ArrowRightLeft, Coins, Mountain, Plug, PlugZap, Wallet } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { formatEther } from 'viem'
 import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
 import {
   useCChainBalance,
   useCrossChainTransfer,
+  useMounted,
   usePChainAddress,
   usePChainBalance,
 } from '@suzaku-network/suzaku-sdk/react'
@@ -35,8 +36,7 @@ function shortAddress(addr: string | null | undefined, head = 6, tail = 4) {
 }
 
 export default function Page() {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
 
   const connection = useConnection()
   const { connect, status: connectStatus, error: connectError } = useConnect()
@@ -97,7 +97,7 @@ export default function Page() {
                     description="Contract Chain · EVM"
                     icon={<Coins className="size-4" />}
                     address={connection.address ?? null}
-                    balance={cBalanceQuery.data != null ? formatEther(cBalanceQuery.data) : null}
+                    balance={cBalanceQuery.data ? formatEther(cBalanceQuery.data.value) : null}
                     isLoading={cBalanceQuery.isLoading}
                   />
                 </BackgroundGradient>

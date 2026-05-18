@@ -1,33 +1,31 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { useConnection } from "wagmi";
+"use client";
+
+import { useBalance, useConnection, type UseBalanceReturnType } from "wagmi";
 import type { Address } from "viem";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient.js";
 
 export type UseCChainBalanceOptions = {
   /** Override the connected EVM address. */
   address?: Address;
-  /** Refetch interval in ms. Defaults to 20s. Pass `false` to disable. */
+  /** Refetch interval in ms. Pass `false` to disable. */
   refetchInterval?: number | false;
 };
 
 /**
- * Fetches the C-Chain native AVAX balance (in wei) for the connected wallet
- * or a custom address.
+ * Fetches the C-Chain native AVAX balance for the connected wallet (or a
+ * custom address) via wagmi's `useBalance`. Returns the standard wagmi
+ * query result; `data.value` is wei (`bigint`).
  */
 export function useCChainBalance(
   options: UseCChainBalanceOptions = {},
-): UseQueryResult<bigint | null> {
-  const client = useAvalancheWalletClient();
+): UseBalanceReturnType {
   const { address: connectedAddress } = useConnection();
   const address = options.address ?? connectedAddress;
 
-  return useQuery({
-    queryKey: ["suzaku", "c-chain-balance", address],
-    queryFn: async () => {
-      if (!client || !address) return null;
-      return client.getBalance({ address });
+  return useBalance({
+    address,
+    query: {
+      enabled: !!address,
+      refetchInterval: options.refetchInterval ?? 20_000,
     },
-    enabled: !!client && !!address,
-    refetchInterval: options.refetchInterval ?? 20_000,
   });
 }
