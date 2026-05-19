@@ -19,3 +19,21 @@ jobs:
 
       - name: test
         run: pnpm suzaku-cli --help
+
+      - name: security scan (trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          format: table
+          output: trivy-report.txt
+
+      - name: upload trivy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.txt

@@ -3,7 +3,6 @@ import { ExtendedWalletClient } from "../client/types";
 import { getBalancerValidatorManager } from "../BalancerValidatorManager/abi";
 import { encodeNodeID, NodeId, parseNodeID, retryWhileError } from "../lib/avalancheUtils";
 import { logger } from '../logger';
-import { color } from "console-log-colors";
 import { collectSignatures, decodeWarpMessages, packL1ValidatorRegistration, packL1ValidatorWeightMessage, packWarpIntoAccessList, WarpMessageType } from "../lib/warpUtils";
 import { getCurrentValidators, registerL1Validator, setValidatorWeight, validatedBy } from "../lib/pChainUtils";
 import { getSigningSubnetIdFromWarpMessage } from "../lib/pChainUtils";
@@ -38,13 +37,13 @@ export async function completeValidatorRegistration(
   })[0]
 
   if (!InitiatedValidatorRegistration) {
-    logger.error(color.red("No InitiatedValidatorRegistration event found in the transaction logs, verify the transaction hash."));
+    logger.error("No InitiatedValidatorRegistration event found in the transaction logs, verify the transaction hash.");
     process.exit(1);
   }
 
   const validator = await balancer.read.getValidator([InitiatedValidatorRegistration.args.validationID])
   if (validator.status === ValidatorStatus.Active) {
-    logger.log(color.yellow("Node is already registered as a validator on the balancer, skipping registerL1Validator call."));
+    logger.log("Node is already registered as a validator on the balancer, skipping registerL1Validator call.");
     return;
   }
   const warpLogs = parseEventLogs({
@@ -58,7 +57,7 @@ export async function completeValidatorRegistration(
   const subnetID = utils.base58check.encode(hexToBytes(subnetIDHex));
   const isValidator = (await getCurrentValidators(client, subnetID)).some((v) => v.nodeID === nodeId);
   if (isValidator) {
-    logger.log(color.yellow("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call."));
+    logger.log("Node is already registered as a validator on the P-Chain, skipping registerL1Validator call.");
   } else {
     const RegisterL1ValidatorUnsignedWarpMsg = warpLogs.args.message;
 
@@ -126,10 +125,10 @@ export async function completeValidatorRemoval(
 
   if (messages.length === 0) throw new Error("No messages found in the receipt.");
 
-  let validators = await balancer.multicall(messages.map((m) => ({name: "getValidator", args: [m.validationID]})))
+  let validators = await balancer.multicall(messages.map((m) => ({ name: "getValidator", args: [m.validationID] })))
   validators = validators
     .filter((v) => {
-      if (v.status !== ValidatorStatus.PendingRemoved) logger.log(color.yellow(`Node ${encodeNodeID(v.nodeID)} (status: ${ValidatorStatus[v.status]}) is not pending removed, skipping. `))
+      if (v.status !== ValidatorStatus.PendingRemoved) logger.log(`Node ${encodeNodeID(v.nodeID)} (status: ${ValidatorStatus[v.status]}) is not pending removed, skipping. `)
       return v.status === ValidatorStatus.PendingRemoved
     });
 
@@ -154,7 +153,7 @@ export async function completeValidatorRemoval(
 
     const isValidator = currentValidators.some((v) => v.nodeID === nodeID);
     if (!isValidator) {
-      logger.log(color.yellow("Node is not registered as a validator on the P-Chain."));
+      logger.log("Node is not registered as a validator on the P-Chain.");
     } else {
       const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: message.raw, signingSubnetId });
       logger.log("Aggregated signatures for the L1ValidatorWeightMessage from the Validator Manager chain");
@@ -237,7 +236,7 @@ export async function completeWeightUpdate(
       if (res.status === 'success') {
         acc.push(res.result);
       } else {
-        logger.warn(color.yellow(`Warning: No validation ID found for NodeID ${nodeIDs[i]}`));
+        logger.warn(`Warning: No validation ID found for NodeID ${nodeIDs[i]}`);
       }
       return acc;
     }, []);
@@ -250,7 +249,7 @@ export async function completeWeightUpdate(
   }).filter((e) => validationIds ? validationIds.includes(e.args.validationID) : true)
 
   if (InitiatedValidatorWeightUpdates.length === 0) {
-    logger.error(color.red("No matching NodeStakeUpdated event found for the provided NodeIDs. Verify the transaction hash and NodeIDs."));
+    logger.error("No matching NodeStakeUpdated event found for the provided NodeIDs. Verify the transaction hash and NodeIDs.");
     process.exit(1);
   }
 
@@ -281,7 +280,7 @@ export async function completeWeightUpdate(
           logger.error(err);
           process.exit(1)
         }
-        logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationIDHex} due to stale nonce (already issued)`));
+        logger.warn(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationIDHex} due to stale nonce (already issued)`);
       }));
 
     const validationIDBytes = hexToBytes(validationIDHex as Hex);

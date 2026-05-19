@@ -1,5 +1,5 @@
-export { getSuzakuWagmiConfig } from "./config.js";
-export type { SuzakuWagmiConfigOptions } from "./config.js";
+export { getSuzakuWagmiConfig } from "./config";
+export type { SuzakuWagmiConfigOptions } from "./config";
 
-export { withSuzakuNext } from "./next.js";
-export type { WithSuzakuNextOptions } from "./next.js";
+export { withSuzakuNext } from "./next";
+export type { WithSuzakuNextOptions } from "./next";

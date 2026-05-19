@@ -1,8 +1,8 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { getBalance } from "@avalanche-sdk/client/methods/pChain";
 import type { GetBalanceReturnType } from "@avalanche-sdk/client/methods/pChain";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient.js";
-import { usePChainAddress } from "./usePChainAddress.js";
+import { useAvalancheWalletClient } from "./useAvalancheWalletClient";
+import { usePChainAddress } from "./usePChainAddress";
 
 export type UsePChainBalanceOptions = {
   /** Override the derived P-Chain address (e.g. `P-fuji1...`). */

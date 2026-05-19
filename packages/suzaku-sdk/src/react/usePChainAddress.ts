@@ -1,7 +1,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
-import { publicKeyToXPAddress } from "./internal/publicKeyToXPAddress.js";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient.js";
+import { publicKeyToXPAddress } from "./internal/publicKeyToXPAddress";
+import { useAvalancheWalletClient } from "./useAvalancheWalletClient";
 
 export type PChainAddress = `P-${string}`;
 

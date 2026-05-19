@@ -1,5 +1,4 @@
 import { bytesToHex, hexToBytes, fromBytes, parseEventLogs, type Hex, type Address } from 'viem';
-import { color } from 'console-log-colors';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
 import type { IContract } from '../client/contract';
@@ -82,7 +81,7 @@ export async function ksmCompleteValidatorRegistration(
   const isValidator = (await getCurrentValidators(client, subnetID)).some(v => v.nodeID === nodeId);
 
   if (isValidator) {
-    logger.log(color.yellow('Node is already registered as a validator on the P-Chain, skipping registerL1Validator call.'));
+    logger.log('Node is already registered as a validator on the P-Chain, skipping registerL1Validator call.');
   } else {
     logger.log('\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...');
     const signedMessage = await collectSignatures({ network: client.network, message: warpLog.args.message, signingSubnetId });
@@ -166,7 +165,7 @@ export async function ksmCompleteDelegatorRegistration(
     R.tap(pChainSetWeightTxId => logger.log('SetL1ValidatorWeightTx executed on P-Chain:', pChainSetWeightTxId)),
     R.tapError(err => {
       if (!String(err).includes('warp message contains stale nonce')) throw new Error(String(err));
-      logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
+      logger.warn(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`);
     }),
   );
 
@@ -259,11 +258,11 @@ export async function ksmCompleteDelegatorRemoval(
 
     const weightUpdates = parseEventLogs({ abi: ValidatorManagerABI, logs: receipt.logs, eventName: 'InitiatedValidatorWeightUpdate' })
       .filter(e => e.args.validationID === validationID);
-    if (weightUpdates.length === 0) { logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`)); continue; }
+    if (weightUpdates.length === 0) { logger.error(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`); continue; }
 
     const weightUpdateEvent = weightUpdates[0];
     const warpLog = warpLogs.find(w => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
-    if (!warpLog) { logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`)); continue; }
+    if (!warpLog) { logger.error(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`); continue; }
 
     const { weight, nonce } = weightUpdateEvent.args;
     const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
@@ -278,7 +277,7 @@ export async function ksmCompleteDelegatorRemoval(
       R.tap(pChainSetWeightTxId => logger.log('SetL1ValidatorWeightTx executed on P-Chain:', pChainSetWeightTxId)),
       R.tapError(err => {
         if (!String(err).includes('warp message contains stale nonce')) throw new Error(String(err));
-        logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
+        logger.warn(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`);
       }),
     );
 
@@ -343,11 +342,11 @@ export async function ksmCompleteValidatorRemoval(
 
   const filteredRemovals = nodeIDs
     ? (await Promise.all(
-        initiatedValidatorRemovals.map(async e => {
-          const validator = await validatorManager.read.getValidator([e.args.validationID]);
-          return { event: e, nodeId: encodeNodeID(validator.nodeID as Hex) };
-        }),
-      )).filter(({ nodeId }) => nodeIDs.includes(nodeId)).map(({ event }) => event)
+      initiatedValidatorRemovals.map(async e => {
+        const validator = await validatorManager.read.getValidator([e.args.validationID]);
+        return { event: e, nodeId: encodeNodeID(validator.nodeID as Hex) };
+      }),
+    )).filter(({ nodeId }) => nodeIDs.includes(nodeId)).map(({ event }) => event)
     : initiatedValidatorRemovals;
 
   if (filteredRemovals.length === 0) throw new Error('No matching InitiatedValidatorRemoval event found for the provided NodeIDs, verify the transaction hash and NodeIDs.');
@@ -365,7 +364,7 @@ export async function ksmCompleteValidatorRemoval(
     logger.log(`Processing removal for node ${nodeID}`);
 
     const warpLog = warpLogs.find(w => w.args.messageID === event.args.validatorWeightMessageID);
-    if (!warpLog) { logger.error(color.red(`No matching warp log found for validationID ${validationID}`)); continue; }
+    if (!warpLog) { logger.error(`No matching warp log found for validationID ${validationID}`); continue; }
 
     const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
 
@@ -378,7 +377,7 @@ export async function ksmCompleteValidatorRemoval(
 
     const isValidator = currentValidators.some(v => v.nodeID === nodeID);
     if (!isValidator) {
-      logger.log(color.yellow('Node is not registered as a validator on the P-Chain.'));
+      logger.log('Node is not registered as a validator on the P-Chain.');
     } else {
       logger.log('\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...');
       const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: warpLog.args.message, signingSubnetId });

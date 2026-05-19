@@ -8,6 +8,7 @@ import { cookieToInitialState } from 'wagmi'
 import { cn } from '@/lib/utils'
 import { getConfig } from '../wagmi'
 import { Providers } from './providers'
+import { MotionLayout } from '@/components/MotionLayout'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -24,7 +25,9 @@ export default async function RootLayout(props: { children: ReactNode }) {
   return (
     <html lang="en" className={cn('dark', geist.variable)}>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
-        <Providers initialState={initialState}>{props.children}</Providers>
+        <Providers initialState={initialState}>
+          <MotionLayout>{props.children}</MotionLayout>
+        </Providers>
       </body>
     </html>
   )

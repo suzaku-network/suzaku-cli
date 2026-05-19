@@ -1,5 +1,4 @@
 import { hexToBytes, bytesToHex, fromBytes, parseEventLogs, type Hex, type Address } from 'viem';
-import { color } from 'console-log-colors';
 import { pipe, R } from '@mobily/ts-belt';
 import { utils } from '@avalabs/avalanchejs';
 import type { IContract, IReadContract } from '../client/contract';
@@ -146,7 +145,7 @@ export async function svCompleteValidatorRegistration(
   const isValidator = (await getCurrentValidators(client, subnetIDStr)).some(v => v.nodeID === nodeId);
 
   if (isValidator) {
-    logger.log(color.yellow('Node is already registered as a validator on the P-Chain, skipping registerL1Validator call.'));
+    logger.log('Node is already registered as a validator on the P-Chain, skipping registerL1Validator call.');
   } else {
     logger.log('\nCollecting signatures for the L1ValidatorRegistrationMessage from the Validator Manager chain...');
     const signedMessage = await collectSignatures({ network: client.network, message: warpLog.args.message, signingSubnetId });
@@ -242,7 +241,7 @@ export async function svCompleteDelegatorRegistration(
     R.tap(pChainSetWeightTxId => logger.log('SetL1ValidatorWeightTx executed on P-Chain:', pChainSetWeightTxId)),
     R.tapError(err => {
       if (!String(err).includes('warp message contains stale nonce')) throw new Error(String(err));
-      logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
+      logger.warn(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`);
     }),
   );
 
@@ -291,14 +290,14 @@ export async function svCompleteValidatorRemoval(
 
   const filteredRemovals = nodeIDs
     ? (await Promise.all(
-        validatorRemovalInitiatedEvents.map(async e => {
-          const validationID = e.args?.validationID;
-          if (!validationID) return null;
-          const validator = await validatorManager.read.getValidator([validationID]);
-          const nodeId = encodeNodeID(validator.nodeID as Hex);
-          return { event: e, nodeId };
-        }),
-      )).filter((item): item is { event: typeof validatorRemovalInitiatedEvents[0]; nodeId: NodeId } => item !== null && nodeIDs.includes(item.nodeId)).map(({ event }) => event)
+      validatorRemovalInitiatedEvents.map(async e => {
+        const validationID = e.args?.validationID;
+        if (!validationID) return null;
+        const validator = await validatorManager.read.getValidator([validationID]);
+        const nodeId = encodeNodeID(validator.nodeID as Hex);
+        return { event: e, nodeId };
+      }),
+    )).filter((item): item is { event: typeof validatorRemovalInitiatedEvents[0]; nodeId: NodeId } => item !== null && nodeIDs.includes(item.nodeId)).map(({ event }) => event)
     : validatorRemovalInitiatedEvents;
   if (filteredRemovals.length === 0) throw new Error('No matching StakingVault__ValidatorRemovalInitiated event found for the provided NodeIDs, verify the transaction hash and NodeIDs.');
 
@@ -317,23 +316,23 @@ export async function svCompleteValidatorRemoval(
 
   for (const event of filteredRemovals) {
     const validationID = event.args?.validationID;
-    if (!validationID) { logger.error(color.red('No validationID found in StakingVault__ValidatorRemovalInitiated event.')); continue; }
+    if (!validationID) { logger.error('No validationID found in StakingVault__ValidatorRemovalInitiated event.'); continue; }
 
     const validator = await validatorManager.read.getValidator([validationID]);
     const nodeID = encodeNodeID(validator.nodeID as Hex);
     logger.log(`Processing removal for node ${nodeID}`);
 
     const validatorManagerEvent = validatorManagerRemovalEvents.find(e => e.args?.validationID === validationID);
-    if (!validatorManagerEvent) { logger.error(color.red(`No matching ValidatorManager InitiatedValidatorRemoval event found for validationID ${validationID}`)); continue; }
+    if (!validatorManagerEvent) { logger.error(`No matching ValidatorManager InitiatedValidatorRemoval event found for validationID ${validationID}`); continue; }
 
     const warpLog = warpLogs.find(w => w.args.messageID === validatorManagerEvent.args.validatorWeightMessageID);
-    if (!warpLog) { logger.error(color.red(`No matching warp log found for validationID ${validationID}`)); continue; }
+    if (!warpLog) { logger.error(`No matching warp log found for validationID ${validationID}`); continue; }
 
     const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
 
     const isValidator = currentValidators.some(v => v.nodeID === nodeID);
     if (!isValidator) {
-      logger.log(color.yellow('Node is not registered as a validator on the P-Chain.'));
+      logger.log('Node is not registered as a validator on the P-Chain.');
     } else {
       logger.log('\nCollecting signatures for the L1ValidatorWeightMessage from the Validator Manager chain...');
       const signedL1ValidatorWeightMessage = await collectSignatures({ network: client.network, message: warpLog.args.message, signingSubnetId });
@@ -395,7 +394,7 @@ export async function svCompleteDelegatorRemoval(
 
   for (const event of filteredRemovals) {
     const delegationID = event.args?.delegationID;
-    if (!delegationID) { logger.error(color.red('No delegationID found in StakingVault__DelegatorRemovalInitiated event.')); continue; }
+    if (!delegationID) { logger.error('No delegationID found in StakingVault__DelegatorRemovalInitiated event.'); continue; }
 
     const delegatorInfo = await stakingVault.read.getDelegatorInfo([delegationID]);
     const validationID = delegatorInfo.validationID;
@@ -405,11 +404,11 @@ export async function svCompleteDelegatorRemoval(
 
     const initiatedWeightUpdates = parseEventLogs({ abi: ValidatorManagerABI, logs: receipt.logs, eventName: 'InitiatedValidatorWeightUpdate' })
       .filter(e => e.args.validationID === validationID);
-    if (initiatedWeightUpdates.length === 0) { logger.error(color.red(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`)); continue; }
+    if (initiatedWeightUpdates.length === 0) { logger.error(`No InitiatedValidatorWeightUpdate event found for validationID ${validationID}`); continue; }
 
     const weightUpdateEvent = initiatedWeightUpdates[0];
     const warpLog = warpLogs.find(w => w.args.messageID === weightUpdateEvent.args.weightUpdateMessageID);
-    if (!warpLog) { logger.error(color.red(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`)); continue; }
+    if (!warpLog) { logger.error(`No matching warp log found for weightUpdateMessageID ${weightUpdateEvent.args.weightUpdateMessageID}`); continue; }
 
     const signingSubnetId = await getSigningSubnetIdFromWarpMessage(client, warpLog.args.message);
     const { weight, nonce } = weightUpdateEvent.args;
@@ -422,7 +421,7 @@ export async function svCompleteDelegatorRemoval(
       R.tap(txId => logger.log('SetL1ValidatorWeightTx executed on P-Chain:', txId)),
       R.tapError(err => {
         if (!String(err).includes('warp message contains stale nonce')) throw new Error(String(err));
-        logger.warn(color.yellow(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`));
+        logger.warn(`Warning: Skipping SetL1ValidatorWeightTx for validationID ${validationID} due to stale nonce (already issued)`);
       }),
     );
 

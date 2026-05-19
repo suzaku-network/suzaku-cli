@@ -3,8 +3,8 @@
 export { logger, LogLevelEnum } from './logger/index';
 export type { LogLevel, LoggerInstance, UserInteractionInterface, ProgressInterface } from './logger/index';
 
-export { chainList } from './client/index';
-export type { Network, Chains, PChainAddress, Addresses, ExtendedWalletClient, ExtendedPublicClient, ExtendedClient } from './client/index';
+export { chainList, NETWORK_ADDRESSES } from './client/index';
+export type { Network, Chains, PChainAddress, Addresses, ExtendedWalletClient, ExtendedPublicClient, ExtendedClient, NetworkAddresses } from './client/index';
 
 export { setCastMode, isCastMode, CAST_DUMMY_HASH, formatCastCommand, logCastCall, logCastSend, logPChainIssueTx } from './lib/castUtils';
 export type { CastCommandOptions } from './lib/castUtils';
