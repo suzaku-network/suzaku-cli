@@ -22,7 +22,7 @@ export default defineConfig([
   {
     ...shared,
     entry: { react: "src/react/index.ts" },
-    // React entry exposes hooks/providers — mark the bundle as a
+    // React entries expose hooks/providers — mark the bundle as a
     // React Server Component client boundary so Next.js consumers
     // can import it from server components. The server-safe
     // `react/config` entry stays banner-less.

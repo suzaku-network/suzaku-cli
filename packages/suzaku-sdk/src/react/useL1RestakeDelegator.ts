@@ -1,6 +1,6 @@
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getVaultTokenized } from "../core/VaultTokenized/abi";
 import { setL1Limit } from "../core/L1RestakeDelegator/service";
 
@@ -12,7 +12,7 @@ export type SetL1LimitParams = {
 };
 
 export function useSetL1Limit(): UseMutationResult<Hex, Error, SetL1LimitParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");

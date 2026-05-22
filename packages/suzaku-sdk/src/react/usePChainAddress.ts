@@ -1,7 +1,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
-import { publicKeyToXPAddress } from "./internal/publicKeyToXPAddress";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient";
+import { publicKeyToXPAddress } from "../core/lib/publicKeyToXPAddress";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 
 export type PChainAddress = `P-${string}`;
 
@@ -10,7 +10,7 @@ export type PChainAddress = `P-${string}`;
  * Uses the `fuji` HRP on testnets, `avax` otherwise.
  */
 export function usePChainAddress(): UseQueryResult<PChainAddress | null> {
-  const client = useAvalancheWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   const { chain } = useConnection();
   const hrp = chain?.testnet ? "fuji" : "avax";
 

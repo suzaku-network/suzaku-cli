@@ -1,6 +1,8 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
+import { useAvalanchePublicExtendedClient } from "./useAvalanchePublicExtendedClient";
+
 import { getStakingVault } from "../core/StakingVault/abi";
 import {
   getValidatorManagerInfo,
@@ -12,13 +14,14 @@ import {
   svInitiateDelegatorRegistration,
   svCompleteDelegatorRegistration,
   svCompleteDelegatorRemoval,
+  svClaimOperatorFees,
   type ValidatorManagerInfo,
   type PChainOwnerOptions,
 } from "../core/StakingVault/service";
 import type { NodeId } from "../core/lib/avalancheUtils";
 
 export function useGetValidatorManagerInfo(contractAddress?: Address): UseQueryResult<ValidatorManagerInfo | null> {
-  const client = useExtendedWalletClient();
+  const client = useAvalanchePublicExtendedClient();
   return useQuery({
     queryKey: ["getValidatorManagerInfo", contractAddress],
     queryFn: async () => {
@@ -41,7 +44,7 @@ export type SvInitiateValidatorRegistrationParams = {
 };
 
 export function useSvInitiateValidatorRegistration(): UseMutationResult<Hex, Error, SvInitiateValidatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -60,10 +63,11 @@ export type SvCompleteValidatorRegistrationParams = {
   blsProofOfPossession: Hex;
   initialBalance: bigint;
   waitValidatorVisible?: boolean;
+  onProgress?: (msg: string) => void;
 };
 
 export function useSvCompleteValidatorRegistration(): UseMutationResult<Hex, Error, SvCompleteValidatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -71,6 +75,7 @@ export function useSvCompleteValidatorRegistration(): UseMutationResult<Hex, Err
       return svCompleteValidatorRegistration(
         client, contract, client, params.initiateTxHash,
         params.blsProofOfPossession, params.initialBalance, params.waitValidatorVisible,
+        params.onProgress,
       );
     },
   });
@@ -82,7 +87,7 @@ export type SvInitiateValidatorRemovalParams = {
 };
 
 export function useSvInitiateValidatorRemoval(): UseMutationResult<{ hash: Hex; validationID: Hex }, Error, SvInitiateValidatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -98,7 +103,7 @@ export type SvForceRemoveValidatorParams = {
 };
 
 export function useSvForceRemoveValidator(): UseMutationResult<Hex, Error, SvForceRemoveValidatorParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -114,17 +119,18 @@ export type SvCompleteValidatorRemovalParams = {
   nodeIDs?: NodeId[];
   waitValidatorVisible?: boolean;
   initiateTxHash?: Hex;
+  onProgress?: (msg: string) => void;
 };
 
 export function useSvCompleteValidatorRemoval(): UseMutationResult<void, Error, SvCompleteValidatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getStakingVault(client, params.contractAddress);
       return svCompleteValidatorRemoval(
         client, contract, client, params.initiateRemovalTxHash,
-        params.nodeIDs, params.waitValidatorVisible, params.initiateTxHash,
+        params.nodeIDs, params.waitValidatorVisible, params.initiateTxHash, params.onProgress,
       );
     },
   });
@@ -137,7 +143,7 @@ export type SvInitiateDelegatorRegistrationParams = {
 };
 
 export function useSvInitiateDelegatorRegistration(): UseMutationResult<{ hash: Hex; validationID: Hex }, Error, SvInitiateDelegatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -152,16 +158,18 @@ export type SvCompleteDelegatorRegistrationParams = {
   initiateTxHash: Hex;
   rpcUrl: string;
   bypassToken?: string;
+  onProgress?: (msg: string) => void;
 };
 
 export function useSvCompleteDelegatorRegistration(): UseMutationResult<Hex, Error, SvCompleteDelegatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getStakingVault(client, params.contractAddress);
       return svCompleteDelegatorRegistration(
         client, contract, client, params.initiateTxHash, params.rpcUrl, params.bypassToken,
+        params.onProgress,
       );
     },
   });
@@ -171,17 +179,33 @@ export type SvCompleteDelegatorRemovalParams = {
   contractAddress: Address;
   initiateRemovalTxHash: Hex;
   delegationIDs?: Hex[];
+  onProgress?: (msg: string) => void;
 };
 
 export function useSvCompleteDelegatorRemoval(): UseMutationResult<void, Error, SvCompleteDelegatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getStakingVault(client, params.contractAddress);
       return svCompleteDelegatorRemoval(
-        client, contract, client, params.initiateRemovalTxHash, params.delegationIDs,
+        client, contract, client, params.initiateRemovalTxHash, params.delegationIDs, params.onProgress,
       );
+    },
+  });
+}
+
+export type SvClaimOperatorFeesParams = {
+  contractAddress: Address;
+};
+
+export function useSvClaimOperatorFees(): UseMutationResult<Hex, Error, SvClaimOperatorFeesParams> {
+  const { client } = useAvalancheWalletExtendedClient();
+  return useMutation({
+    mutationFn: async (params) => {
+      if (!client) throw new Error("Wallet client not ready");
+      const contract = await getStakingVault(client, params.contractAddress);
+      return svClaimOperatorFees(contract);
     },
   });
 }

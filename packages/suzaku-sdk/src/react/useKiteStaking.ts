@@ -1,6 +1,6 @@
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getKiteStakingManager } from "../core/KiteStaking/abi";
 import {
   ksmInitiateValidatorRegistration,
@@ -30,7 +30,7 @@ export type KsmInitiateValidatorRegistrationParams = {
 };
 
 export function useKsmInitiateValidatorRegistration(): UseMutationResult<Hex, Error, KsmInitiateValidatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -51,10 +51,11 @@ export type KsmCompleteValidatorRegistrationParams = {
   blsProofOfPossession: Hex;
   initialBalance: bigint;
   waitValidatorVisible?: boolean;
+  onProgress?: (msg: string) => void;
 };
 
 export function useKsmCompleteValidatorRegistration(): UseMutationResult<Hex, Error, KsmCompleteValidatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -62,7 +63,7 @@ export function useKsmCompleteValidatorRegistration(): UseMutationResult<Hex, Er
       return ksmCompleteValidatorRegistration(
         client, contract, client, params.initiateTxHash,
         params.blsProofOfPossession, params.initialBalance,
-        params.waitValidatorVisible,
+        params.waitValidatorVisible, params.onProgress,
       );
     },
   });
@@ -76,7 +77,7 @@ export type KsmInitiateDelegatorRegistrationParams = {
 };
 
 export function useKsmInitiateDelegatorRegistration(): UseMutationResult<Hex, Error, KsmInitiateDelegatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -92,15 +93,16 @@ export type KsmCompleteDelegatorRegistrationParams = {
   contractAddress: Address;
   initiateTxHash: Hex;
   rpcUrl: string;
+  onProgress?: (msg: string) => void;
 };
 
 export function useKsmCompleteDelegatorRegistration(): UseMutationResult<Hex, Error, KsmCompleteDelegatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getKiteStakingManager(client, params.contractAddress);
-      return ksmCompleteDelegatorRegistration(client, contract, client, params.initiateTxHash, params.rpcUrl);
+      return ksmCompleteDelegatorRegistration(client, contract, client, params.initiateTxHash, params.rpcUrl, params.onProgress);
     },
   });
 }
@@ -113,7 +115,7 @@ export type KsmInitiateDelegatorRemovalParams = {
 };
 
 export function useKsmInitiateDelegatorRemoval(): UseMutationResult<Hex, Error, KsmInitiateDelegatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -130,17 +132,18 @@ export type KsmCompleteDelegatorRemovalParams = {
   initiateRemovalTxHash: Hex;
   delegationIDs?: Hex[];
   waitValidatorVisible?: boolean;
+  onProgress?: (msg: string) => void;
 };
 
 export function useKsmCompleteDelegatorRemoval(): UseMutationResult<void, Error, KsmCompleteDelegatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getKiteStakingManager(client, params.contractAddress);
       return ksmCompleteDelegatorRemoval(
         client, contract, client, params.initiateRemovalTxHash,
-        params.delegationIDs, params.waitValidatorVisible,
+        params.delegationIDs, params.waitValidatorVisible, params.onProgress,
       );
     },
   });
@@ -153,7 +156,7 @@ export type KsmInitiateValidatorRemovalParams = {
 };
 
 export function useKsmInitiateValidatorRemoval(): UseMutationResult<Hex, Error, KsmInitiateValidatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -169,17 +172,18 @@ export type KsmCompleteValidatorRemovalParams = {
   nodeIDs?: NodeId[];
   waitValidatorVisible?: boolean;
   initiateTxHashes?: Hex[];
+  onProgress?: (msg: string) => void;
 };
 
 export function useKsmCompleteValidatorRemoval(): UseMutationResult<void, Error, KsmCompleteValidatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const contract = await getKiteStakingManager(client, params.contractAddress);
       return ksmCompleteValidatorRemoval(
         client, contract, client, params.initiateRemovalTxHash,
-        params.nodeIDs, params.waitValidatorVisible, params.initiateTxHashes,
+        params.nodeIDs, params.waitValidatorVisible, params.initiateTxHashes, params.onProgress,
       );
     },
   });
@@ -192,7 +196,7 @@ export type KsmSubmitUptimeProofParams = {
 };
 
 export function useKsmSubmitUptimeProof(): UseMutationResult<Hex, Error, KsmSubmitUptimeProofParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");

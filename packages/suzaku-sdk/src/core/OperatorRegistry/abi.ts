@@ -4,14 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getOperatorRegistry<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'OperatorRegistry', client, address, selectors);
-}
+import errors from './errors';
 
-const abi = [
+const baseAbi = [
     {
         "type": "event",
         "name": "RegisterOperator",
@@ -43,16 +38,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "OperatorRegistry__OperatorAlreadyRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OperatorRegistry__OperatorNotRegistered",
-        "inputs": []
     },
     {
         "type": "function",
@@ -174,5 +159,15 @@ const abi = [
         "stateMutability": "view"
     }
 ] as const;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'OperatorRegistry';
+
+export async function getOperatorRegistry<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'OperatorRegistry', client, address, selectors);
+}
+
 export type TOperatorRegistryABI = typeof abi;
 export default abi;

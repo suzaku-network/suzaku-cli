@@ -4,13 +4,6 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getIWarpMessenger<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'IWarpMessenger', client, address, selectors);
-}
-
 const abi = [
     {
         "type": "event",
@@ -147,5 +140,14 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
+(abi as any).contractName = 'IWarpMessenger';
+
+export async function getIWarpMessenger<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'IWarpMessenger', client, address, selectors);
+}
+
 export type TIWarpMessengerABI = typeof abi;
 export default abi;

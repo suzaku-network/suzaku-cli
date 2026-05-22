@@ -1,10 +1,9 @@
-import type { Hex, Abi, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, AccessList, Account, Chain, Address } from 'viem';
+import type { Hex, Abi, ContractFunctionName, ContractFunctionArgs, ContractFunctionReturnType, AccessList, Account, Chain, Address, Transport } from 'viem';
 import type {
   AvalancheWalletClient,
   AvalancheClient,
-  PChainActions,
-  CChainActions,
 } from '@avalanche-sdk/client';
+import type { avalanche } from '@avalanche-sdk/client/chains';
 import type { chainList } from './chainList';
 
 export type Network = 'fuji' | 'mainnet' | 'anvil';
@@ -14,8 +13,6 @@ export type Addresses = { P: PChainAddress; C: Hex };
 
 type ClientExtension = {
   network: Network;
-  pChain: PChainActions;
-  cChain: CChainActions;
   wait?: number;
   skipAbiValidation?: boolean;
 };
@@ -24,7 +21,10 @@ export type ExtendedWalletClient = AvalancheWalletClient & ClientExtension & {
   addresses: Addresses;
 };
 
-export type ExtendedPublicClient = AvalancheClient & ClientExtension;
+// typeof avalanche satisfies `chain extends { name: "Avalanche" | "Avalanche Fuji" }`,
+// so pChain/xChain resolve in the conditional type. The factory always builds them
+// from explicit URLs, so this type is correct for mainnet, fuji, and custom L1s.
+export type ExtendedPublicClient = AvalancheClient<Transport, typeof avalanche> & ClientExtension;
 
 export type ExtendedClient = ExtendedWalletClient | ExtendedPublicClient;
 

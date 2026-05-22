@@ -1,6 +1,6 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getVaultTokenized } from "../core/VaultTokenized/abi";
 import { getL1Middleware } from "../core/L1Middleware/abi";
 import {
@@ -8,6 +8,8 @@ import {
   deposit,
   setDepositLimit,
   increaseCollateralLimit,
+  vaultWithdraw,
+  claimBatch,
   type VaultInfo,
 } from "../core/VaultTokenized/service";
 
@@ -17,7 +19,7 @@ export type GetVaultInfoParams = {
 };
 
 export function useGetVaultInfo(params: GetVaultInfoParams): UseQueryResult<VaultInfo | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: ["getVaultInfo", params.contractAddress, params.middlewareAddress],
     queryFn: async () => {
@@ -40,7 +42,7 @@ export type DepositParams = {
 };
 
 export function useDeposit(): UseMutationResult<{ approveTxHash: Hex; depositTxHash: Hex }, Error, DepositParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -56,7 +58,7 @@ export type SetDepositLimitParams = {
 };
 
 export function useSetDepositLimit(): UseMutationResult<Hex, Error, SetDepositLimitParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -72,12 +74,46 @@ export type IncreaseCollateralLimitParams = {
 };
 
 export function useIncreaseCollateralLimit(): UseMutationResult<Hex, Error, IncreaseCollateralLimitParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
       const vault = await getVaultTokenized(client, params.contractAddress);
       return increaseCollateralLimit(client, vault, params.limit);
+    },
+  });
+}
+
+export type VaultWithdrawParams = {
+  contractAddress: Address;
+  claimer: Address;
+  amount: string;
+};
+
+export function useVaultWithdraw(): UseMutationResult<Hex, Error, VaultWithdrawParams> {
+  const { client } = useAvalancheWalletExtendedClient();
+  return useMutation({
+    mutationFn: async (params) => {
+      if (!client) throw new Error("Wallet client not ready");
+      const vault = await getVaultTokenized(client, params.contractAddress);
+      return vaultWithdraw(client, vault, params.claimer, params.amount);
+    },
+  });
+}
+
+export type ClaimBatchParams = {
+  contractAddress: Address;
+  recipient: Address;
+  epochs: bigint[];
+};
+
+export function useClaimBatch(): UseMutationResult<Hex, Error, ClaimBatchParams> {
+  const { client } = useAvalancheWalletExtendedClient();
+  return useMutation({
+    mutationFn: async (params) => {
+      if (!client) throw new Error("Wallet client not ready");
+      const vault = await getVaultTokenized(client, params.contractAddress);
+      return claimBatch(client, vault, params.recipient, params.epochs);
     },
   });
 }

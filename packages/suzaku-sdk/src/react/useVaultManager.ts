@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getVaultManager } from "../core/VaultManager/abi";
 import { getL1Registry } from "../core/L1Registry/abi";
 import { getOperatorL1OptInService } from "../core/OperatorL1OptInService/abi";
@@ -16,7 +16,7 @@ export type GetOperatorStakesParams = {
 export function useGetOperatorStakes(
   params: GetOperatorStakesParams,
 ): UseQueryResult<OperatorStakesResult | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: [
       "getOperatorStakes",

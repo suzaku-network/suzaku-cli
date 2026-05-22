@@ -1,6 +1,6 @@
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getL1Middleware } from "../core/L1Middleware/abi";
 import { getPoASecurityModule } from "../core/PoASecurityModule/abi";
 import { getBalancerValidatorManager } from "../core/BalancerValidatorManager/abi";
@@ -24,7 +24,7 @@ export type CompleteValidatorRegistrationParams = {
 };
 
 export function useCompleteValidatorRegistration(): UseMutationResult<void, Error, CompleteValidatorRegistrationParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -53,7 +53,7 @@ export type CompleteValidatorRemovalParams = {
 };
 
 export function useCompleteValidatorRemoval(): UseMutationResult<{ nodes: string[]; txHash: `0x${string}` }, Error, CompleteValidatorRemovalParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -81,7 +81,7 @@ export type CompleteWeightUpdateParams = {
 };
 
 export function useCompleteWeightUpdate(): UseMutationResult<void, Error, CompleteWeightUpdateParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");

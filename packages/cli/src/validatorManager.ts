@@ -49,5 +49,17 @@ export function addValidatorManagerCommands(program: SuzakuCliProgram) {
       const validatorManager = await getValidatorManager(client, validatorManagerAddress);
       logger.error("Not implemented yet");
     });
+
+  validatorManagerCmd
+    .command("info-validator")
+    .description("List all validators in the ValidatorManager contract")
+    .addArgument(argValidatorManagerAddress)
+    .addArgument(ArgHex("validationId", "Validator validation ID"))
+    .asyncAction({ signer: true }, async (client, validatorManagerAddress, validationId) => {
+      // instantiate ValidatorManager contract
+      const validatorManager = await getValidatorManager(client, validatorManagerAddress);
+      const validators = await validatorManager.read.getValidator([validationId])
+      logger.log(validators);
+    });
   return validatorManagerCmd;
 }

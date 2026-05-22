@@ -1,5 +1,6 @@
 import {
   getContract as viemGetContract,
+  decodeErrorResult,
   type GetContractReturnType,
   type Address,
   parseEventLogs,
@@ -95,6 +96,38 @@ function handleContractError(error: any, abiName: string): never {
     throw new Error(msg);
   }
   throw error;
+}
+
+// Walks the full viem/ethers cause chain looking for raw revert hex.
+// Core wallet embeds it as data="0x..." inside an ethers-format message string.
+export function extractRevertData(error: any): `0x${string}` | undefined {
+  let current: any = error;
+  while (current) {
+    if (typeof current.data === 'string' && current.data.startsWith('0x') && current.data.length >= 10) {
+      return current.data as `0x${string}`;
+    }
+    for (const field of ['message', 'details', 'shortMessage'] as const) {
+      const text: string = current[field] ?? '';
+      const match = text.match(/data="(0x[0-9a-fA-F]{8,})"/);
+      if (match) return match[1] as `0x${string}`;
+    }
+    current = current.cause;
+  }
+  return undefined;
+}
+
+// Extracts raw revert hex and decodes it against the given ABI.
+// Returns "ErrorName(arg1, arg2)" if found and decodable, undefined otherwise.
+export function decodeRevertError(error: any, abi: Abi): string | undefined {
+  const rawData = extractRevertData(error);
+  if (!rawData) return undefined;
+  try {
+    const decoded = decodeErrorResult({ abi, data: rawData });
+    const args = (decoded.args ?? []).map(a => typeof a === 'bigint' ? a.toString() : String(a)).join(', ');
+    return `${decoded.errorName}(${args})`;
+  } catch {
+    return undefined;
+  }
 }
 
 // ── contractAbiValidation ─────────────────────────────────────────────────────
@@ -268,6 +301,8 @@ export function withSafeWrite<const TAbi extends Abi, C extends ExtendedClient>(
   confirmations = 1,
 ): SafeEnhancedContract<TAbi, C> {
   if ('write' in contract) {
+    const isInjectedTransport = (client as any).transport?.type === 'custom';
+
     // Proxy contract.write to add receipt waiting and log parsing
     const writeHandler: ProxyHandler<Record<string, any>> = {
       get(target, prop) {
@@ -292,6 +327,10 @@ export function withSafeWrite<const TAbi extends Abi, C extends ExtendedClient>(
             }
             return hash;
           } catch (error: any) {
+            if (isInjectedTransport) {
+              const decoded = decodeRevertError(error, abi as Abi);
+              if (decoded) throw new Error(`${contract.name} reverted: ${decoded}`);
+            }
             handleContractError(error, contract.name ?? 'unknown');
           }
         };
@@ -308,7 +347,18 @@ export function withSafeWrite<const TAbi extends Abi, C extends ExtendedClient>(
           try {
             const simulateFn = (contract as any).simulate?.[prop];
             if (typeof simulateFn === 'function') {
-              await simulateFn(args, options);
+              try {
+                await simulateFn(args, options);
+              } catch (simError: any) {
+                if (extractRevertData(simError) || !isInjectedTransport) {
+                  // CLI (HTTP): always throw on simulation failure
+                  // Browser (injected): only throw when revert data is present
+                  handleContractError(simError, contract.name ?? 'unknown');
+                }
+                // Injected transport with no revert data: wallet strips eth_call data,
+                // fall through to write and let the wallet simulate on its own.
+                logger.warn(`[${contract.name ?? String(prop)}] Simulation inconclusive (no revert data), proceeding with write`);
+              }
             }
             return await (contract as any).write[prop as string](args, options);
           } catch (error: any) {

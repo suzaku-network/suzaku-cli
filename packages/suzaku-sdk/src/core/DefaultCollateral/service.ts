@@ -19,3 +19,15 @@ export async function depositToCollateral(
   await client.waitForTransactionReceipt({ hash: depositTxHash });
   return { approveTxHash, depositTxHash };
 }
+
+export async function withdrawFromCollateral(
+  client: ExtendedWalletClient,
+  collateral: IContract<TDefaultCollateralABI, 'withdraw' | 'decimals'>,
+  recipient: Address,
+  amount: string,
+): Promise<Hex> {
+  const amountWei = parseUnits(amount, await collateral.read.decimals());
+  const txHash = await collateral.safeWrite.withdraw([recipient, amountWei]);
+  await client.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}

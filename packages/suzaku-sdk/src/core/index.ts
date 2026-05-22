@@ -3,7 +3,7 @@
 export { logger, LogLevelEnum } from './logger/index';
 export type { LogLevel, LoggerInstance, UserInteractionInterface, ProgressInterface } from './logger/index';
 
-export { chainList, NETWORK_ADDRESSES } from './client/index';
+export { chainList, NETWORK_ADDRESSES, createAvalanchePublicExtendedClient, createAvalancheWalletExtendedClient } from './client/index';
 export type { Network, Chains, PChainAddress, Addresses, ExtendedWalletClient, ExtendedPublicClient, ExtendedClient, NetworkAddresses } from './client/index';
 
 export { setCastMode, isCastMode, CAST_DUMMY_HASH, formatCastCommand, logCastCall, logCastSend, logPChainIssueTx } from './lib/castUtils';
@@ -18,9 +18,9 @@ export { withErrors } from './lib/abiUtils';
 export { L1RegistryABI, getL1Registry } from './L1Registry';
 export { L1MiddlewareABI, getL1Middleware, addNode, initStakeUpdate, processNodeStakeCache, predictForceUpdateImpact, getLastNodeValidationId, getValidatorsToTopUp, weightSync } from './L1Middleware';
 export type { OperatorForceUpdatePrediction, ValidatorTopUp } from './L1Middleware';
-export { VaultTokenizedABI, getVaultTokenized, getVaultInfo, deposit, setDepositLimit, increaseCollateralLimit } from './VaultTokenized';
+export { VaultTokenizedABI, getVaultTokenized, getVaultInfo, fetchVaultInfo, deposit, setDepositLimit, increaseCollateralLimit, vaultWithdraw, claimBatch } from './VaultTokenized';
 export type { VaultInfo, CollateralClassInfo } from './VaultTokenized';
-export { DefaultCollateralABI, getDefaultCollateral, depositToCollateral } from './DefaultCollateral';
+export { DefaultCollateralABI, getDefaultCollateral, depositToCollateral, withdrawFromCollateral } from './DefaultCollateral';
 export { ERC20ABI, getERC20 } from './ERC20';
 export { L1RestakeDelegatorABI, getL1RestakeDelegator, setL1Limit } from './L1RestakeDelegator';
 export { VaultManagerABI, getVaultManager, getOperatorStakes } from './VaultManager';
@@ -39,7 +39,7 @@ export { RewardsNativeTokenABI, getRewardsNativeToken } from './RewardsNativeTok
 export { OwnableABI, getOwnable } from './Ownable';
 export { KiteStakingManagerABI, getKiteStakingManager, ksmInitiateValidatorRegistration, ksmCompleteValidatorRegistration, ksmInitiateDelegatorRegistration, ksmCompleteDelegatorRegistration, ksmInitiateDelegatorRemoval, ksmCompleteDelegatorRemoval, ksmInitiateValidatorRemoval, ksmCompleteValidatorRemoval, ksmSubmitUptimeProof } from './KiteStaking';
 export type { TKiteStakingManagerABI } from './KiteStaking';
-export { StakingVaultABI, getStakingVault, getValidatorManagerInfo, svInitiateValidatorRegistration, svInitiateValidatorRemoval, svForceRemoveValidator, svInitiateDelegatorRegistration, svCompleteValidatorRegistration, svCompleteDelegatorRegistration, svCompleteValidatorRemoval, svCompleteDelegatorRemoval } from './StakingVault';
+export { StakingVaultABI, getStakingVault, getValidatorManagerInfo, svInitiateValidatorRegistration, svInitiateValidatorRemoval, svForceRemoveValidator, svInitiateDelegatorRegistration, svCompleteValidatorRegistration, svCompleteDelegatorRegistration, svCompleteValidatorRemoval, svCompleteDelegatorRemoval, svClaimOperatorFees } from './StakingVault';
 export type { ValidatorManagerInfo, PChainOwnerOptions } from './StakingVault';
 export { StakingVaultOperationsABI, getStakingVaultOperations } from './StakingVaultOperations';
 

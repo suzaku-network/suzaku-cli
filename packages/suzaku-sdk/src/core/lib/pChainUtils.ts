@@ -239,6 +239,7 @@ export async function validates(client: ExtendedClient, subnetId: string): Promi
 }
 
 export async function validatedBy(client: ExtendedClient, blockchainId: string): Promise<string | undefined> {
+    client.pChain
     const response = await client.pChain.validatedBy({ blockchainID: blockchainId });
     if (!response.subnetID) return undefined;
     return response.subnetID;

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getL1Middleware } from "../core/L1Middleware/abi";
 import {
   addNode,
@@ -27,7 +27,7 @@ export type AddNodeParams = {
 };
 
 export function useAddNode(): UseMutationResult<Hex, Error, AddNodeParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -47,7 +47,7 @@ export type InitStakeUpdateParams = {
 };
 
 export function useInitStakeUpdate(): UseMutationResult<Hex, Error, InitStakeUpdateParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -65,7 +65,7 @@ export type ProcessNodeStakeCacheParams = {
 };
 
 export function useProcessNodeStakeCache(): UseMutationResult<void, Error, ProcessNodeStakeCacheParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -82,7 +82,7 @@ export type WeightSyncParams = {
 };
 
 export function useWeightSync(): UseMutationResult<string[], Error, WeightSyncParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");
@@ -100,7 +100,7 @@ export type PredictForceUpdateImpactParams = {
 export function usePredictForceUpdateImpact(
   params: PredictForceUpdateImpactParams,
 ): UseQueryResult<OperatorForceUpdatePrediction[] | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: ["predictForceUpdateImpact", params.contractAddress, params.operators],
     queryFn: async () => {
@@ -121,7 +121,7 @@ export type GetLastNodeValidationIdParams = {
 export function useGetLastNodeValidationId(
   params: GetLastNodeValidationIdParams,
 ): UseQueryResult<Hex | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: ["getLastNodeValidationId", params.contractAddress, params.nodeId],
     queryFn: async () => {
@@ -149,7 +149,7 @@ export type GetValidatorsToTopUpResult = {
 export function useGetValidatorsToTopUp(
   params: GetValidatorsToTopUpParams,
 ): UseQueryResult<GetValidatorsToTopUpResult | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: ["getValidatorsToTopUp", params.contractAddress, params.operator, params.targetBalanceWei?.toString()],
     queryFn: async () => {

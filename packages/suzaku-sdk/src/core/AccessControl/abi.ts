@@ -4,14 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getAccessControl<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'AccessControl', client, address, selectors);
-}
+import errors from './errors';
 
-const abi = [
+const baseAbi = [
     {
         "type": "event",
         "name": "RoleAdminChanged",
@@ -86,27 +81,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AccessControlUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "neededRole",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
     },
     {
         "type": "function",
@@ -238,5 +212,15 @@ const abi = [
         "stateMutability": "view"
     }
 ] as const;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'AccessControl';
+
+export async function getAccessControl<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'AccessControl', client, address, selectors);
+}
+
 export type TAccessControlABI = typeof abi;
 export default abi;

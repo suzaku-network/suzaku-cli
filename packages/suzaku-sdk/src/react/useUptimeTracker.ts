@@ -1,7 +1,7 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import { hexToBytes, type Address, type Hex } from "viem";
 import { useWriteContract } from "wagmi";
-import { useExtendedWalletClient } from "./useExtendedWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { getUptimeTracker } from "../core/UptimeTracker/abi";
 import { UptimeTrackerABI } from "../core/UptimeTracker";
 import { getL1Middleware } from "../core/L1Middleware/abi";
@@ -42,7 +42,7 @@ export type GetValidationUptimeMessageParams = {
 export function useGetValidationUptimeMessage(
   params: GetValidationUptimeMessageParams,
 ): UseQueryResult<string | null> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useQuery({
     queryKey: ["getValidationUptimeMessage", params.rpcUrl, params.nodeId, params.networkID, params.sourceChainID],
     queryFn: async () => {
@@ -85,7 +85,7 @@ export type SyncUptimeParams = {
 };
 
 export function useSyncUptime(): UseMutationResult<void, Error, SyncUptimeParams> {
-  const client = useExtendedWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   return useMutation({
     mutationFn: async (params) => {
       if (!client) throw new Error("Wallet client not ready");

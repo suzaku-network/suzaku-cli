@@ -3,7 +3,7 @@ import type {
   SendParameters,
   SendReturnType,
 } from "@avalanche-sdk/client/methods/wallet";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 
 /**
  * Mutation hook for cross-chain AVAX transfers (P↔C) via the wallet client's
@@ -14,7 +14,7 @@ export function useCrossChainTransfer(): UseMutationResult<
   Error,
   SendParameters
 > {
-  const client = useAvalancheWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
 
   return useMutation<SendReturnType, Error, SendParameters>({
     mutationFn: async (params) => {

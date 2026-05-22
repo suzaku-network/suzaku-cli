@@ -4,14 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getOperatorVaultOptInService<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'OperatorVaultOptInService', client, address, selectors);
-}
+import errors from './errors';
 
-const abi = [
+const baseAbi = [
     {
         "type": "constructor",
         "inputs": [
@@ -95,83 +90,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "CheckpointUnorderedInsertion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidShortString",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__AlreadyOptedIn",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__ExpiredSignature",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__InvalidSignature",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotOptedIn",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWhereEntity",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWhereRegistered",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__NotWho",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OptInService__OptOutCooldown",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "SafeCastOverflowedUintDowncast",
-        "inputs": [
-            {
-                "name": "bits",
-                "type": "uint8",
-                "internalType": "uint8"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "StringTooLong",
-        "inputs": [
-            {
-                "name": "str",
-                "type": "string",
-                "internalType": "string"
-            }
-        ]
     },
     {
         "type": "function",
@@ -382,5 +300,15 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'OperatorVaultOptInService';
+
+export async function getOperatorVaultOptInService<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'OperatorVaultOptInService', client, address, selectors);
+}
+
 export type TOperatorVaultOptInServiceABI = typeof abi;
 export default abi;

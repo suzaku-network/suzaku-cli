@@ -4,7 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-const abi = [
+import errors from './errors';
+
+const baseAbi = [
     {
         "type": "constructor",
         "inputs": [
@@ -161,199 +163,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AccessControlUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "neededRole",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ECDSAInvalidSignature",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "ECDSAInvalidSignatureLength",
-        "inputs": [
-            {
-                "name": "length",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ECDSAInvalidSignatureS",
-        "inputs": [
-            {
-                "name": "s",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InsufficientAllowance",
-        "inputs": [
-            {
-                "name": "spender",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "allowance",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "needed",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InsufficientBalance",
-        "inputs": [
-            {
-                "name": "sender",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "balance",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "needed",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidApprover",
-        "inputs": [
-            {
-                "name": "approver",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidReceiver",
-        "inputs": [
-            {
-                "name": "receiver",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidSender",
-        "inputs": [
-            {
-                "name": "sender",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC20InvalidSpender",
-        "inputs": [
-            {
-                "name": "spender",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC2612ExpiredSignature",
-        "inputs": [
-            {
-                "name": "deadline",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ERC2612InvalidSigner",
-        "inputs": [
-            {
-                "name": "signer",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidAccountNonce",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "currentNonce",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidShortString",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "StringTooLong",
-        "inputs": [
-            {
-                "name": "str",
-                "type": "string",
-                "internalType": "string"
-            }
-        ]
     },
     {
         "type": "function",
@@ -832,12 +641,15 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
-export default abi;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'ERC20';
 
 export async function getERC20<C extends ExtendedClient>(
   client: C,
   address?: Address,
 ): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'ERC20', client, address, selectors) as any;
-  // as any: TypeScript cannot resolve conditional return type from a generic function
+  return getContract(abi, 'ERC20', client, address, selectors);
 }
+
+export type TERC20ABI = typeof abi;
+export default abi;

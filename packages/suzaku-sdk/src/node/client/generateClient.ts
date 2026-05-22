@@ -1,8 +1,8 @@
 import { createSafeClient } from '@safe-global/sdk-starter-kit';
 import { type Hex } from 'viem';
-import { createAvalancheClient, createAvalancheWalletClient } from '@avalanche-sdk/client';
 import { privateKeyToAvalancheAccount } from '@avalanche-sdk/client/accounts';
 import { chainList } from '../../core/client/chainList';
+import { createAvalanchePublicExtendedClient } from '../../core/client/createAvalanchePublicExtendedClient';
 import { type Chains, type Network, type PChainAddress } from '../../core/client/types';
 import { type ExtendedWalletClient, type ExtendedPublicClient, type ExtendedClient } from './types';
 import { getLedgerAccount, toSafeProvider } from './ledgerUtils';
@@ -31,16 +31,20 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
     const hrp = network === 'mainnet' ? 'avax' : 'fuji';
     const pChainAddress = avalancheAccount.getXPAddress('P', hrp) as PChainAddress;
     const cChainAddress = avalancheAccount.getEVMAddress() as Hex;
+    const baseUrl = chainList[chain].rpcUrls.default.http[0];
 
-    const walletClient = createAvalancheWalletClient({
-      account: avalancheAccount,
-      chain: chainList[chain],
-      transport: { type: 'http' },
-    });
+    const walletClient = createAvalanchePublicExtendedClient(
+      baseUrl,
+      chainList[chain],
+      network,
+      cChainAddress,
+      pChainAddress,
+      avalancheAccount,
+    );
 
     const safeClient = safe
       ? await createSafeClient({
-          provider: isLedger ? await toSafeProvider(walletClient, avalancheAccount) : chainList[chain].rpcUrls.default.http[0],
+          provider: isLedger ? await toSafeProvider(walletClient as any, avalancheAccount) : baseUrl,
           signer: isLedger ? undefined : privateKey,
           safeAddress: safe,
           txServiceUrl:
@@ -51,22 +55,18 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
 
     return {
       ...walletClient,
-      network,
       ledger: isLedger,
       safe: safeClient,
-      addresses: { C: cChainAddress, P: pChainAddress },
       ...options,
     } as ExtendedWalletClient;
   }
 
-  const publicClient = createAvalancheClient({
-    chain: chainList[chain],
-    transport: { type: 'http' },
-  });
+  const baseUrl = chainList[chain].rpcUrls.default.http[0];
+  const publicClient = createAvalanchePublicExtendedClient(baseUrl, chainList[chain], network);
 
   const safeClient = safe
     ? await createSafeClient({
-        provider: chainList[chain].rpcUrls.default.http[0],
+        provider: baseUrl,
         safeAddress: safe,
         txServiceUrl:
           network === 'fuji' ? 'https://wallet-transaction-fuji.ash.center/api' : 'https://api.safe.global/tx-service/avax/api',
@@ -76,7 +76,6 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
 
   return {
     ...publicClient,
-    network,
     safe: safeClient,
     ...options,
   } as ExtendedPublicClient;

@@ -1,7 +1,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { getBalance } from "@avalanche-sdk/client/methods/pChain";
 import type { GetBalanceReturnType } from "@avalanche-sdk/client/methods/pChain";
-import { useAvalancheWalletClient } from "./useAvalancheWalletClient";
+import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
 import { usePChainAddress } from "./usePChainAddress";
 
 export type UsePChainBalanceOptions = {
@@ -18,7 +18,7 @@ export type UsePChainBalanceOptions = {
 export function usePChainBalance(
   options: UsePChainBalanceOptions = {},
 ): UseQueryResult<GetBalanceReturnType | null> {
-  const client = useAvalancheWalletClient();
+  const { client } = useAvalancheWalletExtendedClient();
   const { data: derivedAddress } = usePChainAddress();
   const address = options.address ?? derivedAddress ?? null;
 

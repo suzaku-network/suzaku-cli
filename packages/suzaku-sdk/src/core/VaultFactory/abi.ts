@@ -4,14 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getVaultFactory<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'VaultFactory', client, address, selectors);
-}
+import errors from './errors';
 
-const abi = [
+const baseAbi = [
     {
         "type": "constructor",
         "inputs": [
@@ -99,68 +94,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "EntityNotExist",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__AlreadyBlacklisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__AlreadyWhitelisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__InvalidImplementation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__InvalidVersion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__NotOwner",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__OldVersion",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "MigratableFactory__VersionBlacklisted",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
     },
     {
         "type": "function",
@@ -386,5 +319,15 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'VaultFactory';
+
+export async function getVaultFactory<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'VaultFactory', client, address, selectors);
+}
+
 export type TVaultFactoryABI = typeof abi;
 export default abi;

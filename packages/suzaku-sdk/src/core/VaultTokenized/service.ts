@@ -6,6 +6,8 @@ import type { TL1MiddlewareABI } from '../L1Middleware/abi';
 import { getDefaultCollateral } from '../DefaultCollateral/abi';
 import { getERC20 } from '../ERC20/abi';
 import { getL1RestakeDelegator } from '../L1RestakeDelegator/abi';
+import { getL1Middleware } from '../L1Middleware/abi';
+import { getVaultTokenized } from './abi';
 
 export type CollateralClassInfo = {
   class: number;
@@ -108,6 +110,18 @@ export async function getVaultInfo(
   };
 }
 
+export async function fetchVaultInfo(
+  client: ExtendedClient,
+  contractAddress: Address,
+  middlewareAddress?: Address,
+): Promise<VaultInfo> {
+  const vault = await getVaultTokenized(client, contractAddress);
+  const middleware = middlewareAddress
+    ? await getL1Middleware(client, middlewareAddress)
+    : undefined;
+  return getVaultInfo(client, vault, middleware);
+}
+
 export async function deposit(
   client: ExtendedWalletClient,
   vault: IContract<TVaultTokenizedABI, 'deposit' | 'collateral'>,
@@ -156,4 +170,27 @@ export async function increaseCollateralLimit(
     chain: null,
     account: client.account!,
   });
+}
+
+export async function vaultWithdraw(
+  client: ExtendedWalletClient,
+  vault: IContract<TVaultTokenizedABI, 'withdraw' | 'decimals'>,
+  claimer: Address,
+  amount: string,
+): Promise<Hex> {
+  const amountWei = parseUnits(amount, await vault.read.decimals());
+  const txHash = await vault.safeWrite.withdraw([claimer, amountWei]);
+  await client.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}
+
+export async function claimBatch(
+  client: ExtendedWalletClient,
+  vault: IContract<TVaultTokenizedABI, 'claimBatch'>,
+  recipient: Address,
+  epochs: bigint[],
+): Promise<Hex> {
+  const txHash = await vault.safeWrite.claimBatch([recipient, epochs]);
+  await client.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
 }

@@ -29,8 +29,7 @@ export async function increasePChainValidatorBalance(
         validationId,
         fromAddresses: [pAddress],
     });
-    const signedTx = await client.signXPTransaction(tx);
-    return issuePchainTx(client, signedTx);
+    return issuePchainTx(client, tx);
 }
 
 export async function convertSubnetToL1(params: {

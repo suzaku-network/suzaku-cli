@@ -3,10 +3,11 @@ export type { SuzakuProvidersProps } from "./Providers";
 
 export { ClientOnly, useMounted } from "./useMounted";
 
-export { useAvalancheWalletClient } from "./useAvalancheWalletClient";
-export type { UseAvalancheWalletClientResult } from "./useAvalancheWalletClient";
+export { useEnhancedWriteContract } from "./useEnhancedWriteContract";
 
-export { useExtendedWalletClient } from "./useExtendedWalletClient";
+export { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
+export { useAvalanchePublicExtendedClient } from "./useAvalanchePublicExtendedClient";
+
 
 export { usePChainAddress } from "./usePChainAddress";
 export type { PChainAddress } from "./usePChainAddress";
@@ -52,6 +53,7 @@ export {
   useSvInitiateDelegatorRegistration,
   useSvCompleteDelegatorRegistration,
   useSvCompleteDelegatorRemoval,
+  useSvClaimOperatorFees,
 } from "./useStakingVault";
 export type {
   SvInitiateValidatorRegistrationParams,
@@ -62,6 +64,7 @@ export type {
   SvInitiateDelegatorRegistrationParams,
   SvCompleteDelegatorRegistrationParams,
   SvCompleteDelegatorRemovalParams,
+  SvClaimOperatorFeesParams,
 } from "./useStakingVault";
 
 export {
@@ -100,12 +103,16 @@ export {
   useDeposit,
   useSetDepositLimit,
   useIncreaseCollateralLimit,
+  useVaultWithdraw,
+  useClaimBatch,
 } from "./useVaultTokenized";
 export type {
   GetVaultInfoParams,
   DepositParams,
   SetDepositLimitParams,
   IncreaseCollateralLimitParams,
+  VaultWithdrawParams,
+  ClaimBatchParams,
 } from "./useVaultTokenized";
 
 export { useGetOperatorStakes } from "./useVaultManager";
@@ -127,8 +134,8 @@ export type {
 export { useInitiateValidatorRemoval } from "./usePoASecurityModule";
 export type { InitiateValidatorRemovalParams } from "./usePoASecurityModule";
 
-export { useDepositToCollateral } from "./useDefaultCollateral";
-export type { DepositToCollateralParams } from "./useDefaultCollateral";
+export { useDepositToCollateral, useWithdrawFromCollateral } from "./useDefaultCollateral";
+export type { DepositToCollateralParams, WithdrawFromCollateralParams } from "./useDefaultCollateral";
 
 export { useSetL1Limit } from "./useL1RestakeDelegator";
 export type { SetL1LimitParams } from "./useL1RestakeDelegator";

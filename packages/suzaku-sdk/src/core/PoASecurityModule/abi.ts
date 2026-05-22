@@ -4,14 +4,9 @@ import type { ExtendedClient, ExtendedWalletClient } from '../client/types';
 import type { EnhancedContract, SafeEnhancedContract } from '../client/viemUtils';
 import { selectors } from './selectors';
 
-export async function getPoASecurityModule<C extends ExtendedClient>(
-  client: C,
-  address?: Address,
-): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
-  return getContract(abi, 'PoASecurityModule', client, address, selectors);
-}
+import errors from './errors';
 
-const abi = [
+const baseAbi = [
     {
         "type": "constructor",
         "inputs": [
@@ -46,33 +41,6 @@ const abi = [
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ZeroAddress",
-        "inputs": []
     },
     {
         "type": "function",
@@ -307,5 +275,15 @@ const abi = [
         "stateMutability": "nonpayable"
     }
 ] as const;
+const abi = [...baseAbi, ...errors] as const;
+(abi as any).contractName = 'PoASecurityModule';
+
+export async function getPoASecurityModule<C extends ExtendedClient>(
+  client: C,
+  address?: Address,
+): Promise<C extends ExtendedWalletClient ? SafeEnhancedContract<typeof abi, C> : EnhancedContract<typeof abi, C>> {
+  return getContract(abi, 'PoASecurityModule', client, address, selectors);
+}
+
 export type TPoASecurityModuleABI = typeof abi;
 export default abi;
