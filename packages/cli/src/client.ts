@@ -21,8 +21,9 @@ export async function generateClient(chain: Chains, privateKey?: undefined, safe
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: { wait?: number; skipAbiValidation?: boolean }): Promise<ExtendedClient> {
   const envFileBase = path.resolve(__dirname, '..', 'defaults', '.env.');
-  const network: Network = chainList[chain].testnet ? 'fuji' : 'mainnet';
+  const network: Network = (chainList[chain] as { network?: string }).network === 'local' ? 'local' : chainList[chain].testnet ? 'fuji' : 'mainnet';
   configDotenv({ path: envFileBase + network });
   if ((network as string) !== chain) configDotenv({ path: envFileBase + chain });
+
   return _generateClient(chain, privateKey as any, safe, options);
 }

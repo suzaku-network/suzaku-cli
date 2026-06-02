@@ -12,8 +12,7 @@
     "build": "pnpm -r --filter=./packages/* build",
     "typecheck": "pnpm -r --filter=./packages/* typecheck",
     "cli": "pnpm --filter @suzaku-network/suzaku-cli cli",
-    "suzaku-cli": "pnpm --filter @suzaku-network/suzaku-cli suzaku-cli",
-    "ui-tools:dev": "pnpm --filter ui-tools dev"
+    "suzaku-cli": "pnpm --filter @suzaku-network/suzaku-cli suzaku-cli"
   },
   "devDependencies": {
     "typescript": "5.9.3"

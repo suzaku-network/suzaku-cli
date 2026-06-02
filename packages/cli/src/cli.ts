@@ -323,6 +323,7 @@ program.
     .argument('genesisFile', 'Path to the genesis file')
     .option('--vm-id <vmId>', 'subnet-evm custom id')
     .asyncAction({ signer: true }, async (client, chainName, genesisFile, options) => {
+        await requirePChainBallance(client, 50000n, false);
         const subnetId = await createSubnet({ client: client })
         const genesisData = readFileSync(genesisFile).toString('utf-8');
         const chainId = await createChain({

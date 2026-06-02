@@ -1,6 +1,7 @@
 import { createSafeClient } from '@safe-global/sdk-starter-kit';
 import { type Hex } from 'viem';
 import { privateKeyToAvalancheAccount } from '@avalanche-sdk/client/accounts';
+import { getHRP } from '../../core/client/createAvalancheWalletExtendedClient';
 import { chainList } from '../../core/client/chainList';
 import { createAvalanchePublicExtendedClient } from '../../core/client/createAvalanchePublicExtendedClient';
 import { type Chains, type Network, type PChainAddress } from '../../core/client/types';
@@ -14,8 +15,7 @@ export async function generateClient(chain: Chains, privateKey: Hex | 'ledger', 
 export async function generateClient(chain: Chains, privateKey?: undefined, safe?: Hex, options?: ClientOptions): Promise<ExtendedPublicClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: ClientOptions): Promise<ExtendedClient>;
 export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger', safe?: Hex, options?: ClientOptions): Promise<ExtendedClient> {
-  const network: Network = chainList[chain].testnet ? 'fuji' : 'mainnet';
-
+  const network: Network = (chainList[chain] as { network?: string }).network === 'local' ? 'local' : chainList[chain].testnet ? 'fuji' : 'mainnet';
   if (network !== chain && safe) {
     logger.error(`Error: The chain ${chain} is not supported by safe on the ${network} network`);
     process.exit(1);
@@ -28,7 +28,7 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
       ? await getLedgerAccount(network, process.env.LEDGER_ACCOUNT_INDEX ? parseInt(process.env.LEDGER_ACCOUNT_INDEX) : 0)
       : privateKeyToAvalancheAccount(privateKey);
 
-    const hrp = network === 'mainnet' ? 'avax' : 'fuji';
+    const hrp = getHRP(chainList[chain]);
     const pChainAddress = avalancheAccount.getXPAddress('P', hrp) as PChainAddress;
     const cChainAddress = avalancheAccount.getEVMAddress() as Hex;
     const baseUrl = chainList[chain].rpcUrls.default.http[0];

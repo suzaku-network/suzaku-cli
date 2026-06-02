@@ -2,6 +2,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import { publicKeyToXPAddress } from "../core/lib/publicKeyToXPAddress";
 import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
+import { getHRP } from "../core/client/createAvalancheWalletExtendedClient";
 
 export type PChainAddress = `P-${string}`;
 
@@ -12,7 +13,7 @@ export type PChainAddress = `P-${string}`;
 export function usePChainAddress(): UseQueryResult<PChainAddress | null> {
   const { client } = useAvalancheWalletExtendedClient();
   const { chain } = useConnection();
-  const hrp = chain?.testnet ? "fuji" : "avax";
+  const hrp = getHRP(chain!);
 
   return useQuery({
     queryKey: ["suzaku", "p-chain-address", chain?.id],

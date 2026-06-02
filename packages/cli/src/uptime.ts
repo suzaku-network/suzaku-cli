@@ -64,7 +64,7 @@ export function addUptimeCommands(program: SuzakuCliProgram) {
       logger.log(`Starting validator uptime report for NodeID: ${nodeId} on source chain ${blockchainId} via RPC ${rpcUrl}`);
       logger.log(`Target UptimeTracker: ${uptimeTracker.address}`);
 
-      const warpNetworkID = client.network === 'mainnet' ? 1 : 5;
+      const warpNetworkID = client.network === 'mainnet' ? 1 : client.network === 'local' ? 12345 : 5;
       const bypassToken = process.env.RPC_BYPASS_TOKEN;
       let signedUptimeHex = await getValidationUptimeMessage(client, rpcUrl, nodeId, warpNetworkID, blockchainId, bypassToken);
 

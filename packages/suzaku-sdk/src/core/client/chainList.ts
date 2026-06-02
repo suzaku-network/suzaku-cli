@@ -63,10 +63,14 @@ export async function setCustomChainRpcUrl(rpcUrl: string): Promise<void> {
   try {
     const networkIDresp = await infoApi.getNetworkId();
     const chainId = await getChainId(rpcUrl);
+    const networkName =
+      networkIDresp.networkID === '1' ? 'mainnet' :
+      networkIDresp.networkID === '12345' ? 'local' :
+      'fuji';
     chainList.custom = defineChain({
       ...chainList.custom,
-      testnet: networkIDresp.networkID === '1' ? false : true,
-      network: networkIDresp.networkID === '1' ? 'mainnet' : 'fuji',
+      testnet: networkName !== 'mainnet',
+      network: networkName,
       id: Number(chainId),
       rpcUrls: { default: { http: [rpcUrl] } },
     });

@@ -1,7 +1,8 @@
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
+import { useReadContract } from 'wagmi';
 import type { Address, Hex } from "viem";
 import { useAvalancheWalletExtendedClient } from "./useAvalancheWalletExtendedClient";
-import { getKiteStakingManager } from "../core/KiteStaking/abi";
+import KiteStakingManagerABI, { getKiteStakingManager } from "../core/KiteStaking/abi";
 import {
   ksmInitiateValidatorRegistration,
   ksmCompleteValidatorRegistration,
@@ -204,4 +205,16 @@ export function useKsmSubmitUptimeProof(): UseMutationResult<Hex, Error, KsmSubm
       return ksmSubmitUptimeProof(client, contract, params.nodeId, params.rpcUrl);
     },
   });
+}
+
+// ── Read hooks ────────────────────────────────────────────────────────────────
+
+export function useStakingManagerSettings(ksmAddress: Address | undefined) {
+  const { data, ...rest } = useReadContract({
+    address: ksmAddress,
+    abi: KiteStakingManagerABI,
+    functionName: 'getStakingManagerSettings',
+    query: { enabled: !!ksmAddress },
+  });
+  return { settings: data, ...rest };
 }

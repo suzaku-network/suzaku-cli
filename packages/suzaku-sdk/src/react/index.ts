@@ -30,6 +30,7 @@ export {
   useKsmInitiateValidatorRemoval,
   useKsmCompleteValidatorRemoval,
   useKsmSubmitUptimeProof,
+  useStakingManagerSettings,
 } from "./useKiteStaking";
 export type {
   KsmInitiateValidatorRegistrationParams,
@@ -54,6 +55,14 @@ export {
   useSvCompleteDelegatorRegistration,
   useSvCompleteDelegatorRemoval,
   useSvClaimOperatorFees,
+  useStakingManagerAddress,
+  useOperatorInfo,
+  useOperatorValidators,
+  useOperatorDelegators,
+  useValidatorDetails,
+  useDelegatorDetails,
+  useVaultState,
+  useWithdrawalRequests,
 } from "./useStakingVault";
 export type {
   SvInitiateValidatorRegistrationParams,
@@ -65,6 +74,12 @@ export type {
   SvCompleteDelegatorRegistrationParams,
   SvCompleteDelegatorRemovalParams,
   SvClaimOperatorFeesParams,
+  SvOperatorInfo,
+  StakingValidatorInfo,
+  ValidatorInfo,
+  DelegatorInfo,
+  WithdrawalRequest,
+  VaultState,
 } from "./useStakingVault";
 
 export {

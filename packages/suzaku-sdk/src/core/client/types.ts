@@ -6,7 +6,7 @@ import type {
 import type { avalanche } from '@avalanche-sdk/client/chains';
 import type { chainList } from './chainList';
 
-export type Network = 'fuji' | 'mainnet' | 'anvil';
+export type Network = 'fuji' | 'mainnet' | 'local' | 'anvil';
 export type Chains = keyof typeof chainList;
 export type PChainAddress = `P-${string}`;
 export type Addresses = { P: PChainAddress; C: Hex };

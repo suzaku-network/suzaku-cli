@@ -4,18 +4,24 @@ import type { ExtendedWalletClient, Network, PChainAddress } from './types';
 import { avalanche, avalancheFuji } from '@avalanche-sdk/client/chains';
 import { publicKeyToXPAddress } from '../lib/publicKeyToXPAddress';
 
+export function getHRP(chain: Chain): string {
+  if ((chain as Chain & { network?: string }).network === 'local') return 'local';
+  if (chain.testnet) return 'fuji';
+  return 'avax';
+}
+
 export async function createAvalancheWalletExtendedClient(
   chain: Chain,
   provider: EIP1193Provider
 ): Promise<ExtendedWalletClient> {
-  const primaryChain = chain.testnet === true ? avalancheFuji : avalanche;
+  const hrp = getHRP(chain);
+  const primaryChain = hrp === "fuji" ? avalancheFuji : hrp === "avax" ? avalanche : chain;
   const walletClient = createAvalancheWalletClient({ chain: primaryChain, transport: { type: 'custom', provider } });
   const cChainAddress = (await walletClient.getAddresses())[0];
-  const hrp = chain.testnet === true ? "fuji" : "avax";
 
   const { xp } = await walletClient.getAccountPubKey();
   const pChainAddress = `P-${publicKeyToXPAddress(xp, hrp)}` as PChainAddress;
-  const network: Network = chain.testnet ? "fuji" : "mainnet";
+  const network: Network = (chain as Chain & { network?: string }).network === 'local' ? 'local' : chain.testnet ? 'fuji' : 'mainnet';
   const l1Client = createAvalancheWalletClient({ chain, transport: { type: 'custom', provider }, account: cChainAddress });
 
   // Switch Core to the primary network before any P/X-Chain tx, then switch back.
