@@ -30,6 +30,8 @@ A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The
     - [Operator Registry Commands (`operator-registry`)](#operator-registry-commands-operator-registry)
     - [Vault Manager Commands (`vault-manager`)](#vault-manager-commands-vault-manager)
     - [Vault Commands (`vault`)](#vault-commands-vault)
+    - [LST Wrapper Commands (`lst-wrapper`)](#lst-wrapper-commands-lst-wrapper)
+    - [Vault Helper Commands (`vault-helper`)](#vault-helper-commands-vault-helper)
     - [Middleware Commands (`middleware`)](#middleware-commands-middleware)
     - [Operator Opt-In Commands (`opt-in`)](#operator-opt-in-commands-opt-in)
     - [Balancer Commands (`balancer`)](#balancer-commands-balancer)
@@ -615,6 +617,75 @@ suzaku-cli --help
   Get L1 limit for a vault's delegator.
 - **get-operator-l1-shares `<vaultAddress>` `<l1Address>` `<collateralClass>` `<operatorAddress>`**
   Get L1 shares for an operator in a vault's delegator.
+
+### LST Wrapper Commands (`lst-wrapper`)
+
+Interact with an **LSTWrapper** contract — an ERC4626 vault that wraps a VaultTokenized instance and issues LST shares with ERC20Votes governance support.
+
+**Read commands:**
+
+- **info `<lstWrapperAddress>`**
+  Name, symbol, vault/collateral/rewards addresses, total assets, supply and pause state in one multicall.
+- **get-balance `<lstWrapperAddress>` [--account `<account>`]**
+  LST shares held — determines redemption value and active voting weight.
+- **get-allowance `<lstWrapperAddress>` `<owner>` `<spender>`**
+  Tokens approved for a spender — must be sufficient before any VaultHelper stake call or third-party transfer.
+- **get-checkpoints `<lstWrapperAddress>` `<pos>` [--account `<account>`]**
+  Historical voting snapshot at a given checkpoint index — used to prove balance at a past block for governance proposals.
+- **preview-deposit `<lstWrapperAddress>` `<assets>`**
+  Shares you would receive for depositing assets — compare over time to detect exchange rate drift before committing.
+- **preview-mint `<lstWrapperAddress>` `<shares>`**
+  Assets required to mint an exact share count — useful when targeting a specific governance weight.
+- **preview-redeem `<lstWrapperAddress>` `<shares>`**
+  Assets you would receive for redeeming shares — reflects current exchange rate including accrued rewards.
+- **preview-withdraw `<lstWrapperAddress>` `<assets>`**
+  Shares to burn for an exact asset withdrawal — a higher value than preview-deposit means the rate improved (compounding).
+- **paused `<lstWrapperAddress>`**
+  Whether new deposits are currently blocked — existing shares are unaffected and can still be redeemed.
+- **convert-to-assets `<lstWrapperAddress>` `<shares>`**
+  Current collateral assets equivalent to a given share amount at the live exchange rate.
+- **convert-to-shares `<lstWrapperAddress>` `<assets>`**
+  Current LST shares equivalent to a given asset amount at the live exchange rate.
+- **get-votes `<lstWrapperAddress>` [--account `<account>`]**
+  Current delegated voting power — 0 until the account self-delegates or receives delegation.
+- **max-deposit `<lstWrapperAddress>` [--account `<account>`]**
+  Remaining deposit capacity before the collateral limit is hit — 0 when paused or during the seed phase.
+
+**Write commands:**
+
+- **deposit `<lstWrapperAddress>` `<assets>` [--receiver `<receiver>`]**
+  Deposit collateral assets and receive LST shares — increases receiver's voting weight and reward exposure.
+- **redeem `<lstWrapperAddress>` `<shares>` [--receiver `<receiver>`] [--owner `<owner>`]**
+  Burn LST shares and receive underlying collateral assets — reduces owner's voting weight and reward exposure.
+- **harvest `<lstWrapperAddress>`**
+  Collect accrued native staking rewards and compound them as vault shares, raising the exchange rate for all holders.
+- **set-deposits-paused `<lstWrapperAddress>` `<paused>`**
+  Block (`true`) or unblock (`false`) new deposits — existing positions remain redeemable (owner only).
+- **sweep `<lstWrapperAddress>` `<token>` `<recipient>` `<amount>`**
+  Recover accidentally sent ERC20 tokens (owner only) — cannot sweep vault collateral or native token.
+- **sweep-collateral-dust `<lstWrapperAddress>` `<recipient>` `<amount>`**
+  Remove sub-threshold collateral residue from rounding without affecting the vault share price (owner only).
+
+### Vault Helper Commands (`vault-helper`)
+
+Interact with the **VaultHelper** contract — a stateless helper for reading pending withdrawals, claimable rewards, and for executing single-transaction stake/unstake flows.
+
+**Read commands:**
+
+- **info `<vaultHelperAddress>`**
+  VAULT_FACTORY and LST_WRAPPER_FACTORY addresses registered in this helper instance.
+- **get-pending-withdraws `<vaultHelperAddress>` `<vaultAddress>` [--user `<user>`]**
+  All epochs where a user has collateral queued for withdrawal — amount and epoch for each entry.
+- **get-future-pending-withdraws `<vaultHelperAddress>` `<vaultAddress>` [--user `<user>`]**
+  Epochs not yet claimable (withdrawal window not yet open) — useful to forecast when funds will be available.
+- **get-pending-withdraws-in-range `<vaultHelperAddress>` `<vaultAddress>` `<fromEpoch>` `<toEpoch>` [--user `<user>`]**
+  Pending withdrawals scoped to a specific epoch range — efficient for paginating large withdrawal histories.
+- **get-claimable-reward `<vaultHelperAddress>` `<vaultAddress>` `<rewardsAddress>` `<rewardTokenAddress>` [--staker `<staker>`]**
+  Total rewards a staker can claim across all unclaimed epochs — token address and amount in a single call.
+- **get-claimable-reward-in-range `<vaultHelperAddress>` `<vaultAddress>` `<rewardsAddress>` `<rewardTokenAddress>` `<fromEpoch>` `<toEpoch>` [--staker `<staker>`]**
+  Claimable rewards scoped to a specific epoch range — useful to estimate rewards for a subset of epochs before claiming.
+- **get-latest-distributed-rewards `<vaultHelperAddress>` `<vaultAddress>` `<rewardsAddress>`**
+  The most recently distributed reward amount for a vault — indicates whether a new distribution cycle is needed.
 
 ### Middleware Commands (`middleware`)
 

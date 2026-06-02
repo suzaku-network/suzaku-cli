@@ -20,6 +20,8 @@ import Ownable from './Ownable';
 import KiteStakingManager from './KiteStakingManager';
 import StakingVault from './StakingVault';
 import StakingVaultOperations from './StakingVaultOperations';
+import LSTWrapper from './LSTWrapper';
+import VaultHelper from './VaultHelper';
 
 import { Abi } from 'viem';
 
@@ -53,5 +55,7 @@ export const SuzakuABI = {
   Ownable,
   KiteStakingManager,
   StakingVault: withErrors(StakingVault, StakingVaultOperations, KiteStakingManager, ValidatorManager),
-  StakingVaultOperations
+  StakingVaultOperations,
+  LSTWrapper,
+  VaultHelper,
 };

@@ -41,6 +41,8 @@ const contractMappings = {
   KiteStaking: "KiteStaking.ts",
   StakingVault: "StakingVault.ts",
   StakingVaultOperations: "StakingVaultOperations.ts",
+  LSTWrapper: "LSTWrapper.ts",
+  VaultHelper: "VaultHelper.ts",
 };
 
 // Default source directory
