@@ -45,6 +45,38 @@ import {
 } from "./vault";
 
 import {
+    lstWrapperInfo,
+    lstWrapperGetBalance,
+    lstWrapperGetAllowance,
+    lstWrapperGetCheckpoints,
+    lstWrapperPreviewDeposit,
+    lstWrapperPreviewMint,
+    lstWrapperPreviewRedeem,
+    lstWrapperPreviewWithdraw,
+    lstWrapperPaused,
+    lstWrapperConvertToAssets,
+    lstWrapperConvertToShares,
+    lstWrapperGetVotes,
+    lstWrapperMaxDeposit,
+    lstWrapperDeposit,
+    lstWrapperRedeem,
+    lstWrapperHarvest,
+    lstWrapperSetDepositsPaused,
+    lstWrapperSweep,
+    lstWrapperSweepCollateralDust,
+} from "./lstWrapper";
+
+import {
+    vaultHelperInfo,
+    vaultHelperGetUserPendingWithdraws,
+    vaultHelperGetUserFuturePendingWithdraws,
+    vaultHelperGetUserPendingWithdrawsInRange,
+    vaultHelperGetStakerClaimableReward,
+    vaultHelperGetStakerClaimableRewardInRange,
+    vaultHelperGetVaultLatestDistributedRewards,
+} from "./vaultHelper";
+
+import {
     setL1Limit,
     setOperatorL1Shares
 } from "./delegator";
@@ -239,6 +271,8 @@ async function main() {
     const argMiddlewareAddress = ArgAddress("middlewareAddress", "Middleware contract address");
     const argMiddlewareVaultManagerAddress = ArgAddress("middlewareVaultManagerAddress", "Middleware vault manager contract address");
     const argVaultAddress = ArgAddress("vaultAddress", "Vault contract address");
+    const argLstWrapperAddress = ArgAddress("lstWrapperAddress", "LSTWrapper contract address");
+    const argVaultHelperAddress = ArgAddress("vaultHelperAddress", "VaultHelper contract address");
     const argUptimeTrackerAddress = ArgAddress("uptimeTrackerAddress", "UptimeTracker contract address");
     const argRewardsAddress = ArgAddress("rewardsAddress", "Rewards contract address");
     const argRewardTokenAddress = ArgAddress("rewardTokenAddress", "Reward token contract address");
@@ -624,6 +658,17 @@ async function main() {
 
         });
 
+    // get current epoch
+    vaultCmd
+        .command("get-current-epoch")
+        .description("Get current epoch of a vault")
+        .addArgument(argVaultAddress)
+        .asyncAction(async (config, vaultAddress) => {
+            const vault = await config.contracts.VaultTokenized(vaultAddress);
+            const epoch = await vault.read.currentEpoch();
+            logger.log(`Current epoch for vault (${await vault.read.name()}) ${vaultAddress} is ${epoch}`);
+        });
+
     // setIsDepositLimit
     vaultCmd
         .command("set-deposit-limit")
@@ -869,6 +914,312 @@ async function main() {
             const shares = await delegator.read.operatorL1Shares([l1Address, collateralClass, operatorAddress]);
             logger.log(`L1 shares for operator ${operatorAddress} in vault ${vaultAddress} on L1 ${l1Address} (collateral class ${collateralClass}): ${shares}`);
         });
+    /* --------------------------------------------------
+    * LST WRAPPER
+    * -------------------------------------------------- */
+
+    const lstWrapperCmd = program
+        .command("lst-wrapper")
+        .description("Commands to interact with an LSTWrapper (ERC4626 vault wrapping a VaultTokenized with LST shares and governance votes)");
+
+    lstWrapperCmd
+        .command("info")
+        .description("Name, symbol, vault/collateral/rewards addresses, total assets, supply and pause state in one call")
+        .addArgument(argLstWrapperAddress)
+        .asyncAction(async (config, lstWrapperAddress) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperInfo(lstWrapper);
+        });
+
+    lstWrapperCmd
+        .command("get-balance")
+        .description("LST shares held by an account — determines redemption value and active voting weight")
+        .addArgument(argLstWrapperAddress)
+        .addOption(new Option("--account <account>", "Account to check (defaults to signer)").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, options) => {
+            const account = options.account ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperGetBalance(lstWrapper, account);
+        });
+
+    lstWrapperCmd
+        .command("get-allowance")
+        .description("Tokens approved for a spender — must be sufficient before VaultHelper or any third-party stake call")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgAddress("owner", "Token owner address"))
+        .addArgument(ArgAddress("spender", "Approved spender address"))
+        .asyncAction(async (config, lstWrapperAddress, owner, spender) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperGetAllowance(lstWrapper, owner, spender);
+        });
+
+    lstWrapperCmd
+        .command("get-checkpoints")
+        .description("Historical voting snapshot at a given position — used to prove balance at a past block for governance proposals")
+        .addArgument(argLstWrapperAddress)
+        .addOption(new Option("--account <account>", "Account to query (defaults to signer)").argParser(ParserAddress))
+        .addArgument(ArgNumber("pos", "Checkpoint array index"))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, pos, options) => {
+            const account = options.account ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperGetCheckpoints(lstWrapper, account, pos);
+        });
+
+    lstWrapperCmd
+        .command("preview-deposit")
+        .description("Shares you would receive for depositing assets — compare over time to detect exchange rate drift before committing")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("assets", "Amount of assets to simulate"))
+        .asyncAction(async (config, lstWrapperAddress, assets) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperPreviewDeposit(lstWrapper, assets);
+        });
+
+    lstWrapperCmd
+        .command("preview-mint")
+        .description("Assets required to mint an exact share count — use when targeting a specific governance weight")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("shares", "Amount of shares to simulate"))
+        .asyncAction(async (config, lstWrapperAddress, shares) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperPreviewMint(lstWrapper, shares);
+        });
+
+    lstWrapperCmd
+        .command("preview-redeem")
+        .description("Assets you would receive for redeeming shares — reflects current exchange rate including accrued rewards")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("shares", "Amount of shares to simulate"))
+        .asyncAction(async (config, lstWrapperAddress, shares) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperPreviewRedeem(lstWrapper, shares);
+        });
+
+    lstWrapperCmd
+        .command("preview-withdraw")
+        .description("Shares to burn for an exact asset withdrawal — higher than deposit preview means exchange rate improved (compounding)")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("assets", "Amount of assets to simulate"))
+        .asyncAction(async (config, lstWrapperAddress, assets) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperPreviewWithdraw(lstWrapper, assets);
+        });
+
+    lstWrapperCmd
+        .command("paused")
+        .description("Whether new deposits are currently blocked — existing shares are unaffected and can still be redeemed")
+        .addArgument(argLstWrapperAddress)
+        .asyncAction(async (config, lstWrapperAddress) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperPaused(lstWrapper);
+        });
+
+    lstWrapperCmd
+        .command("convert-to-assets")
+        .description("Current collateral assets equivalent to a given share amount at the live exchange rate")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("shares", "Amount of shares to convert"))
+        .asyncAction(async (config, lstWrapperAddress, shares) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperConvertToAssets(lstWrapper, shares);
+        });
+
+    lstWrapperCmd
+        .command("convert-to-shares")
+        .description("Current LST shares equivalent to a given asset amount at the live exchange rate")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("assets", "Amount of assets to convert"))
+        .asyncAction(async (config, lstWrapperAddress, assets) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperConvertToShares(lstWrapper, assets);
+        });
+
+    lstWrapperCmd
+        .command("get-votes")
+        .description("Current delegated voting power — 0 until the account self-delegates or receives delegation")
+        .addArgument(argLstWrapperAddress)
+        .addOption(new Option("--account <account>", "Account to check (defaults to signer)").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, options) => {
+            const account = options.account ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperGetVotes(lstWrapper, account);
+        });
+
+    lstWrapperCmd
+        .command("max-deposit")
+        .description("Remaining capacity before the collateral limit is hit — 0 when paused or during seed phase (no supply yet)")
+        .addArgument(argLstWrapperAddress)
+        .addOption(new Option("--account <account>", "Account to check (defaults to signer)").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, options) => {
+            const account = options.account ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperMaxDeposit(lstWrapper, account);
+        });
+
+    lstWrapperCmd
+        .command("deposit")
+        .description("Deposit collateral assets and receive LST shares; increases receiver's voting weight and reward exposure")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("assets", "Amount of assets to deposit"))
+        .addOption(new Option("--receiver <receiver>", "Address to receive LST shares (defaults to signer)").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, assets, options) => {
+            const receiver = options.receiver ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperDeposit(lstWrapper, assets, receiver);
+        });
+
+    lstWrapperCmd
+        .command("redeem")
+        .description("Burn LST shares and receive underlying collateral assets; reduces owner's voting weight and reward exposure")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgBigInt("shares", "Amount of LST shares to burn"))
+        .addOption(new Option("--receiver <receiver>", "Address to receive assets (defaults to signer)").argParser(ParserAddress))
+        .addOption(new Option("--owner <owner>", "Share owner address (defaults to signer)").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, shares, options) => {
+            const receiver = options.receiver ?? config.client.account!.address;
+            const owner = options.owner ?? config.client.account!.address;
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperRedeem(lstWrapper, shares, receiver, owner);
+        });
+
+    lstWrapperCmd
+        .command("harvest")
+        .description("Collect accrued native staking rewards and compound them as vault shares, raising the exchange rate for all holders")
+        .addArgument(argLstWrapperAddress)
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperHarvest(lstWrapper);
+        });
+
+    lstWrapperCmd
+        .command("set-deposits-paused")
+        .description("Block or unblock new deposits — existing positions remain redeemable regardless of this setting (owner only)")
+        .addArgument(argLstWrapperAddress)
+        .argument("<paused>", "true to pause deposits, false to unpause", (v) => v === 'true')
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, paused) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperSetDepositsPaused(lstWrapper, paused);
+        });
+
+    lstWrapperCmd
+        .command("sweep")
+        .description("Recover accidentally sent ERC20 tokens (owner only) — cannot sweep vault collateral or native token")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgAddress("token", "ERC20 token address to sweep"))
+        .addArgument(ArgAddress("recipient", "Address to receive the recovered tokens"))
+        .addArgument(ArgBigInt("amount", "Amount to sweep"))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, token, recipient, amount) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperSweep(lstWrapper, token, recipient, amount);
+        });
+
+    lstWrapperCmd
+        .command("sweep-collateral-dust")
+        .description("Remove sub-threshold collateral residue from rounding without affecting the vault share price (owner only)")
+        .addArgument(argLstWrapperAddress)
+        .addArgument(ArgAddress("recipient", "Address to receive the dust"))
+        .addArgument(ArgBigInt("amount", "Amount to sweep"))
+        .asyncAction({ signer: true }, async (config, lstWrapperAddress, recipient, amount) => {
+            const lstWrapper = await config.contracts.LSTWrapper(lstWrapperAddress);
+            await lstWrapperSweepCollateralDust(lstWrapper, recipient, amount);
+        });
+
+    /* --------------------------------------------------
+    * VAULT HELPER
+    * -------------------------------------------------- */
+
+    const vaultHelperCmd = program
+        .command("vault-helper")
+        .description("Commands to interact with the VaultHelper contract");
+
+    vaultHelperCmd
+        .command("info")
+        .description("Get factory addresses registered in the VaultHelper")
+        .addArgument(argVaultHelperAddress)
+        .asyncAction(async (config, vaultHelperAddress) => {
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperInfo(vaultHelper);
+        });
+
+    vaultHelperCmd
+        .command("get-pending-withdraws")
+        .description("Get all pending withdrawals for a user in a vault")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addOption(new Option("--user <user>", "User address").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, vaultHelperAddress, vaultAddress, options) => {
+            const user = options.user ?? config.client.account!.address;
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetUserPendingWithdraws(vaultHelper, vaultAddress, user);
+        });
+
+    vaultHelperCmd
+        .command("get-future-pending-withdraws")
+        .description("Get future pending withdrawals for a user in a vault")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addOption(new Option("--user <user>", "User address").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, vaultHelperAddress, vaultAddress, options) => {
+            const user = options.user ?? config.client.account!.address;
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetUserFuturePendingWithdraws(vaultHelper, vaultAddress, user);
+        });
+
+    vaultHelperCmd
+        .command("get-pending-withdraws-in-range")
+        .description("Get pending withdrawals for a user in a vault within an epoch range")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addArgument(ArgBigInt("fromEpoch", "Start epoch (inclusive)"))
+        .addArgument(ArgBigInt("toEpoch", "End epoch (exclusive)"))
+        .addOption(new Option("--user <user>", "User address").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, vaultHelperAddress, vaultAddress, fromEpoch, toEpoch, options) => {
+            const user = options.user ?? config.client.account!.address;
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetUserPendingWithdrawsInRange(vaultHelper, vaultAddress, user, fromEpoch, toEpoch);
+        });
+
+    vaultHelperCmd
+        .command("get-claimable-reward")
+        .description("Get total claimable rewards for a staker across all unclaimed epochs")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addArgument(argRewardsAddress)
+        .addArgument(argRewardTokenAddress)
+        .addOption(new Option("--staker <staker>", "Staker address").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, vaultHelperAddress, vaultAddress, rewardsAddress, rewardTokenAddress, options) => {
+            const staker = options.staker ?? config.client.account!.address;
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetStakerClaimableReward(vaultHelper, staker, rewardsAddress, vaultAddress, rewardTokenAddress);
+        });
+
+    vaultHelperCmd
+        .command("get-claimable-reward-in-range")
+        .description("Get claimable rewards for a staker within a specific epoch range")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addArgument(argRewardsAddress)
+        .addArgument(argRewardTokenAddress)
+        .addArgument(ArgNumber("fromEpoch", "Start epoch (inclusive)"))
+        .addArgument(ArgNumber("toEpoch", "End epoch (exclusive)"))
+        .addOption(new Option("--staker <staker>", "Staker address").argParser(ParserAddress))
+        .asyncAction({ signer: true }, async (config, vaultHelperAddress, vaultAddress, rewardsAddress, rewardTokenAddress, fromEpoch, toEpoch, options) => {
+            const staker = options.staker ?? config.client.account!.address;
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetStakerClaimableRewardInRange(vaultHelper, staker, rewardsAddress, vaultAddress, rewardTokenAddress, fromEpoch, toEpoch);
+        });
+
+    vaultHelperCmd
+        .command("get-latest-distributed-rewards")
+        .description("Get the latest distributed rewards amount for a vault")
+        .addArgument(argVaultHelperAddress)
+        .addArgument(argVaultAddress)
+        .addArgument(argRewardsAddress)
+        .asyncAction(async (config, vaultHelperAddress, vaultAddress, rewardsAddress) => {
+            const vaultHelper = await config.contracts.VaultHelper(vaultHelperAddress);
+            await vaultHelperGetVaultLatestDistributedRewards(vaultHelper, vaultAddress, rewardsAddress);
+        });
+
     /* --------------------------------------------------
     * MIDDLEWARE
     * -------------------------------------------------- */
