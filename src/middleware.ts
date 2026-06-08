@@ -238,6 +238,20 @@ export async function middlewareGetOperatorUsedStake(
 
 }
 
+// getOperatorUsedStakeCachedPerEpoch
+export async function middlewareGetOperatorUsedStakePerEpoch(
+  middleware: SuzakuContract['L1Middleware'],
+  epoch: number,
+  operator: Hex,
+  collateralClass: bigint
+) {
+  logger.log("Reading operator used stake cached at epoch...");
+
+  const val = await middleware.read.getOperatorUsedStakeCachedPerEpoch([epoch, operator, collateralClass]);
+  logger.log(val);
+
+}
+
 // getAllOperators
 export async function middlewareGetAllOperators(
   middleware: SuzakuContract['L1Middleware']
