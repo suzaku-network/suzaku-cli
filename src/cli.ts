@@ -107,7 +107,8 @@ import {
     middlewareLastValidationId,
     weightSync,
     middlewareInfo,
-    operatorsInfo as getOperatorsInfoMiddleware
+    operatorsInfo as getOperatorsInfoMiddleware,
+    middlewareGetOperatorUsedStakePerEpoch
 } from "./middleware";
 
 import {
@@ -1870,6 +1871,24 @@ async function main() {
             await middlewareGetOperatorUsedStake(
                 middlewareSvc,
                 operator
+            );
+        });
+
+    // getOperatorUsedStakeCachedPerEpoch (read)
+    middlewareCmd
+        .command("get-operator-used-stake-per-epoch")
+        .description("Get operator used stake from cache for a specific epoch")
+        .addArgument(argMiddlewareAddress)
+        .addArgument(ArgNumber("epoch", "Epoch number"))
+        .addArgument(argOperatorAddress)
+        .addArgument(ArgBigInt("collateralClass", "collateral class"))
+        .asyncAction(async (config, middlewareAddress, epoch, operator, collateralClass) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetOperatorUsedStakePerEpoch(
+                middlewareSvc,
+                epoch,
+                operator,
+                collateralClass
             );
         });
 

@@ -46,7 +46,7 @@ export const SuzakuABI = {
   OperatorL1OptInService,
   UptimeTracker,
   PoASecurityModule,
-  DefaultCollateral,
+  DefaultCollateral: withErrors(DefaultCollateral, ERC20),
   ERC20,
   IWarpMessenger,
   ValidatorManager,
