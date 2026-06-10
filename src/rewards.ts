@@ -3,7 +3,7 @@ import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
 import { ExtendedPublicClient } from './client';
-import { blockAtTimestamp, collectEventsInRange } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, GetContractEvents } from './lib/cChainUtils';
 
 /**
  * Distributes rewards for a specific epoch
@@ -464,4 +464,163 @@ export async function getRewardsAmountSetEvents(
   });
 
   return { epoch, eventCount: formattedEvents.length, totalAmount, currentEpochRewards, events: formattedEvents };
+}
+
+/**
+ * Reads funded/distribution status and the set rewards amount for a range of epochs —
+ * epochStatus(epoch) is otherwise not exposed by any command.
+ */
+export async function getRewardsEpochStatus(
+  rewards: SuzakuContract['RewardsNativeToken'],
+  fromEpoch: number,
+  toEpoch: number
+) {
+  if (toEpoch < fromEpoch) {
+    throw new Error(`--to-epoch (${toEpoch}) must be >= epoch (${fromEpoch})`);
+  }
+  const epochs = Array.from({ length: toEpoch - fromEpoch + 1 }, (_, i) => fromEpoch + i);
+
+  const [fundingDeadlineOffset, distributionEarliestOffset, claimGracePeriodEpochs, statuses, amounts] = await Promise.all([
+    rewards.read.FUNDING_DEADLINE_OFFSET(),
+    rewards.read.DISTRIBUTION_EARLIEST_OFFSET(),
+    rewards.read.CLAIM_GRACE_PERIOD_EPOCHS(),
+    Promise.all(epochs.map((e) => rewards.read.epochStatus([e]))),
+    Promise.all(epochs.map((e) => rewards.read.getEpochRewards([e]))),
+  ]);
+
+  const epochRows = epochs.map((epoch, i) => {
+    const [funded, distributionComplete] = statuses[i] as [boolean, boolean];
+    return {
+      epoch,
+      epochRewards: (amounts[i] as bigint).toString(),
+      funded,
+      distributionComplete,
+    };
+  });
+
+  logger.log(`Epoch status for epochs ${fromEpoch}..${toEpoch}:`);
+  for (const row of epochRows) {
+    logger.log(`  epoch ${row.epoch}: rewards=${row.epochRewards} (raw wei) funded=${row.funded} distributionComplete=${row.distributionComplete}`);
+  }
+
+  logger.addData('epochStatusTable', {
+    fromEpoch,
+    toEpoch,
+    constants: {
+      fundingDeadlineOffset: Number(fundingDeadlineOffset),
+      distributionEarliestOffset: Number(distributionEarliestOffset),
+      claimGracePeriodEpochs: Number(claimGracePeriodEpochs),
+    },
+    epochs: epochRows,
+  });
+
+  return { fromEpoch, toEpoch, epochs: epochRows };
+}
+
+export const REWARDS_LIFECYCLE_EVENTS = [
+  'RewardsAmountSet',
+  'RewardsDistributed',
+  'RewardsClaimed',
+  'UndistributedRewardsClaimed',
+  'OperatorFeeClaimed',
+  'CuratorFeeClaimed',
+  'ProtocolFeeClaimed',
+  'ZeroRewardsClaim',
+] as const;
+
+/**
+ * Scans rewards contract lifecycle events over a block or epoch range —
+ * one source for "what happened in rewards" instead of one scan per event type.
+ */
+export async function getRewardsLifecycleEvents(
+  rewards: SuzakuContract['RewardsNativeToken'],
+  config: Config<ExtendedPublicClient>,
+  options: {
+    middlewareAddress?: Hex;
+    fromEpoch?: number;
+    toEpoch?: number;
+    fromBlock?: bigint;
+    toBlock?: bigint;
+    events?: string[];
+    snowscanApiKey?: string;
+  }
+) {
+  const client = config.client;
+  const eventNames = options.events ?? [...REWARDS_LIFECYCLE_EVENTS];
+  const unknown = eventNames.filter((e) => !(REWARDS_LIFECYCLE_EVENTS as readonly string[]).includes(e));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown event name(s): ${unknown.join(', ')}. Valid: ${REWARDS_LIFECYCLE_EVENTS.join(', ')}`);
+  }
+
+  const middleware = options.middlewareAddress
+    ? await config.contracts.L1Middleware(options.middlewareAddress)
+    : undefined;
+
+  let fromBlock: bigint;
+  if (options.fromBlock !== undefined) {
+    fromBlock = options.fromBlock;
+  } else if (options.fromEpoch !== undefined) {
+    if (!middleware) throw new Error('--middleware is required when using --from-epoch');
+    const epochStartTs = await middleware.read.getEpochStartTs([options.fromEpoch]);
+    fromBlock = await blockAtTimestamp(client, BigInt(epochStartTs));
+  } else {
+    throw new Error('Either --from-block or --from-epoch (with --middleware) must be provided');
+  }
+
+  const latestBlock = await client.getBlock({ includeTransactions: false });
+  let toBlock: bigint;
+  if (options.toBlock !== undefined) {
+    toBlock = options.toBlock;
+  } else if (options.toEpoch !== undefined) {
+    if (!middleware) throw new Error('--middleware is required when using --to-epoch');
+    const nextEpochStartTs = BigInt(await middleware.read.getEpochStartTs([options.toEpoch + 1]));
+    toBlock = nextEpochStartTs > latestBlock.timestamp
+      ? latestBlock.number
+      : await blockAtTimestamp(client, nextEpochStartTs);
+  } else {
+    toBlock = latestBlock.number;
+  }
+
+  const events = await GetContractEvents(
+    client,
+    rewards.address as Hex,
+    Number(fromBlock),
+    Number(toBlock),
+    rewards.abi,
+    eventNames,
+    options.snowscanApiKey || undefined
+  );
+  events.sort((a, b) => Number(a.blockNumber - b.blockNumber));
+
+  const countsByType = Object.fromEntries(eventNames.map((name) => [name, 0])) as Record<string, number>;
+  const formattedEvents = events.map((e: DecodedEvent) => {
+    countsByType[e.eventName] = (countsByType[e.eventName] ?? 0) + 1;
+    return {
+      eventName: e.eventName,
+      blockNumber: e.blockNumber.toString(),
+      transactionHash: e.transactionHash,
+      timestamp: new Date(e.timestamp * 1000).toISOString(),
+      args: Object.fromEntries(Object.entries(e.args).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v])),
+    };
+  });
+
+  logger.log(`Rewards lifecycle events in blocks ${fromBlock}..${toBlock}: ${formattedEvents.length}`);
+  for (const [name, count] of Object.entries(countsByType)) {
+    if (count > 0) logger.log(`  ${name}: ${count}`);
+  }
+  for (const ev of formattedEvents) {
+    logger.log(`  ${ev.eventName} tx: ${ev.transactionHash} block: ${ev.blockNumber} (${ev.timestamp})`);
+  }
+
+  logger.addData('rewardsLifecycleEvents', {
+    fromBlock: fromBlock.toString(),
+    toBlock: toBlock.toString(),
+    ...(options.fromEpoch !== undefined ? { fromEpoch: options.fromEpoch } : {}),
+    ...(options.toEpoch !== undefined ? { toEpoch: options.toEpoch } : {}),
+    totalEventCount: formattedEvents.length,
+    countsByType,
+    events: formattedEvents,
+  });
+
+  return { fromBlock, toBlock, totalEventCount: formattedEvents.length, countsByType, events: formattedEvents };
 }

@@ -174,6 +174,8 @@ import {
     getLastEpochClaimedCurator,
     getRewardsClaimsCount,
     getRewardsAmountSetEvents,
+    getRewardsEpochStatus,
+    getRewardsLifecycleEvents,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
@@ -4468,6 +4470,45 @@ async function main() {
                     middlewareAddress: options.middleware,
                     fromBlock: options.fromBlock as bigint | undefined,
                     toBlock: options.toBlock as bigint | undefined,
+                }
+            );
+        });
+
+    rewardsCmd
+        .command("get-epoch-status")
+        .description("Get funded/distributionComplete status and set rewards amount for one epoch or a range of epochs")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Start epoch (the single epoch to query if --to-epoch is omitted)"))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive) for a range query").argParser(ParserNumber))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsEpochStatus(rewardsContract, epoch, options.toEpoch ?? epoch);
+        });
+
+    rewardsCmd
+        .command("get-events")
+        .description("Scan rewards lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range")
+        .addArgument(argRewardsAddress)
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute block range from epoch start timestamps (required with --from-epoch/--to-epoch)"))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive); toBlock is derived from the next epoch start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (overrides --to-epoch; defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--events <names>", "Comma-separated event names to include (defaults to all lifecycle events)"))
+        .addOption(new Option("--snowscan-api-key <string>", "Snowscan API key for faster log retrieval").default(""))
+        .asyncAction(async (config, rewardsAddress, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsLifecycleEvents(
+                rewardsContract,
+                config,
+                {
+                    middlewareAddress: options.middleware,
+                    fromEpoch: options.fromEpoch,
+                    toEpoch: options.toEpoch,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    events: options.events ? options.events.split(',').map((s: string) => s.trim()) : undefined,
+                    snowscanApiKey: options.snowscanApiKey,
                 }
             );
         });
