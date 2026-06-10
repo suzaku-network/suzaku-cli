@@ -478,6 +478,9 @@ export async function getRewardsEpochStatus(
   if (toEpoch < fromEpoch) {
     throw new Error(`--to-epoch (${toEpoch}) must be >= epoch (${fromEpoch})`);
   }
+  if (toEpoch - fromEpoch + 1 > 100) {
+    throw new Error(`Epoch range too large (${toEpoch - fromEpoch + 1}); maximum is 100 epochs per call`);
+  }
   const epochs = Array.from({ length: toEpoch - fromEpoch + 1 }, (_, i) => fromEpoch + i);
 
   const [fundingDeadlineOffset, distributionEarliestOffset, claimGracePeriodEpochs, statuses, amounts] = await Promise.all([
