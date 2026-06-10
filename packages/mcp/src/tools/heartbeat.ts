@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { runCli, formatResult, CliResult, RunCliOptions } from '../cli-runner.js';
@@ -110,6 +111,37 @@ export function shortHex(value: string, head = 6, tail = 4): string {
   return value.length > head + tail + 1 ? `${value.slice(0, head)}…${value.slice(-tail)}` : value;
 }
 
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Encode(bytes: Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let out = '';
+  while (n > 0n) {
+    out = BASE58_ALPHABET[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out = '1' + out;
+  }
+  return out;
+}
+
+/** Converts a 20-byte (or left-padded 32-byte) hex node ID to "NodeID-<CB58>"; returns the input unchanged when it is not one. */
+export function hexToNodeId(value: string): string {
+  if (!/^0x[0-9a-fA-F]+$/.test(value)) return value;
+  let h = value.slice(2);
+  if (h.length === 64 && h.startsWith('0'.repeat(24))) h = h.slice(24); // bytes32 left-padding
+  if (h.length !== 40) return value;
+  const payload = Uint8Array.from(h.match(/../g)!.map((x) => parseInt(x, 16)));
+  const checksum = createHash('sha256').update(payload).digest().subarray(28); // CB58: last 4 bytes of sha256
+  const full = new Uint8Array(payload.length + 4);
+  full.set(payload);
+  full.set(checksum, payload.length);
+  return `NodeID-${base58Encode(full)}`;
+}
+
 /** Epoch start timestamp interpolated from the current epoch's start (epochs are fixed-duration). */
 export function epochStartOf(timing: EpochTiming, epoch: number): number {
   return timing.currentEpochStartTs - (timing.currentEpoch - epoch) * timing.epochDuration;
@@ -134,11 +166,14 @@ export function deriveClaimabilityStatus(
   const isSet = row.epochRewards !== '0';
   const fundingDeadlineTs = epochStartOf(timing, row.epoch) + constants.fundingDeadlineOffset * timing.epochDuration;
 
+  if (row.epoch >= timing.currentEpoch) {
+    if (setTxCount !== null && setTxCount > 1) {
+      return { status: 'accumulation_warning', human: `running · ⚠ ${setTxCount} set-amount txs (accumulated)` };
+    }
+    return { status: 'current_epoch', human: 'running' };
+  }
   if (setTxCount !== null && setTxCount > 1) {
     return { status: 'accumulation_warning', human: `⚠ ${setTxCount} set-amount txs (accumulated)` };
-  }
-  if (row.epoch >= timing.currentEpoch) {
-    return { status: 'current_epoch', human: 'running' };
   }
 
   const distributable = row.epoch <= timing.currentEpoch - constants.distributionEarliestOffset;
@@ -159,8 +194,10 @@ export function deriveClaimabilityStatus(
   }
 
   if (!row.distributionComplete) {
-    if (distribution && distribution.processed > 0) {
-      return { status: 'distributing', human: `distributing ${distribution.processed}/${operatorsTotal} ops` };
+    if (distribution && distribution.processed !== 0) {
+      // processed < 0 is the fetch-failed sentinel: distribution state unknown, keep the row visible
+      const label = distribution.processed < 0 ? '?' : String(distribution.processed);
+      return { status: 'distributing', human: `distributing ${label}/${operatorsTotal} ops` };
     }
     return { status: 'waiting_uptime', human: 'funded · waiting uptime to distribute' };
   }
@@ -218,7 +255,8 @@ export function detectStuckTwoPhase(
 export function summarizeChangedEvents(events: HeartbeatEvent[]): string[] {
   return events.map((e) => {
     const a = e.args;
-    const node = a.nodeId ? shortHex(String(a.nodeId)) : a.nodeID ? shortHex(String(a.nodeID)) : undefined;
+    const rawNode = a.nodeId ?? a.nodeID;
+    const node = rawNode ? shortHex(hexToNodeId(String(rawNode)), 11, 3) : undefined;
     const op = a.operator ? shortHex(String(a.operator)) : undefined;
     const tx = shortHex(e.transactionHash, 6, 4);
     switch (e.eventName) {
@@ -318,6 +356,9 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
       case 'funding_closed':
         checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'alert', detail: `epoch ${row.epoch} set but never funded; funding window closed`, human: `🔴 epoch ${row.epoch} rewards set but never funded — funding window closed` });
         break;
+      case 'not_set_closed':
+        checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'alert', detail: `epoch ${row.epoch} rewards never set; funding window closed`, human: `🔴 epoch ${row.epoch} rewards never set — funding window closed` });
+        break;
       case 'not_funded':
       case 'not_set': {
         // warn when less than one epoch remains to the funding deadline
@@ -381,6 +422,7 @@ export function buildHumanLines(args: {
   timing: EpochTiming;
   cacheOk: boolean;
   changedLines: string[];
+  changedScanFailed?: boolean;
   validatorSummary: string | null;
   tvlLine: string | null;
   activityLine: string | null;
@@ -406,7 +448,9 @@ export function buildHumanLines(args: {
     '',
     `CHANGED since epoch ${timing.currentEpoch - 1} start`,
   ];
-  if (args.changedLines.length === 0) {
+  if (args.changedScanFailed) {
+    lines.push('  ⚠ event scan failed — changes this epoch unknown');
+  } else if (args.changedLines.length === 0) {
     lines.push('  no node/stake/validator changes');
   } else {
     lines.push(...args.changedLines.map((l) => `  ${l}`));
@@ -476,6 +520,13 @@ export function registerHeartbeatTools(server: McpServer) {
       const [epochStartResult, cacheStatusResult, operatorsResult, epochStatusResult, lstInfoResult] = phase1;
 
       const epochStartTs = Number(extractData(epochStartResult, 'get-epoch-start-ts', _warnings).epochStartTs ?? 0);
+      if (!epochStartTs || !Number.isFinite(epochStartTs)) {
+        // Without the epoch start timestamp every deadline computation is garbage — fail loudly
+        // rather than flooding the channel with false 1970-dated alerts.
+        return formatResult(epochStartResult.success
+          ? { success: false, data: null, error: 'get-epoch-start-ts returned no usable epochStartTs' }
+          : epochStartResult);
+      }
       const cacheStatus = extractData(cacheStatusResult, 'get-cache-status', _warnings).cacheStatus as { allClassesCached?: boolean } | undefined;
       const operators = (extractData(operatorsResult, 'get-all-operators', _warnings).operators ?? []) as string[];
       const epochStatusTable = extractData(epochStatusResult, 'get-epoch-status', _warnings).epochStatusTable as {
@@ -512,16 +563,18 @@ export function registerHeartbeatTools(server: McpServer) {
       const nodeLogs = isDigest
         ? (extractData(phase2[1], 'node-logs', _warnings).nodeLogs ?? []) as HeartbeatEvent[]
         : [];
+      const nodeLogsFailed = isDigest && !phase2[1]?.success;
       const rewardsEvents = isDigest
         ? extractData(phase2[2], 'rewards-get-events', _warnings).rewardsLifecycleEvents as { countsByType: Record<string, number>; events: HeartbeatEvent[] } | undefined
         : undefined;
+      const rewardsEventsFailed = isDigest && !rewardsEvents;
 
       // Phase 3: distribution batches for funded-but-incomplete distributable epochs + uptime flags (≤8 parallel)
       const distributionEpochs = statusRows
         .filter((r) => r.funded && !r.distributionComplete && r.epoch <= currentEpoch - constants.distributionEarliestOffset)
         .map((r) => r.epoch)
         .slice(0, 5);
-      const uptimeOperators = uptimeTrackerAddress ? operators.slice(0, 2) : [];
+      const uptimeOperators = uptimeTrackerAddress ? operators : [];
       // Chunked to leave subprocess slots free for concurrent external tool calls
       const phase3Calls = [
         ...distributionEpochs.map((ep) => () => runCli(['rewards', 'get-distribution-batch', rewardsAddress, String(ep)], opts)),
@@ -535,7 +588,10 @@ export function registerHeartbeatTools(server: McpServer) {
       const distributionByEpoch: Record<number, DistributionProgress> = {};
       distributionEpochs.forEach((ep, i) => {
         const d = extractData(phase3[i], `get-distribution-batch-${ep}`, _warnings).distributionBatch as { lastProcessedOperator?: string; isComplete?: boolean } | undefined;
-        if (d) distributionByEpoch[ep] = { processed: Number(d.lastProcessedOperator ?? 0), isComplete: d.isComplete ?? false };
+        // processed: -1 = fetch failed; keeps the row in 'distributing' state instead of silently masking it
+        distributionByEpoch[ep] = d
+          ? { processed: Number(d.lastProcessedOperator ?? 0), isComplete: d.isComplete ?? false }
+          : { processed: -1, isComplete: false };
       });
       const uptimeSetByOperator: Record<string, boolean | null> = {};
       uptimeOperators.forEach((op, i) => {
@@ -545,7 +601,12 @@ export function registerHeartbeatTools(server: McpServer) {
 
       // ── Derivations (no I/O below this point) ──
       const claimability: ClaimabilityRow[] = statusRows.map((row) => {
-        const setTxCount = isDigest && rewardsEvents ? countSetAmountTxs(rewardsEvents.events, row.epoch) : null;
+        // The event scan covers the elapsed epoch only: a positive count is a real in-window
+        // detection for any epoch, but a zero is only conclusive for epochs the window fully covers.
+        const windowCount = isDigest && rewardsEvents ? countSetAmountTxs(rewardsEvents.events, row.epoch) : null;
+        const setTxCount = windowCount === null
+          ? null
+          : windowCount > 0 ? windowCount : (row.epoch >= currentEpoch - 1 ? 0 : null);
         const derived = deriveClaimabilityStatus(
           row, timing, constants, distributionByEpoch[row.epoch] ?? null, operators.length, setTxCount, now,
         );
@@ -567,7 +628,20 @@ export function registerHeartbeatTools(server: McpServer) {
         : null;
       const activityLine = rewardsEvents ? summarizeRewardsActivity(rewardsEvents.countsByType) : null;
 
-      const checks = runAlertChecks({
+      // Sub-call failures that blind a whole monitoring layer must surface as checks,
+      // not just as _warnings the bot never shows.
+      const dataChecks: AlertCheck[] = [];
+      if (!epochStatusTable) {
+        dataChecks.push({ name: 'rewards_data_unavailable', status: 'alert', detail: 'rewards get-epoch-status sub-call failed — claimability table empty', human: '🔴 rewards monitoring unavailable — epoch status reads failed (check CLI version / RPC)' });
+      }
+      if (nodeLogsFailed) {
+        dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'middleware node-logs scan failed — node/stake changes unknown', human: '⚠️ node/stake event scan failed — CHANGED section incomplete' });
+      }
+      if (rewardsEventsFailed) {
+        dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'rewards get-events scan failed — rewards activity and accumulation detection unavailable', human: '⚠️ rewards event scan failed — activity/accumulation not assessed' });
+      }
+
+      const checks = [...dataChecks, ...runAlertChecks({
         timing,
         constants,
         allClassesCached: cacheStatus?.allClassesCached ?? false,
@@ -578,12 +652,13 @@ export function registerHeartbeatTools(server: McpServer) {
         stuckTwoPhase,
         thresholds: { pChainMinAVAX, cacheLateDays, uptimeMissingEpochFraction },
         now,
-      });
+      })];
 
       const humanLines = buildHumanLines({
         mode, timing,
         cacheOk: cacheStatus?.allClassesCached ?? false,
-        changedLines, validatorSummary, tvlLine, activityLine,
+        changedLines, changedScanFailed: nodeLogsFailed,
+        validatorSummary, tvlLine, activityLine,
         claimability, checks,
       });
 
