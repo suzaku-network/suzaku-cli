@@ -100,6 +100,18 @@ describe('--read-only mode', () => {
     expect(tools.length).toBeGreaterThanOrEqual(60);
   });
 
+  it('registers no tool with destructiveHint when readOnly is true (catches unguarded future write tools)', () => {
+    const server = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(server, true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registered = (server as any)._registeredTools as Record<string, { annotations?: { destructiveHint?: boolean } }>;
+    const destructive = Object.entries(registered)
+      .filter(([, t]) => t.annotations?.destructiveHint === true)
+      .map(([name]) => name);
+    expect(destructive).toEqual([]);
+  });
+
   it('registers all tools (read + write) when readOnly is false', () => {
     const server = new McpServer({ name: 'test', version: '0.1.0' });
     registerAllTools(server, false);

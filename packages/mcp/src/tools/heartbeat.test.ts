@@ -11,9 +11,9 @@ vi.mock('../cli-runner.js', () => ({
 
 import { runCli } from '../cli-runner.js';
 import {
-  tsToUtc, weiToToken, exchangeRate, epochStartOf, shortHex,
+  tsToUtc, weiToToken, exchangeRate, epochStartOf, shortHex, hexToNodeId,
   deriveClaimabilityStatus, countSetAmountTxs, detectStuckTwoPhase,
-  runAlertChecks, summarizeRewardsActivity, buildHumanLines,
+  runAlertChecks, summarizeRewardsActivity, summarizeChangedEvents, buildHumanLines,
   registerHeartbeatTools,
   EpochTiming, RewardsConstants, EpochStatusRow, HeartbeatEvent, ClaimabilityRow,
 } from './heartbeat.js';
@@ -60,6 +60,15 @@ describe('humanizers', () => {
   it('shortHex shortens long values and keeps short ones', () => {
     expect(shortHex('0x9411307279456450ABF9B5181aA7a02271f0DC34')).toBe('0x9411…DC34');
     expect(shortHex('0xabc')).toBe('0xabc');
+  });
+
+  it('hexToNodeId converts 20-byte and padded 32-byte hex to CB58 NodeID (live mainnet vector)', () => {
+    // vector generated with the CLI's own parseNodeID/encodeNodeID
+    const nodeId = 'NodeID-FskSry7jWP6bT2oXaaCUgznhwogWHTiBt';
+    expect(hexToNodeId('0xa32ad36bc7a5ef488fdb5faa5c10c6c0347cc60e')).toBe(nodeId);
+    expect(hexToNodeId('0x000000000000000000000000a32ad36bc7a5ef488fdb5faa5c10c6c0347cc60e')).toBe(nodeId);
+    expect(hexToNodeId('not-hex')).toBe('not-hex');
+    expect(hexToNodeId('0x1234')).toBe('0x1234'); // wrong length passes through
   });
 
   it('epochStartOf interpolates from the current epoch start', () => {
@@ -128,6 +137,18 @@ describe('deriveClaimabilityStatus', () => {
   it('accumulation warning wins over everything', () => {
     expect(derive(row(35, '100', true, true), { setTxCount: 3 }).status).toBe('accumulation_warning');
     expect(derive(row(35, '100', true, true), { setTxCount: 3 }).human).toContain('3 set-amount txs');
+  });
+
+  it('accumulation on the running epoch keeps the "running" identity in the label', () => {
+    const res = derive(row(38, '100', false, false), { setTxCount: 2 });
+    expect(res.status).toBe('accumulation_warning');
+    expect(res.human).toContain('running');
+  });
+
+  it('fetch-failed distribution sentinel renders unknown progress instead of masking the row', () => {
+    const res = derive(row(36, '100', true, false), { distribution: { processed: -1, isComplete: false } });
+    expect(res.status).toBe('distributing');
+    expect(res.human).toBe('distributing ?/2 ops');
   });
 
   it('setTxCount null (alerts mode, no scan) skips accumulation assessment', () => {
@@ -255,6 +276,40 @@ describe('runAlertChecks', () => {
     const checks = runAlertChecks(input);
     expect(checks.find((c) => c.name === 'set_amount_accumulation')?.epoch).toBe(35);
     expect(checks.find((c) => c.name === 'funding_deadline')?.status).toBe('alert');
+  });
+
+  it('alerts when an epoch was never set and its funding window closed (not_set_closed)', () => {
+    const input = baseInput();
+    input.claimability = [
+      { ...row(32, '0', false, false), setAlot: '—', setTxCount: null, status: 'not_set_closed', statusHuman: '' },
+    ];
+    const check = runAlertChecks(input).find((c) => c.name === 'funding_deadline');
+    expect(check?.status).toBe('alert');
+    expect(check?.epoch).toBe(32);
+    expect(check?.human).toContain('never set');
+  });
+});
+
+describe('summarizeChangedEvents', () => {
+  // args shaped exactly like the CLI's nodeLogs addData output (hex node IDs, stringified bigints)
+  const PADDED = '0x000000000000000000000000a32ad36bc7a5ef488fdb5faa5c10c6c0347cc60e';
+
+  it('renders NodeAdded with a human NodeID and token-formatted stake', () => {
+    const [line] = summarizeChangedEvents([{
+      eventName: 'NodeAdded', blockNumber: '1', transactionHash: '0x9de4900044e5b99ab661b97f0000000000000000000000000000000000000001',
+      args: { operator: '0x853323787b0F515d2C2b1c64994BA7D312B6e655', nodeId: PADDED, stake: '5000000000000000000000000' },
+    }]);
+    expect(line).toContain('+ node NodeID-FskS…iBt');
+    expect(line).toContain('5,000,000');
+  });
+
+  it('renders balancer two-phase events by validationID', () => {
+    const [line] = summarizeChangedEvents([{
+      eventName: 'CompletedValidatorRegistration', blockNumber: '2', transactionHash: '0xabc1230000000000000000000000000000000000000000000000000000000000',
+      args: { validationID: '0xdeadbeef00000000000000000000000000000000000000000000000000000001', weight: '500000' },
+    }]);
+    expect(line).toContain('✓ validator registration completed');
+    expect(line).toContain('0xdead');
   });
 });
 
@@ -414,5 +469,37 @@ describe('deployment_heartbeat handler', () => {
     mockRunCli({});
     const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
     expect(res.isError).toBe(true);
+  });
+
+  it('fails loudly (not with garbage 1970 deadlines) when the epoch start timestamp is unavailable', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-epoch-start-ts'];
+    mockRunCli(partial);
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    expect(res.isError).toBe(true);
+  });
+
+  it('raises a hard alert when the rewards epoch-status layer is unavailable', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-epoch-status'];
+    mockRunCli(partial);
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+    const check = data.checks.find((c: { name: string }) => c.name === 'rewards_data_unavailable');
+    expect(check?.status).toBe('alert');
+    expect(data.humanLines.length).toBeGreaterThan(0);
+  });
+
+  it('digest mode marks the CHANGED section unknown when the node-logs scan fails', async () => {
+    const partial = {
+      ...MOCK_BASE,
+      'get-events': { rewardsLifecycleEvents: { fromBlock: '1', toBlock: '2', totalEventCount: 0, countsByType: {}, events: [] } },
+    } as MockResponses; // node-logs intentionally unmocked → failure
+    mockRunCli(partial);
+    const res = await getHandler()({ ...ADDRS, mode: 'digest', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+    expect(data.checks.some((c: { name: string }) => c.name === 'event_scan_failed')).toBe(true);
+    expect(data.humanLines.some((l: string) => l.includes('event scan failed'))).toBe(true);
+    expect(data.humanLines.some((l: string) => l.includes('no node/stake/validator changes'))).toBe(false);
   });
 });
