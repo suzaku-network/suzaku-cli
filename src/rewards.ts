@@ -229,6 +229,7 @@ export async function getVaultShares(
   ) as bigint;
 
   logger.log(`Vault ${vault} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.addData('vaultShares', share.toString());
   return share;
 }
 
@@ -245,6 +246,7 @@ export async function getCuratorShares(
   ) as bigint;
 
   logger.log(`Curator ${curator} shares for epoch ${epoch}: ${share.toString()}`);
+  logger.addData('curatorShares', share.toString());
   return share;
 }
 
@@ -340,6 +342,7 @@ export async function getLastEpochClaimedStaker(
   const lastEpoch = await rewards.read.lastEpochClaimedStaker([staker]);
 
   logger.log(`Last epoch claimed by staker ${staker}: ${lastEpoch.toString()}`);
+  logger.addData('lastClaimedEpoch', lastEpoch.toString());
   return lastEpoch;
 }
 
@@ -353,6 +356,7 @@ export async function getLastEpochClaimedOperator(
   const lastEpoch = await rewards.read.lastEpochClaimedOperator([operator]);
 
   logger.log(`Last epoch claimed by operator ${operator}: ${lastEpoch.toString()}`);
+  logger.addData('lastClaimedEpoch', lastEpoch.toString());
   return lastEpoch;
 }
 
@@ -366,6 +370,7 @@ export async function getLastEpochClaimedCurator(
   const lastEpoch = await rewards.read.lastEpochClaimedCurator([curator]);
 
   logger.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
+  logger.addData('lastClaimedEpoch', lastEpoch.toString());
   return lastEpoch;
 }
 
