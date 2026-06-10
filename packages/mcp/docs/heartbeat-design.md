@@ -155,7 +155,7 @@ Gap 5 (Kite-path `addData`) remains a separate issue and only blocks the Kite pr
 
 Behavior notes vs. the design above:
 
-- The digest's set-amount accumulation flag counts `RewardsAmountSet` events **within the scanned window** (the elapsed epoch). It catches accumulation as it happens; historical incidents are drill-down via `rewards_epoch_diagnosis`. First live digest run (epoch 38) immediately flagged epochs 35 *and* 36 as accumulated this way.
+- The digest's set-amount accumulation flag counts `RewardsAmountSet` events **within the scanned window** (the elapsed epoch). A positive count is a real detection for any epoch the events target; a zero is only conclusive for epochs the window fully covers (N−1, N) — older epochs with no in-window events show `·` (not assessed) rather than `0`. It catches accumulation as it happens; historical incidents are drill-down via `rewards_epoch_diagnosis`. First live digest run (epoch 38) immediately flagged epochs 35 *and* 36 as accumulated this way.
 - Validator health uses the P-Chain validator list + stuck two-phase event detection instead of per-node `balancer get-validator-status` calls (that command takes one nodeId per call).
 - The undistributed-reclaim date is an approximation (`epoch start + (DISTRIBUTION_EARLIEST_OFFSET + CLAIM_GRACE_PERIOD_EPOCHS + 1) × epochDuration`) marked with `~` — the contract exposes no view for the `EpochStillClaimable` boundary.
 - The tool emits `humanLines: string[]` assembled deterministically in TypeScript: alerts mode returns `[]` when every check is ok (= post nothing); digest mode returns the full monospace block ready for Telegram.
