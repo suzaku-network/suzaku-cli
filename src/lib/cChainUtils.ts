@@ -74,14 +74,18 @@ export async function GetContractEvents(
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { status: string, message: string, result: any[] };
       events = data.result
-        .reduce((acc: [], log) =>
-          [Object.assign(log, decodeEventLog({
-            abi,
-            data: log.data,
-            topics: log.topics,
-          })), ...acc]
-          , []
-        )
+        .reduce((acc: CommonEvent[], log) => {
+          try {
+            return [Object.assign(log, decodeEventLog({
+              abi,
+              data: log.data,
+              topics: log.topics,
+            })), ...acc];
+          } catch {
+            // log emitted by the contract but absent from the provided ABI (e.g. proxy events)
+            return acc;
+          }
+        }, [])
     } else {
       // Fetch logs using viem client
       toBlock = toBlock - 2 // to avoid reading the current block, which may not be finalized yet
@@ -95,7 +99,7 @@ export async function GetContractEvents(
       }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
 
-        const toSub = i + 2000 > toBlock ? toBlock : i + 2000;
+        const toSub = i + 1999 > toBlock ? toBlock : i + 1999;
         events.push(...await client.getContractEvents({
           address: address,
           abi: abi,
