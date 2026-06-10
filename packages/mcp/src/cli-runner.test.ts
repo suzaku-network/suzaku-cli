@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   sanitizeOutput,
   sanitizeArgs,
+  redactRpcUrl,
   formatResult,
   formatGuardError,
   requireSigner,
@@ -11,6 +12,27 @@ import {
   DEDUP_CACHE_MAX,
   type CliResult,
 } from './cli-runner.js';
+
+describe('redactRpcUrl', () => {
+  it('strips API-key-bearing path segments', () => {
+    expect(redactRpcUrl('https://avax-mainnet.g.alchemy.com/v2/SECRETKEY123')).toBe('https://avax-mainnet.g.alchemy.com/[REDACTED]');
+  });
+
+  it('strips query strings and userinfo', () => {
+    expect(redactRpcUrl('https://rpc.example.com/path?apikey=abc')).toBe('https://rpc.example.com/[REDACTED]');
+    expect(redactRpcUrl('https://user:pass@rpc.example.com')).toBe('https://rpc.example.com/[REDACTED]');
+  });
+
+  it('keeps a bare host:port with no secret material untouched', () => {
+    expect(redactRpcUrl('https://api.avax.network')).toBe('https://api.avax.network');
+    expect(redactRpcUrl('https://rpc.example.com:8545')).toBe('https://rpc.example.com:8545');
+  });
+
+  it('passes through undefined and redacts unparseable input', () => {
+    expect(redactRpcUrl(undefined)).toBeUndefined();
+    expect(redactRpcUrl('not a url')).toBe('[REDACTED]');
+  });
+});
 
 describe('sanitizeOutput', () => {
   it('redacts the configured SUZAKU_PK with and without 0x prefix', () => {

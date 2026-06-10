@@ -137,6 +137,19 @@ export function sanitizeArgs(args: string[]): string[] {
   return result;
 }
 
+/** Redact an RPC URL for logging: keep scheme + host (+ port), drop userinfo, path, and query —
+ *  these commonly carry API keys (e.g. /v2/<KEY> or ?apikey=<KEY>). */
+export function redactRpcUrl(rpcUrl: string | undefined): string | undefined {
+  if (!rpcUrl) return rpcUrl;
+  try {
+    const u = new URL(rpcUrl);
+    const hadSecret = u.username !== '' || u.password !== '' || (u.pathname !== '' && u.pathname !== '/') || u.search !== '';
+    return `${u.protocol}//${u.host}${hadSecret ? '/[REDACTED]' : ''}`;
+  } catch {
+    return '[REDACTED]';
+  }
+}
+
 /** Build user-facing command string (no raw key material) */
 function buildUserCommand(
   cliArgs: string[],
@@ -518,7 +531,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     tool: toolName,
     args: sanitizeArgs(args),
     network: options.network,
-    rpcUrl: options.rpcUrl,
+    rpcUrl: redactRpcUrl(options.rpcUrl),
     success: result.success,
     duration_ms: durationMs,
     signerMethod,
