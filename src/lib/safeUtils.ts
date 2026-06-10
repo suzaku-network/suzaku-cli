@@ -17,6 +17,16 @@ interface TransactionStrategyResponse {
 }
 
 /**
+ * Human-facing link to review a proposal: the Safe web UI queue on mainnet, the
+ * Ash-hosted transaction-service API on fuji (no public Safe UI fronts it).
+ */
+export function safeQueueUrl(network: string, safeAddress: string): string {
+  return network === 'fuji'
+    ? `https://wallet-transaction-fuji.ash.center/api/v1/safes/${safeAddress}/multisig-transactions/?executed=false`
+    : `https://app.safe.global/transactions/queue?safe=avax:${safeAddress}`;
+}
+
+/**
  * Safe transaction management strategy (ledger support integrated):
  * 1. Search for similar pending transactions in the Safe.
  * 2. Exact match:
