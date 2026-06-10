@@ -103,6 +103,7 @@ import {
     getCollateralClassIds,
     getActiveCollateralClasses,
     middlewareGetNodeLogs,
+    middlewareGetValidatorBalances,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
     weightSync,
@@ -1980,9 +1981,12 @@ async function main() {
 
     middlewareCmd
         .command("node-logs")
-        .description("Get middleware node logs")
+        .description("Get middleware node logs (NodeAdded/NodeRemoved/NodeStakeUpdated/AllNodeStakesUpdated/OperatorHasLeftoverStake plus all BalancerValidatorManager events)")
         .addArgument(argMiddlewareAddress)
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp (defaults to middleware START_TIME)").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
         .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
         .asyncAction(async (config, middlewareAddress, options) => {
             logger.log(`nodeId: ${options.nodeId}`);
@@ -1992,8 +1996,23 @@ async function main() {
                 middleware,
                 config,
                 options.nodeId,
-                options.snowscanApiKey
+                options.snowscanApiKey,
+                undefined,
+                {
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    fromEpoch: options.fromEpoch,
+                }
             );
+        });
+
+    middlewareCmd
+        .command("get-validator-balances")
+        .description("Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only; P-Chain RPC is the canonical Avalanche endpoint for the selected network, independent of --rpc-url)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetValidatorBalances(config.client, middlewareSvc, config);
         });
 
     middlewareCmd

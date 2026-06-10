@@ -1,4 +1,4 @@
-import { bytesToHex, Hex, hexToBytes } from 'viem';
+import { bytesToHex, formatUnits, Hex, hexToBytes } from 'viem';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
@@ -307,13 +307,25 @@ export async function middlewareGetNodeLogs(
   config: Config<ExtendedPublicClient>,
   nodeId?: NodeId,
   snowscanApiKey?: string,
-  quiet?: boolean
+  quiet?: boolean,
+  range?: {
+    fromBlock?: bigint;
+    toBlock?: bigint;
+    fromEpoch?: number;
+  }
 ) {
   logger.log("Reading logs from middleware and balancer...");
 
-  const to = await client.getBlockNumber();
+  const to = range?.toBlock ?? (await client.getBlockNumber());
 
-  const from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
+  let from: bigint;
+  if (range?.fromBlock !== undefined) {
+    from = range.fromBlock;
+  } else if (range?.fromEpoch !== undefined) {
+    from = await blockAtTimestamp(client, BigInt(await middleware.read.getEpochStartTs([range.fromEpoch])));
+  } else {
+    from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
+  }
 
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   if (bar) bar.start(0, 0);
@@ -326,7 +338,7 @@ export async function middlewareGetNodeLogs(
     Number(from),
     Number(to),
     config.abis.L1Middleware,
-    ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
+    ["NodeAdded", "NodeRemoved", "NodeStakeUpdated", "AllNodeStakesUpdated", "OperatorHasLeftoverStake"],
     snowscanApiKey,
     snowscanApiKey ? false : true,
     bar
@@ -383,6 +395,56 @@ export async function middlewareGetNodeLogs(
     }
   }
 
+}
+
+/**
+ * Reads P-Chain continuous-fee balances for all current subnet validators,
+ * matched to their middleware operators. Validators whose balance drains are
+ * deactivated on the P-Chain, so this is the liveness-risk signal.
+ */
+export async function middlewareGetValidatorBalances(
+  client: ExtendedClient,
+  middleware: SuzakuContract['L1Middleware'],
+  config: Config<ExtendedPublicClient>
+) {
+  const [balancerAddress, operators] = await middleware.multicall(['BALANCER', 'getAllOperators']);
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress as Hex);
+  const subnetIdHex = await balancer.read.subnetID();
+  const subnetId = utils.base58check.encode(hexToBytes(subnetIdHex));
+
+  const pChainValidators = await getCurrentValidators(client, subnetId);
+
+  const operatorByNodeId: Record<string, Hex> = {};
+  await Promise.all((operators as Hex[]).map(async (operator) => {
+    const validationIDs = await middleware.read.getOperatorValidationIDs([operator]);
+    if (validationIDs.length === 0) return;
+    const validators = await balancer.multicall(validationIDs.map((id: Hex) => ({ name: 'getValidator' as const, args: [id] })));
+    for (const validator of validators as Validator[]) {
+      operatorByNodeId[encodeNodeID(validator.nodeID)] = operator;
+    }
+  }));
+
+  const validatorRows = pChainValidators.map((v) => ({
+    nodeID: v.nodeID,
+    validationID: v.validationID,
+    operator: operatorByNodeId[v.nodeID],
+    balanceNAvax: (v.balance ?? 0).toString(),
+    balanceAVAX: formatUnits(BigInt(v.balance ?? 0), 9),
+    weight: String(v.weight),
+  }));
+
+  logger.log(`P-Chain validators for subnet ${subnetId}: ${validatorRows.length}`);
+  for (const row of validatorRows) {
+    logger.log(`  ${row.nodeID} balance=${row.balanceAVAX} AVAX weight=${row.weight}${row.operator ? ` operator=${row.operator}` : ''}`);
+  }
+
+  logger.addData('validatorBalances', {
+    subnetId,
+    totalValidators: validatorRows.length,
+    validators: validatorRows,
+  });
+
+  return { subnetId, totalValidators: validatorRows.length, validators: validatorRows };
 }
 
 export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; executionTime: string/*args: string*/ }[]> {
