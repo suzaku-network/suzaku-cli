@@ -166,6 +166,51 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
   );
 
   server.tool(
+    'rewards_get_epoch_status',
+    'Get funded/distributionComplete status and the set rewards amount for one epoch or a range of epochs, plus the contract scheduling constants (funding deadline, distribution earliest offset, claim grace period). Use epoch + toEpoch to fetch a whole claimability window in one call.',
+    {
+      rewardsAddress: Address.describe('Rewards contract address'),
+      epoch: z.string().describe('Start epoch (the single epoch to query if toEpoch is omitted)'),
+      toEpoch: z.string().optional().describe('End epoch (inclusive) for a range query'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ rewardsAddress, epoch, toEpoch, network, rpcUrl }) => {
+      const args = ['rewards', 'get-epoch-status', rewardsAddress, epoch];
+      if (toEpoch) args.push('--to-epoch', toEpoch);
+      return formatResult(await runCli(args, { network, rpcUrl }));
+    },
+  );
+
+  server.tool(
+    'rewards_get_events',
+    'Scan rewards contract lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range. Returns per-type counts and a flat chronological event list. Block scans can take ~30s per epoch of range; prefer a dedicated RPC.',
+    {
+      rewardsAddress: Address.describe('Rewards contract address'),
+      middlewareAddress: Address.optional().describe('L1Middleware address (required when using fromEpoch/toEpoch)'),
+      fromEpoch: z.string().optional().describe('Start epoch; fromBlock derived from its start timestamp'),
+      toEpoch: z.string().optional().describe('End epoch (inclusive); toBlock derived from the next epoch start'),
+      fromBlock: z.string().optional().describe('Start block (overrides fromEpoch)'),
+      toBlock: z.string().optional().describe('End block (overrides toEpoch; defaults to latest)'),
+      events: z.string().optional().describe('Comma-separated event names to include (defaults to all lifecycle events)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ rewardsAddress, middlewareAddress, fromEpoch, toEpoch, fromBlock, toBlock, events, network, rpcUrl }) => {
+      const args = ['rewards', 'get-events', rewardsAddress];
+      if (middlewareAddress) args.push('--middleware', middlewareAddress);
+      if (fromEpoch) args.push('--from-epoch', fromEpoch);
+      if (toEpoch) args.push('--to-epoch', toEpoch);
+      if (fromBlock) args.push('--from-block', fromBlock);
+      if (toBlock) args.push('--to-block', toBlock);
+      if (events) args.push('--events', events);
+      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
+    },
+  );
+
+  server.tool(
     'rewards_epoch_diagnosis',
     'Diagnose why claim-undistributed or distribute is returning unexpected numbers for an epoch. Runs all relevant reads in parallel and synthesizes plain-language findings — e.g. detects accumulation from multiple set-amount calls, incomplete distribution, or zero rewards.',
     {
