@@ -1,4 +1,4 @@
-FROM node:22-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS build
+FROM node:24-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS build
 
 WORKDIR /app
 
@@ -44,14 +44,16 @@ ENV SUZAKU_MCP_AUDIT_DIR=/data/audit
 ENTRYPOINT ["node", "packages/mcp/dist/server.js", "--read-only"]
 
 # ── Target: OpenClaw Telegram bot (openclaw spawns MCP server as subprocess) ──
-FROM ghcr.io/openclaw/openclaw:latest AS bot
+# Pinned — minimum safe version is 2026.4.22 (Claw Chain sandbox fixes); 2026.6.5 includes the May/June advisory batch.
+# To upgrade: bump tag+digest deliberately after reading the changelog, then run `openclaw doctor` in the container.
+FROM ghcr.io/openclaw/openclaw:2026.6.5@sha256:037f49ba1595be9502fb345138d727cd0cfaecf1392cbe0cfe053fb4681386cd AS bot
 
 # Install mcporter + runtime libs for usb/node-hid (CLI imports Ledger transport at load time)
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libusb-1.0-0 libudev1 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g mcporter \
+    && npm install -g mcporter@0.12.0 \
     && mkdir -p /home/node/.openclaw/workspace/config \
     && chown -R node:node /home/node/.openclaw
 COPY --chmod=755 packages/mcp/deploy/openclaw/entrypoint.sh /usr/local/bin/suzaku-entrypoint.sh

@@ -125,6 +125,8 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 | `agents.defaults.model.primary` | `anthropic/claude-sonnet-4-6` | Cost-effective model for read queries |
 | `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
 | `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
+| `channels.telegram.contextVisibility` | `allowlist` | Quoted/thread context from non-allowlisted senders never reaches the model (prompt-injection surface reduction; requires OpenClaw ≥ 2026.4.5) |
+| `cron.enabled` | `true` | Built-in scheduler — enables registering epoch-alert jobs (see below) |
 | `skills.entries.mcporter` | enabled | MCP tools via mcporter CLI bridge |
 
 ### Access control
@@ -160,6 +162,33 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 
 Users can specify `network: "fuji"` in their queries — the MCP tools accept a network parameter. The default is mainnet.
 
+## Upgrading OpenClaw
+
+The Dockerfile pins the OpenClaw image by version tag **and** digest (`2026.6.5`). Never revert to `:latest` — 2026 releases shipped several breaking config changes and the pin is also a security floor (versions before 2026.4.22 are vulnerable to the "Claw Chain" sandbox-escape advisories; 2026.6.5 includes the May/June advisory batch).
+
+Upgrade procedure:
+
+1. Read the release notes between the pinned and the target version (`github.com/openclaw/openclaw/releases`).
+2. Bump the tag + digest in the Dockerfile and rebuild **locally first** (`docker compose up --build`), not on the production VPS.
+3. Run `docker compose exec suzaku-bot node openclaw.mjs doctor` — it flags deprecated/unrecognized config keys (unrecognized keys have blocked gateway startup in past releases).
+4. Verify group access control still holds: send a message in the group **without** @-mentioning the bot from a non-admin account and confirm it does not respond (a past release had a bug where `requireMention` silently reverted on restart).
+
+## Scheduled Epoch Alerts (cron)
+
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime (they live in the container filesystem, so re-register after a rebuild):
+
+```bash
+docker compose exec suzaku-bot node openclaw.mjs cron create "0 */4 * * *" \
+  "Check the current epoch status, timing, and cache readiness on mainnet using the Suzaku MCP tools. If the epoch is about to roll over or the stake cache is not ready, say so explicitly." \
+  --name "epoch-check" \
+  --session isolated \
+  --announce \
+  --channel telegram \
+  --to "<TELEGRAM_GROUP_ID>"
+```
+
+This pushes a proactive epoch report to the group every 4 hours — useful for the rewards workflow (uptime → set-amount → distribute → harvest) where missing an epoch boundary is the most common operational mistake.
+
 ## Example Queries
 
 Once the bot is running, try these in a DM:
@@ -176,6 +205,7 @@ Once the bot is running, try these in a DM:
 |---|---|
 | Bot doesn't respond to DM | Check `docker compose logs` — verify Telegram token is valid |
 | Bot responds in wrong group | Verify `TELEGRAM_GROUP_ID` in `.env` matches your group; rebuild with `docker compose up --build` |
+| Bot answers non-mentioned group messages | Known upstream bug (config persistence on restart) — restart the container and re-verify; see Upgrading OpenClaw step 4 |
 | Container crash-loops | Check logs; if `read_only` causes issues, remove it temporarily and file a bug |
 | `docker inspect` shows API keys | Expected — Docker env vars are visible to host root. This is why VPS isolation matters |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower |

@@ -13,12 +13,16 @@
       "dmPolicy": "allowlist",
       "allowFrom": ["tg:${TELEGRAM_ADMIN_USER_ID}"],
       "groupPolicy": "allowlist",
+      "contextVisibility": "allowlist",
       "groups": {
         "${TELEGRAM_GROUP_ID}": {
           "requireMention": true
         }
       }
     }
+  },
+  "cron": {
+    "enabled": true
   },
   "skills": {
     "entries": {
