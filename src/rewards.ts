@@ -3,6 +3,7 @@ import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
 import { ExtendedPublicClient } from './client';
+import { blockAtTimestamp, collectEventsInRange } from './lib/cChainUtils';
 
 /**
  * Distributes rewards for a specific epoch
@@ -366,4 +367,96 @@ export async function getLastEpochClaimedCurator(
 
   logger.log(`Last epoch claimed by curator ${curator}: ${lastEpoch.toString()}`);
   return lastEpoch;
+}
+
+/**
+ * Lists every RewardsAmountSet event that covers a given epoch —
+ * diagnoses repeated set-amount calls, whose amounts accumulate on-chain.
+ */
+export async function getRewardsAmountSetEvents(
+  rewards: SuzakuContract['RewardsNativeToken'],
+  config: Config<ExtendedPublicClient>,
+  epoch: number,
+  options: {
+    middlewareAddress?: Hex;
+    fromBlock?: bigint;
+    toBlock?: bigint;
+  }
+) {
+  const client = config.client;
+  let fromBlock: bigint;
+  if (options.fromBlock !== undefined) {
+    fromBlock = options.fromBlock;
+  } else if (options.middlewareAddress) {
+    const middleware = await config.contracts.L1Middleware(options.middlewareAddress);
+    const lookbackEpoch = Math.max(epoch - 2, 0);
+    const epochStartTs = await middleware.read.getEpochStartTs([lookbackEpoch]);
+    fromBlock = await blockAtTimestamp(client, BigInt(epochStartTs));
+  } else {
+    throw new Error('Either --from-block or --middleware must be provided');
+  }
+
+  const toBlock = options.toBlock ?? (await client.getBlockNumber());
+
+  const events = await collectEventsInRange(
+    fromBlock,
+    toBlock,
+    -1,
+    (opts) => client.getContractEvents({
+      address: rewards.address as Hex,
+      abi: rewards.abi,
+      eventName: 'RewardsAmountSet',
+      fromBlock: opts.fromBlock,
+      toBlock: opts.toBlock,
+    })
+  );
+
+  const matching = events.filter((e) => {
+    const startEpoch = Number(e.args.startEpoch);
+    const numberOfEpochs = Number(e.args.numberOfEpochs);
+    return startEpoch <= epoch && epoch < startEpoch + numberOfEpochs;
+  });
+
+  const blockTimestampCache: Record<number, number> = {};
+  const getBlockTimestamp = async (blockNumber: bigint): Promise<number> => {
+    const n = Number(blockNumber);
+    if (blockTimestampCache[n] !== undefined) return blockTimestampCache[n];
+    const block = await client.getBlock({ blockNumber, includeTransactions: false });
+    blockTimestampCache[n] = Number(block.timestamp);
+    return blockTimestampCache[n];
+  };
+
+  const formattedEvents = await Promise.all(matching.map(async (e) => {
+    const ts = await getBlockTimestamp(e.blockNumber);
+    return {
+      txHash: e.transactionHash,
+      blockNumber: e.blockNumber.toString(),
+      timestamp: new Date(ts * 1000).toISOString(),
+      startEpoch: Number(e.args.startEpoch),
+      numberOfEpochs: Number(e.args.numberOfEpochs),
+      rewardsToken: e.args.rewardsToken as string,
+      rewardsAmount: (e.args.rewardsAmount as bigint).toString(),
+    };
+  }));
+
+  const totalAmount = formattedEvents.reduce((acc, e) => acc + BigInt(e.rewardsAmount), 0n);
+  const currentEpochRewards = (await rewards.read.getEpochRewards([epoch]) as bigint).toString();
+
+  logger.log(`RewardsAmountSet events covering epoch ${epoch}: ${formattedEvents.length}`);
+  for (const ev of formattedEvents) {
+    logger.log(`  tx: ${ev.txHash} block: ${ev.blockNumber} (${ev.timestamp})`);
+    logger.log(`    startEpoch=${ev.startEpoch} numberOfEpochs=${ev.numberOfEpochs} rewardsToken=${ev.rewardsToken} rewardsAmount=${ev.rewardsAmount} (raw wei)`);
+  }
+  logger.log(`Total rewardsAmount across matched events: ${totalAmount.toString()} (raw wei)`);
+  logger.log(`Current getEpochRewards(${epoch}): ${currentEpochRewards} (raw wei)`);
+
+  logger.addData('rewardsAmountSetEvents', {
+    epoch,
+    eventCount: formattedEvents.length,
+    totalAmount: totalAmount.toString(),
+    currentEpochRewards,
+    events: formattedEvents,
+  });
+
+  return { epoch, eventCount: formattedEvents.length, totalAmount, currentEpochRewards, events: formattedEvents };
 }

@@ -173,6 +173,7 @@ import {
     getLastEpochClaimedOperator,
     getLastEpochClaimedCurator,
     getRewardsClaimsCount,
+    getRewardsAmountSetEvents,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
@@ -4446,6 +4447,28 @@ async function main() {
             await getLastEpochClaimedCurator(
                 rewardsContract,
                 curator
+            );
+        });
+
+    rewardsCmd
+        .command("get-amount-set-events")
+        .description("List every RewardsAmountSet event that covers a given epoch — diagnose multiple set-amount calls for the same epoch")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Epoch to inspect"))
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute fromBlock from epoch start timestamp (required unless --from-block is given)"))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --middleware-derived block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsAmountSetEvents(
+                rewardsContract,
+                config,
+                epoch,
+                {
+                    middlewareAddress: options.middleware,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                }
             );
         });
 
