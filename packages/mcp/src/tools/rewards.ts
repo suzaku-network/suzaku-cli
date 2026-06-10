@@ -177,6 +177,14 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ rewardsAddress, epoch, toEpoch, network, rpcUrl }) => {
+      const from = Number(epoch);
+      const to = toEpoch ? Number(toEpoch) : from;
+      if (!Number.isInteger(from) || from < 0 || !Number.isInteger(to) || to < 0) {
+        return formatResult({ success: false, data: null, error: 'epoch and toEpoch must be non-negative integers' });
+      }
+      if (to - from + 1 > 50) {
+        return formatResult({ success: false, data: null, error: `Epoch range too large (${to - from + 1}); maximum is 50 epochs per call` });
+      }
       const args = ['rewards', 'get-epoch-status', rewardsAddress, epoch];
       if (toEpoch) args.push('--to-epoch', toEpoch);
       return formatResult(await runCli(args, { network, rpcUrl }));
@@ -206,6 +214,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
       if (fromBlock) args.push('--from-block', fromBlock);
       if (toBlock) args.push('--to-block', toBlock);
       if (events) args.push('--events', events);
+      if (process.env.SNOWSCAN_API_KEY) args.push('--snowscan-api-key', process.env.SNOWSCAN_API_KEY);
       return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
     },
   );

@@ -150,6 +150,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       if (fromEpoch) args.push('--from-epoch', fromEpoch);
       if (fromBlock) args.push('--from-block', fromBlock);
       if (toBlock) args.push('--to-block', toBlock);
+      if (process.env.SNOWSCAN_API_KEY) args.push('--snowscan-api-key', process.env.SNOWSCAN_API_KEY);
       return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
     },
   );
