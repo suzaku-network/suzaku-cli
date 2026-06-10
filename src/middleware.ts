@@ -407,6 +407,7 @@ export async function middlewareGetValidatorBalances(
   middleware: SuzakuContract['L1Middleware'],
   config: Config<ExtendedPublicClient>
 ) {
+  logger.log("Reading validator balances from middleware and P-Chain...");
   const [balancerAddress, operators] = await middleware.multicall(['BALANCER', 'getAllOperators']);
   const balancer = await config.contracts.BalancerValidatorManager(balancerAddress as Hex);
   const subnetIdHex = await balancer.read.subnetID();
@@ -419,7 +420,8 @@ export async function middlewareGetValidatorBalances(
     const validationIDs = await middleware.read.getOperatorValidationIDs([operator]);
     if (validationIDs.length === 0) return;
     const validators = await balancer.multicall(validationIDs.map((id: Hex) => ({ name: 'getValidator' as const, args: [id] })));
-    for (const validator of validators as Validator[]) {
+    for (const validator of validators as (Validator | undefined)[]) {
+      if (!validator?.nodeID) continue; // failed multicall slot (e.g. deregistered validator)
       operatorByNodeId[encodeNodeID(validator.nodeID)] = operator;
     }
   }));
