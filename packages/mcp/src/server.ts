@@ -29,6 +29,7 @@ import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
 import { registerLstWrapperTools } from './tools/lst-wrapper.js';
 import { registerVaultHelperTools } from './tools/vault-helper.js';
 import { registerUptimeTools } from './tools/uptime.js';
+import { registerHeartbeatTools } from './tools/heartbeat.js';
 
 const readOnly = process.argv.includes('--read-only');
 
@@ -328,6 +329,7 @@ if (!readOnly) registerPoaSecurityModuleTools(server);
 registerLstWrapperTools(server, readOnly);
 registerVaultHelperTools(server);
 registerUptimeTools(server, readOnly);
+registerHeartbeatTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
