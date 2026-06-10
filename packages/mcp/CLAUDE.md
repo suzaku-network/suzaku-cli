@@ -1,6 +1,6 @@
 # @suzaku/mcp
 
-MCP server exposing 121 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 125 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
 
 ## Architecture
 
@@ -11,19 +11,20 @@ src/
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
 ├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl (with SSRF blocklist)
 ├── tools/
-│   ├── middleware.ts    # 22 tools — L1Middleware contract (18 read: 9 atomic + 9 composite, 4 write)
+│   ├── middleware.ts    # 23 tools — L1Middleware contract (19 read: 10 atomic + 9 composite, 4 write)
 │   ├── vault.ts         # 11 tools — Symbiotic vault (8 read, 3 write)
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
 │   ├── opt-in.ts        # 6 tools — operator opt-in/out (2 read, 4 write)
-│   ├── rewards.ts       # 13 tools — Rewards contract (9 read, 4 write)
+│   ├── rewards.ts       # 15 tools — Rewards contract (11 read, 4 write)
 │   ├── kite-staking.ts  # 12 tools — KiteStakingManager (3 read, 9 write, two-phase lifecycle)
 │   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
 │   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
 │   ├── poa-security-module.ts # 6 tools — PoASecurityModule (all write, two-phase lifecycle)
 │   ├── lst-wrapper.ts   # 9 tools — LSTWrapper/wsALOT (6 read, 3 write)
 │   ├── vault-helper.ts  # 4 tools — VaultHelper (all read)
-│   └── uptime.ts        # 3 tools — UptimeTracker (1 read, 2 write)
+│   ├── uptime.ts        # 3 tools — UptimeTracker (1 read, 2 write)
+│   └── heartbeat.ts     # 1 tool — deployment_heartbeat composite monitor (read; digest + alerts modes)
 ```
 
 **Data flow** (write tool):
@@ -115,16 +116,16 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 ## Tool Catalog
 
-121 tools total (65 read, 56 write):
+125 tools total (69 read, 56 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
-| `middleware.ts` | 18 | 4 | `discover_network`, `middleware_info`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_get_operator_used_stake_per_epoch`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
+| `middleware.ts` | 19 | 4 | `discover_network`, `middleware_info`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_get_validator_balances`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_get_operator_used_stake_per_epoch`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
 | `vault.ts` | 8 | 3 | `vault_get_balance`, `vault_get_active_stake`, `vault_get_active_stake_at_epoch`, `vault_get_total_supply_at_epoch`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
 | `opt-in.ts` | 2 | 4 | `check_opt_in_l1`, `check_opt_in_vault`, `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
-| `rewards.ts` | 9 | 4 | `rewards_get_epoch_rewards`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed` |
+| `rewards.ts` | 11 | 4 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed` |
 | `kite-staking.ts` | 3 | 9 | `kite_info`, `kite_info_validator`, `kite_info_delegator`, `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
 | `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
 | `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
@@ -132,6 +133,7 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 | `lst-wrapper.ts` | 6 | 3 | `lst_wrapper_info`, `lst_wrapper_get_balance`, `lst_wrapper_preview_deposit`, `lst_wrapper_preview_redeem`, `lst_wrapper_max_deposit`, `lst_wrapper_paused`, `lst_wrapper_deposit`, `lst_wrapper_redeem`, `lst_wrapper_harvest` |
 | `vault-helper.ts` | 4 | 0 | `vault_helper_info`, `vault_helper_get_pending_withdraws`, `vault_helper_get_claimable_reward`, `vault_helper_get_latest_distributed_rewards` |
 | `uptime.ts` | 1 | 2 | `uptime_get_validation_uptime_message`, `uptime_report_validator`, `uptime_compute_operator_uptime` |
+| `heartbeat.ts` | 1 | 0 | `deployment_heartbeat` — composite monitor; `mode=digest` (per-epoch: changed nodes/stakes/validators, rewards activity, claimability table) or `mode=alerts` (4-hourly checks, non-OK findings only). See `docs/heartbeat-design.md` |
 | `server.ts` | 1 | 0 | `health_check` — verifies CLI path, signer config, optional network connectivity |
 
 ## Signing Methods

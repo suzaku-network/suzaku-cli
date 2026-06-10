@@ -1,4 +1,4 @@
-# Deployment Heartbeat — design (not yet implemented)
+# Deployment Heartbeat — design (implemented; see "Implementation status" below)
 
 Proactive monitoring for the Dexalot Suzaku deployment, delivered through the OpenClaw Telegram bot. Two outputs from one composite `deployment_heartbeat` read tool (checks run deterministically in TypeScript; the LLM only formats the result):
 
@@ -141,3 +141,40 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 - Cron jobs are lost on container rebuild — keep the two `openclaw.mjs cron create` commands in a post-start script. One alerts cron every 4 h; the digest fires when that run detects `epoch != lastReportedEpoch` (the tool returns `epoch`, so the bot compares against its last message — no extra scheduler needed for the 3.5-day period a fixed cron can't express).
 - Two runs inside the 60 s dedup window return cached data — harmless at these cadences.
 - Use a dedicated RPC, not `api.avax.network`. Heartbeat-only crons can run on `claude-haiku-4-5` to cut cost; the formatting task is trivial.
+
+## Implementation status (June 2026)
+
+Implemented in `packages/mcp/src/tools/heartbeat.ts` as the `deployment_heartbeat` tool (read-only; registered in both normal and `--read-only` mode). CLI gaps 1–4 are closed:
+
+1. `rewards get-epoch-status <addr> <epoch> [--to-epoch <n>]` — wraps `epochStatus` + `getEpochRewards` + scheduling constants; one call covers the whole claimability window. MCP: `rewards_get_epoch_status`.
+2. `rewards get-events <addr> --middleware <mw> --from-epoch <n> [--to-epoch <n>]` — single-pass scan of all 8 lifecycle events with per-type counts. MCP: `rewards_get_events`.
+3. `middleware node-logs` — extended with `--from-epoch/--from-block/--to-block` and the `AllNodeStakesUpdated`/`OperatorHasLeftoverStake` events. MCP: `middleware_get_node_logs` (new `fromEpoch`/`fromBlock`/`toBlock` params).
+4. `middleware get-validator-balances <addr>` — P-Chain continuous-fee balances for all subnet validators, matched to operators. MCP: `middleware_get_validator_balances`.
+
+Gap 5 (Kite-path `addData`) remains a separate issue and only blocks the Kite profile.
+
+Behavior notes vs. the design above:
+
+- The digest's set-amount accumulation flag counts `RewardsAmountSet` events **within the scanned window** (the elapsed epoch). It catches accumulation as it happens; historical incidents are drill-down via `rewards_epoch_diagnosis`. First live digest run (epoch 38) immediately flagged epochs 35 *and* 36 as accumulated this way.
+- Validator health uses the P-Chain validator list + stuck two-phase event detection instead of per-node `balancer get-validator-status` calls (that command takes one nodeId per call).
+- The undistributed-reclaim date is an approximation (`epoch start + (DISTRIBUTION_EARLIEST_OFFSET + CLAIM_GRACE_PERIOD_EPOCHS + 1) × epochDuration`) marked with `~` — the contract exposes no view for the `EpochStillClaimable` boundary.
+- The tool emits `humanLines: string[]` assembled deterministically in TypeScript: alerts mode returns `[]` when every check is ok (= post nothing); digest mode returns the full monospace block ready for Telegram.
+- Measured live (Dexalot mainnet, public RPC): alerts mode ~4 s, digest mode ~15–40 s.
+
+## OpenClaw setup
+
+Two crons, both every 4 h — add to the post-start script so they survive container rebuilds:
+
+```bash
+# 1. Alerts: post only when something needs attention
+openclaw.mjs cron create \
+  --schedule "10 */4 * * *" \
+  --prompt "Call deployment_heartbeat with mode=alerts, middlewareAddress=0x9411307279456450ABF9B5181aA7a02271f0DC34, rewardsAddress=0x0f388C7c6201014Ad836400e9e2ebD211BDBcB00, lstWrapperAddress=0xDc1c4428F3145286f262980d36C640285c0DA403, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group."
+
+# 2. Digest: post once per epoch rollover (the bot compares the returned epoch to the last digest it posted)
+openclaw.mjs cron create \
+  --schedule "25 */4 * * *" \
+  --prompt "Call deployment_heartbeat with mode=digest (same addresses as the alerts cron). If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch."
+```
+
+Use a dedicated `rpcUrl` in production; the digest's event scans are too slow for rate-limited public endpoints. `claude-haiku-4-5` is sufficient for both crons — the message is pre-formatted.
