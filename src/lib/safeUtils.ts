@@ -1,5 +1,5 @@
 import { SafeClient } from "@safe-global/sdk-starter-kit";
-import { Abi, decodeFunctionData, Hex } from "viem";
+import { Abi, decodeFunctionData, getAddress, Hex } from "viem";
 import { logger } from "./logger";
 
 interface SelectedTx {
@@ -24,6 +24,76 @@ export function safeQueueUrl(network: string, safeAddress: string): string {
   return network === 'fuji'
     ? `https://wallet-transaction-fuji.ash.center/api/v1/safes/${safeAddress}/multisig-transactions/?executed=false`
     : `https://app.safe.global/transactions/queue?safe=avax:${safeAddress}`;
+}
+
+export interface SafeBatchTx {
+  to: Hex;
+  data: Hex;
+  value: string;
+}
+
+interface BatchTransactionResponse {
+  safeTxHash: Hex;
+  ethereumTxHash?: Hex;
+  action: 'new' | 'propose' | 'skip';
+}
+
+/**
+ * Send or propose several calls as ONE atomic MultiSend Safe transaction.
+ * Used where sequential per-call proposals would break: they would collide on the
+ * Safe nonce, and a later call's simulation can revert on state an earlier call
+ * has not yet produced (e.g. set-amount pulls tokens the approve has not granted
+ * until it is mined).
+ */
+export async function handleBatchTransaction(
+  txs: SafeBatchTx[],
+  client: SafeClient,
+  clientAddress: Hex,
+  network: string,
+): Promise<BatchTransactionResponse> {
+  const sender = getAddress(clientAddress);
+  clientAddress = clientAddress.toLowerCase() as Hex;
+  const [safeAddress, nonce] = await Promise.all([client.getAddress(), client.getNonce()]);
+
+  const owners = (await client.getOwners()).map((o) => o.toLowerCase());
+  const delegates = (await client.apiKit.getSafeDelegates({ safeAddress })).results.map((d) => d.delegate.toLowerCase());
+  const isOwner = owners.includes(clientAddress);
+
+  if (!isOwner && !delegates.includes(clientAddress)) {
+    logger.exitError(['You are neither an owner or a delegate of this Safe']);
+  }
+
+  const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs });
+  const safeTxHash = await client.protocolKit.getTransactionHash(safeTransaction) as Hex;
+  const queueUrl = safeQueueUrl(network, safeAddress);
+  logger.addData('safeTxHash', safeTxHash);
+  logger.addData('safeQueueUrl', queueUrl);
+
+  // Idempotency: an identical pending batch hashes to the same safeTxHash — skip it.
+  const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce });
+  if (pendingTxs.results.some((tx) => tx.safeTxHash === safeTxHash)) {
+    logger.log(`Safe batch ${safeTxHash} is already pending. Skipping.`);
+    return { safeTxHash, action: 'skip' };
+  }
+
+  if (isOwner) {
+    logger.debug(`Sending a new Safe batch transaction as owner`);
+    const result = await client.send({ transactions: txs });
+    const ethereumTxHash = result.transactions?.ethereumTxHash as Hex | undefined;
+    return { safeTxHash, ethereumTxHash, action: 'new' };
+  }
+
+  logger.debug(`Proposing a Safe batch transaction as delegate`);
+  const signature = await client.protocolKit.signHash(safeTxHash);
+  await client.apiKit.proposeTransaction({
+    safeAddress,
+    safeTransactionData: safeTransaction.data,
+    safeTxHash,
+    senderAddress: sender,
+    senderSignature: signature.data,
+  });
+  logger.log(`Proposed Safe batch transaction ${safeTxHash}\nReview and sign: ${queueUrl}`);
+  return { safeTxHash, action: 'propose' };
 }
 
 /**

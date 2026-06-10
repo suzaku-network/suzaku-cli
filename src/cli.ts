@@ -11,7 +11,10 @@ console.warn = function (...args) {
 };
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
+import { Abi, encodeFunctionData, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
+import { SuzakuABI } from "./abis";
+import { handleBatchTransaction } from "./lib/safeUtils";
+import { isCastMode } from "./lib/castUtils";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -4194,6 +4197,38 @@ async function main() {
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
+            const client = config.client;
+            if ('safe' in client && client.safe != undefined && !isCastMode()) {
+                // One atomic MultiSend: separate approve/set proposals would collide on
+                // the Safe nonce, and the set call cannot be simulated (or executed)
+                // while the approve is unmined — setRewardsAmountForEpochs pulls the
+                // tokens via transferFrom at set time.
+                const batch = await handleBatchTransaction([
+                    {
+                        to: tokenAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.ERC20 as Abi,
+                            functionName: 'approve',
+                            args: [rewardsAddress, amountToApprove],
+                        }),
+                        value: '0',
+                    },
+                    {
+                        to: rewardsAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.RewardsNativeToken as Abi,
+                            functionName: 'setRewardsAmountForEpochs',
+                            args: [startEpoch, numberOfEpochs, rewardsAmountWei],
+                        }),
+                        value: '0',
+                    },
+                ], client.safe, client.account!.address as Hex, client.network);
+                if (batch.ethereumTxHash) {
+                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
+                }
+                logger.log(`approve + setRewardsAmountForEpochs batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
+                return;
+            }
             await token.safeWrite.approve([rewardsAddress, amountToApprove], {
                 chain: null,
                 account: config.client.account!,
