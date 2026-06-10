@@ -104,11 +104,20 @@ export function tryParseJsonBlock(text: string): Record<string, unknown> | null 
   }
 }
 
-/** Strip private key material (64-char hex strings) from output to prevent leakage */
+/**
+ * Strip private key material from output to prevent leakage.
+ * Redacts the exact configured secrets and bare (un-prefixed) 64-char hex; 0x-prefixed
+ * 64-char hex passes through — tx hashes, role hashes, and validation IDs are legitimate output.
+ */
 export function sanitizeOutput(text: string): string {
-  return text
-    .replace(/0x[0-9a-fA-F]{64}/g, '0x[REDACTED]')
-    .replace(/\b[0-9a-fA-F]{64}\b/g, '[REDACTED]');
+  let out = text;
+  for (const secret of [process.env.SUZAKU_PK, process.env.SUZAKU_PCHAIN_PK]) {
+    if (!secret || !/^(0x)?[0-9a-fA-F]{64}$/.test(secret)) continue;
+    const bare = secret.replace(/^0x/, '');
+    out = out.split(`0x${bare}`).join('0x[REDACTED]');
+    out = out.split(bare).join('[REDACTED]');
+  }
+  return out.replace(/(?<![0-9a-fA-Fx])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g, '[REDACTED]');
 }
 
 /** Flags whose following value should be redacted in audit logs */
@@ -325,6 +334,12 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
   cliArgs.push('--json', '--yes');
 
+  // Confirmation depth override — e.g. SUZAKU_MCP_WAIT=1 for instant-mining forks/anvil
+  const waitOverride = process.env.SUZAKU_MCP_WAIT;
+  if (waitOverride && /^\d+$/.test(waitOverride)) {
+    cliArgs.push('--wait', waitOverride);
+  }
+
   // Network-aware suggest / show+confirm for write operations
   if (options.privateKey) {
     // Explicit testnet allowlist — unknown networks (mainnet, kiteai, custom RPCs) get mainnet-safe handling
@@ -408,7 +423,9 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     });
 
     // Timeout handling with SIGKILL fallback
+    let timedOut = false;
     const killTimer = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGTERM');
       setTimeout(() => {
         if (!exited) {
@@ -453,7 +470,9 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
         resolve({
           success: false,
           data: null,
-          error: sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
+          error: timedOut
+            ? `Command timed out after ${timeout}ms and was killed. ${sanitizeOutput(stderr.trim() || stdout.trim())}`.trim()
+            : sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
         });
         return;
       }
@@ -470,7 +489,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     });
   });
 
-  if (result.success) {
+  if (result.success && !isWrite) {
     dedupCache.set(dedupKey, { ts: Date.now(), result });
     evictDedupCache(dedupWindowMs);
   }

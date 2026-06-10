@@ -13,27 +13,35 @@ import {
 } from './cli-runner.js';
 
 describe('sanitizeOutput', () => {
-  it('redacts 64-char hex private keys', () => {
-    const pk = '0x' + 'a'.repeat(64);
-    expect(sanitizeOutput(`key: ${pk}`)).toBe('key: 0x[REDACTED]');
+  it('redacts the configured SUZAKU_PK with and without 0x prefix', () => {
+    const bare = 'a'.repeat(64);
+    process.env.SUZAKU_PK = '0x' + bare;
+    try {
+      expect(sanitizeOutput(`key: 0x${bare}`)).toBe('key: 0x[REDACTED]');
+      expect(sanitizeOutput(`key: ${bare}`)).toBe('key: [REDACTED]');
+    } finally {
+      delete process.env.SUZAKU_PK;
+    }
   });
 
-  it('redacts multiple keys in one string', () => {
-    const pk1 = '0x' + '1'.repeat(64);
-    const pk2 = '0x' + '2'.repeat(64);
-    expect(sanitizeOutput(`${pk1} and ${pk2}`)).toBe('0x[REDACTED] and 0x[REDACTED]');
+  it('redacts the configured SUZAKU_PCHAIN_PK', () => {
+    const bare = 'b'.repeat(64);
+    process.env.SUZAKU_PCHAIN_PK = bare;
+    try {
+      expect(sanitizeOutput(`pchain: 0x${bare}`)).toBe('pchain: 0x[REDACTED]');
+    } finally {
+      delete process.env.SUZAKU_PCHAIN_PK;
+    }
+  });
+
+  it('preserves 0x-prefixed 64-char hex (tx hashes, role hashes, validation IDs)', () => {
+    const txHash = '0x' + '1'.repeat(64);
+    expect(sanitizeOutput(`tx: ${txHash}`)).toBe(`tx: ${txHash}`);
   });
 
   it('preserves shorter hex strings', () => {
     const shortHex = '0x' + 'a'.repeat(40); // address-length
     expect(sanitizeOutput(`addr: ${shortHex}`)).toBe(`addr: ${shortHex}`);
-  });
-
-  it('preserves longer hex strings (only redacts exactly 64 chars)', () => {
-    const longHex = '0x' + 'a'.repeat(65);
-    // The regex matches 0x + 64 hex chars, so the first 66 chars get redacted
-    // and the trailing 'a' remains
-    expect(sanitizeOutput(longHex)).toBe('0x[REDACTED]a');
   });
 
   it('redacts bare 64-char hex without 0x prefix', () => {
@@ -53,23 +61,18 @@ describe('sanitizeOutput', () => {
   it('handles empty string', () => {
     expect(sanitizeOutput('')).toBe('');
   });
-
-  it('is case-insensitive for hex characters', () => {
-    const pkUpper = '0x' + 'A'.repeat(64);
-    const pkMixed = '0x' + 'aAbBcCdDeEfF'.repeat(5) + 'aAbB';
-    expect(sanitizeOutput(pkUpper)).toBe('0x[REDACTED]');
-    expect(sanitizeOutput(pkMixed)).toBe('0x[REDACTED]');
-  });
 });
 
 describe('sanitizeArgs', () => {
-  it('redacts keys in each array element', () => {
-    const pk = '0x' + 'f'.repeat(64);
-    const args = ['command', pk, '--flag'];
+  it('preserves 0x-prefixed hashes but redacts bare 64-char hex in elements', () => {
+    const txHash = '0x' + 'f'.repeat(64);
+    const bare = 'e'.repeat(64);
+    const args = ['command', txHash, bare, '--flag'];
     const result = sanitizeArgs(args);
     expect(result[0]).toBe('command');
-    expect(result[1]).toBe('0x[REDACTED]');
-    expect(result[2]).toBe('--flag');
+    expect(result[1]).toBe(txHash);
+    expect(result[2]).toBe('[REDACTED]');
+    expect(result[3]).toBe('--flag');
   });
 
   it('handles empty array', () => {
@@ -137,12 +140,17 @@ describe('formatResult', () => {
     expect((formatted as { structuredContent?: unknown }).structuredContent).toBeUndefined();
   });
 
-  it('redacts private keys in error messages', () => {
+  it('redacts the configured private key in error messages', () => {
     const pk = '0x' + 'a'.repeat(64);
-    const result: CliResult = { success: false, data: null, error: `Failed with key ${pk}` };
-    const formatted = formatResult(result);
-    expect(formatted.content[0].text).toContain('0x[REDACTED]');
-    expect(formatted.content[0].text).not.toContain(pk);
+    process.env.SUZAKU_PK = pk;
+    try {
+      const result: CliResult = { success: false, data: null, error: `Failed with key ${pk}` };
+      const formatted = formatResult(result);
+      expect(formatted.content[0].text).toContain('0x[REDACTED]');
+      expect(formatted.content[0].text).not.toContain(pk);
+    } finally {
+      delete process.env.SUZAKU_PK;
+    }
   });
 });
 
