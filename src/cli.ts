@@ -242,8 +242,11 @@ async function main() {
             logger.error('Error: --rpc-url is required when using --network custom');
             process.exit(1);
         }
-        // Block manually private key on mainnet
-        if (opts.privateKey! && chainList[opts.network].testnet === false) {
+        // Block manually private key on mainnet. Exception: a Safe delegate software key
+        // (propose-only flow) behind an explicit env opt-in — owner keys are refused at
+        // the Safe layer (safeUtils), so this cannot widen into on-chain execution.
+        if (opts.privateKey! && chainList[opts.network].testnet === false
+            && !(opts.safe && process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true')) {
             logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }

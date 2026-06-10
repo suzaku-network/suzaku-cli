@@ -17,6 +17,18 @@ interface TransactionStrategyResponse {
 }
 
 /**
+ * ALLOW_SAFE_DELEGATE_MAINNET grants a software key the right to PROPOSE only.
+ * An owner key would take the execute branches (send/confirm) instead of proposing,
+ * so it is refused outright while the opt-in is active — this is the safety pairing
+ * for the mainnet guard relaxation in cliParser.ts / cli.ts.
+ */
+function assertDelegateOnly(isOwner: boolean): void {
+  if (process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true' && isOwner) {
+    logger.exitError(['ALLOW_SAFE_DELEGATE_MAINNET is set but the signer is a Safe OWNER; this mode only permits delegate (propose-only) keys. Unset the env var to transact as an owner.']);
+  }
+}
+
+/**
  * Human-facing link to review a proposal: the Safe web UI queue on mainnet, the
  * Ash-hosted transaction-service API on fuji (no public Safe UI fronts it).
  */
@@ -62,6 +74,7 @@ export async function handleBatchTransaction(
   if (!isOwner && !delegates.includes(clientAddress)) {
     logger.exitError(['You are neither an owner or a delegate of this Safe']);
   }
+  assertDelegateOnly(isOwner);
 
   const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs });
   const safeTxHash = await client.protocolKit.getTransactionHash(safeTransaction) as Hex;
@@ -125,6 +138,7 @@ export async function handleTransactionStrategy(
   if (newOrProposal === 'propose' && !delegates.includes(clientAddress)) {
     logger.exitError(['You are neither an owner or a delegate of this Safe'])
   }
+  assertDelegateOnly(owners.includes(clientAddress));
 
   const selections = pendingTxs.results.reduce((acc, tx) => {
     // filter similar method calls

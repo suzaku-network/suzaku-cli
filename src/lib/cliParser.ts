@@ -56,7 +56,10 @@ export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
   if (!value.startsWith('0x')) {
     return parseSecretName(value,).trim() as Hex;
   }
-  if (process.argv.includes('mainnet')) {
+  // ALLOW_SAFE_DELEGATE_MAINNET permits a software key on mainnet ONLY together with
+  // --safe (propose-only delegate flow); the paired owner-refusal lives in safeUtils.
+  if (process.argv.includes('mainnet')
+    && !(process.argv.includes('--safe') && process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true')) {
     throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
   }
   return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');
