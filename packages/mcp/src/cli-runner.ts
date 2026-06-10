@@ -179,6 +179,13 @@ export interface RunCliOptions {
   skipLimiter?: boolean;
   /** Skip the dedup cache for calls whose result anchors follow-up reads (e.g. current epoch) */
   skipDedup?: boolean;
+  /**
+   * Skip the network-aware suggest/confirm matrix. HARDCODE true only in the Safe
+   * propose tools (rewards_*_propose) — there the CLI call is an off-chain Safe
+   * proposal and the human signature in the Safe UI is the execution gate.
+   * Never derive this from env or client input.
+   */
+  bypassSuggest?: boolean;
 }
 
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
@@ -331,10 +338,14 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     }
   }
 
-  // Safe multisig wiring
+  // Safe multisig wiring. The tx-service API key (mainnet auth) and the delegate-mode
+  // opt-in travel ONLY with --safe — the CLI refuses owner keys while the opt-in is
+  // set, so this cannot widen into direct on-chain execution.
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
     cliArgs.push('--safe', process.env.SUZAKU_SAFE_ADDRESS);
     signerMethod = signerMethod ? `${signerMethod}+SUZAKU_SAFE_ADDRESS` : 'SUZAKU_SAFE_ADDRESS';
+    childEnv.SAFE_API_KEY = process.env.SAFE_API_KEY;
+    childEnv.ALLOW_SAFE_DELEGATE_MAINNET = process.env.ALLOW_SAFE_DELEGATE_MAINNET;
   }
 
   // P-Chain transaction key — passed via child env PK_PCHAIN
@@ -356,7 +367,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   }
 
   // Network-aware suggest / show+confirm for write operations
-  if (options.privateKey) {
+  if (options.privateKey && !options.bypassSuggest) {
     // Explicit testnet allowlist — unknown networks (mainnet, kiteai, custom RPCs) get mainnet-safe handling
     const isTestnet = options.network != null && TESTNET_NETWORKS.has(options.network);
     const suggestEnv = process.env.SUZAKU_MCP_SUGGEST;
@@ -526,6 +537,9 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   // Audit log (best-effort, non-blocking) — supports SUZAKU_MCP_AUDIT_DIR override
   const auditDir = process.env.SUZAKU_MCP_AUDIT_DIR || join(homedir(), '.suzaku-cli');
   const auditLog = join(auditDir, 'mcp-audit.log');
+  const safeTxHash = result.data != null && typeof result.data === 'object'
+    ? (result.data as Record<string, unknown>).safeTxHash
+    : undefined;
   const auditEntry = JSON.stringify({
     ts: new Date().toISOString(),
     tool: toolName,
@@ -535,6 +549,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     success: result.success,
     duration_ms: durationMs,
     signerMethod,
+    ...(typeof safeTxHash === 'string' ? { safeTxHash } : {}),
   }) + '\n';
   mkdir(auditDir, { recursive: true }, (mkdirErr) => {
     if (mkdirErr) return;

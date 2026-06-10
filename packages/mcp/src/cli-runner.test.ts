@@ -6,6 +6,7 @@ import {
   formatResult,
   formatGuardError,
   requireSigner,
+  runCli,
   getActiveSubprocesses,
   resetActiveSubprocesses,
   resetRateLimiter,
@@ -267,4 +268,37 @@ describe('rate limiter', () => {
     // Verify reset doesn't throw and state is clean
     resetRateLimiter();
   });
+});
+
+describe('bypassSuggest', () => {
+  beforeEach(() => {
+    resetActiveSubprocesses();
+    resetRateLimiter();
+    delete process.env.SUZAKU_MCP_SUGGEST;
+    delete process.env.SUZAKU_SAFE_ADDRESS;
+  });
+
+  afterEach(() => {
+    delete process.env.SUZAKU_SAFE_ADDRESS;
+  });
+
+  it('mainnet writes return suggest mode by default', async () => {
+    const result = await runCli(['nonexistent-command'], { privateKey: true, network: 'mainnet' });
+    expect(result.success).toBe(true);
+    expect((result.data as Record<string, unknown>)._suggest_mode).toBe(true);
+  });
+
+  it('suggested command includes --safe when SUZAKU_SAFE_ADDRESS is set', async () => {
+    process.env.SUZAKU_SAFE_ADDRESS = '0x' + '1'.repeat(40);
+    const result = await runCli(['nonexistent-command'], { privateKey: true, network: 'mainnet' });
+    expect((result.data as Record<string, unknown>).command).toContain(`--safe 0x${'1'.repeat(40)}`);
+  });
+
+  it('bypassSuggest skips the suggest matrix and reaches execution', async () => {
+    // The unknown command makes the spawned CLI fail fast — getting a non-suggest
+    // failure proves the matrix was bypassed and the subprocess actually ran.
+    const result = await runCli(['nonexistent-command'], { privateKey: true, network: 'mainnet', bypassSuggest: true, timeout: 30_000 });
+    expect(result.success).toBe(false);
+    expect((result.data as Record<string, unknown> | null)?._suggest_mode).toBeUndefined();
+  }, 35_000);
 });
