@@ -2094,6 +2094,7 @@ async function main() {
             const roles = getRoles(middlewareSvc);
             const accessControl = await config.contracts.AccessControl(middlewareAddress);
             const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
+            const accountInfo: { [key: string]: any } = { account, isOwner: account === owner, roles: roles.filter((_, index) => hasRole[index]) };
             logger.log(`Account ${account} has the following rights: `);
             if (account === owner) {
                 logger.log(`L1 owner`);
@@ -2120,7 +2121,9 @@ async function main() {
                     formated[encodeNodeID(validator.nodeID)] = { NodeID: encodeNodeID(validator.nodeID), status, weight: validator.weight, ValidationId: validationIDs[i / 2], continuousAVAXBalance: parseUnits(pChainValidator?.balance?.toString() ?? '0', 9) }
                 }
                 logger.logJsonTree(formated);
+                accountInfo.operator = { stake, validators: formated };
             }
+            logger.addData('accountInfo', accountInfo);
         });
 
     middlewareCmd
@@ -2355,6 +2358,8 @@ async function main() {
             const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
                 logger.log("Validator status: NotRegistered");
+                logger.addData("status", "NotRegistered");
+                logger.addData("nodeId", nodeId);
                 return;
             }
             const [validator, PendingWeightUpdate] = await Promise.all([balancer.read.getValidator([validationId]), balancer.read.isValidatorPendingWeightUpdate([validationId])]);

@@ -140,6 +140,7 @@ export async function getVaultTotalSupply(
 
   const totalSupply = await vault.read.totalSupply();
   logger.log("Total supply:", totalSupply.toString());
+  logger.addData('totalSupplyAtEpoch', totalSupply.toString());
   return totalSupply;
 }
 
@@ -152,6 +153,7 @@ export async function getVaultTotalSupplyAtEpoch(
   const epochEndTs = StartTs + epochDuration * (Number(epoch) + 1);
   const totalSupply = await vault.read.activeSharesAt([epochEndTs, '0x']);
   logger.log("Total supply:", totalSupply.toString());
+  logger.addData('totalSupplyAtEpoch', totalSupply.toString());
   return totalSupply;
 }
 
@@ -161,6 +163,7 @@ export async function getActiveStake(
   logger.log(`Reading active stake...`);
   const activeStake = await vault.read.activeStake();
   logger.log("Active stake:", activeStake.toString());
+  logger.addData('activeStake', activeStake.toString());
   return activeStake;
 }
 
@@ -173,6 +176,7 @@ export async function getActiveStakeAtEpoch(
   const epochEndTs = StartTs + epochDuration * (Number(epoch) + 1);
   const activeStake = await vault.read.activeStakeAt([epochEndTs, '0x']);
   logger.log("Active stake:", activeStake.toString());
+  logger.addData('activeStakeAtEpoch', activeStake.toString());
   return activeStake;
 }
 
