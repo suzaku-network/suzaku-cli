@@ -81,7 +81,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | `SUZAKU_PK` | Raw EVM private key (hex). Injected as `PK` in child env — never on CLI args | — |
 | `SUZAKU_SECRET_NAME` | GPG keystore secret name. Passed as `--secret-name` flag | — |
 | `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
-| `SUZAKU_PCHAIN_PK` | P-Chain key for cross-chain warp ops. Injected as `PK_PCHAIN` in child env | — |
+| `SUZAKU_PCHAIN_PK` | P-Chain key for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
 | `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args | — |
 
 ### Safety / Guard
@@ -144,7 +144,7 @@ Priority order (first match wins in `runCli()`):
 
 **Safe multisig overlay** — independent of signing method. If `SUZAKU_SAFE_ADDRESS` is set, `--safe <address>` is appended. Audit log records composite method (e.g. `SUZAKU_PK+SUZAKU_SAFE_ADDRESS`).
 
-**P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Required only by `complete_*` two-phase lifecycle tools.
+**P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Intended for `complete_*` two-phase lifecycle tools. Known limitation: current CLI versions do not read `PK_PCHAIN` and sign P-Chain transactions with the main key instead.
 
 **Key sanitization**: `sanitizeOutput()` redacts any 64-char hex string from all outputs, logs, and audit entries.
 
