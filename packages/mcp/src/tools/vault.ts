@@ -12,15 +12,16 @@ export function registerVaultTools(server: McpServer, readOnly?: boolean) {
     'Get token balance for an address in a vault',
     {
       vaultAddress: Address.describe('Vault contract address'),
-      account: Address.optional().describe('Account address to query (defaults to signer)'),
+      account: Address.describe('Account address to query'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, account, network, rpcUrl }) => {
-      const args = ['vault', 'get-balance', vaultAddress];
-      if (account) args.push('--account', account);
-      return formatResult(await runCli(args, { network, rpcUrl }));
+      return formatResult(await runCli(
+        ['vault', 'get-balance', vaultAddress, '--account', account],
+        { network, rpcUrl },
+      ));
     },
   );
 
@@ -29,15 +30,16 @@ export function registerVaultTools(server: McpServer, readOnly?: boolean) {
     'Get active (staked) balance for an address in a vault',
     {
       vaultAddress: Address.describe('Vault contract address'),
-      account: Address.optional().describe('Account address to query (defaults to signer)'),
+      account: Address.describe('Account address to query'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, account, network, rpcUrl }) => {
-      const args = ['vault', 'get-active-balance', vaultAddress];
-      if (account) args.push('--account', account);
-      return formatResult(await runCli(args, { network, rpcUrl }));
+      return formatResult(await runCli(
+        ['vault', 'get-active-balance', vaultAddress, '--account', account],
+        { network, rpcUrl },
+      ));
     },
   );
 
@@ -81,15 +83,16 @@ export function registerVaultTools(server: McpServer, readOnly?: boolean) {
     {
       vaultAddress: Address.describe('Vault contract address'),
       epoch: z.string().describe('Epoch number (bigint)'),
-      account: Address.optional().describe('Account address to filter (defaults to signer)'),
+      account: Address.describe('Account address to filter'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ vaultAddress, epoch, account, network, rpcUrl }) => {
-      const args = ['vault', 'get-withdrawals', vaultAddress, epoch];
-      if (account) args.push('--account', account);
-      return formatResult(await runCli(args, { network, rpcUrl }));
+      return formatResult(await runCli(
+        ['vault', 'get-withdrawals', vaultAddress, epoch, '--account', account],
+        { network, rpcUrl },
+      ));
     },
   );
 

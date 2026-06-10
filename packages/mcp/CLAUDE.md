@@ -67,7 +67,7 @@ Only applies to write tools (where `options.privateKey === true`):
 
 Formula: `shouldSuggest = suggestEnv === 'true' || (suggestEnv !== 'false' && !isTestnet)`
 
-Testnet networks: `fuji`, `anvil`, `kitetestnet`. The `Network` schema defaults to `'mainnet'` when omitted.
+Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`, `kiteai` (unknown/custom networks are treated as mainnet-safe). The `Network` schema defaults to `'mainnet'` when omitted.
 
 ## Environment Variables
 
@@ -116,7 +116,7 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 | File | R | W | Key tools |
 |---|---|---|---|
-| `middleware.ts` | 16 | 4 | `discover_network`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_watcher` |
+| `middleware.ts` | 16 | 4 | `discover_network`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
 | `vault.ts` | 5 | 3 | `vault_get_balance`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
@@ -195,7 +195,7 @@ For cross-chain warp tools, add `pchainPrivateKey: true` and `timeout: 300_000` 
 
 | URI | Contents |
 |---|---|
-| `config://networks` | Supported networks + RPC endpoints (mainnet, fuji, anvil, kitetestnet) |
+| `config://networks` | Supported networks + RPC endpoints (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom) |
 | `config://contracts` | Discovery guide: entry point (`discover_network`), auto-resolve paths, manual tools, and non-discoverable contracts |
 
 ### Prompts (3)

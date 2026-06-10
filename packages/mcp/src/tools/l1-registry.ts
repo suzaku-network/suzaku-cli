@@ -17,17 +17,6 @@ export function extractL1s(result: CliResult): { balancer: string; middleware: s
     }));
   }
 
-  // Fallback: parse from receipt arrays — order matches registerL1(l1/balancer, middleware, metadataURL)
-  const receipt = data.receipt as { result?: unknown[] } | undefined;
-  if (receipt?.result && Array.isArray(receipt.result) && receipt.result.length >= 3) {
-    const [balancers, middlewares, urls] = receipt.result as [string[], string[], string[]];
-    return balancers.map((b, i) => ({
-      balancer: b,
-      middleware: middlewares[i],
-      metadataUrl: urls[i],
-    }));
-  }
-
   return [];
 }
 
@@ -54,22 +43,21 @@ export function registerL1RegistryTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'l1_registry_register',
-    'Register a new L1 in the L1Registry (requires SUZAKU_PK)',
+    'Register a new L1 in the L1Registry. The BalancerValidatorManager address is automatically resolved from the middleware contract on-chain (requires SUZAKU_PK)',
     {
-      balancerAddress: Address.describe('BalancerValidatorManager contract address'),
-      l1Middleware: Address.describe('L1Middleware contract address'),
+      middlewareAddress: Address.describe('L1Middleware contract address'),
       metadataUrl: z.string().describe('Metadata URL for the L1 (https or wss)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { destructiveHint: true },
-    async ({ balancerAddress, l1Middleware, metadataUrl, network, rpcUrl }) => {
+    async ({ middlewareAddress, metadataUrl, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
-      const guardErr = await guardWriteOperation('l1_registry_register', { balancerAddress, l1Middleware, metadataUrl, network, rpcUrl });
+      const guardErr = await guardWriteOperation('l1_registry_register', { middlewareAddress, metadataUrl, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['l1-registry', 'register', balancerAddress, l1Middleware, metadataUrl],
+        ['l1-registry', 'register', middlewareAddress, metadataUrl],
         { network, rpcUrl, privateKey: true },
       ));
     },

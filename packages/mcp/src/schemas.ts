@@ -10,7 +10,7 @@ export const Hex = z.string().regex(/^0x[0-9a-fA-F]+$/).describe('Hex string');
 export const NodeID = z.string().regex(/^NodeID-[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/).describe('NodeID in CB58 format (e.g. NodeID-xxx)');
 
 /** Target network */
-export const Network = z.enum(['mainnet', 'fuji', 'anvil', 'kitetestnet', 'custom']).default('mainnet').describe('Network to use');
+export const Network = z.enum(['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai', 'custom']).default('mainnet').describe('Network to use');
 
 /**
  * Check whether a hostname resolves to a private/loopback/link-local address.

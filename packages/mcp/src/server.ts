@@ -57,8 +57,10 @@ server.resource(
         _note: 'Static values mirrored from src/lib/chainList.ts. Use --rpc-url with network=custom to override.',
         mainnet: { chainId: 43114, name: 'Avalanche Mainnet', rpcUrl: 'https://api.avax.network/ext/bc/C/rpc' },
         fuji: { chainId: 43113, name: 'Avalanche Fuji Testnet', rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc' },
-        anvil: { name: 'Local Anvil (development)', rpcUrl: 'http://127.0.0.1:8545' },
-        kitetestnet: { chainId: 2368, name: 'Kite Testnet', rpcUrl: 'https://rpc-testnet.gokite.ai/' },
+        anvil: { chainId: 31337, name: 'Local Anvil (development)', rpcUrl: 'http://127.0.0.1:8545' },
+        kiteaitestnet: { chainId: 2368, name: 'Kite AI Testnet', rpcUrl: 'https://rpc-testnet.gokite.ai/' },
+        kiteai: { chainId: 2366, name: 'Kite AI', rpcUrl: 'https://rpc.gokite.ai' },
+        custom: { _note: 'Requires --rpc-url; chain ID and network bucket are resolved from the node at runtime' },
       }, null, 2),
       mimeType: 'application/json',
     }],
@@ -107,7 +109,7 @@ server.prompt(
   {
     middlewareAddress: z.string().describe('L1Middleware contract address'),
     operatorAddress: z.string().describe('Operator address to check'),
-    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kitetestnet)'),
+    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom)'),
   },
   ({ middlewareAddress, operatorAddress, network }) => ({
     messages: [{
@@ -124,7 +126,7 @@ server.prompt(
   'register-new-operator',
   'Step-by-step guide for the full operator registration workflow',
   {
-    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kitetestnet)'),
+    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom)'),
   },
   ({ network }) => ({
     messages: [{

@@ -14,7 +14,7 @@ import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
 /** Tool names known to be write operations (destructiveHint: true). */
 const WRITE_TOOLS = [
   // middleware
-  'middleware_register_operator', 'middleware_add_node', 'middleware_init_stake_update', 'middleware_weight_watcher',
+  'middleware_register_operator', 'middleware_add_node', 'middleware_init_stake_update', 'middleware_weight_sync',
   // vault
   'vault_deposit', 'vault_withdraw', 'vault_claim',
   // operator

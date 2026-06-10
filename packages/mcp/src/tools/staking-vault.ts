@@ -18,7 +18,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'info', stakingVaultAddress],
+        ['staking-vault', 'info', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -35,7 +35,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'fees-info', stakingVaultAddress],
+        ['staking-vault', 'info-fees', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -52,7 +52,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'operators-info', stakingVaultAddress],
+        ['staking-vault', 'info-operators', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -69,7 +69,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'validators-info', stakingVaultAddress],
+        ['staking-vault', 'info-validators', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -86,7 +86,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'delegators-info', stakingVaultAddress],
+        ['staking-vault', 'info-delegators', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -103,7 +103,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'withdrawals-info', stakingVaultAddress],
+        ['staking-vault', 'info-withdrawals', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -120,7 +120,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'epoch-info', stakingVaultAddress],
+        ['staking-vault', 'info-epoch', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -137,7 +137,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
     { readOnlyHint: true, idempotentHint: true },
     async ({ stakingVaultAddress, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['staking-vault', 'full-info', stakingVaultAddress],
+        ['staking-vault', 'info-full', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl },
       ));
     },
@@ -164,7 +164,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_deposit', { stakingVaultAddress, amount, minShares, network, rpcUrl }, 'amount');
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'deposit', stakingVaultAddress, amount, minShares],
+        ['staking-vault', 'deposit', amount, minShares, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -186,7 +186,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_request_withdrawal', { stakingVaultAddress, shares, network, rpcUrl }, 'shares');
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'request-withdrawal', stakingVaultAddress, shares],
+        ['staking-vault', 'request-withdrawal', shares, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -208,7 +208,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_claim_withdrawal', { stakingVaultAddress, requestId, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'claim-withdrawal', stakingVaultAddress, requestId],
+        ['staking-vault', 'claim-withdrawal', requestId, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -229,7 +229,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_process_epoch', { stakingVaultAddress, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'process-epoch', stakingVaultAddress],
+        ['staking-vault', 'process-epoch', '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -255,7 +255,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_add_operator', { stakingVaultAddress, operator, allocationBips, feeRecipient, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'add-operator', stakingVaultAddress, operator, allocationBips, feeRecipient],
+        ['staking-vault', 'add-operator', operator, allocationBips, feeRecipient, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -278,7 +278,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_update_operator_allocations', { stakingVaultAddress, operator, allocationBips, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'update-operator-allocations', stakingVaultAddress, operator, allocationBips],
+        ['staking-vault', 'update-operator-allocations', operator, allocationBips, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -308,7 +308,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_initiate_validator_registration', { stakingVaultAddress, nodeId, blsKey, stakeAmount, network, rpcUrl }, 'stakeAmount');
       if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'initiate-validator-registration',
-        stakingVaultAddress, nodeId, blsKey, stakeAmount];
+        nodeId, blsKey, stakeAmount, '--staking-vault-address', stakingVaultAddress];
       if (pchainRemainingBalanceOwnerThreshold !== undefined) args.push('--pchain-remaining-balance-owner-threshold', String(pchainRemainingBalanceOwnerThreshold));
       if (pchainDisableOwnerThreshold !== undefined) args.push('--pchain-disable-owner-threshold', String(pchainDisableOwnerThreshold));
       for (const addr of pchainRemainingBalanceOwnerAddresses ?? []) args.push('--pchain-remaining-balance-owner-address', addr);
@@ -336,7 +336,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_complete_validator_registration', { stakingVaultAddress, initiateTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-validator-registration',
-        stakingVaultAddress, initiateTxHash, blsProofOfPossession];
+        initiateTxHash, blsProofOfPossession, '--staking-vault-address', stakingVaultAddress];
       if (initialBalance) args.push('--initial-balance', initialBalance);
       if (skipWaitApi) args.push('--skip-wait-api');
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
@@ -361,7 +361,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_initiate_validator_removal', { stakingVaultAddress, nodeId, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'initiate-validator-removal', stakingVaultAddress, nodeId],
+        ['staking-vault', 'initiate-validator-removal', nodeId, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -385,7 +385,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_validator_removal', { stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['staking-vault', 'complete-validator-removal', stakingVaultAddress, initiateRemovalTxHash];
+      const args = ['staking-vault', 'complete-validator-removal', initiateRemovalTxHash, '--staking-vault-address', stakingVaultAddress];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const nid of nodeIds ?? []) args.push('--node-id', nid);
       if (initiateTx) args.push('--initiate-tx', initiateTx);
@@ -412,7 +412,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_initiate_delegator_registration', { stakingVaultAddress, nodeId, amount, network, rpcUrl }, 'amount');
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'initiate-delegator-registration', stakingVaultAddress, nodeId, amount],
+        ['staking-vault', 'initiate-delegator-registration', nodeId, amount, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -438,7 +438,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_complete_delegator_registration', { stakingVaultAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['staking-vault', 'complete-delegator-registration',
-        stakingVaultAddress, initiateTxHash, uptimeRpcUrl];
+        initiateTxHash, uptimeRpcUrl, '--staking-vault-address', stakingVaultAddress];
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
     },
   );
@@ -461,7 +461,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       const guardErr = await guardWriteOperation('staking_vault_initiate_delegator_removal', { stakingVaultAddress, delegationId, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['staking-vault', 'initiate-delegator-removal', stakingVaultAddress, delegationId],
+        ['staking-vault', 'initiate-delegator-removal', delegationId, '--staking-vault-address', stakingVaultAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -485,7 +485,7 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('staking_vault_complete_delegator_removal', { stakingVaultAddress, initiateRemovalTxHash, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['staking-vault', 'complete-delegator-removal', stakingVaultAddress, initiateRemovalTxHash];
+      const args = ['staking-vault', 'complete-delegator-removal', initiateRemovalTxHash, '--staking-vault-address', stakingVaultAddress];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const did of delegationIds ?? []) args.push('--delegation-id', did);
       if (initiateTx) args.push('--initiate-tx', initiateTx);

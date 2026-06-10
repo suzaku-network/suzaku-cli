@@ -160,7 +160,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, account, network, rpcUrl }) => {
       return formatResult(await runCli(
-        ['middleware', 'account-info', middlewareAddress, account],
+        ['middleware', 'info-account', middlewareAddress, account],
         { network, rpcUrl },
       ));
     },
@@ -950,8 +950,8 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
   // ── Operations ──
 
   server.tool(
-    'middleware_weight_watcher',
-    'Run the weight watcher orchestrator — long-running operation that processes pending stake updates across epochs, may run for several minutes (requires SUZAKU_PK)',
+    'middleware_weight_sync',
+    'Run the weight sync orchestrator — long-running operation that processes pending stake updates across epochs, may run for several minutes (requires SUZAKU_PK)',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       epochs: z.number().optional().describe('Number of epochs to process'),
@@ -963,9 +963,9 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     async ({ middlewareAddress, epochs, loopEpochs, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
-      const guardErr = await guardWriteOperation('middleware_weight_watcher', { middlewareAddress, epochs, loopEpochs, network, rpcUrl });
+      const guardErr = await guardWriteOperation('middleware_weight_sync', { middlewareAddress, epochs, loopEpochs, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['middleware', 'weight-watcher', middlewareAddress];
+      const args = ['middleware', 'weight-sync', middlewareAddress];
       if (epochs !== undefined) args.push('-e', String(epochs));
       if (loopEpochs !== undefined) args.push('-l', String(loopEpochs));
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, timeout: 300_000 }));

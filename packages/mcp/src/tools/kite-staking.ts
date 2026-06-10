@@ -12,8 +12,8 @@ export function registerKiteStakingTools(server: McpServer) {
     'Update staking configuration on a KiteStakingManager (requires SUZAKU_PK)',
     {
       kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
-      minimumStakeAmount: z.string().describe('Minimum stake amount in AVAX (human-readable, e.g. "25")'),
-      maximumStakeAmount: z.string().describe('Maximum stake amount in AVAX (human-readable)'),
+      minimumStakeAmount: z.string().describe('Minimum stake amount in KITE (human-readable, e.g. "25")'),
+      maximumStakeAmount: z.string().describe('Maximum stake amount in KITE (human-readable)'),
       minimumStakeDuration: z.string().describe('Minimum stake duration in seconds'),
       minimumDelegationFeeBips: z.string().describe('Minimum delegation fee in basis points'),
       maximumStakeMultiplier: z.string().describe('Maximum stake multiplier'),
@@ -27,8 +27,9 @@ export function registerKiteStakingTools(server: McpServer) {
       const guardErr = await guardWriteOperation('kite_update_staking_config', { kiteStakingManagerAddress, minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
-        ['kite-staking-manager', 'update-staking-config', kiteStakingManagerAddress,
-          minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier],
+        ['kite-staking-manager', 'update-staking-config',
+          minimumStakeAmount, maximumStakeAmount, minimumStakeDuration, minimumDelegationFeeBips, maximumStakeMultiplier,
+          '--staking-manager-address', kiteStakingManagerAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -46,7 +47,7 @@ export function registerKiteStakingTools(server: McpServer) {
       delegationFeeBips: z.string().describe('Delegation fee in basis points'),
       minStakeDuration: z.string().describe('Minimum stake duration in seconds'),
       rewardRecipient: Address.describe('Address to receive staking rewards'),
-      stakeAmount: z.string().describe('Stake amount in AVAX (human-readable) — sent as msg.value'),
+      stakeAmount: z.string().describe('Stake amount in KITE (human-readable) — sent as msg.value'),
       pchainRemainingBalanceOwnerThreshold: z.number().optional().describe('P-Chain remaining balance owner threshold (default: 1)'),
       pchainDisableOwnerThreshold: z.number().optional().describe('P-Chain disable owner threshold (default: 1)'),
       pchainRemainingBalanceOwnerAddresses: z.array(z.string()).optional().describe('P-Chain remaining balance owner addresses (hex)'),
@@ -61,7 +62,8 @@ export function registerKiteStakingTools(server: McpServer) {
       const guardErr = await guardWriteOperation('kite_initiate_validator_registration', { kiteStakingManagerAddress, nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount, network, rpcUrl }, 'stakeAmount');
       if (guardErr) return formatGuardError(guardErr);
       const args = ['kite-staking-manager', 'initiate-validator-registration',
-        kiteStakingManagerAddress, nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount];
+        nodeId, blsKey, delegationFeeBips, minStakeDuration, rewardRecipient, stakeAmount,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (pchainRemainingBalanceOwnerThreshold !== undefined) args.push('--pchain-remaining-balance-owner-threshold', String(pchainRemainingBalanceOwnerThreshold));
       if (pchainDisableOwnerThreshold !== undefined) args.push('--pchain-disable-owner-threshold', String(pchainDisableOwnerThreshold));
       for (const addr of pchainRemainingBalanceOwnerAddresses ?? []) args.push('--pchain-remaining-balance-owner-address', addr);
@@ -77,7 +79,7 @@ export function registerKiteStakingTools(server: McpServer) {
       kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
       initiateTxHash: Hex.describe('Transaction hash from initiate-validator-registration'),
       blsProofOfPossession: z.string().regex(/^0x[0-9a-fA-F]{192}$/).describe('BLS Proof of Possession (96-byte hex)'),
-      initialBalance: z.string().optional().describe('Initial nAVAX balance for node (default: "0.01")'),
+      initialBalance: z.string().optional().describe('Initial balance for the node’s continuous P-Chain fee, in whole native tokens (default: "0.01")'),
       skipWaitApi: z.boolean().optional().describe('Skip waiting for validator to appear on P-Chain API'),
       network: Network,
       rpcUrl: RpcUrl,
@@ -89,7 +91,8 @@ export function registerKiteStakingTools(server: McpServer) {
       const guardErr = await guardWriteOperation('kite_complete_validator_registration', { kiteStakingManagerAddress, initiateTxHash, blsProofOfPossession, initialBalance, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['kite-staking-manager', 'complete-validator-registration',
-        kiteStakingManagerAddress, initiateTxHash, blsProofOfPossession];
+        initiateTxHash, blsProofOfPossession,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (initialBalance) args.push('--initial-balance', initialBalance);
       if (skipWaitApi) args.push('--skip-wait-api');
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
@@ -114,7 +117,8 @@ export function registerKiteStakingTools(server: McpServer) {
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('kite_initiate_validator_removal', { kiteStakingManagerAddress, nodeId, includeUptimeProof, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['kite-staking-manager', 'initiate-validator-removal', kiteStakingManagerAddress, nodeId];
+      const args = ['kite-staking-manager', 'initiate-validator-removal', nodeId,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (includeUptimeProof) args.push('--include-uptime-proof');
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));
     },
@@ -138,7 +142,8 @@ export function registerKiteStakingTools(server: McpServer) {
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('kite_complete_validator_removal', { kiteStakingManagerAddress, initiateRemovalTxHash, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['kite-staking-manager', 'complete-validator-removal', kiteStakingManagerAddress, initiateRemovalTxHash];
+      const args = ['kite-staking-manager', 'complete-validator-removal', initiateRemovalTxHash,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const nid of nodeIds ?? []) args.push('--node-id', nid);
       for (const tx of initiateTxHashes ?? []) args.push('--initiate-tx', tx);
@@ -155,7 +160,7 @@ export function registerKiteStakingTools(server: McpServer) {
       kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
       nodeId: NodeID,
       rewardRecipient: Address.describe('Address to receive delegation rewards'),
-      stakeAmount: z.string().describe('Delegation amount in AVAX (human-readable) — sent as msg.value'),
+      stakeAmount: z.string().describe('Delegation amount in KITE (human-readable) — sent as msg.value'),
       network: Network,
       rpcUrl: RpcUrl,
     },
@@ -167,7 +172,8 @@ export function registerKiteStakingTools(server: McpServer) {
       if (guardErr) return formatGuardError(guardErr);
       return formatResult(await runCli(
         ['kite-staking-manager', 'initiate-delegator-registration',
-          kiteStakingManagerAddress, nodeId, rewardRecipient, stakeAmount],
+          nodeId, rewardRecipient, stakeAmount,
+          '--staking-manager-address', kiteStakingManagerAddress],
         { network, rpcUrl, privateKey: true },
       ));
     },
@@ -190,7 +196,8 @@ export function registerKiteStakingTools(server: McpServer) {
       const guardErr = await guardWriteOperation('kite_complete_delegator_registration', { kiteStakingManagerAddress, initiateTxHash, uptimeRpcUrl, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['kite-staking-manager', 'complete-delegator-registration',
-        kiteStakingManagerAddress, initiateTxHash, uptimeRpcUrl];
+        initiateTxHash, uptimeRpcUrl,
+        '--staking-manager-address', kiteStakingManagerAddress];
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
     },
   );
@@ -217,7 +224,8 @@ export function registerKiteStakingTools(server: McpServer) {
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('kite_initiate_delegator_removal', { kiteStakingManagerAddress, delegationId, includeUptimeProof, uptimeRpcUrl, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
-      const args = ['kite-staking-manager', 'initiate-delegator-removal', kiteStakingManagerAddress, delegationId];
+      const args = ['kite-staking-manager', 'initiate-delegator-removal', delegationId,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (includeUptimeProof) args.push('--include-uptime-proof');
       if (uptimeRpcUrl) args.push('--rpc-url', uptimeRpcUrl);
       return formatResult(await runCli(args, { network, rpcUrl: uptimeRpcUrl ? undefined : rpcUrl, privateKey: true }));
@@ -247,7 +255,8 @@ export function registerKiteStakingTools(server: McpServer) {
       const guardErr = await guardWriteOperation('kite_complete_delegator_removal', { kiteStakingManagerAddress, initiateRemovalTxHash, uptimeRpcUrl, skipWaitApi, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['kite-staking-manager', 'complete-delegator-removal',
-        kiteStakingManagerAddress, initiateRemovalTxHash, uptimeRpcUrl];
+        initiateRemovalTxHash, uptimeRpcUrl,
+        '--staking-manager-address', kiteStakingManagerAddress];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const did of delegationIds ?? []) args.push('--delegation-id', did);
       if (initiateTx) args.push('--initiate-tx', initiateTx);

@@ -59,7 +59,8 @@ describe('Network schema', () => {
     expect(Network.parse('mainnet')).toBe('mainnet');
     expect(Network.parse('fuji')).toBe('fuji');
     expect(Network.parse('anvil')).toBe('anvil');
-    expect(Network.parse('kitetestnet')).toBe('kitetestnet');
+    expect(Network.parse('kiteaitestnet')).toBe('kiteaitestnet');
+    expect(Network.parse('kiteai')).toBe('kiteai');
   });
 
   it('defaults to mainnet when undefined', () => {

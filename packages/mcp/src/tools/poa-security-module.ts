@@ -44,7 +44,7 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       poaSecurityModuleAddress: Address.describe('PoA Security Module contract address'),
       addNodeTxHash: Hex.describe('Transaction hash from add-node (initiate validator registration)'),
       blsProofOfPossession: z.string().regex(/^0x[0-9a-fA-F]{192}$/).describe('BLS Proof of Possession (96-byte hex)'),
-      initialBalance: z.string().optional().describe('Initial nAVAX balance for node (default: "0.01")'),
+      initialBalance: z.string().optional().describe('Initial AVAX balance for node (default: "0.01")'),
       skipWaitApi: z.boolean().optional().describe('Skip waiting for validator to appear on P-Chain API'),
       network: Network,
       rpcUrl: RpcUrl,
@@ -92,12 +92,11 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       removeNodeTxHash: Hex.describe('Transaction hash from remove-node (initiate validator removal)'),
       skipWaitApi: z.boolean().optional().describe('Skip waiting for validator removal on P-Chain API'),
       nodeIds: z.array(z.string()).optional().describe('Filter which validators to process (NodeID format)'),
-      addNodeTxHashes: z.array(z.string()).optional().describe('Add-node transaction hashes for justification'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { destructiveHint: true, openWorldHint: true },
-    async ({ poaSecurityModuleAddress, removeNodeTxHash, skipWaitApi, nodeIds, addNodeTxHashes, network, rpcUrl }) => {
+    async ({ poaSecurityModuleAddress, removeNodeTxHash, skipWaitApi, nodeIds, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
       const guardErr = await guardWriteOperation('poa_complete_validator_removal', { poaSecurityModuleAddress, removeNodeTxHash, skipWaitApi, network, rpcUrl });
@@ -105,7 +104,6 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
       const args = ['poa', 'complete-validator-removal', poaSecurityModuleAddress, removeNodeTxHash];
       if (skipWaitApi) args.push('--skip-wait-api');
       for (const nid of nodeIds ?? []) args.push('--node-id', nid);
-      for (const tx of addNodeTxHashes ?? []) args.push('--add-node-tx', tx);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
     },
   );
@@ -139,19 +137,17 @@ export function registerPoaSecurityModuleTools(server: McpServer) {
     {
       poaSecurityModuleAddress: Address.describe('PoA Security Module contract address'),
       weightUpdateTxHash: Hex.describe('Transaction hash from init-weight-update'),
-      skipWaitApi: z.boolean().optional().describe('Skip waiting for weight update on P-Chain API'),
       nodeIds: z.array(z.string()).optional().describe('Filter which validators to process (NodeID format)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { destructiveHint: true, openWorldHint: true },
-    async ({ poaSecurityModuleAddress, weightUpdateTxHash, skipWaitApi, nodeIds, network, rpcUrl }) => {
+    async ({ poaSecurityModuleAddress, weightUpdateTxHash, nodeIds, network, rpcUrl }) => {
       const pkErr = requireSigner();
       if (pkErr) return pkErr;
-      const guardErr = await guardWriteOperation('poa_complete_weight_update', { poaSecurityModuleAddress, weightUpdateTxHash, skipWaitApi, network, rpcUrl });
+      const guardErr = await guardWriteOperation('poa_complete_weight_update', { poaSecurityModuleAddress, weightUpdateTxHash, network, rpcUrl });
       if (guardErr) return formatGuardError(guardErr);
       const args = ['poa', 'complete-weight-update', poaSecurityModuleAddress, weightUpdateTxHash];
-      if (skipWaitApi) args.push('--skip-wait-api');
       for (const nid of nodeIds ?? []) args.push('--node-id', nid);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true, pchainPrivateKey: true, timeout: WARP_TIMEOUT }));
     },

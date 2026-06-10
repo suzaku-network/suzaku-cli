@@ -81,6 +81,29 @@ const CLI_PATH = resolveCliPath();
 /** Grace period before sending SIGKILL after SIGTERM (5 seconds) */
 const SIGKILL_GRACE_MS = 5_000;
 
+/** Networks where write tools may execute directly — anything else is treated as mainnet-safe */
+const TESTNET_NETWORKS = new Set(['fuji', 'anvil', 'kiteaitestnet']);
+
+/** Parse a JSON object out of subprocess stderr — the CLI routes its --json error payload through console.error */
+export function tryParseJsonBlock(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {}
+  // stderr may mix plain log lines with the pretty-printed JSON payload — extract the outermost block
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1));
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Strip private key material (64-char hex strings) from output to prevent leakage */
 export function sanitizeOutput(text: string): string {
   return text
@@ -304,7 +327,8 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
   // Network-aware suggest / show+confirm for write operations
   if (options.privateKey) {
-    const isTestnet = options.network != null && options.network !== 'mainnet';
+    // Explicit testnet allowlist — unknown networks (mainnet, kiteai, custom RPCs) get mainnet-safe handling
+    const isTestnet = options.network != null && TESTNET_NETWORKS.has(options.network);
     const suggestEnv = process.env.SUZAKU_MCP_SUGGEST;
 
     // Suggest mode: default for mainnet, opt-in for testnet via SUGGEST=true
@@ -416,6 +440,16 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       }
 
       if (code !== 0) {
+        // The CLI writes its --json error payload to stderr — recover the structured data
+        const errData = tryParseJsonBlock(stderr);
+        if (errData !== null) {
+          resolve({
+            success: false,
+            data: errData,
+            error: sanitizeOutput(String(errData.error ?? stderr.trim())),
+          });
+          return;
+        }
         resolve({
           success: false,
           data: null,
