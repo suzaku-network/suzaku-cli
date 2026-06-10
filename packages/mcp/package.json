@@ -42,7 +42,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.12.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@suzaku-network/suzaku-cli": "workspace:*",
     "zod": "^3.25.0"
   },
