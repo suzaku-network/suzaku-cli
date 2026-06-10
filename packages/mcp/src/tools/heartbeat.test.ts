@@ -233,6 +233,19 @@ describe('runAlertChecks', () => {
     expect(checks.find((c) => c.name === 'stuck_two_phase')?.status).toBe('warn');
   });
 
+  it('warns on stalled distribution only past the earliest-offset boundary (constant-driven)', () => {
+    const input = baseInput();
+    input.claimability = [
+      // N-2 = first distributable epoch: distributing is normal, no warning yet
+      { ...row(36, '100', true, false), setAlot: '100', setTxCount: 1, status: 'distributing', statusHuman: '' },
+      // N-3: distributable for over an epoch and still incomplete → stalled
+      { ...row(35, '100', true, false), setAlot: '100', setTxCount: 1, status: 'distributing', statusHuman: '' },
+    ];
+    const stalled = runAlertChecks(input).filter((c) => c.name === 'distribution_stalled');
+    expect(stalled).toHaveLength(1);
+    expect(stalled[0].epoch).toBe(35);
+  });
+
   it('escalates accumulation and funding_closed rows from the claimability table', () => {
     const input = baseInput();
     input.claimability = [

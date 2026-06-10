@@ -328,7 +328,7 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
         break;
       }
       case 'distributing':
-        if (row.epoch < timing.currentEpoch - 2) {
+        if (row.epoch < timing.currentEpoch - input.constants.distributionEarliestOffset) {
           checks.push({ name: 'distribution_stalled', epoch: row.epoch, status: 'warn', detail: `distribution for epoch ${row.epoch} incomplete past its earliest window`, human: `⚠️ epoch ${row.epoch} distribution started but incomplete` });
         }
         break;
@@ -452,8 +452,8 @@ export function registerHeartbeatTools(server: McpServer) {
       const _warnings: string[] = [];
       const now = Math.floor(Date.now() / 1000);
 
-      // Phase 0: epoch config (includes current epoch)
-      const epochConfigResult = await runCli(['middleware', 'get-epoch-config', middlewareAddress], opts);
+      // Phase 0: epoch config (includes current epoch) — skipDedup so the whole run anchors on a fresh epoch
+      const epochConfigResult = await runCli(['middleware', 'get-epoch-config', middlewareAddress], { ...opts, skipDedup: true });
       const epochConfig = extractData(epochConfigResult, 'get-epoch-config', _warnings).epochConfig as {
         epoch: number; epochDuration: number; updateWindow: number; lastNodeStakeUpdateEpoch: number;
       } | undefined;
@@ -522,10 +522,15 @@ export function registerHeartbeatTools(server: McpServer) {
         .map((r) => r.epoch)
         .slice(0, 5);
       const uptimeOperators = uptimeTrackerAddress ? operators.slice(0, 2) : [];
-      const phase3 = await Promise.all([
-        ...distributionEpochs.map((ep) => runCli(['rewards', 'get-distribution-batch', rewardsAddress, String(ep)], opts)),
-        ...uptimeOperators.map((op) => runCli(['uptime', 'check-operator-uptime-set', uptimeTrackerAddress!, op, String(Math.max(0, currentEpoch - 1))], opts)),
-      ]);
+      // Chunked to leave subprocess slots free for concurrent external tool calls
+      const phase3Calls = [
+        ...distributionEpochs.map((ep) => () => runCli(['rewards', 'get-distribution-batch', rewardsAddress, String(ep)], opts)),
+        ...uptimeOperators.map((op) => () => runCli(['uptime', 'check-operator-uptime-set', uptimeTrackerAddress!, op, String(Math.max(0, currentEpoch - 1))], opts)),
+      ];
+      const phase3: CliResult[] = [];
+      for (let i = 0; i < phase3Calls.length; i += 4) {
+        phase3.push(...await Promise.all(phase3Calls.slice(i, i + 4).map((call) => call())));
+      }
 
       const distributionByEpoch: Record<number, DistributionProgress> = {};
       distributionEpochs.forEach((ep, i) => {

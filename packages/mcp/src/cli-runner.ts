@@ -164,6 +164,8 @@ export interface RunCliOptions {
   timeout?: number;
   /** Skip rate limiter for internal composite fan-out calls (concurrency limiter still applies) */
   skipLimiter?: boolean;
+  /** Skip the dedup cache for calls whose result anchors follow-up reads (e.g. current epoch) */
+  skipDedup?: boolean;
 }
 
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
@@ -268,7 +270,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   const dedupWindowMs = Number(process.env.SUZAKU_MCP_DEDUP_WINDOW_MS ?? 60_000);
   const isWrite = options.privateKey === true;
   const dedupKey = `${JSON.stringify(args)}|${options.network ?? ''}|${options.rpcUrl ?? ''}`;
-  const cached = !isWrite ? dedupCache.get(dedupKey) : undefined;
+  const cached = !isWrite && !options.skipDedup ? dedupCache.get(dedupKey) : undefined;
   if (cached && Date.now() - cached.ts < dedupWindowMs) {
     const cachedResult: CliResult = {
       ...cached.result,
