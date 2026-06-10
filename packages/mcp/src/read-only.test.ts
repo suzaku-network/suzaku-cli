@@ -13,6 +13,7 @@ import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
 import { registerLstWrapperTools } from './tools/lst-wrapper.js';
 import { registerVaultHelperTools } from './tools/vault-helper.js';
 import { registerUptimeTools } from './tools/uptime.js';
+import { registerHeartbeatTools } from './tools/heartbeat.js';
 
 /** Tool names known to be write operations (destructiveHint: true). */
 const WRITE_TOOLS = [
@@ -73,6 +74,7 @@ function registerAllTools(server: McpServer, readOnly: boolean) {
   registerLstWrapperTools(server, readOnly);
   registerVaultHelperTools(server);
   registerUptimeTools(server, readOnly);
+  registerHeartbeatTools(server);
 }
 
 describe('--read-only mode', () => {
