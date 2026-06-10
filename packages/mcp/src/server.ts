@@ -26,6 +26,9 @@ import { registerKiteStakingTools } from './tools/kite-staking.js';
 import { registerStakingVaultTools } from './tools/staking-vault.js';
 import { registerBalancerTools } from './tools/balancer.js';
 import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
+import { registerLstWrapperTools } from './tools/lst-wrapper.js';
+import { registerVaultHelperTools } from './tools/vault-helper.js';
+import { registerUptimeTools } from './tools/uptime.js';
 
 const readOnly = process.argv.includes('--read-only');
 
@@ -174,6 +177,67 @@ server.prompt(
   },
 );
 
+server.prompt(
+  'epoch-rewards-runbook',
+  'Step-by-step runbook for the Dexalot weekly epoch rewards workflow',
+  {
+    middlewareAddress: z.string().describe('L1Middleware contract address'),
+    rewardsAddress: z.string().describe('RewardsNativeToken contract address'),
+    lstWrapperAddress: z.string().optional().describe('LSTWrapper contract address (e.g. wsALOT) — required for the harvest step'),
+    uptimeTrackerAddress: z.string().optional().describe('UptimeTracker contract address — required for uptime steps 1 and 2'),
+    epoch: z.string().optional().describe('Epoch number to process (e.g. "35"). If omitted, query the current epoch first using middleware_get_current_epoch.'),
+  },
+  ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, epoch }) => ({
+    messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: [
+          `Run the Dexalot weekly epoch rewards workflow for middleware ${middlewareAddress} and rewards contract ${rewardsAddress}${epoch ? ` (epoch ${epoch})` : ''}.`,
+          '',
+          `If no epoch was provided, start by calling middleware_get_current_epoch with middlewareAddress=${middlewareAddress} to determine which epoch to process.`,
+          '',
+          'Follow these steps in order:',
+          '',
+          `Step 1 — Report validator uptimes (call uptime_report_validator once per active validator):`,
+          uptimeTrackerAddress
+            ? `  • uptimeTrackerAddress: ${uptimeTrackerAddress}`
+            : `  • You need the UptimeTracker address — check if it is known or ask the user.`,
+          `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
+          `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
+          '',
+          `Step 2 — Compute operator uptime:`,
+          `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
+          `  • This must be called once per operator after all validator uptime reports for that operator are submitted.`,
+          '',
+          `Step 3 — Diagnose epoch rewards state before setting amounts (CRITICAL):`,
+          `  • Call rewards_epoch_diagnosis with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, and the epoch.`,
+          `  • WARNING: rewards_set_amount accumulates on-chain — each call ADDS to the existing total rather than replacing it.`,
+          `    If set-amount was already called for this epoch, calling it again will double-count rewards.`,
+          `    The diagnosis output will warn you if eventCount > 1 (accumulation already happened) or if the epoch has existing rewards.`,
+          `  • Only proceed to Step 4 if the diagnosis confirms zero or the expected rewards amount for this epoch.`,
+          '',
+          `Step 4 — Set rewards amount:`,
+          `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
+          `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
+          '',
+          `Step 5 — Distribute rewards:`,
+          `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
+          `  • After each distribute call, check completion with rewards_get_distribution_batch. Repeat if isComplete is false.`,
+          '',
+          `Step 6 — Harvest into the LST wrapper:`,
+          lstWrapperAddress
+            ? `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`
+            : `  • You need the LSTWrapper address (e.g. wsALOT contract) — check if it is known or ask the user.`,
+          `  • Harvest is permissionless — any signer can call it. It compounds accrued staking rewards as vault shares, raising the wsALOT exchange rate.`,
+          '',
+          'Ask me for any required parameters that are missing before proceeding with each step.',
+        ].join('\n'),
+      },
+    }],
+  }),
+);
+
 // ── Health Check ──
 
 server.tool(
@@ -255,12 +319,15 @@ registerMiddlewareTools(server, readOnly);
 registerVaultTools(server, readOnly);
 registerOperatorTools(server, readOnly);
 registerL1RegistryTools(server, readOnly);
-if (!readOnly) registerOptInTools(server);
+registerOptInTools(server, readOnly);
 registerRewardsTools(server, readOnly);
-if (!readOnly) registerKiteStakingTools(server);
+registerKiteStakingTools(server, readOnly);
 registerStakingVaultTools(server, readOnly);
 registerBalancerTools(server, readOnly);
 if (!readOnly) registerPoaSecurityModuleTools(server);
+registerLstWrapperTools(server, readOnly);
+registerVaultHelperTools(server);
+registerUptimeTools(server, readOnly);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

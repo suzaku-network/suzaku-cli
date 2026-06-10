@@ -96,6 +96,59 @@ export function registerVaultTools(server: McpServer, readOnly?: boolean) {
     },
   );
 
+  server.tool(
+    'vault_get_active_stake',
+    'Get the current total active stake (raw wei) held in a vault — the aggregate collateral actively securing the network right now',
+    {
+      vaultAddress: Address.describe('Vault contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ vaultAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['vault', 'get-active-stake', vaultAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'vault_get_active_stake_at_epoch',
+    'Get the total active stake (raw wei) in a vault at a specific past epoch — use this to audit historical stake levels or diagnose reward calculations',
+    {
+      vaultAddress: Address.describe('Vault contract address'),
+      epoch: z.string().describe('Epoch number (bigint)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ vaultAddress, epoch, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['vault', 'get-active-stake-at-epoch', vaultAddress, epoch],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'vault_get_total_supply_at_epoch',
+    'Get the vault token supply snapshot (raw wei) at a specific epoch — this is the denominator used for per-epoch reward share calculations; compare against active stake at the same epoch to understand per-token reward ratios',
+    {
+      vaultAddress: Address.describe('Vault contract address'),
+      epoch: z.string().describe('Epoch number (bigint)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ vaultAddress, epoch, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['vault', 'get-total-supply-at-epoch', vaultAddress, epoch],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
   if (readOnly) return;
 
   // ── Writes ──

@@ -4,7 +4,49 @@ import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-ru
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
-export function registerOptInTools(server: McpServer) {
+export function registerOptInTools(server: McpServer, readOnly?: boolean) {
+  // ── Reads ──
+
+  server.tool(
+    'check_opt_in_l1',
+    'Pre-flight check: answers "is operator X currently opted in to this L1?" — run before registering an operator or diagnosing why an operator is inactive on a validator manager.',
+    {
+      operator: Address.describe('Operator address to check'),
+      validatorManagerAddress: Address.describe('L1 validator manager contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ operator, validatorManagerAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['opt-in', 'check-l1', operator, validatorManagerAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'check_opt_in_vault',
+    'Pre-flight check: answers "is operator X currently opted in to this vault?" — run before staking or diagnosing why an operator is not receiving delegated stake from a vault.',
+    {
+      operator: Address.describe('Operator address to check'),
+      vaultAddress: Address.describe('Vault contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ operator, vaultAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['opt-in', 'check-vault', operator, vaultAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  if (readOnly) return;
+
+  // ── Writes ──
+
   server.tool(
     'opt_in_l1',
     'Opt an operator into an L1 — required before the operator can participate in that L1\'s validator set (requires SUZAKU_PK)',

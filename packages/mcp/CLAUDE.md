@@ -1,6 +1,6 @@
 # @suzaku/mcp
 
-MCP server exposing 85 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 121 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
 
 ## Architecture
 
@@ -11,16 +11,19 @@ src/
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
 ├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl (with SSRF blocklist)
 ├── tools/
-│   ├── middleware.ts    # 20 tools — L1Middleware contract (16 read: 9 atomic + 7 composite, 4 write)
-│   ├── vault.ts         # 8 tools — Symbiotic vault (5 read, 3 write)
+│   ├── middleware.ts    # 22 tools — L1Middleware contract (18 read: 9 atomic + 9 composite, 4 write)
+│   ├── vault.ts         # 11 tools — Symbiotic vault (8 read, 3 write)
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
-│   ├── opt-in.ts        # 4 tools — operator opt-in/out (all write)
-│   ├── rewards.ts       # 3 tools — Rewards contract (1 read, 2 write)
-│   ├── kite-staking.ts  # 9 tools — KiteStakingManager (all write, two-phase lifecycle)
+│   ├── opt-in.ts        # 6 tools — operator opt-in/out (2 read, 4 write)
+│   ├── rewards.ts       # 13 tools — Rewards contract (9 read, 4 write)
+│   ├── kite-staking.ts  # 12 tools — KiteStakingManager (3 read, 9 write, two-phase lifecycle)
 │   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
 │   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
-│   └── poa-security-module.ts # 6 tools — PoASecurityModule (all write, two-phase lifecycle)
+│   ├── poa-security-module.ts # 6 tools — PoASecurityModule (all write, two-phase lifecycle)
+│   ├── lst-wrapper.ts   # 9 tools — LSTWrapper/wsALOT (6 read, 3 write)
+│   ├── vault-helper.ts  # 4 tools — VaultHelper (all read)
+│   └── uptime.ts        # 3 tools — UptimeTracker (1 read, 2 write)
 ```
 
 **Data flow** (write tool):
@@ -112,20 +115,23 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 ## Tool Catalog
 
-85 tools total (36 read, 49 write):
+121 tools total (65 read, 56 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
-| `middleware.ts` | 16 | 4 | `discover_network`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
-| `vault.ts` | 5 | 3 | `vault_get_balance`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
+| `middleware.ts` | 18 | 4 | `discover_network`, `middleware_info`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_get_operator_used_stake_per_epoch`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
+| `vault.ts` | 8 | 3 | `vault_get_balance`, `vault_get_active_stake`, `vault_get_active_stake_at_epoch`, `vault_get_total_supply_at_epoch`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
-| `opt-in.ts` | 0 | 4 | `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
-| `rewards.ts` | 1 | 2 | `rewards_get_epoch_rewards`, `rewards_distribute`, `rewards_claim` |
-| `kite-staking.ts` | 0 | 9 | `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
+| `opt-in.ts` | 2 | 4 | `check_opt_in_l1`, `check_opt_in_vault`, `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
+| `rewards.ts` | 9 | 4 | `rewards_get_epoch_rewards`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed` |
+| `kite-staking.ts` | 3 | 9 | `kite_info`, `kite_info_validator`, `kite_info_delegator`, `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
 | `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
 | `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
 | `poa-security-module.ts` | 0 | 6 | `poa_add_node`, `poa_complete_validator_registration`, `poa_remove_node`, `poa_complete_validator_removal`, `poa_init_weight_update`, `poa_complete_weight_update` |
+| `lst-wrapper.ts` | 6 | 3 | `lst_wrapper_info`, `lst_wrapper_get_balance`, `lst_wrapper_preview_deposit`, `lst_wrapper_preview_redeem`, `lst_wrapper_max_deposit`, `lst_wrapper_paused`, `lst_wrapper_deposit`, `lst_wrapper_redeem`, `lst_wrapper_harvest` |
+| `vault-helper.ts` | 4 | 0 | `vault_helper_info`, `vault_helper_get_pending_withdraws`, `vault_helper_get_claimable_reward`, `vault_helper_get_latest_distributed_rewards` |
+| `uptime.ts` | 1 | 2 | `uptime_get_validation_uptime_message`, `uptime_report_validator`, `uptime_compute_operator_uptime` |
 | `server.ts` | 1 | 0 | `health_check` — verifies CLI path, signer config, optional network connectivity |
 
 ## Signing Methods
@@ -198,13 +204,14 @@ For cross-chain warp tools, add `pchainPrivateKey: true` and `timeout: 300_000` 
 | `config://networks` | Supported networks + RPC endpoints (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom) |
 | `config://contracts` | Discovery guide: entry point (`discover_network`), auto-resolve paths, manual tools, and non-discoverable contracts |
 
-### Prompts (3)
+### Prompts (4)
 
 | Name | Purpose | Key params |
 |---|---|---|
 | `check-operator-health` | Run 5 read tools to assess operator health; suggests `discover_network` if middleware unknown | `middlewareAddress`, `operatorAddress` |
 | `register-new-operator` | Step-by-step 5-phase registration; starts with `discover_network` for address discovery | `network?` |
 | `validator-lifecycle` | Two-phase validator/delegator registration or removal; suggests `discover_network` + `middleware_operator_dashboard` for address resolution | `operation` (`register`/`remove`), `manager?` (`kite`/`vault`) |
+| `epoch-rewards-runbook` | 6-step weekly epoch workflow: report validator uptimes → compute operator uptime → diagnose rewards state (warns on set-amount accumulation) → set rewards → distribute → harvest LST wrapper | `middlewareAddress`, `rewardsAddress`, `lstWrapperAddress?`, `uptimeTrackerAddress?`, `epoch?` |
 
 ## Build & Verify
 
@@ -227,6 +234,6 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 6. **Dedup is write-agnostic** — Cache key is args+network+rpcUrl. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
 7. **Two-phase lifecycle needs P-Chain key** — `complete_*` tools require `SUZAKU_PCHAIN_PK` and use 5-minute timeout.
 8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` (or `SUZAKU_MCP_AUDIT_DIR`) via non-blocking `appendFile`. Auto-rotates at `SUZAKU_MCP_AUDIT_MAX_MB` (default 50 MB), keeping max 2 files. Failures are silently ignored.
-9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All 37 read tools inherit this via shared schema.
+9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.

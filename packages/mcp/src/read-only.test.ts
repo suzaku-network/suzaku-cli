@@ -10,6 +10,9 @@ import { registerKiteStakingTools } from './tools/kite-staking.js';
 import { registerStakingVaultTools } from './tools/staking-vault.js';
 import { registerBalancerTools } from './tools/balancer.js';
 import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
+import { registerLstWrapperTools } from './tools/lst-wrapper.js';
+import { registerVaultHelperTools } from './tools/vault-helper.js';
+import { registerUptimeTools } from './tools/uptime.js';
 
 /** Tool names known to be write operations (destructiveHint: true). */
 const WRITE_TOOLS = [
@@ -43,6 +46,12 @@ const WRITE_TOOLS = [
   // poa-security-module (all write)
   'poa_add_node', 'poa_complete_validator_registration', 'poa_remove_node',
   'poa_complete_validator_removal', 'poa_init_weight_update', 'poa_complete_weight_update',
+  // rewards (new write tools)
+  'rewards_set_amount', 'rewards_claim_undistributed',
+  // lst-wrapper (write subset)
+  'lst_wrapper_deposit', 'lst_wrapper_redeem', 'lst_wrapper_harvest',
+  // uptime (write subset)
+  'uptime_report_validator', 'uptime_compute_operator_uptime',
 ];
 
 function getToolNames(server: McpServer): string[] {
@@ -55,12 +64,15 @@ function registerAllTools(server: McpServer, readOnly: boolean) {
   registerVaultTools(server, readOnly);
   registerOperatorTools(server, readOnly);
   registerL1RegistryTools(server, readOnly);
-  if (!readOnly) registerOptInTools(server);
+  registerOptInTools(server, readOnly);
   registerRewardsTools(server, readOnly);
-  if (!readOnly) registerKiteStakingTools(server);
+  registerKiteStakingTools(server, readOnly);
   registerStakingVaultTools(server, readOnly);
   registerBalancerTools(server, readOnly);
   if (!readOnly) registerPoaSecurityModuleTools(server);
+  registerLstWrapperTools(server, readOnly);
+  registerVaultHelperTools(server);
+  registerUptimeTools(server, readOnly);
 }
 
 describe('--read-only mode', () => {
@@ -82,8 +94,8 @@ describe('--read-only mode', () => {
     for (const tool of tools) {
       expect(WRITE_TOOLS).not.toContain(tool);
     }
-    // Should have a meaningful number of read tools (37 read tools expected)
-    expect(tools.length).toBeGreaterThanOrEqual(35);
+    // Should have a meaningful number of read tools (64 read tools expected across all tool files)
+    expect(tools.length).toBeGreaterThanOrEqual(60);
   });
 
   it('registers all tools (read + write) when readOnly is false', () => {

@@ -4,7 +4,67 @@ import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } f
 import { guardWriteOperation } from '../guard.js';
 import { Address, Hex, NodeID, Network, RpcUrl } from '../schemas.js';
 
-export function registerKiteStakingTools(server: McpServer) {
+export function registerKiteStakingTools(server: McpServer, readOnly?: boolean) {
+  // ── Reads ──
+
+  server.tool(
+    'kite_info',
+    'Get global configuration for a KiteStakingManager — minimum/maximum stake amounts (in KITE nanotoken units), stake duration limits, delegation fee bounds, ValidatorManager address, reward calculator, reward vault, and protocol constants. Use this to understand the staking rules before registering a validator.',
+    {
+      kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ kiteStakingManagerAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['kite-staking-manager', 'info',
+          '--staking-manager-address', kiteStakingManagerAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'kite_info_validator',
+    'Get comprehensive information for a specific validator on KiteStakingManager by its validationID — owner, delegation fee, minimum stake duration, uptime seconds, pending staking rewards and delegation fees (in KITE nanotoken units), reward recipient, and accrued rewards. Use this to inspect a validator\'s current state and pending rewards.',
+    {
+      kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
+      validationId: z.string().regex(/^0x[0-9a-fA-F]+$/).describe('Validation ID (hex) of the validator to query'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ kiteStakingManagerAddress, validationId, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['kite-staking-manager', 'info-validator', validationId,
+          '--staking-manager-address', kiteStakingManagerAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'kite_info_delegator',
+    'Get comprehensive information for a specific delegator on KiteStakingManager by its delegationID — status, owner, validationID of the validator it delegates to, weight, start time, nonces, pending gross reward, validator fee, net pending reward (in KITE nanotoken units), reward recipient, and accrued rewards. Use this to check a delegation\'s state and pending earnings.',
+    {
+      kiteStakingManagerAddress: Address.describe('KiteStakingManager contract address'),
+      delegationId: z.string().regex(/^0x[0-9a-fA-F]+$/).describe('Delegation ID (hex) of the delegator to query'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ kiteStakingManagerAddress, delegationId, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['kite-staking-manager', 'info-delegator', delegationId,
+          '--staking-manager-address', kiteStakingManagerAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  if (readOnly) return;
+
   // ── Config ──
 
   server.tool(

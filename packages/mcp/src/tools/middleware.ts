@@ -183,6 +183,43 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
     },
   );
 
+  server.tool(
+    'middleware_info',
+    'Full middleware overview: owner, balancer validator manager, primary asset and class, epoch config, operator count, collateral class IDs, vault manager. Use this to orient yourself to a middleware before running per-operator queries.',
+    {
+      middlewareAddress: Address.describe('L1Middleware contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['middleware', 'info', middlewareAddress],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
+  server.tool(
+    'middleware_get_operator_used_stake_per_epoch',
+    'Get the cached used stake for an operator in a specific past epoch and collateral class — useful for auditing historical stake allocation or debugging reward discrepancies.',
+    {
+      middlewareAddress: Address.describe('L1Middleware contract address'),
+      epoch: z.string().describe('Epoch number (bigint)'),
+      operator: Address.describe('Operator address'),
+      collateralClass: z.string().describe('Collateral class ID (bigint)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, epoch, operator, collateralClass, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['middleware', 'get-operator-used-stake-per-epoch', middlewareAddress, epoch, operator, collateralClass],
+        { network, rpcUrl },
+      ));
+    },
+  );
+
   // ── Composite Reads (dashboard / report tools) ──
 
   server.tool(
