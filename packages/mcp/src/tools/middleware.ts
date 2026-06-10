@@ -133,18 +133,41 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'middleware_get_node_logs',
-    'Get correlated on-chain events for a node from the middleware. Uses SNOWSCAN_API_KEY env var for API access.',
+    'Get correlated on-chain node/stake/validator events: NodeAdded, NodeRemoved, NodeStakeUpdated, AllNodeStakesUpdated, OperatorHasLeftoverStake from the middleware plus all BalancerValidatorManager lifecycle events. Defaults to scanning from contract START_TIME; pass fromEpoch or fromBlock for an epoch-scoped digest. Uses SNOWSCAN_API_KEY env var for API access.',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       nodeId: z.string().optional().describe('NodeID (CB58 format, e.g. NodeID-xxx) to filter logs for a specific node'),
+      fromEpoch: z.string().optional().describe('Start epoch; fromBlock derived from its start timestamp'),
+      fromBlock: z.string().optional().describe('Start block (overrides fromEpoch)'),
+      toBlock: z.string().optional().describe('End block (defaults to latest)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
-    async ({ middlewareAddress, nodeId, network, rpcUrl }) => {
+    async ({ middlewareAddress, nodeId, fromEpoch, fromBlock, toBlock, network, rpcUrl }) => {
       const args = ['middleware', 'node-logs', middlewareAddress];
       if (nodeId) args.push('--node-id', nodeId);
-      return formatResult(await runCli(args, { network, rpcUrl }));
+      if (fromEpoch) args.push('--from-epoch', fromEpoch);
+      if (fromBlock) args.push('--from-block', fromBlock);
+      if (toBlock) args.push('--to-block', toBlock);
+      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
+    },
+  );
+
+  server.tool(
+    'middleware_get_validator_balances',
+    'Get P-Chain continuous-fee balances for all subnet validators, matched to their middleware operators. A validator whose balance drains is deactivated on the P-Chain — use this to spot liveness risk. Note: the P-Chain RPC is always the canonical Avalanche endpoint for the selected network, independent of rpcUrl.',
+    {
+      middlewareAddress: Address.describe('L1Middleware contract address'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { readOnlyHint: true, idempotentHint: true },
+    async ({ middlewareAddress, network, rpcUrl }) => {
+      return formatResult(await runCli(
+        ['middleware', 'get-validator-balances', middlewareAddress],
+        { network, rpcUrl },
+      ));
     },
   );
 
