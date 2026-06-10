@@ -2,7 +2,22 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { runCli, formatResult, formatGuardError, requireSigner, WARP_TIMEOUT } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
-import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
+import { Address, NodeID, Network, RpcUrl, isPrivateHost } from '../schemas.js';
+
+/** SSRF guard for the public read tool: reject L1 RPC URLs pointing at private/loopback/link-local hosts.
+ *  The write tools intentionally permit private hosts (operator-run internal L1 RPCs) and are not exposed read-only. */
+function rejectPrivateL1Rpc(l1RpcUrl: string): string | null {
+  let hostname: string;
+  try {
+    hostname = new URL(l1RpcUrl).hostname;
+  } catch {
+    return `Invalid l1RpcUrl: ${l1RpcUrl}`;
+  }
+  if (isPrivateHost(hostname)) {
+    return 'l1RpcUrl must not point to a private, loopback, or link-local address';
+  }
+  return null;
+}
 
 export function registerUptimeTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
@@ -21,6 +36,8 @@ export function registerUptimeTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true },
     async ({ l1RpcUrl, blockchainId, nodeId, network, rpcUrl }) => {
+      const ssrfErr = rejectPrivateL1Rpc(l1RpcUrl);
+      if (ssrfErr) return formatGuardError(ssrfErr);
       return formatResult(await runCli(
         ['uptime', 'get-validation-uptime-message', l1RpcUrl, blockchainId, nodeId],
         { network, rpcUrl },
