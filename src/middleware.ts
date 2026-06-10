@@ -811,7 +811,7 @@ export async function operatorsInfo(
 
 // getLinkedAddresses — multicall for all address-returning view functions
 export async function middlewareGetLinkedAddresses(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   logger.log("Reading linked addresses...");
 
@@ -837,7 +837,7 @@ export async function middlewareGetLinkedAddresses(
 
 // getEpochConfig — multicall for epoch timing parameters
 export async function middlewareGetEpochConfig(
-  middleware: SafeSuzakuContract['L1Middleware']
+  middleware: SuzakuContract['L1Middleware']
 ) {
   logger.log("Reading epoch config...");
 
@@ -861,7 +861,7 @@ export async function middlewareGetEpochConfig(
 
 // getCacheStatus — totalStakeCached per class + rebalancedThisEpoch per operator
 export async function middlewareGetCacheStatus(
-  middleware: SafeSuzakuContract['L1Middleware'],
+  middleware: SuzakuContract['L1Middleware'],
   epochOverride?: number
 ) {
   logger.log("Reading cache status...");

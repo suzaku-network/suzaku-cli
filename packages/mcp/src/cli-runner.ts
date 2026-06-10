@@ -61,7 +61,7 @@ function resolveCliPath(): string {
 
   // npm dependency: resolve via node_modules when installed as a package
   try {
-    const depPath = fileURLToPath(new URL('../../suzaku-cli/bin/cli.js', import.meta.url));
+    const depPath = fileURLToPath(new URL('../../@suzaku-network/suzaku-cli/bin/cli.js', import.meta.url));
     if (existsSync(depPath)) {
       return depPath;
     }

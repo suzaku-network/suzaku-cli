@@ -1949,11 +1949,8 @@ async function main() {
     middlewareCmd
         .command("get-epoch-config")
         .description("Get epoch timing configuration (duration, update window, current epoch, last node stake update epoch)")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetEpochConfig(middlewareSvc);
         });
@@ -1962,12 +1959,9 @@ async function main() {
     middlewareCmd
         .command("get-cache-status")
         .description("Get stake cache and rebalance status for current or specified epoch")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
+        .addArgument(argMiddlewareAddress)
         .addOption(new Option('--epoch <epoch>', 'Epoch number (defaults to current)').argParser(ParserNumber))
-        .action(async (middlewareAddress, options) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .asyncAction(async (config, middlewareAddress, options) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetCacheStatus(middlewareSvc, options.epoch);
         });
@@ -1975,11 +1969,8 @@ async function main() {
     middlewareCmd
         .command("get-linked-addresses")
         .description("Get all linked contract addresses from the middleware (balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn)")
-        .addArgument(ArgAddress("middlewareAddress", "Middleware contract address"))
-        .action(async (middlewareAddress) => {
-            const opts = program.opts();
-            const client = await generateClient(opts.network);
-            const config = getConfig(client, opts.wait, opts.skipAbiValidation);
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             await middlewareGetLinkedAddresses(middlewareSvc);
         });
