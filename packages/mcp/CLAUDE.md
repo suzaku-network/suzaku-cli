@@ -50,7 +50,7 @@ Five layers, checked in order for every write operation:
 
 | # | Guard | Location | What it does |
 |---|---|---|---|
-| 1 | `requireSigner()` | `cli-runner.ts` | Blocks if no signing method configured (`SUZAKU_PK`, `SUZAKU_SECRET_NAME`, or `SUZAKU_MCP_LEDGER`) |
+| 1 | `requireSigner()` | `cli-runner.ts` | Blocks if no signing method configured (`SUZAKU_PK`, `SUZAKU_PK_FILE`, `SUZAKU_SECRET_NAME`, or `SUZAKU_MCP_LEDGER`) |
 | 2 | `checkToolAccess()` | `guard.ts` | Checks `SUZAKU_MCP_DENY_TOOLS` then `SUZAKU_MCP_ALLOW_TOOLS`; deny wins |
 | 3 | `checkValueLimit()` | `guard.ts` | Rejects if amount exceeds `SUZAKU_MCP_MAX_AVAX_PER_TX` |
 | 4 | `confirmWriteOperation()` | `guard.ts` | On testnet with `SUZAKU_MCP_REQUIRE_CONFIRM=true`: MCP elicitation dialog |
@@ -120,8 +120,9 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | Variable | Purpose | Default |
 |---|---|---|
 | `SUZAKU_CLI_PATH` | Override CLI binary path. Falls back to `../../../bin/cli.js` then `which suzaku-cli` | — |
-| `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (ms). Identical calls within window return cached result | `60000` |
+| `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (ms). Identical read calls within window return cached result (writes always bypass) | `60000` |
 | `SUZAKU_MCP_DEBUG` | Forwards subprocess stderr to server stderr in real time (server-side only — not passed to child process) | — |
+| `SUZAKU_MCP_WAIT` | Confirmation-depth override: appends `--wait <n>` to every CLI call (e.g. `1` for instant-mining forks/anvil) | — (CLI default `2`) |
 | `SUZAKU_MCP_MAX_CONCURRENT` | Max parallel CLI subprocesses. Rejects with error when exceeded | `10` |
 | `SUZAKU_MCP_RATE_MAX_CALLS` | Max CLI calls per sliding window. Rejects with error when exceeded | `60` |
 | `SUZAKU_MCP_RATE_WINDOW_MS` | Sliding window duration (ms) for rate limiter | `60000` |
@@ -161,7 +162,7 @@ Priority order (first match wins in `runCli()`):
 
 1. **Ledger** (`SUZAKU_MCP_LEDGER=true`) — `--ledger` flag, timeout 180 s
 2. **GPG keystore** (`SUZAKU_SECRET_NAME`) — `--secret-name <value>` flag
-3. **Raw private key** (`SUZAKU_PK`) — injected as `PK` env var, never on command line
+3. **Raw private key** (`SUZAKU_PK` or `SUZAKU_PK_FILE`) — resolved via `readSecret()` (file form preferred, read at spawn time); injected as `PK` env var, never on command line
 
 **Safe multisig overlay** — independent of signing method. If `SUZAKU_SAFE_ADDRESS` is set, `--safe <address>` is appended. Audit log records composite method (e.g. `SUZAKU_PK+SUZAKU_SAFE_ADDRESS`).
 
@@ -256,11 +257,11 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 3. **Restricted child env** — Subprocess inherits only 8 explicitly allowlisted variables. No ambient env leakage.
 4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
-6. **Dedup is write-agnostic** — Cache key is args+network+rpcUrl. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
+6. **Dedup applies to reads only** — Cache key is args+network+rpcUrl. Identical read calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`; write calls always bypass the cache (never served from it, never stored to it).
 7. **Two-phase lifecycle uses a P-Chain key** — `complete_*` tools inject `PK_PCHAIN` (from `SUZAKU_PCHAIN_PK`/`_FILE`) into the child env and use a 5-minute timeout. **Known limitation:** the CLI does not yet read `PK_PCHAIN` — it falls back to the main key for P-Chain transactions (see Signing Methods).
 8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` (or `SUZAKU_MCP_AUDIT_DIR`) via non-blocking `appendFile`. Auto-rotates at `SUZAKU_MCP_AUDIT_MAX_MB` (default 50 MB), keeping max 2 files. Failures are silently ignored.
 9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
 12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
-13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Mutually exclusive with `--read-only` (the server exits if both are passed), and requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set to a positive number at startup. `health_check` reports `proposeOnly` and warns (`safeApiKeyWarning`) when `SAFE_API_KEY` is unset (the pending-queue check fails open without it).
+13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Mutually exclusive with `--read-only` (the server exits if both are passed), and requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set to a positive number at startup. `health_check` reports `proposeOnly` and warns (`safeApiKeyWarning`) when neither `SAFE_API_KEY` nor `SAFE_API_KEY_FILE` is set (the pending-queue check fails open without a key).
