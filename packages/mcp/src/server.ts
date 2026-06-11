@@ -39,12 +39,6 @@ if (readOnly && proposeOnly) {
   console.error('--read-only and --propose-only are mutually exclusive');
   process.exit(1);
 }
-// The mainnet delegate relaxation must never be active outside the propose-only profile —
-// otherwise every registered write tool would inherit it. Fail fast rather than widen silently.
-if (process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true' && !proposeOnly) {
-  console.error('ALLOW_SAFE_DELEGATE_MAINNET=true is only supported with --propose-only. Refusing to start.');
-  process.exit(1);
-}
 // In propose-only mode the amount cap is a required safety bound — fail at startup, not mid-proposal.
 if (proposeOnly) {
   const cap = Number(process.env.SUZAKU_MAX_REWARDS_AMOUNT ?? '');

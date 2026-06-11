@@ -136,7 +136,7 @@ describe('rewards_set_amount_propose', () => {
       (c: unknown[]) => (c[0] as string[]).join(' ').startsWith('rewards set-amount'),
     );
     expect(proposeCall).toBeDefined();
-    expect(proposeCall![0]).toEqual(['rewards', 'set-amount', REWARDS, '46', '1', '10450']);
+    expect(proposeCall![0]).toEqual(['rewards', 'set-amount', REWARDS, '46', '1', '10450', '--safe-propose']);
     expect(proposeCall![1]).toMatchObject({ privateKey: true, bypassSuggest: true });
 
     const data = res.structuredContent as Record<string, unknown>;
@@ -289,7 +289,7 @@ describe('rewards_distribute_propose', () => {
     const proposeCall = (runCli as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c[0] as string[])[1] === 'distribute',
     );
-    expect(proposeCall![0]).toEqual(['rewards', 'distribute', REWARDS, '46', '10']);
+    expect(proposeCall![0]).toEqual(['rewards', 'distribute', REWARDS, '46', '10', '--safe-propose']);
     expect(proposeCall![1]).toMatchObject({ privateKey: true, bypassSuggest: true });
     expect((res.structuredContent as Record<string, unknown>).proposed).toBe(true);
   });

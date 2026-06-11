@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   sanitizeOutput,
   sanitizeArgs,
@@ -272,36 +275,57 @@ describe('rate limiter', () => {
 });
 
 describe('buildChildEnv', () => {
-  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'ALLOW_SAFE_DELEGATE_MAINNET', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK'];
+  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_PK_FILE', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'SAFE_API_KEY_FILE', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK'];
+  const tmpFiles: string[] = [];
   beforeEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
-  afterEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
+  afterEach(() => {
+    for (const k of SAFE_ENV) delete process.env[k];
+    for (const f of tmpFiles.splice(0)) { try { unlinkSync(f); } catch { /* ignore */ } }
+  });
+  const writeTmp = (content: string) => {
+    const p = join(tmpdir(), `suzaku-test-secret-${tmpFiles.length}-${content.length}`);
+    writeFileSync(p, content);
+    tmpFiles.push(p);
+    return p;
+  };
 
   it('forwards only the 8 base vars for a read call', () => {
     const env = buildChildEnv({});
     expect(env.PATH).toBe(process.env.PATH);
     expect('PK' in env).toBe(false);
     expect('SAFE_API_KEY' in env).toBe(false);
-    expect('ALLOW_SAFE_DELEGATE_MAINNET' in env).toBe(false);
   });
 
-  it('forwards SAFE_API_KEY + ALLOW_SAFE_DELEGATE_MAINNET only on a Safe-wired write call', () => {
+  it('forwards SAFE_API_KEY only on a Safe-wired write call', () => {
     process.env.SUZAKU_PK = 'a'.repeat(64);
     process.env.SUZAKU_SAFE_ADDRESS = '0x' + '1'.repeat(40);
     process.env.SAFE_API_KEY = 'svc-key';
-    process.env.ALLOW_SAFE_DELEGATE_MAINNET = 'true';
     const env = buildChildEnv({ privateKey: true });
     expect(env.PK).toBe('a'.repeat(64));
     expect(env.SAFE_API_KEY).toBe('svc-key');
-    expect(env.ALLOW_SAFE_DELEGATE_MAINNET).toBe('true');
+    expect('ALLOW_SAFE_DELEGATE_MAINNET' in env).toBe(false);
+  });
+
+  it('reads PK and SAFE_API_KEY from a _FILE path (file secret), trimming whitespace', () => {
+    process.env.SUZAKU_PK_FILE = writeTmp('a'.repeat(64) + '\n');
+    process.env.SUZAKU_SAFE_ADDRESS = '0x' + '1'.repeat(40);
+    process.env.SAFE_API_KEY_FILE = writeTmp('svc-key\n');
+    const env = buildChildEnv({ privateKey: true });
+    expect(env.PK).toBe('a'.repeat(64));
+    expect(env.SAFE_API_KEY).toBe('svc-key');
+  });
+
+  it('prefers the _FILE form over the direct env var', () => {
+    process.env.SUZAKU_PK = 'b'.repeat(64);
+    process.env.SUZAKU_PK_FILE = writeTmp('a'.repeat(64));
+    expect(buildChildEnv({ privateKey: true }).PK).toBe('a'.repeat(64));
   });
 
   it('does NOT forward the Safe vars without SUZAKU_SAFE_ADDRESS', () => {
     process.env.SUZAKU_PK = 'a'.repeat(64);
     process.env.SAFE_API_KEY = 'svc-key';
-    process.env.ALLOW_SAFE_DELEGATE_MAINNET = 'true';
     const env = buildChildEnv({ privateKey: true });
     expect('SAFE_API_KEY' in env).toBe(false);
-    expect('ALLOW_SAFE_DELEGATE_MAINNET' in env).toBe(false);
   });
 
   it('does NOT forward the Safe vars on a read call even when SUZAKU_SAFE_ADDRESS is set', () => {

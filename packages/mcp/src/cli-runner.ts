@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdir, appendFile, stat, rename } from 'node:fs';
+import { existsSync, mkdir, appendFile, stat, rename, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -268,9 +268,26 @@ function evictDedupCache(windowMs: number): void {
 }
 
 /**
+ * Resolve a secret from either a `<NAME>_FILE` path (compose/Docker file secret, read
+ * at spawn time) or the direct `<NAME>` env var. The file form keeps the value out of
+ * the container env (docker inspect / /proc/PID/environ) — the path is non-sensitive.
+ */
+function readSecret(directVar: string, fileVar: string): string | undefined {
+  const file = process.env[fileVar];
+  if (file) {
+    try {
+      return readFileSync(file, 'utf8').trim();
+    } catch {
+      return undefined;
+    }
+  }
+  return process.env[directVar];
+}
+
+/**
  * Build the allow-listed environment for a CLI subprocess. Only these variables ever
- * reach the child — nothing ambient leaks. SAFE_API_KEY and ALLOW_SAFE_DELEGATE_MAINNET
- * are forwarded ONLY for Safe-wired write calls (privateKey + SUZAKU_SAFE_ADDRESS).
+ * reach the child — nothing ambient leaks. SAFE_API_KEY is forwarded ONLY for Safe-wired
+ * write calls (privateKey + SUZAKU_SAFE_ADDRESS). Signing secrets accept a `_FILE` form.
  * Exported so the forwarding rules can be unit-tested without spawning.
  */
 export function buildChildEnv(options: RunCliOptions): Record<string, string | undefined> {
@@ -285,15 +302,18 @@ export function buildChildEnv(options: RunCliOptions): Record<string, string | u
     SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
   };
   const usingLedger = options.privateKey && process.env.SUZAKU_MCP_LEDGER === 'true';
-  if (options.privateKey && !usingLedger && !process.env.SUZAKU_SECRET_NAME && process.env.SUZAKU_PK) {
-    env.PK = process.env.SUZAKU_PK;
+  if (options.privateKey && !usingLedger && !process.env.SUZAKU_SECRET_NAME) {
+    const pk = readSecret('SUZAKU_PK', 'SUZAKU_PK_FILE');
+    if (pk) env.PK = pk;
   }
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
-    env.SAFE_API_KEY = process.env.SAFE_API_KEY;
-    env.ALLOW_SAFE_DELEGATE_MAINNET = process.env.ALLOW_SAFE_DELEGATE_MAINNET;
+    // tx-service auth (mainnet); travels with --safe only. The CLI refuses owner keys
+    // in propose mode, so this cannot widen into direct on-chain execution.
+    env.SAFE_API_KEY = readSecret('SAFE_API_KEY', 'SAFE_API_KEY_FILE');
   }
-  if (options.pchainPrivateKey && process.env.SUZAKU_PCHAIN_PK) {
-    env.PK_PCHAIN = process.env.SUZAKU_PCHAIN_PK;
+  if (options.pchainPrivateKey) {
+    const pchain = readSecret('SUZAKU_PCHAIN_PK', 'SUZAKU_PCHAIN_PK_FILE');
+    if (pchain) env.PK_PCHAIN = pchain;
   }
   return env;
 }
@@ -354,14 +374,14 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     if (process.env.SUZAKU_SECRET_NAME) {
       cliArgs.push('--secret-name', process.env.SUZAKU_SECRET_NAME);
       signerMethod = 'SUZAKU_SECRET_NAME';
-    } else if (process.env.SUZAKU_PK) {
-      signerMethod = 'SUZAKU_PK';
+    } else if (process.env.SUZAKU_PK || process.env.SUZAKU_PK_FILE) {
+      signerMethod = process.env.SUZAKU_PK_FILE ? 'SUZAKU_PK_FILE' : 'SUZAKU_PK';
     }
   }
 
-  // Safe multisig wiring. The tx-service API key (mainnet auth) and the delegate-mode
-  // opt-in travel ONLY with --safe (see buildChildEnv) — the CLI refuses owner keys while
-  // the opt-in is set, so this cannot widen into direct on-chain execution.
+  // Safe multisig wiring. The tx-service API key (mainnet auth) travels ONLY with --safe
+  // (see buildChildEnv). The CLI refuses owner keys in --safe-propose mode, so this
+  // cannot widen into direct on-chain execution.
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
     cliArgs.push('--safe', process.env.SUZAKU_SAFE_ADDRESS);
     signerMethod = signerMethod ? `${signerMethod}+SUZAKU_SAFE_ADDRESS` : 'SUZAKU_SAFE_ADDRESS';
@@ -600,6 +620,7 @@ export function formatGuardError(err: string) {
 export function requireSigner(): ReturnType<typeof formatResult> | null {
   if (
     !process.env.SUZAKU_PK?.trim() &&
+    !process.env.SUZAKU_PK_FILE?.trim() &&
     !process.env.SUZAKU_SECRET_NAME?.trim() &&
     process.env.SUZAKU_MCP_LEDGER !== 'true'
   ) {

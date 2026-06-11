@@ -632,7 +632,7 @@ function registerProposeTools(server: McpServer) {
 
       const preCheckAt = new Date().toISOString();
       const proposeResult = await runCli(
-        ['rewards', 'set-amount', rewardsAddress, epoch, '1', rewardsAmount],
+        ['rewards', 'set-amount', rewardsAddress, epoch, '1', rewardsAmount, '--safe-propose'],
         { network, rpcUrl, privateKey: true, bypassSuggest: true, timeout: 180_000 },
       );
       if (!proposeResult.success) return formatResult(proposeResult);
@@ -735,7 +735,7 @@ function registerProposeTools(server: McpServer) {
 
       const preCheckAt = new Date().toISOString();
       const proposeResult = await runCli(
-        ['rewards', 'distribute', rewardsAddress, epoch, batchSize],
+        ['rewards', 'distribute', rewardsAddress, epoch, batchSize, '--safe-propose'],
         { network, rpcUrl, privateKey: true, bypassSuggest: true, timeout: 180_000 },
       );
       if (!proposeResult.success) return formatResult(proposeResult);
