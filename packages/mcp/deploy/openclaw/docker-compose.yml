@@ -27,8 +27,49 @@ services:
     networks:
       - suzaku-net
 
+  # DM-only propose bot: same image, --propose-only MCP profile. Holds a Safe
+  # DELEGATE key (never an owner key) — it can queue proposals for human review in
+  # the Safe UI, never execute. The public group bot above stays keyless.
+  # Optional: bring it up explicitly with `docker compose --profile propose up -d`.
+  suzaku-propose-bot:
+    profiles: ["propose"]
+    build:
+      context: ../../../..
+      dockerfile: packages/mcp/deploy/openclaw/Dockerfile
+      target: bot
+    restart: unless-stopped
+    pids_limit: 100
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:size=128m
+    volumes:
+      - audit-data-propose:/data/audit
+      - ./openclaw-propose.json:/home/node/.openclaw/openclaw.json.tpl:ro
+      - ./SOUL-propose.md:/home/node/.openclaw/workspace/SOUL.md
+      - ./mcporter-propose.json:/home/node/.openclaw/workspace/config/mcporter.json.tpl:ro
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_PROPOSE_BOT_TOKEN}
+      # Numeric Telegram user IDs ONLY (tg:123456), never @usernames — usernames can
+      # be released and re-registered by someone else.
+      - TELEGRAM_ADMIN_USER_ID=${TELEGRAM_ADMIN_USER_ID}
+      - SUZAKU_PK=${SUZAKU_DELEGATE_PK}
+      - SUZAKU_SAFE_ADDRESS=${SUZAKU_SAFE_ADDRESS}
+      - SAFE_API_KEY=${SAFE_API_KEY}
+      - SUZAKU_REWARDS_ADDRESS=${SUZAKU_REWARDS_ADDRESS}
+      - SUZAKU_MIDDLEWARE_ADDRESS=${SUZAKU_MIDDLEWARE_ADDRESS}
+      - SUZAKU_MAX_REWARDS_AMOUNT=${SUZAKU_MAX_REWARDS_AMOUNT}
+    networks:
+      - suzaku-net
+
 volumes:
   audit-data:
+  audit-data-propose:
 
 networks:
   suzaku-net:

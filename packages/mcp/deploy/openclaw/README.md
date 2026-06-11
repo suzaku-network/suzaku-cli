@@ -162,6 +162,67 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 
 Users can specify `network: "fuji"` in their queries — the MCP tools accept a network parameter. The default is mainnet.
 
+## Propose Bot (Safe rewards proposals)
+
+A second, **DM-only** bot from the same image that turns "prepare 10450 ALOT as rewards for epoch 46" into a **Safe proposal** — an off-chain entry in the Safe transaction queue that owners review (decoded calldata) and sign in the Safe UI. The bot holds a Safe **delegate** key: it can propose, it can never sign or execute. The public group bot above is unchanged and stays keyless.
+
+```
+suzaku-propose-bot (compose profile "propose")
+  ├── MCP server: --propose-only  → 69 read tools + exactly 2 write tools:
+  │     rewards_set_amount_propose   (one MultiSend batch: approve + setRewardsAmountForEpochs)
+  │     rewards_distribute_propose
+  ├── CLI: ALLOW_SAFE_DELEGATE_MAINNET=true — a software key is permitted on mainnet
+  │   ONLY together with --safe, and the CLI hard-refuses OWNER keys in this mode
+  └── Pre-checks per proposal: epoch has no rewards set (accumulation guard), epoch
+      window, amount bounds (SUZAKU_MAX_REWARDS_AMOUNT), no matching pending proposal
+```
+
+### Additional environment variables (propose bot)
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `TELEGRAM_PROPOSE_BOT_TOKEN` | Yes | Separate bot token — never reuse the group bot's |
+| `SUZAKU_DELEGATE_PK` | Yes | The delegate EOA key (NOT an owner key — the CLI refuses owner keys) |
+| `SUZAKU_SAFE_ADDRESS` | Yes | The rewards Safe |
+| `SAFE_API_KEY` | mainnet | Safe tx-service auth — get one at developer.safe.global |
+| `SUZAKU_REWARDS_ADDRESS` | Yes | RewardsNativeToken address (removes wrong-address risk) |
+| `SUZAKU_MIDDLEWARE_ADDRESS` | Yes | L1Middleware address (epoch-window pre-check) |
+| `SUZAKU_MAX_REWARDS_AMOUNT` | Yes | Upper bound (human units) — proposals at or above are refused |
+
+Secrets reach the MCP server via `mcporter-propose.json`, which is mounted as a template and rendered by `entrypoint.sh` (mcporter does not inherit the container environment). The rendered file is `chmod 600` inside the container.
+
+### One-time setup (in order)
+
+1. **Generate the delegate key** (a fresh EOA; it needs a little AVAX for nothing — it never sends transactions).
+2. **Grant the Safe the rewards role and fund it** (owner action): the Safe must hold `REWARDS_MANAGER_ROLE` on the rewards contract (`suzaku-cli access-control ...` or the protocol admin does it) and a sufficient ALOT balance — the proposed batch pulls tokens from the Safe when executed. Verify: `cast call <rewards> "hasRole(bytes32,address)(bool)" $(cast keccak "REWARDS_MANAGER_ROLE") <safe>`.
+3. **Register the delegate** (owner action, from the repo root):
+   ```bash
+   NETWORK=fuji SAFE_ADDRESS=0x... DELEGATE_ADDRESS=0x... OWNER_PK=0x... \
+     node scripts/add-safe-delegate.mjs
+   # verify:
+   curl "https://wallet-transaction-fuji.ash.center/api/v1/safes/<safe>/delegates/"
+   ```
+   On mainnet add `SAFE_API_KEY=...` and verify against `https://api.safe.global/tx-service/avax/api`.
+4. **Start the bot**: `docker compose --profile propose up -d --build`.
+
+Roll out **fuji first**: the fuji Safe tx service is Ash-hosted (`wallet-transaction-fuji.ash.center`) — confirm the delegates endpoint responds (step 3's curl) before relying on it. Note `--safe` does not work on anvil (the CLI blocks Safe on non-fuji testnets), so fuji is the only testnet path.
+
+### Access control and trust model
+
+- DM allowlist only, `groupPolicy: deny` — the bot never responds in groups. Allowlist entries MUST be numeric Telegram user IDs (`tg:123456789`), never `@usernames` (usernames can be released and re-registered).
+- The DM allowlist only gates **who can draft proposals**. The real backstop is the Safe: nothing executes without owner signatures on the decoded transaction.
+- The bot's pre-checks are point-in-time and advisory. Signers must re-run `rewards_epoch_diagnosis` and read the decoded calldata in the Safe UI before signing — the propose tools say this in every response (`verifyBeforeSigning`).
+
+### Incident response
+
+Bad or stale proposal in the queue (wrong amount, wrong epoch, duplicate):
+
+1. **Do not sign it.** An unsigned proposal is inert.
+2. Delete it — in the Safe UI (transaction queue → discard), or via the tx service with the delegate key (`DELETE /v2/multisig-transactions/{safeTxHash}/`, signed by the proposer).
+3. Re-run `rewards_epoch_diagnosis`, then re-propose.
+
+If the delegate key is compromised: remove the delegate (`scripts/add-safe-delegate.mjs` flow in reverse via the Safe UI / `DELETE /v2/delegates/`), rotate `SUZAKU_DELEGATE_PK`, re-register. A compromised delegate can only spam the queue — owners should treat unexpected proposals as hostile and delete them.
+
 ## Upgrading OpenClaw
 
 The Dockerfile pins the OpenClaw image by version tag **and** digest (`2026.6.5`). Never revert to `:latest` — 2026 releases shipped several breaking config changes and the pin is also a security floor (versions before 2026.4.22 are vulnerable to the "Claw Chain" sandbox-escape advisories; 2026.6.5 includes the May/June advisory batch).
