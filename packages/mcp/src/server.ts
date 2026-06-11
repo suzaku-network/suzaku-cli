@@ -290,8 +290,9 @@ server.tool(
         status.pchainSigner = 'configured';
       }
       // Propose tools' Safe queue duplicate-check fails open without a mainnet API key.
-      if (proposeOnly && !process.env.SAFE_API_KEY) {
-        status.safeApiKeyWarning = 'SAFE_API_KEY is not set; the Safe queue duplicate-check fails open on mainnet (HTTP 401). Set it from developer.safe.global.';
+      // Accept either the direct env var or the file-secret form used by the deploy.
+      if (proposeOnly && !process.env.SAFE_API_KEY && !process.env.SAFE_API_KEY_FILE) {
+        status.safeApiKeyWarning = 'Neither SAFE_API_KEY nor SAFE_API_KEY_FILE is set; the Safe queue duplicate-check fails open on mainnet (HTTP 401). Set one from developer.safe.global.';
       }
     }
 

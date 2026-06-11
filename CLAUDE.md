@@ -49,7 +49,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 | `viemUtils.ts` | `curriedContract()` — curried contract factory with ABI validation. `withSafeWrite()` — proxy adding simulate-then-execute, Safe tx strategy, cast mode, event log parsing. `contractAbiValidation()` — selector matching with Aho-Corasick + proxy detection |
 | `chainList.ts` | Chain definitions (mainnet, fuji, anvil, kitetestnet, custom). `setCustomChainRpcUrl()` for `--rpc-url` |
 | `castUtils.ts` | `--cast` mode: formats equivalent `cast call`/`cast send`/`curl` commands instead of executing |
-| `safeUtils.ts` | Safe multisig transaction strategy: `handleTransactionStrategy` (match pending txs, confirm/propose/skip) and `handleBatchTransaction` (atomic MultiSend proposal for `rewards set-amount`/`distribute` under `--safe-propose`; pins nonce for a deterministic, idempotent SafeTxHash). Also exports `safeQueueUrl` |
+| `safeUtils.ts` | Safe multisig transaction strategy: `handleTransactionStrategy` (match pending txs, confirm/propose/skip) and `handleBatchTransaction` (atomic batch send/propose for `rewards set-amount`/`distribute` whenever `--safe` is active; pins nonce for a deterministic, idempotent SafeTxHash; `--safe-propose` sets `proposeOnly` to refuse owner keys). Also exports `safeQueueUrl` |
 | `ledgerUtils.ts` | Ledger hardware wallet integration (account derivation, Safe provider adapter) |
 | `pChainUtils.ts` | P-Chain operations (create subnet, convert to L1, validator balance, `getCurrentValidators`) |
 | `cChainUtils.ts` | C-Chain utilities (get chain ID) |
@@ -121,7 +121,7 @@ Two guards enforce keystore or Ledger on mainnet. **Guard A** (`ParserPrivateKey
 
 `--safe <address>` creates a `SafeClient` overlay. Transaction strategy in `safeUtils.ts`: searches for matching pending Safe txs, then confirms/proposes/creates new/skips. Works with any signing method.
 
-**`--safe-propose`** (per-command, only on `rewards set-amount`/`distribute`) routes the call through `handleBatchTransaction` as one atomic MultiSend proposal instead of the per-call `withSafeWrite` proxy, and forces propose-only mode (refuses Safe OWNER keys, never executes). Set-amount batches `approve` + `setRewardsAmountForEpochs`; distribute is a single-call batch. The shared `withSafeWrite` proxy and `handleTransactionStrategy` are unchanged.
+For `rewards set-amount`/`distribute`, any `--safe` run already routes through `handleBatchTransaction` (an atomic batch, bypassing the per-call `withSafeWrite` proxy): set-amount batches `approve` + `setRewardsAmountForEpochs` as a MultiSend; distribute is a single-call batch. **`--safe-propose`** (per-command, only on these two commands) additionally forces propose-only mode — it refuses Safe OWNER keys (never executes) and is what relaxes the mainnet raw-key guard. The shared `withSafeWrite` proxy and `handleTransactionStrategy` are unchanged.
 
 ### GPG keystore
 

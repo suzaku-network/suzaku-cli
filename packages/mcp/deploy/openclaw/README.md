@@ -173,8 +173,11 @@ suzaku-propose-bot (compose profile "propose")
   │     rewards_distribute_propose
   ├── CLI: a software key is permitted on mainnet ONLY with --safe AND --safe-propose
   │   (a flag valid only on rewards set-amount/distribute, which hard-refuse OWNER keys)
-  └── Pre-checks per proposal: epoch has no rewards set (accumulation guard), epoch
-      window, amount bounds (SUZAKU_MAX_REWARDS_AMOUNT), no matching pending proposal
+  ├── set-amount pre-checks: epoch has no rewards set (accumulation guard), epoch in
+  │   settable window (currentEpoch-2 ≤ epoch < currentEpoch), amount below
+  │   SUZAKU_MAX_REWARDS_AMOUNT, no matching pending proposal
+  └── distribute pre-checks: epochRewards > 0, distribution not already complete
+      (early return, not error), no matching pending distributeRewards proposal
 ```
 
 ### Additional environment variables (propose bot)
@@ -271,6 +274,6 @@ Once the bot is running, try these in a DM:
 | Bot answers non-mentioned group messages | Known upstream bug (config persistence on restart) — restart the container and re-verify; see Upgrading OpenClaw step 4 |
 | Container crash-loops | Check logs (`docker compose logs --tail 200`); examine recent image/config changes |
 | `docker inspect` shows the group bot's API keys | Expected — those are env vars, visible to host root; this is why VPS isolation matters. The propose bot's delegate key and Safe API key are file secrets (`/run/secrets/...`) and do **not** appear in `docker inspect` |
-| Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key (`SAFE_API_KEY_FILE` secret); the mainnet pending-queue check needs it |
+| Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key via the `SAFE_API_KEY_FILE` secret; both the `health_check` warning and the mainnet pending-queue check accept the file form |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower |
 | High API costs | Set a billing cap at console.anthropic.com; consider switching to `claude-haiku-4-5` in `openclaw.json` |

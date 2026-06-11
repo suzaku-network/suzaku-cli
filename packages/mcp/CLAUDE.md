@@ -63,7 +63,7 @@ Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountFi
 - `rewards_set_amount_propose` hard-refuses on: epoch already has rewards set on-chain, set-amount events already exist (accumulation guard), epoch outside the settable window (`currentEpoch-2 ≤ epoch < currentEpoch`), amount missing/unconfigured-cap/at-or-above `SUZAKU_MAX_REWARDS_AMOUNT`, or a matching `setRewardsAmountForEpochs` proposal already pending in the Safe queue.
 - `rewards_distribute_propose` hard-refuses on: epoch has no rewards set (`epochRewards == 0`) or a matching `distributeRewards` proposal already pending; returns early (non-error) if distribution is already complete. It does **not** check the epoch window, accumulation, or the amount cap.
 
-The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or HTTP 4xx returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
+The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or any non-OK HTTP response returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
 
 ## Network-Aware Decision Matrix
 
@@ -167,7 +167,7 @@ Priority order (first match wins in `runCli()`):
 
 **P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Intended for `complete_*` two-phase lifecycle tools. Known limitation: current CLI versions do not read `PK_PCHAIN` and sign P-Chain transactions with the main key instead.
 
-**Key sanitization**: `sanitizeOutput()` redacts any 64-char hex string from all outputs, logs, and audit entries.
+**Key sanitization**: `sanitizeOutput()` redacts the configured secrets and **bare** (un-prefixed) 64-char hex from all outputs, logs, and audit entries; `0x`-prefixed 64-char hex (tx hashes, role hashes, validation IDs) passes through.
 
 ### Future: KMS / remote signing (key never in the container)
 
@@ -252,7 +252,7 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 ## Key Invariants
 
 1. **Mainnet-safe-by-default** — Write tools on mainnet never auto-execute. Default behavior is suggest mode. Opting out (`SUZAKU_MCP_SUGGEST=false`) still requires elicitation confirmation.
-2. **No PK on command line** — Private keys pass only via child process env (`PK`, `PK_PCHAIN`). `sanitizeOutput()` redacts 64-char hex strings from all outputs.
+2. **No PK on command line** — Private keys pass only via child process env (`PK`, `PK_PCHAIN`). `sanitizeOutput()` redacts the configured secrets and bare 64-char hex from all outputs (0x-prefixed hashes pass through).
 3. **Restricted child env** — Subprocess inherits only 8 explicitly allowlisted variables. No ambient env leakage.
 4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.

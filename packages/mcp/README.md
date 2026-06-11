@@ -55,7 +55,7 @@ Start flags select which tools are registered:
 | Value limit | `SUZAKU_MCP_MAX_AVAX_PER_TX` caps per-transaction AVAX |
 | Mainnet suggest mode | Writes return the CLI command instead of executing (default) |
 | PK never on CLI args | Keys pass via child process env only; 64-char hex strings redacted from all output |
-| Restricted child env | Subprocess inherits only `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. `PK` and `SAFE_API_KEY` are injected per-call for write operations (read from `SUZAKU_PK`/`SUZAKU_PK_FILE` and `SAFE_API_KEY`/`SAFE_API_KEY_FILE` at spawn time) |
+| Restricted child env | Subprocess inherits only `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. `PK` is injected for write operations; `SAFE_API_KEY` only for Safe-wired writes (when `SUZAKU_SAFE_ADDRESS` is set) — both read from the direct env or the `_FILE` form at spawn time |
 | Audit log | Every call logged to `~/.suzaku-cli/mcp-audit.log` |
 
 ### Mainnet vs testnet behavior
@@ -69,7 +69,7 @@ The Safe propose tools bypass this matrix entirely — they always queue an off-
 
 ### Safe propose tools
 
-`rewards_set_amount_propose` and `rewards_distribute_propose` never execute; they queue a Safe proposal. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key (`SUZAKU_PK`/`SUZAKU_PK_FILE`) — the CLI refuses Safe owner keys for this flow. `rewards_set_amount_propose` hard-refuses if the epoch already has rewards set, has set-amount events (accumulation guard), is outside the settable window, exceeds `SUZAKU_MAX_REWARDS_AMOUNT`, or a matching proposal is already pending. `rewards_distribute_propose` refuses if the epoch has no rewards set, returns early if distribution is complete, and refuses a duplicate pending proposal.
+`rewards_set_amount_propose` and `rewards_distribute_propose` never execute; they queue a Safe proposal. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key (`SUZAKU_PK`/`SUZAKU_PK_FILE`) — the CLI refuses Safe owner keys for this flow. `rewards_set_amount_propose` hard-refuses if the epoch already has rewards set, has set-amount events (accumulation guard), is outside the settable window, is at or above `SUZAKU_MAX_REWARDS_AMOUNT` (or the cap is unset), or a matching proposal is already pending. `rewards_distribute_propose` refuses if the epoch has no rewards set, returns early if distribution is complete, and refuses a duplicate pending proposal.
 
 ### Signing methods (priority order)
 
