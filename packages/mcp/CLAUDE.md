@@ -58,7 +58,7 @@ Five layers, checked in order for every write operation:
 
 Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountField?)`.
 
-**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. Before proposing they hard-refuse on: epoch already has rewards set or set-amount events (accumulation guard), epoch outside the settable window, amount out of bounds (`SUZAKU_MAX_REWARDS_AMOUNT`), or a matching proposal already pending in the Safe queue. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key — the CLI refuses owner keys while `ALLOW_SAFE_DELEGATE_MAINNET=true`.
+**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. They append the CLI `--safe-propose` flag, which (a) permits a software key on mainnet with `--safe` and (b) makes the CLI refuse Safe OWNER keys (propose-only). Before proposing they hard-refuse on: epoch already has rewards set or set-amount events (accumulation guard), epoch outside the settable window, amount out of bounds (`SUZAKU_MAX_REWARDS_AMOUNT`), or a matching proposal already pending in the Safe queue. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key.
 
 ## Network-Aware Decision Matrix
 
@@ -84,12 +84,12 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | Variable | Purpose | Default |
 |---|---|---|
 | `SUZAKU_PK` | Raw EVM private key (hex). Injected as `PK` in child env — never on CLI args | — |
+| `SUZAKU_PK_FILE` | Path to a file holding the key (compose/Docker file secret). Read at spawn time → child `PK`; preferred over `SUZAKU_PK`. Keeps the key out of the container env | — |
 | `SUZAKU_SECRET_NAME` | GPG keystore secret name. Passed as `--secret-name` flag | — |
 | `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
-| `SUZAKU_PCHAIN_PK` | P-Chain key for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
-| `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` + `ALLOW_SAFE_DELEGATE_MAINNET` to the child env | — |
-| `SAFE_API_KEY` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none). Child env only, never argv | — |
-| `ALLOW_SAFE_DELEGATE_MAINNET` | `'true'` lets the CLI accept a software key on mainnet **only with `--safe`**, and makes it refuse Safe OWNER keys (delegate-propose-only mode) | — |
+| `SUZAKU_PCHAIN_PK` / `SUZAKU_PCHAIN_PK_FILE` | P-Chain key (direct or file) for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
+| `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` to the child env | — |
+| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file. Child env only, never argv | — |
 
 ### Safe propose tools
 
@@ -126,7 +126,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 
 ### Child Process Env (allowlist)
 
-Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY` — plus, only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`): `SAFE_API_KEY` and `ALLOW_SAFE_DELEGATE_MAINNET`.
+Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. Signing secrets are injected per-call: `PK` (from `SUZAKU_PK` or `SUZAKU_PK_FILE`) for write calls, and `SAFE_API_KEY` (from `SAFE_API_KEY` or `SAFE_API_KEY_FILE`) only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`). The `_FILE` forms are read at spawn time so the raw secret never sits in the container env.
 
 ## Tool Catalog
 
@@ -163,6 +163,10 @@ Priority order (first match wins in `runCli()`):
 **P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Intended for `complete_*` two-phase lifecycle tools. Known limitation: current CLI versions do not read `PK_PCHAIN` and sign P-Chain transactions with the main key instead.
 
 **Key sanitization**: `sanitizeOutput()` redacts any 64-char hex string from all outputs, logs, and audit entries.
+
+### Future: KMS / remote signing (key never in the container)
+
+The propose bot's delegate key currently lives in the container as a file secret (read at spawn time). The genuine custody upgrade — the key never present on the host at all — is **KMS signing**. AWS KMS (`ECC_SECG_P256K1`) and GCP Cloud KMS (`EC_SIGN_SECP256K1_SHA256`) both sign secp256k1, and Safe proposals only need an EIP-712 `signTypedData` over the SafeTxHash. The CLI already has the exact template: `src/lib/ledgerUtils.ts` builds a viem account via `toAccount()` with `signTypedData`/`signMessage`/`signTransaction` callbacks — a KMS account is the same shape with the device call replaced by a KMS `Sign` API call. Estimated ~50 LOC in `src/client.ts` + a `--kms` path in the mainnet guard (a recognized signer, like `--ledger`); the container then holds only `KMS_KEY_ID` + an IAM role, no key. Cost ~$1/mo. **Out of scope here; documented so it's on record.**
 
 ## Adding a New Tool
 
@@ -253,5 +257,5 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
-12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under `ALLOW_SAFE_DELEGATE_MAINNET=true`), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
+12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
 13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`).
