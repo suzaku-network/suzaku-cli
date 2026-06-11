@@ -17,7 +17,7 @@ services:
     volumes:
       - audit-data:/data/audit
       - ./openclaw.json:/home/node/.openclaw/openclaw.json.tpl:ro
-      - ./SOUL.md:/home/node/.openclaw/workspace/SOUL.md
+      - ./SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
       - ./mcporter.json:/home/node/.openclaw/workspace/config/mcporter.json:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -50,7 +50,7 @@ services:
     volumes:
       - audit-data-propose:/data/audit
       - ./openclaw-propose.json:/home/node/.openclaw/openclaw.json.tpl:ro
-      - ./SOUL-propose.md:/home/node/.openclaw/workspace/SOUL.md
+      - ./SOUL-propose.md:/home/node/.openclaw/workspace/SOUL.md:ro
       - ./mcporter-propose.json:/home/node/.openclaw/workspace/config/mcporter.json.tpl:ro
     # The delegate key and Safe API key are delivered as file secrets (mounted at
     # /run/secrets/<name>, read at spawn time) — NOT env vars. They never appear in
@@ -77,12 +77,15 @@ services:
 # Create them out-of-band (chmod 600, never committed), e.g.:
 #   echo -n 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk
 #   echo -n <safe-api-key>   > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key
-# Override the paths with SUZAKU_DELEGATE_PK_FILE / SAFE_API_KEY_FILE in your .env.
+# Override the HOST paths with SUZAKU_DELEGATE_PK_FILE / SUZAKU_SAFE_API_KEY_FILE in your
+# .env. (Deliberately NOT named SAFE_API_KEY_FILE — that name is the container-internal
+# path the service env sets above; reusing it here would point Docker at /run/secrets/...
+# on the host.)
 secrets:
   delegate_pk:
     file: ${SUZAKU_DELEGATE_PK_FILE:-./secrets/delegate_pk}
   safe_api_key:
-    file: ${SAFE_API_KEY_FILE:-./secrets/safe_api_key}
+    file: ${SUZAKU_SAFE_API_KEY_FILE:-./secrets/safe_api_key}
 
 volumes:
   audit-data:
