@@ -1,6 +1,8 @@
 # @suzaku/mcp
 
-MCP server exposing 125 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 127 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+
+Three server profiles: full (127 tools), `--read-only` (69 read tools, the public group bot), `--propose-only` (69 reads + the 2 Safe propose tools, the DM-only propose bot).
 
 ## Architecture
 
@@ -16,7 +18,7 @@ src/
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
 │   ├── opt-in.ts        # 6 tools — operator opt-in/out (2 read, 4 write)
-│   ├── rewards.ts       # 15 tools — Rewards contract (11 read, 4 write)
+│   ├── rewards.ts       # 17 tools — Rewards contract (11 read, 4 write, 2 Safe propose)
 │   ├── kite-staking.ts  # 12 tools — KiteStakingManager (3 read, 9 write, two-phase lifecycle)
 │   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
 │   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
@@ -56,6 +58,8 @@ Five layers, checked in order for every write operation:
 
 Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountField?)`.
 
+**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. Before proposing they hard-refuse on: epoch already has rewards set or set-amount events (accumulation guard), epoch outside the settable window, amount out of bounds (`SUZAKU_MAX_REWARDS_AMOUNT`), or a matching proposal already pending in the Safe queue. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key — the CLI refuses owner keys while `ALLOW_SAFE_DELEGATE_MAINNET=true`.
+
 ## Network-Aware Decision Matrix
 
 Only applies to write tools (where `options.privateKey === true`):
@@ -83,7 +87,17 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | `SUZAKU_SECRET_NAME` | GPG keystore secret name. Passed as `--secret-name` flag | — |
 | `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
 | `SUZAKU_PCHAIN_PK` | P-Chain key for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
-| `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args | — |
+| `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` + `ALLOW_SAFE_DELEGATE_MAINNET` to the child env | — |
+| `SAFE_API_KEY` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none). Child env only, never argv | — |
+| `ALLOW_SAFE_DELEGATE_MAINNET` | `'true'` lets the CLI accept a software key on mainnet **only with `--safe`**, and makes it refuse Safe OWNER keys (delegate-propose-only mode) | — |
+
+### Safe propose tools
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for `rewards_*_propose` (param overrides) | — |
+| `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check | — |
+| `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused | — (warns, no bound) |
 
 ### Safety / Guard
 
@@ -112,11 +126,11 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 
 ### Child Process Env (allowlist)
 
-Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`.
+Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY` — plus, only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`): `SAFE_API_KEY` and `ALLOW_SAFE_DELEGATE_MAINNET`.
 
 ## Tool Catalog
 
-125 tools total (69 read, 56 write):
+127 tools total (69 read, 58 write):
 
 | File | R | W | Key tools |
 |---|---|---|---|
@@ -125,7 +139,7 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
 | `opt-in.ts` | 2 | 4 | `check_opt_in_l1`, `check_opt_in_vault`, `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
-| `rewards.ts` | 11 | 4 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed` |
+| `rewards.ts` | 11 | 6 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed`, **`rewards_set_amount_propose`**, **`rewards_distribute_propose`** (Safe propose — registered in full and `--propose-only` modes) |
 | `kite-staking.ts` | 3 | 9 | `kite_info`, `kite_info_validator`, `kite_info_delegator`, `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
 | `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
 | `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
@@ -239,3 +253,5 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
+12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under `ALLOW_SAFE_DELEGATE_MAINNET=true`), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
+13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`).
