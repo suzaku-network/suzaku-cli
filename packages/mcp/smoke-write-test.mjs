@@ -21,14 +21,16 @@ const client = new Client({ name: 'write-smoke', version: '0.0.0' });
 await client.connect(transport);
 
 const results = [];
-async function call(name, args, timeoutMs = 180_000) {
+// expectError: a revert is the PASS condition for this call (validates the structured error path)
+async function call(name, args, { timeoutMs = 180_000, expectError } = {}) {
   const t0 = Date.now();
   try {
     const res = await client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
     const text = res.content?.map(c => c.text).join('\n') ?? '';
-    results.push({ name, ok: res.isError !== true, ms: Date.now() - t0, preview: text.slice(0, 400) });
+    const errored = res.isError === true;
+    results.push({ name, ok: expectError ? errored : !errored, expectError, ms: Date.now() - t0, preview: text.slice(0, 400) });
   } catch (e) {
-    results.push({ name, ok: false, ms: Date.now() - t0, preview: `EXCEPTION: ${e.message}`.slice(0, 400) });
+    results.push({ name, ok: false, expectError, ms: Date.now() - t0, preview: `EXCEPTION: ${e.message}`.slice(0, 400) });
   }
 }
 
@@ -37,15 +39,21 @@ await call('operator_registry_register', { metadataUrl: 'https://smoke-test.suza
 await call('opt_in_l1', { l1Address: DEXALOT.balancer, network: 'anvil' });
 await call('opt_in_vault', { vaultAddress: DEXALOT.vault, network: 'anvil' });
 await call('vault_get_balance', { vaultAddress: DEXALOT.vault, account: TEST_ACCOUNT, network: 'anvil' });
-await call('vault_deposit', { vaultAddress: DEXALOT.vault, amount: '100', network: 'anvil' });
+// The Dexalot vault has a depositor whitelist; the anvil dev key is not on it in forked
+// mainnet state, so Vault__NotWhitelistedDepositor is the expected (structured) revert.
+await call('vault_deposit', { vaultAddress: DEXALOT.vault, amount: '100', network: 'anvil' },
+  { expectError: 'Vault__NotWhitelistedDepositor (depositor whitelist)' });
 await call('vault_get_balance', { vaultAddress: DEXALOT.vault, account: TEST_ACCOUNT, network: 'anvil' });
 // Expected to revert (caller lacks the distributor role) — validates the structured error path
-await call('rewards_distribute', { rewardsAddress: DEXALOT.rewards, epoch: '37', batchSize: '10', network: 'anvil' });
+await call('rewards_distribute', { rewardsAddress: DEXALOT.rewards, epoch: '37', batchSize: '10', network: 'anvil' },
+  { expectError: 'AccessControlUnauthorizedAccount (no distributor role)' });
 
 for (const r of results) {
-  console.log(`\n${r.ok ? 'OK ' : 'FAIL'} ${r.name} (${r.ms}ms)`);
+  const tag = r.ok ? (r.expectError ? 'OK (expected revert)' : 'OK ') : 'FAIL';
+  console.log(`\n${tag} ${r.name} (${r.ms}ms)${r.expectError ? ` — expects: ${r.expectError}` : ''}`);
   console.log(r.preview.replace(/\n/g, ' ').slice(0, 380));
 }
-console.log(`\n${results.filter(r => r.ok).length}/${results.length} succeeded (rewards_distribute revert is expected)`);
+const failed = results.filter(r => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} behaved as expected`);
 await client.close();
-process.exit(0);
+process.exit(failed.length === 0 ? 0 : 1);

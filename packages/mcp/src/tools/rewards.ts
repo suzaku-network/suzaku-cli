@@ -256,11 +256,11 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
 
   server.tool(
     'rewards_get_epoch_status',
-    'Get funded/distributionComplete status and the set rewards amount for one epoch or a range of epochs, plus the contract scheduling constants (funding deadline, distribution earliest offset, claim grace period). Use epoch + toEpoch to fetch a whole claimability window in one call.',
+    'Get funded/distributionComplete status and the set rewards amount for one epoch or a range of epochs, plus the contract scheduling constants (funding deadline, distribution earliest offset, claim grace period). Params are `epoch` (+ optional `toEpoch` for a range) — NOT startEpoch/epochs as in middleware_epoch_rewards_report; they mirror the CLI’s `get-epoch-status <epoch> --to-epoch`.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
-      epoch: z.string().describe('Start epoch (the single epoch to query if toEpoch is omitted)'),
-      toEpoch: z.string().optional().describe('End epoch (inclusive) for a range query'),
+      epoch: z.string().describe('Start epoch — this parameter is named `epoch`, not startEpoch (the single epoch to query if toEpoch is omitted)'),
+      toEpoch: z.string().optional().describe('End epoch (inclusive) for a range query — named `toEpoch`, not endEpoch'),
       network: Network,
       rpcUrl: RpcUrl,
     },
