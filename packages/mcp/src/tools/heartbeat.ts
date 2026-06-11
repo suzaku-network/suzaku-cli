@@ -553,8 +553,10 @@ export function registerHeartbeatTools(server: McpServer) {
       const phase2 = await Promise.all([
         runCli(['middleware', 'get-validator-balances', middlewareAddress], opts),
         ...(isDigest ? [
-          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
-          runCli(['rewards', 'get-events', rewardsAddress, '--middleware', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
+          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1)),
+            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])], scanOpts),
+          runCli(['rewards', 'get-events', rewardsAddress, '--middleware', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1)),
+            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])], scanOpts),
         ] : []),
       ]);
       const validatorBalancesData = extractData(phase2[0], 'get-validator-balances', _warnings).validatorBalances as {

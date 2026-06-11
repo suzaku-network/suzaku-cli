@@ -334,7 +334,8 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
       let setAmountEventsResult: CliResult | null = null;
       try {
         setAmountEventsResult = await runCli(
-          ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress],
+          ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress,
+            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])],
           opts,
         );
         if (!setAmountEventsResult.success) {
@@ -624,7 +625,8 @@ function registerProposeTools(server: McpServer) {
       // Best-effort: event history catches edge states epochRewards alone can miss.
       let setAmountEventCount: number | null = null;
       const eventsResult = await runCli(
-        ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress],
+        ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress,
+          ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])],
         { ...opts, timeout: 180_000 },
       );
       if (eventsResult.success) {

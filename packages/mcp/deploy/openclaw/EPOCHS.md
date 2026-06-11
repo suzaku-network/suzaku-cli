@@ -52,11 +52,11 @@ them; fetch and compute.
 
 ## Tool cost — pick the cheap path
 
-- **Event scans are SLOW** (`rewards_get_amount_set_events`, `rewards_get_events`: each is a
-  chunked on-chain log crawl, ~1 minute without an indexer key). Use them ONLY for targeted
-  forensics on specific epochs — never to assemble broad state. If a question needs 2+ scans,
-  say so up front ("digging through on-chain events, this takes a couple of minutes") and keep
-  the scan count minimal.
+- **Event scans are the expensive tools** (`rewards_get_amount_set_events`, `rewards_get_events`,
+  node logs): with the indexer key configured (this deployment) each takes a few seconds;
+  without one it's a ~1-minute chunked log crawl. Either way use them ONLY for targeted
+  forensics on specific epochs — never to assemble broad state — and keep the scan count
+  minimal. If you expect the answer to take more than ~1 minute total, say so up front.
 - **Broad state = ONE call**: `deployment_heartbeat` (mode=digest). Epoch ranges = ONE
   `rewards_get_epoch_status` with `toEpoch`. Never loop per-epoch single reads for data a
   composite returns, and never re-fetch constants (fees config, scheduling offsets) you
