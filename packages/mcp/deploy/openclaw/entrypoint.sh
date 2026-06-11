@@ -30,4 +30,25 @@ if [ -f "$MCPORTER_TPL" ]; then
   chmod 600 "$MCPORTER_OUT"
 fi
 
+# Register the Suzaku MCP server natively with the Codex app-server harness:
+# openai/* agent turns run through Codex, which manages its OWN MCP servers — the
+# mcporter skill does not bridge into it. The block is regenerated on every start
+# (idempotent) so env changes like SNOWSCAN_API_KEY propagate. Read-only bot only
+# (the propose bot is identified by its mcporter template mount and stays on the
+# anthropic runtime).
+CODEX_CFG="/home/node/.openclaw/agents/main/agent/codex-home/config.toml"
+if [ ! -f "$MCPORTER_TPL" ]; then
+  mkdir -p "$(dirname "$CODEX_CFG")"
+  touch "$CODEX_CFG"
+  awk 'BEGIN{skip=0} /^\[mcp_servers\.suzaku\]/{skip=1;next} /^\[/{if(skip)skip=0} skip==0{print}' \
+    "$CODEX_CFG" > "$CODEX_CFG.tmp" && mv "$CODEX_CFG.tmp" "$CODEX_CFG"
+  cat >> "$CODEX_CFG" <<EOF
+
+[mcp_servers.suzaku]
+command = "node"
+args = ["/mcp/packages/mcp/dist/server.js", "--read-only"]
+env = { PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", HOME = "/home/node", SNOWSCAN_API_KEY = "${SNOWSCAN_API_KEY}" }
+EOF
+fi
+
 exec docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured

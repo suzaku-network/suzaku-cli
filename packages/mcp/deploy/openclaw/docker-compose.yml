@@ -5,7 +5,10 @@ services:
       dockerfile: packages/mcp/deploy/openclaw/Dockerfile
       target: bot
     restart: unless-stopped
-    pids_limit: 100
+    # 256: the Codex app-server + MCP server + concurrent CLI subprocesses are all node
+    # processes (~12 threads each, threads count against pids_limit); 100 starved them
+    # mid-turn ("Transport closed").
+    pids_limit: 256
     cap_drop:
       - ALL
     security_opt:
@@ -16,8 +19,11 @@ services:
       - /tmp:size=128m
     volumes:
       - audit-data:/data/audit
+      # Persists OpenClaw state (Codex OAuth profile, telegram spool) across recreates.
+      - openclaw-state:/home/node/.openclaw
       - ./openclaw.json:/home/node/.openclaw/openclaw.json.tpl:ro
       - ./SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ./EPOCHS.md:/home/node/.openclaw/workspace/EPOCHS.md:ro
       - ./mcporter.json:/home/node/.openclaw/workspace/config/mcporter.json:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -29,6 +35,8 @@ services:
       # e.g. `openssl rand -hex 24`. The gateway port is not published; the token only
       # gates access within the compose network.
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      # Optional: explorer API key — drops on-chain event scans from ~45s to ~5s.
+      - SNOWSCAN_API_KEY=${SNOWSCAN_API_KEY}
     networks:
       - suzaku-net
 
@@ -43,7 +51,10 @@ services:
       dockerfile: packages/mcp/deploy/openclaw/Dockerfile
       target: bot
     restart: unless-stopped
-    pids_limit: 100
+    # 256: the Codex app-server + MCP server + concurrent CLI subprocesses are all node
+    # processes (~12 threads each, threads count against pids_limit); 100 starved them
+    # mid-turn ("Transport closed").
+    pids_limit: 256
     cap_drop:
       - ALL
     security_opt:
@@ -56,6 +67,7 @@ services:
       - audit-data-propose:/data/audit
       - ./openclaw-propose.json:/home/node/.openclaw/openclaw.json.tpl:ro
       - ./SOUL-propose.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ./EPOCHS.md:/home/node/.openclaw/workspace/EPOCHS.md:ro
       - ./mcporter-propose.json:/home/node/.openclaw/workspace/config/mcporter.json.tpl:ro
     # The delegate key and Safe API key are delivered as file secrets (mounted at
     # /run/secrets/<name>, read at spawn time) — NOT env vars. They never appear in
@@ -77,6 +89,7 @@ services:
       - SUZAKU_MAX_REWARDS_AMOUNT=${SUZAKU_MAX_REWARDS_AMOUNT}
       # Same gateway-auth requirement as suzaku-bot above.
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - SNOWSCAN_API_KEY=${SNOWSCAN_API_KEY}
     networks:
       - suzaku-net
 
@@ -97,6 +110,7 @@ secrets:
 volumes:
   audit-data:
   audit-data-propose:
+  openclaw-state:
 
 networks:
   suzaku-net:
