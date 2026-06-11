@@ -62,7 +62,10 @@ async function checkPendingSafeQueue(
       { headers },
     );
     if (!res.ok) {
-      return { blocked: false, matches: [], warning: `Safe queue check unavailable (HTTP ${res.status}) — verify the queue manually before signing` };
+      const authHint = (res.status === 401 || res.status === 403)
+        ? ' — SAFE_API_KEY may be missing or invalid'
+        : '';
+      return { blocked: false, matches: [], warning: `Safe queue check unavailable (HTTP ${res.status})${authHint} — verify the queue manually before signing` };
     }
     const body = await res.json() as { results?: Array<{ safeTxHash?: string; to?: string; data?: string | null }> };
     const target = targetAddress.toLowerCase().replace(/^0x/, '');
@@ -560,16 +563,19 @@ function registerProposeTools(server: McpServer) {
         return formatGuardError(`rewardsAmount must be a positive decimal number, got "${rewardsAmount}"`);
       }
       const warnings: string[] = [];
+      // Fail closed: an unconfigured cap means no bound, so refuse rather than silently
+      // propose an unbounded amount — operators must set an explicit ceiling.
       const cap = Number(process.env.SUZAKU_MAX_REWARDS_AMOUNT ?? '');
-      if (Number.isFinite(cap) && cap > 0) {
-        if (Number(rewardsAmount) >= cap) {
-          return formatGuardError(`rewardsAmount ${rewardsAmount} is at or above the configured cap (SUZAKU_MAX_REWARDS_AMOUNT=${cap}) — refusing`);
-        }
-      } else {
-        warnings.push('SUZAKU_MAX_REWARDS_AMOUNT is not configured — no upper bound was enforced on the proposed amount');
+      if (!Number.isFinite(cap) || cap <= 0) {
+        return formatGuardError('SUZAKU_MAX_REWARDS_AMOUNT is not configured — refusing to propose without an explicit upper bound. Set it to the maximum acceptable amount in human token units.');
+      }
+      if (Number(rewardsAmount) >= cap) {
+        return formatGuardError(`rewardsAmount ${rewardsAmount} is at or above the configured cap (SUZAKU_MAX_REWARDS_AMOUNT=${cap}) — refusing`);
       }
 
-      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
+      // Reads that gate the accumulation decision skip the dedup cache so a stale read
+      // from a prior diagnosis call can never green-light a duplicate proposal.
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true, skipDedup: true };
 
       // Hard gate (fail-closed): the epoch must have NO rewards set — set-amount accumulates.
       const epochRewardsResult = await runCli(['rewards', 'get-epoch-rewards', rewardsAddress, epoch], opts);
@@ -695,7 +701,8 @@ function registerProposeTools(server: McpServer) {
       if (!/^[1-9]\d*$/.test(batchSize)) return formatGuardError(`batchSize must be a positive integer, got "${batchSize}"`);
 
       const warnings: string[] = [];
-      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
+      // Skip dedup so the completeness/funded gates read fresh on-chain state.
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true, skipDedup: true };
 
       // Fail-closed: rewards must be set before distribution can be proposed.
       const epochRewardsResult = await runCli(['rewards', 'get-epoch-rewards', rewardsAddress, epoch], opts);

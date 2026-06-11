@@ -213,6 +213,37 @@ describe('rewards_set_amount_propose', () => {
     expect(res.content[0].text).toContain('pending Safe proposal');
   });
 
+  it('REFUSES when SUZAKU_MAX_REWARDS_AMOUNT is unconfigured (no silent uncapped propose)', async () => {
+    mockChain(HEALTHY);
+    delete process.env.SUZAKU_MAX_REWARDS_AMOUNT;
+    const { setAmount } = getHandlers();
+    const res = await setAmount({ epoch: '46', rewardsAmount: '10450', network: 'mainnet' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('SUZAKU_MAX_REWARDS_AMOUNT is not configured');
+    expect((runCli as ReturnType<typeof vi.fn>).mock.calls.some(
+      (c: unknown[]) => (c[0] as string[])[1] === 'set-amount',
+    )).toBe(false);
+  });
+
+  it('does NOT block on an UNRELATED pending tx (no false positive)', async () => {
+    mockChain(HEALTHY);
+    const otherContract = '0x' + '9'.repeat(40);
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [{
+          safeTxHash: '0x' + 'e'.repeat(64),
+          to: otherContract,                       // different contract
+          data: '0xa9059cbb' + '0'.repeat(128),    // ERC20 transfer, not set-amount
+        }],
+      }),
+    })));
+    const { setAmount } = getHandlers();
+    const res = await setAmount({ epoch: '46', rewardsAmount: '10450', network: 'mainnet' });
+    expect(res.isError).toBeUndefined();
+    expect((res.structuredContent as Record<string, unknown>).proposed).toBe(true);
+  });
+
   it('proposes with a warning when the Safe queue check is unavailable (fail-open)', async () => {
     mockChain(HEALTHY);
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));

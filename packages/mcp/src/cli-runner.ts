@@ -268,6 +268,37 @@ function evictDedupCache(windowMs: number): void {
 }
 
 /**
+ * Build the allow-listed environment for a CLI subprocess. Only these variables ever
+ * reach the child — nothing ambient leaks. SAFE_API_KEY and ALLOW_SAFE_DELEGATE_MAINNET
+ * are forwarded ONLY for Safe-wired write calls (privateKey + SUZAKU_SAFE_ADDRESS).
+ * Exported so the forwarding rules can be unit-tested without spawning.
+ */
+export function buildChildEnv(options: RunCliOptions): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    NODE_ENV: process.env.NODE_ENV,
+    PASSWORD_STORE_DIR: process.env.PASSWORD_STORE_DIR, // For GPG keystore
+    GNUPGHOME: process.env.GNUPGHOME,
+    SIG_AGG_URL: process.env.SIG_AGG_URL,
+    LogLevel: process.env.LogLevel,
+    SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
+  };
+  const usingLedger = options.privateKey && process.env.SUZAKU_MCP_LEDGER === 'true';
+  if (options.privateKey && !usingLedger && !process.env.SUZAKU_SECRET_NAME && process.env.SUZAKU_PK) {
+    env.PK = process.env.SUZAKU_PK;
+  }
+  if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
+    env.SAFE_API_KEY = process.env.SAFE_API_KEY;
+    env.ALLOW_SAFE_DELEGATE_MAINNET = process.env.ALLOW_SAFE_DELEGATE_MAINNET;
+  }
+  if (options.pchainPrivateKey && process.env.SUZAKU_PCHAIN_PK) {
+    env.PK_PCHAIN = process.env.SUZAKU_PCHAIN_PK;
+  }
+  return env;
+}
+
+/**
  * Spawns `suzaku-cli <args> --json --yes` as a subprocess and captures JSON output.
  * Each tool call gets a clean, isolated process — avoids logger singleton and process.exit issues.
  */
@@ -310,16 +341,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     return { success: false, data: null, error: `Rate limit exceeded (${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS / 1000}s). Try again shortly.` };
   }
 
-  const childEnv: Record<string, string | undefined> = {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    NODE_ENV: process.env.NODE_ENV,
-    PASSWORD_STORE_DIR: process.env.PASSWORD_STORE_DIR, // For GPG keystore
-    GNUPGHOME: process.env.GNUPGHOME,
-    SIG_AGG_URL: process.env.SIG_AGG_URL,
-    LogLevel: process.env.LogLevel,
-    SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
-  };
+  const childEnv = buildChildEnv(options);
 
   let signerMethod: string | undefined;
 
@@ -333,24 +355,16 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       cliArgs.push('--secret-name', process.env.SUZAKU_SECRET_NAME);
       signerMethod = 'SUZAKU_SECRET_NAME';
     } else if (process.env.SUZAKU_PK) {
-      childEnv.PK = process.env.SUZAKU_PK;
       signerMethod = 'SUZAKU_PK';
     }
   }
 
   // Safe multisig wiring. The tx-service API key (mainnet auth) and the delegate-mode
-  // opt-in travel ONLY with --safe — the CLI refuses owner keys while the opt-in is
-  // set, so this cannot widen into direct on-chain execution.
+  // opt-in travel ONLY with --safe (see buildChildEnv) — the CLI refuses owner keys while
+  // the opt-in is set, so this cannot widen into direct on-chain execution.
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
     cliArgs.push('--safe', process.env.SUZAKU_SAFE_ADDRESS);
     signerMethod = signerMethod ? `${signerMethod}+SUZAKU_SAFE_ADDRESS` : 'SUZAKU_SAFE_ADDRESS';
-    childEnv.SAFE_API_KEY = process.env.SAFE_API_KEY;
-    childEnv.ALLOW_SAFE_DELEGATE_MAINNET = process.env.ALLOW_SAFE_DELEGATE_MAINNET;
-  }
-
-  // P-Chain transaction key — passed via child env PK_PCHAIN
-  if (options.pchainPrivateKey && process.env.SUZAKU_PCHAIN_PK) {
-    childEnv.PK_PCHAIN = process.env.SUZAKU_PCHAIN_PK;
   }
 
   // Dry-run mode

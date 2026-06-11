@@ -7,6 +7,7 @@ import {
   formatGuardError,
   requireSigner,
   runCli,
+  buildChildEnv,
   getActiveSubprocesses,
   resetActiveSubprocesses,
   resetRateLimiter,
@@ -267,6 +268,62 @@ describe('rate limiter', () => {
   it('resetRateLimiter clears the window', () => {
     // Verify reset doesn't throw and state is clean
     resetRateLimiter();
+  });
+});
+
+describe('buildChildEnv', () => {
+  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'ALLOW_SAFE_DELEGATE_MAINNET', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK'];
+  beforeEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
+  afterEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
+
+  it('forwards only the 8 base vars for a read call', () => {
+    const env = buildChildEnv({});
+    expect(env.PATH).toBe(process.env.PATH);
+    expect('PK' in env).toBe(false);
+    expect('SAFE_API_KEY' in env).toBe(false);
+    expect('ALLOW_SAFE_DELEGATE_MAINNET' in env).toBe(false);
+  });
+
+  it('forwards SAFE_API_KEY + ALLOW_SAFE_DELEGATE_MAINNET only on a Safe-wired write call', () => {
+    process.env.SUZAKU_PK = 'a'.repeat(64);
+    process.env.SUZAKU_SAFE_ADDRESS = '0x' + '1'.repeat(40);
+    process.env.SAFE_API_KEY = 'svc-key';
+    process.env.ALLOW_SAFE_DELEGATE_MAINNET = 'true';
+    const env = buildChildEnv({ privateKey: true });
+    expect(env.PK).toBe('a'.repeat(64));
+    expect(env.SAFE_API_KEY).toBe('svc-key');
+    expect(env.ALLOW_SAFE_DELEGATE_MAINNET).toBe('true');
+  });
+
+  it('does NOT forward the Safe vars without SUZAKU_SAFE_ADDRESS', () => {
+    process.env.SUZAKU_PK = 'a'.repeat(64);
+    process.env.SAFE_API_KEY = 'svc-key';
+    process.env.ALLOW_SAFE_DELEGATE_MAINNET = 'true';
+    const env = buildChildEnv({ privateKey: true });
+    expect('SAFE_API_KEY' in env).toBe(false);
+    expect('ALLOW_SAFE_DELEGATE_MAINNET' in env).toBe(false);
+  });
+
+  it('does NOT forward the Safe vars on a read call even when SUZAKU_SAFE_ADDRESS is set', () => {
+    process.env.SUZAKU_SAFE_ADDRESS = '0x' + '1'.repeat(40);
+    process.env.SAFE_API_KEY = 'svc-key';
+    const env = buildChildEnv({});
+    expect('SAFE_API_KEY' in env).toBe(false);
+  });
+
+  it('omits PK when using the GPG keystore or Ledger', () => {
+    process.env.SUZAKU_PK = 'a'.repeat(64);
+    process.env.SUZAKU_SECRET_NAME = 'my-key';
+    expect('PK' in buildChildEnv({ privateKey: true })).toBe(false);
+    delete process.env.SUZAKU_SECRET_NAME;
+    process.env.SUZAKU_MCP_LEDGER = 'true';
+    expect('PK' in buildChildEnv({ privateKey: true })).toBe(false);
+  });
+
+  it('forwards PK_PCHAIN only for a pchain write call', () => {
+    process.env.SUZAKU_PCHAIN_PK = 'b'.repeat(64);
+    expect('PK_PCHAIN' in buildChildEnv({ privateKey: true })).toBe(false);
+    expect(buildChildEnv({ pchainPrivateKey: true }).PK_PCHAIN).toBe('b'.repeat(64));
   });
 });
 

@@ -76,15 +76,17 @@ export async function handleBatchTransaction(
   }
   assertDelegateOnly(isOwner);
 
-  const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs });
+  // Pin the nonce we just read so the hash is deterministic across reruns (idempotency)
+  // and the delegate proposal below is internally consistent under a concurrent-nonce race.
+  const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs, options: { nonce } });
   const safeTxHash = await client.protocolKit.getTransactionHash(safeTransaction) as Hex;
   const queueUrl = safeQueueUrl(network, safeAddress);
-  logger.addData('safeTxHash', safeTxHash);
   logger.addData('safeQueueUrl', queueUrl);
 
   // Idempotency: an identical pending batch hashes to the same safeTxHash — skip it.
   const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce });
   if (pendingTxs.results.some((tx) => tx.safeTxHash === safeTxHash)) {
+    logger.addData('safeTxHash', safeTxHash);
     logger.log(`Safe batch ${safeTxHash} is already pending. Skipping.`);
     return { safeTxHash, action: 'skip' };
   }
@@ -92,10 +94,16 @@ export async function handleBatchTransaction(
   if (isOwner) {
     logger.debug(`Sending a new Safe batch transaction as owner`);
     const result = await client.send({ transactions: txs });
-    const ethereumTxHash = result.transactions?.ethereumTxHash as Hex | undefined;
-    return { safeTxHash, ethereumTxHash, action: 'new' };
+    const sent = result.transactions as { ethereumTxHash?: Hex; safeTxHash?: Hex } | undefined;
+    const ethereumTxHash = sent?.ethereumTxHash;
+    // send() rebuilds the tx internally and may land on a different nonce under a race —
+    // trust the hash it reports (execute path leaves it unset; fall back to ours).
+    const resolvedSafeTxHash = (sent?.safeTxHash ?? safeTxHash) as Hex;
+    logger.addData('safeTxHash', resolvedSafeTxHash);
+    return { safeTxHash: resolvedSafeTxHash, ethereumTxHash, action: 'new' };
   }
 
+  logger.addData('safeTxHash', safeTxHash);
   logger.debug(`Proposing a Safe batch transaction as delegate`);
   const signature = await client.protocolKit.signHash(safeTxHash);
   await client.apiKit.proposeTransaction({

@@ -108,9 +108,9 @@ docker-compose.yml
         │           └── Suzaku MCP server (stdio subprocess)
         │                 └── CLI subprocess (per tool call)
         └── Security layers:
-              read_only: true + tmpfs (/tmp, /root/.openclaw)
+              tmpfs (/tmp only)
               cap_drop: ALL, no-new-privileges
-              pids_limit: 100, mem_limit: 1g
+              pids_limit: 100, mem_limit: 2g
               restart: unless-stopped
 ```
 
