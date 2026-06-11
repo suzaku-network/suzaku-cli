@@ -52,20 +52,37 @@ services:
       - ./openclaw-propose.json:/home/node/.openclaw/openclaw.json.tpl:ro
       - ./SOUL-propose.md:/home/node/.openclaw/workspace/SOUL.md
       - ./mcporter-propose.json:/home/node/.openclaw/workspace/config/mcporter.json.tpl:ro
+    # The delegate key and Safe API key are delivered as file secrets (mounted at
+    # /run/secrets/<name>, read at spawn time) — NOT env vars. They never appear in
+    # `docker inspect`, /proc/PID/environ, or the rendered mcporter.json.
+    secrets:
+      - delegate_pk
+      - safe_api_key
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_PROPOSE_BOT_TOKEN}
       # Numeric Telegram user IDs ONLY (tg:123456), never @usernames — usernames can
       # be released and re-registered by someone else.
       - TELEGRAM_ADMIN_USER_ID=${TELEGRAM_ADMIN_USER_ID}
-      - SUZAKU_PK=${SUZAKU_DELEGATE_PK}
+      - SUZAKU_PK_FILE=/run/secrets/delegate_pk
+      - SAFE_API_KEY_FILE=/run/secrets/safe_api_key
       - SUZAKU_SAFE_ADDRESS=${SUZAKU_SAFE_ADDRESS}
-      - SAFE_API_KEY=${SAFE_API_KEY}
       - SUZAKU_REWARDS_ADDRESS=${SUZAKU_REWARDS_ADDRESS}
       - SUZAKU_MIDDLEWARE_ADDRESS=${SUZAKU_MIDDLEWARE_ADDRESS}
       - SUZAKU_MAX_REWARDS_AMOUNT=${SUZAKU_MAX_REWARDS_AMOUNT}
     networks:
       - suzaku-net
+
+# File secrets: host files holding the delegate EOA key and the Safe tx-service API key.
+# Create them out-of-band (chmod 600, never committed), e.g.:
+#   echo -n 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk
+#   echo -n <safe-api-key>   > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key
+# Override the paths with SUZAKU_DELEGATE_PK_FILE / SAFE_API_KEY_FILE in your .env.
+secrets:
+  delegate_pk:
+    file: ${SUZAKU_DELEGATE_PK_FILE:-./secrets/delegate_pk}
+  safe_api_key:
+    file: ${SAFE_API_KEY_FILE:-./secrets/safe_api_key}
 
 volumes:
   audit-data:

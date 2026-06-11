@@ -6,10 +6,9 @@
       "args": ["/mcp/packages/mcp/dist/server.js", "--propose-only"],
       "env": {
         "SUZAKU_CLI_PATH": "/mcp/bin/cli.js",
-        "SUZAKU_PK": "${SUZAKU_PK}",
+        "SUZAKU_PK_FILE": "/run/secrets/delegate_pk",
+        "SAFE_API_KEY_FILE": "/run/secrets/safe_api_key",
         "SUZAKU_SAFE_ADDRESS": "${SUZAKU_SAFE_ADDRESS}",
-        "SAFE_API_KEY": "${SAFE_API_KEY}",
-        "ALLOW_SAFE_DELEGATE_MAINNET": "true",
         "SUZAKU_REWARDS_ADDRESS": "${SUZAKU_REWARDS_ADDRESS}",
         "SUZAKU_MIDDLEWARE_ADDRESS": "${SUZAKU_MIDDLEWARE_ADDRESS}",
         "SUZAKU_MAX_REWARDS_AMOUNT": "${SUZAKU_MAX_REWARDS_AMOUNT}",

@@ -171,8 +171,8 @@ suzaku-propose-bot (compose profile "propose")
   ├── MCP server: --propose-only  → 69 read tools + exactly 2 write tools:
   │     rewards_set_amount_propose   (one MultiSend batch: approve + setRewardsAmountForEpochs)
   │     rewards_distribute_propose
-  ├── CLI: ALLOW_SAFE_DELEGATE_MAINNET=true — a software key is permitted on mainnet
-  │   ONLY together with --safe, and the CLI hard-refuses OWNER keys in this mode
+  ├── CLI: a software key is permitted on mainnet ONLY with --safe AND --safe-propose
+  │   (a flag valid only on rewards set-amount/distribute, which hard-refuse OWNER keys)
   └── Pre-checks per proposal: epoch has no rewards set (accumulation guard), epoch
       window, amount bounds (SUZAKU_MAX_REWARDS_AMOUNT), no matching pending proposal
 ```
@@ -182,18 +182,20 @@ suzaku-propose-bot (compose profile "propose")
 | Variable | Required | Purpose |
 |---|---|---|
 | `TELEGRAM_PROPOSE_BOT_TOKEN` | Yes | Separate bot token — never reuse the group bot's |
-| `SUZAKU_DELEGATE_PK` | Yes | The delegate EOA key (NOT an owner key — the CLI refuses owner keys) |
 | `SUZAKU_SAFE_ADDRESS` | Yes | The rewards Safe |
-| `SAFE_API_KEY` | mainnet | Safe tx-service auth — get one at developer.safe.global |
 | `SUZAKU_REWARDS_ADDRESS` | Yes | RewardsNativeToken address (removes wrong-address risk) |
 | `SUZAKU_MIDDLEWARE_ADDRESS` | Yes | L1Middleware address (epoch-window pre-check) |
 | `SUZAKU_MAX_REWARDS_AMOUNT` | Yes | Upper bound (human units) — proposals at or above are refused |
+| `SUZAKU_DELEGATE_PK_FILE` | optional | Host path to the delegate-key secret file (default `./secrets/delegate_pk`) |
+| `SAFE_API_KEY_FILE` | optional | Host path to the Safe API key secret file (default `./secrets/safe_api_key`) |
 
-Secrets reach the MCP server via `mcporter-propose.json`, which is mounted as a template and rendered by `entrypoint.sh` (mcporter does not inherit the container environment). The rendered file is `chmod 600` inside the container.
+**Secrets are delivered as files, not env vars.** The delegate EOA key and the Safe tx-service API key are compose **file secrets** mounted at `/run/secrets/delegate_pk` and `/run/secrets/safe_api_key`; the MCP runner reads them at spawn time via `SUZAKU_PK_FILE` / `SAFE_API_KEY_FILE` and injects them only into each CLI subprocess. They never appear in `docker inspect`, `/proc/PID/environ`, the compose env block, or the rendered `mcporter.json` (which carries only the static `/run/secrets/...` paths). The rendered `mcporter.json` is `chmod 600`.
+
+> Note on standalone compose: a file secret is a read-only bind-mount of a host file (mode 0444 by default) — plaintext on host disk, **not** tmpfs/encrypted (that is Swarm-only). The gain over env vars is removing the `docker inspect`/`environ`/child-inherit leaks. Keep the host files `chmod 600`, never commit them, and rely on host-disk encryption + VPS isolation for at-rest protection. The genuine "key never in container" upgrade is KMS signing (see CLAUDE.md → Future).
 
 ### One-time setup (in order)
 
-1. **Generate the delegate key** (a fresh EOA; it needs a little AVAX for nothing — it never sends transactions).
+1. **Generate the delegate key** (a fresh EOA; it needs a little AVAX for nothing — it never sends transactions) and write it to the secret file: `mkdir -p ./secrets && printf '%s' 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk`. On mainnet also `printf '%s' <safe-api-key> > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key` (get the key at developer.safe.global). Never commit `./secrets/`.
 2. **Grant the Safe the rewards role and fund it** (owner action): the Safe must hold `REWARDS_MANAGER_ROLE` on the rewards contract (`suzaku-cli access-control ...` or the protocol admin does it) and a sufficient ALOT balance — the proposed batch pulls tokens from the Safe when executed. Verify: `cast call <rewards> "hasRole(bytes32,address)(bool)" $(cast keccak "REWARDS_MANAGER_ROLE") <safe>`.
 3. **Register the delegate** (owner action, from the repo root):
    ```bash
@@ -221,7 +223,7 @@ Bad or stale proposal in the queue (wrong amount, wrong epoch, duplicate):
 2. Delete it — in the Safe UI (transaction queue → discard), or via the tx service with the delegate key (`DELETE /v2/multisig-transactions/{safeTxHash}/`, signed by the proposer).
 3. Re-run `rewards_epoch_diagnosis`, then re-propose.
 
-If the delegate key is compromised: remove the delegate (`scripts/add-safe-delegate.mjs` flow in reverse via the Safe UI / `DELETE /v2/delegates/`), rotate `SUZAKU_DELEGATE_PK`, re-register. A compromised delegate can only spam the queue — owners should treat unexpected proposals as hostile and delete them.
+If the delegate key is compromised: remove the delegate (`scripts/add-safe-delegate.mjs` flow in reverse via the Safe UI / `DELETE /v2/delegates/`), rotate the key in `./secrets/delegate_pk` and restart the container, then re-register. A compromised delegate can only spam the queue (or pollute a nonce) — owners should treat unexpected proposals as hostile and delete them.
 
 ## Upgrading OpenClaw
 

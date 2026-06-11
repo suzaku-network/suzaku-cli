@@ -13,16 +13,16 @@ if [ -f "$CONFIG_TPL" ]; then
     "$CONFIG_TPL" > "$CONFIG_OUT"
 fi
 
-# Substitute env vars into the mcporter template (propose bot only — its MCP server
-# needs secrets, and mcporter does not inherit the container environment)
+# Substitute the non-secret config vars into the mcporter template (propose bot only —
+# mcporter does not inherit the container environment). The delegate key and Safe API key
+# are NOT here: they are file secrets read at spawn time (SUZAKU_PK_FILE / SAFE_API_KEY_FILE),
+# so the raw secret never lands in the rendered mcporter.json.
 MCPORTER_TPL="/home/node/.openclaw/workspace/config/mcporter.json.tpl"
 MCPORTER_OUT="/home/node/.openclaw/workspace/config/mcporter.json"
 
 if [ -f "$MCPORTER_TPL" ]; then
   sed \
-    -e "s|\${SUZAKU_PK}|${SUZAKU_PK}|g" \
     -e "s|\${SUZAKU_SAFE_ADDRESS}|${SUZAKU_SAFE_ADDRESS}|g" \
-    -e "s|\${SAFE_API_KEY}|${SAFE_API_KEY}|g" \
     -e "s|\${SUZAKU_REWARDS_ADDRESS}|${SUZAKU_REWARDS_ADDRESS}|g" \
     -e "s|\${SUZAKU_MIDDLEWARE_ADDRESS}|${SUZAKU_MIDDLEWARE_ADDRESS}|g" \
     -e "s|\${SUZAKU_MAX_REWARDS_AMOUNT}|${SUZAKU_MAX_REWARDS_AMOUNT}|g" \
