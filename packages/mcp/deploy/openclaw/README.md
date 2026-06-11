@@ -9,7 +9,8 @@ Read-only Telegram bot for Suzaku deployment monitoring, powered by [OpenClaw](h
 1. Message [@BotFather](https://t.me/BotFather) on Telegram
 2. Send `/newbot`, follow the prompts (e.g., "Suzaku Monitor")
 3. Save the bot token
-4. Get your user ID: message [@userinfobot](https://t.me/userinfobot) and note the `Id` field
+4. **Disable privacy mode** (required for group use): `/setprivacy` → select the bot → **Disable**. With privacy mode on, `@mentions` in groups are never delivered to the bot. If the bot is already in a group when you change this, remove and re-add it — Telegram applies the change only on re-join. (OpenClaw still routes only mentions to the model via `requireMention`.)
+5. Get your user ID: message [@userinfobot](https://t.me/userinfobot) and note the `Id` field. For a group's chat ID, add [@getidsbot](https://t.me/getidsbot) to the group briefly (supergroup IDs look like `-100…`)
 
 ### 2. Create `.env`
 
@@ -100,7 +101,25 @@ This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918, link-local
 
 ### Set Anthropic spending limits
 
-Go to [console.anthropic.com](https://console.anthropic.com) and set a monthly billing cap. The bot uses `claude-sonnet-4-6` — a runaway conversation loop could burn through credits.
+Go to [console.anthropic.com](https://console.anthropic.com) and set a monthly billing cap — this applies whenever the Anthropic API key is in play (as primary model or as fallback). A runaway conversation loop could burn through credits.
+
+## Model auth: subscription (Codex) vs API key
+
+The committed config runs the agent on **`openai/gpt-5.5` through OpenClaw's Codex harness**, authenticated with a **ChatGPT/Codex subscription** (OAuth — flat monthly cost, no per-token billing), with **`anthropic/claude-sonnet-4-6` as fallback** via `ANTHROPIC_API_KEY`. The `codex` plugin is enabled in `openclaw.json`; the OAuth profile lives in the `openclaw-state` volume, so it survives container restarts and recreates.
+
+**One-time Codex login** (after the container is up):
+
+```bash
+docker compose exec suzaku-bot node openclaw.mjs models auth login --provider openai
+```
+
+Run this from a real terminal — it requires an interactive TTY. It prints an OpenAI URL: open it in your local browser, sign in with the ChatGPT account that holds the subscription. The browser then redirects to `http://localhost:1455/auth/callback?...` and shows **ERR_CONNECTION_REFUSED — this is expected** (the callback listener runs inside the container). Copy the **full redirect URL** from the browser's address bar and paste it into the waiting terminal prompt.
+
+Notes:
+- After changing the model, runtime, or `codexPlugins`, **existing chat threads keep their old session config** — send `/new` in the Telegram chat to start a session that picks up the changes.
+- Subscriptions are personal-use products with their own usage windows: fine for your own ops automation (this bot, the crons); use API billing for anything genuinely public-facing.
+- API-key-only operation: set `agents.defaults.model.primary` back to `anthropic/claude-sonnet-4-6` — no login step, metered billing.
+- The `claude-cli/*` provider (Claude Pro/Max subscription via Claude Code) also exists but the CLI is not in this image; it would need a Dockerfile addition.
 
 ## Architecture
 
@@ -126,7 +145,9 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 
 | Field | Value | Purpose |
 |---|---|---|
-| `agents.defaults.model.primary` | `anthropic/claude-sonnet-4-6` | Cost-effective model for read queries |
+| `agents.defaults.model.primary` | `openai/gpt-5.5` | Codex-subscription model (see Model auth above) |
+| `agents.defaults.model.fallbacks` | `["anthropic/claude-sonnet-4-6"]` | Automatic fallback via `ANTHROPIC_API_KEY` when the primary is unavailable/rate-limited |
+| `plugins.entries.codex` | enabled | Codex app-server harness — required for `openai/*` agent turns on subscription auth |
 | `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
 | `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
 | `channels.telegram.contextVisibility` | `allowlist` | Quoted/thread context from non-allowlisted senders never reaches the model (prompt-injection surface reduction; requires OpenClaw ≥ 2026.4.5) |
@@ -286,10 +307,16 @@ Once the bot is running, try these in a DM:
 | Issue | Fix |
 |---|---|
 | Bot doesn't respond to DM | Check `docker compose logs` — verify Telegram token is valid |
+| Bot silent in a group (no inbound in logs) | Two usual causes: (1) the group's chat ID isn't `TELEGRAM_GROUP_ID` in `.env` (`groupPolicy: allowlist` drops other groups silently); (2) **bot privacy mode is on** — check with `getMe` (`can_read_all_group_messages` must be `true`); fix via @BotFather `/setprivacy` → Disable, then remove + re-add the bot to the group |
 | Bot responds in wrong group | Verify `TELEGRAM_GROUP_ID` in `.env` matches your group; rebuild with `docker compose up --build` |
 | Bot answers non-mentioned group messages | Known upstream bug (config persistence on restart) — restart the container and re-verify; see Upgrading OpenClaw step 4 |
 | Container crash-loops | Check logs (`docker compose logs --tail 200`); examine recent image/config changes |
 | `docker inspect` shows the group bot's API keys | Expected — those are env vars, visible to host root; this is why VPS isolation matters. The propose bot's delegate key and Safe API key are file secrets (`/run/secrets/...`) and do **not** appear in `docker inspect` |
 | Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key via the `SAFE_API_KEY_FILE` secret; both the `health_check` warning and the mainnet pending-queue check accept the file form |
-| Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower |
-| High API costs | Set a billing cap at console.anthropic.com; consider switching to `claude-haiku-4-5` in `openclaw.json` |
+| Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower. Also ensure `SOUL.md` pins your deployment's contract addresses (see below) so the bot doesn't rediscover them every conversation |
+| Bot says it has no Suzaku tools / "not exposed in this session" | Thread session config is computed once — send `/new` in the chat after any model/runtime/plugin change (a gateway restart alone does not refresh existing threads) |
+| Codex login: browser shows `ERR_CONNECTION_REFUSED` on `localhost:1455` | Expected — the callback listener is inside the container. Paste the full redirect URL from the address bar into the waiting terminal prompt |
+| `models auth login requires an interactive TTY` | Run the login from a real terminal, not piped/scripted |
+| High API costs | Set a billing cap at console.anthropic.com; consider switching crons to `claude-haiku-4-5`, or the subscription route (see Model auth) for interactive use |
+
+**SOUL.md pins the monitored deployment.** The committed `SOUL.md` carries the Dexalot mainnet contract addresses in a "Known deployment" section so the bot answers without a discovery round-trip. Deploying for a different L1? Update those addresses (and the persona text) accordingly.
