@@ -171,8 +171,8 @@ The `complete_*` steps need a P-Chain key because they issue P-Chain transaction
 
 ```bash
 pnpm build          # tsc → dist/
-pnpm cli            # ts-node dev mode (pnpx ts-node src/cli.ts)
-pnpm link --global  # install as global `suzaku-cli` command
+pnpm cli <args>     # ts-node dev mode (pnpx ts-node src/cli.ts) — e.g. `pnpm cli --help`; with no args it prints usage and exits
+pnpm link --global  # install as global `suzaku-cli` command (needs a pnpm global bin dir — run `pnpm setup` once if it errors)
 ```
 
 Entry point: `bin/cli.js` (production) / `src/cli.ts` (dev).

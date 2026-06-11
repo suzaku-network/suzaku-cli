@@ -8,23 +8,36 @@ Mainnet writes never auto-execute. Testnet writes run immediately (unless `SUZAK
 
 ## Setup
 
+**From source** (the package is not yet published to npm):
+
 ```bash
-npm install -g @suzaku-network/mcp
+git clone https://github.com/suzaku-network/suzaku-cli
+cd suzaku-cli
+pnpm install          # builds the CLI and this package (prepare script)
 ```
 
-Add to your MCP client config (e.g. `claude_desktop_config.json`):
+Add to your MCP client config (e.g. `claude_desktop_config.json`) with the **absolute** path to the built server:
 
 ```json
 {
   "mcpServers": {
     "suzaku": {
-      "command": "suzaku-mcp"
+      "command": "node",
+      "args": ["/absolute/path/to/suzaku-cli/packages/mcp/dist/server.js"]
     }
   }
 }
 ```
 
+Once published, `npm install -g @suzaku-network/mcp` will provide a `suzaku-mcp` binary usable directly as the `command`.
+
 This gives you all 69 read tools immediately. Add a signing method (see [Example configs](#example-configs)) when you need writes.
+
+To run the server by hand (it speaks MCP over stdio — it will sit silently waiting for a client):
+
+```bash
+node packages/mcp/dist/server.js [--read-only | --propose-only]
+```
 
 ## Server profiles
 
@@ -84,6 +97,8 @@ The Safe propose tools bypass this matrix entirely — they always queue an off-
 Add `SUZAKU_SAFE_ADDRESS` for Safe multisig overlay (works with any method).
 
 ## Example configs
+
+The examples use the published-binary form (`"command": "suzaku-mcp"`); for a source install substitute `"command": "node", "args": ["/absolute/path/.../packages/mcp/dist/server.js"]` as shown in Setup.
 
 **Testnet dev (raw key is fine here):**
 ```json
