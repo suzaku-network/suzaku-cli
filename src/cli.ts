@@ -4023,6 +4023,27 @@ async function main() {
         .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
         .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            const client = config.client;
+            if ('safe' in client && client.safe != undefined && !isCastMode()) {
+                // Route through the batch helper so the Safe propose path surfaces the
+                // safeTxHash and enforces propose-only, without touching the shared proxy.
+                const batch = await handleBatchTransaction([
+                    {
+                        to: rewardsAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.RewardsNativeToken as Abi,
+                            functionName: 'distributeRewards',
+                            args: [epoch, batchSize],
+                        }),
+                        value: '0',
+                    },
+                ], client.safe, client.account!.address as Hex, client.network);
+                if (batch.ethereumTxHash) {
+                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
+                }
+                logger.log(`distributeRewards for epoch ${epoch} batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
+                return;
+            }
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,

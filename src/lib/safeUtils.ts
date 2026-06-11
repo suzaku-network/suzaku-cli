@@ -24,7 +24,7 @@ interface TransactionStrategyResponse {
  */
 function assertDelegateOnly(isOwner: boolean): void {
   if (process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true' && isOwner) {
-    logger.exitError(['ALLOW_SAFE_DELEGATE_MAINNET is set but the signer is a Safe OWNER; this mode only permits delegate (propose-only) keys. Unset the env var to transact as an owner.']);
+    logger.exitError(['ALLOW_SAFE_DELEGATE_MAINNET is set but the signer is a Safe OWNER; this mode only permits delegate (propose-only) keys. Unset the env var to transact as an owner.'])
   }
 }
 
@@ -35,10 +35,10 @@ function assertDelegateOnly(isOwner: boolean): void {
 export function safeQueueUrl(network: string, safeAddress: string): string {
   return network === 'fuji'
     ? `https://wallet-transaction-fuji.ash.center/api/v1/safes/${safeAddress}/multisig-transactions/?executed=false`
-    : `https://app.safe.global/transactions/queue?safe=avax:${safeAddress}`;
+    : `https://app.safe.global/transactions/queue?safe=avax:${safeAddress}`
 }
 
-export interface SafeBatchTx {
+interface SafeBatchTx {
   to: Hex;
   data: Hex;
   value: string;
@@ -61,60 +61,59 @@ export async function handleBatchTransaction(
   txs: SafeBatchTx[],
   client: SafeClient,
   clientAddress: Hex,
-  network: string,
-): Promise<BatchTransactionResponse> {
-  const sender = getAddress(clientAddress);
-  clientAddress = clientAddress.toLowerCase() as Hex;
+  network: string): Promise<BatchTransactionResponse> {
+  const sender = getAddress(clientAddress)
+  clientAddress = clientAddress.toLowerCase() as Hex
   const [safeAddress, nonce] = await Promise.all([client.getAddress(), client.getNonce()]);
 
-  const owners = (await client.getOwners()).map((o) => o.toLowerCase());
-  const delegates = (await client.apiKit.getSafeDelegates({ safeAddress })).results.map((d) => d.delegate.toLowerCase());
-  const isOwner = owners.includes(clientAddress);
+  const owners = (await client.getOwners()).map((o) => o.toLowerCase())
+  const delegates = (await client.apiKit.getSafeDelegates({ safeAddress })).results.map((d) => d.delegate.toLowerCase())
+  const isOwner = owners.includes(clientAddress)
 
   if (!isOwner && !delegates.includes(clientAddress)) {
-    logger.exitError(['You are neither an owner or a delegate of this Safe']);
+    logger.exitError(['You are neither an owner or a delegate of this Safe'])
   }
-  assertDelegateOnly(isOwner);
+  assertDelegateOnly(isOwner)
 
   // Pin the nonce we just read so the hash is deterministic across reruns (idempotency)
   // and the delegate proposal below is internally consistent under a concurrent-nonce race.
-  const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs, options: { nonce } });
-  const safeTxHash = await client.protocolKit.getTransactionHash(safeTransaction) as Hex;
-  const queueUrl = safeQueueUrl(network, safeAddress);
-  logger.addData('safeQueueUrl', queueUrl);
+  const safeTransaction = await client.protocolKit.createTransaction({ transactions: txs, options: { nonce } })
+  const safeTxHash = await client.protocolKit.getTransactionHash(safeTransaction) as Hex
+  const queueUrl = safeQueueUrl(network, safeAddress)
+  logger.addData('safeQueueUrl', queueUrl)
 
   // Idempotency: an identical pending batch hashes to the same safeTxHash — skip it.
-  const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce });
+  const pendingTxs = await client.apiKit.getPendingTransactions(safeAddress, { currentNonce: nonce })
   if (pendingTxs.results.some((tx) => tx.safeTxHash === safeTxHash)) {
-    logger.addData('safeTxHash', safeTxHash);
-    logger.log(`Safe batch ${safeTxHash} is already pending. Skipping.`);
-    return { safeTxHash, action: 'skip' };
+    logger.addData('safeTxHash', safeTxHash)
+    logger.log(`Safe batch ${safeTxHash} is already pending. Skipping.`)
+    return { safeTxHash, action: 'skip' }
   }
 
   if (isOwner) {
-    logger.debug(`Sending a new Safe batch transaction as owner`);
-    const result = await client.send({ transactions: txs });
-    const sent = result.transactions as { ethereumTxHash?: Hex; safeTxHash?: Hex } | undefined;
-    const ethereumTxHash = sent?.ethereumTxHash;
+    logger.debug(`Sending a new Safe batch transaction as owner`)
+    const result = await client.send({ transactions: txs })
+    const sent = result.transactions as { ethereumTxHash?: Hex; safeTxHash?: Hex } | undefined
+    const ethereumTxHash = sent?.ethereumTxHash
     // send() rebuilds the tx internally and may land on a different nonce under a race —
     // trust the hash it reports (execute path leaves it unset; fall back to ours).
-    const resolvedSafeTxHash = (sent?.safeTxHash ?? safeTxHash) as Hex;
-    logger.addData('safeTxHash', resolvedSafeTxHash);
-    return { safeTxHash: resolvedSafeTxHash, ethereumTxHash, action: 'new' };
+    const resolvedSafeTxHash = (sent?.safeTxHash ?? safeTxHash) as Hex
+    logger.addData('safeTxHash', resolvedSafeTxHash)
+    return { safeTxHash: resolvedSafeTxHash, ethereumTxHash, action: 'new' }
   }
 
-  logger.addData('safeTxHash', safeTxHash);
-  logger.debug(`Proposing a Safe batch transaction as delegate`);
-  const signature = await client.protocolKit.signHash(safeTxHash);
+  logger.addData('safeTxHash', safeTxHash)
+  logger.debug(`Proposing a Safe batch transaction as delegate`)
+  const signature = await client.protocolKit.signHash(safeTxHash)
   await client.apiKit.proposeTransaction({
     safeAddress,
     safeTransactionData: safeTransaction.data,
     safeTxHash,
     senderAddress: sender,
-    senderSignature: signature.data,
-  });
-  logger.log(`Proposed Safe batch transaction ${safeTxHash}\nReview and sign: ${queueUrl}`);
-  return { safeTxHash, action: 'propose' };
+    senderSignature: signature.data
+  })
+  logger.log(`Proposed Safe batch transaction ${safeTxHash}\nReview and sign: ${queueUrl}`)
+  return { safeTxHash, action: 'propose' }
 }
 
 /**
@@ -146,7 +145,6 @@ export async function handleTransactionStrategy(
   if (newOrProposal === 'propose' && !delegates.includes(clientAddress)) {
     logger.exitError(['You are neither an owner or a delegate of this Safe'])
   }
-  assertDelegateOnly(owners.includes(clientAddress));
 
   const selections = pendingTxs.results.reduce((acc, tx) => {
     // filter similar method calls
@@ -185,20 +183,6 @@ export async function handleTransactionStrategy(
 
   // Prompt a message which summarizes the pending transactions and asks the user to choose between available actions: 'confirm' | 'skip' | 'new'.
   if (selections.length > 0) {
-    // Non-interactive runs (--json or no TTY) cannot answer the prompt: logger.prompt
-    // returns 'y' in json mode (never a valid choice) and readline hangs on a silent
-    // stdin pipe. Surface the partial matches and fall through to the default action.
-    if (logger.getConfig().jsonMode || !process.stdin.isTTY) {
-      logger.log(`Found ${selections.length} similar pending Safe transaction(s); defaulting to '${newOrProposal}'.`);
-      logger.addData('similarPendingSafeTxs', selections.map((sel) => ({
-        safeTxHash: sel.safeTxHash,
-        callSignature: sel.callSignature,
-        nonce: sel.txNonce,
-        signed: sel.signed,
-      })));
-      return { action: newOrProposal };
-    }
-
     let promptMessage = `Similar pending transactions found in the Safe:\n`;
     selections.forEach((sel, index) => {
       promptMessage += `[${index + 1}] ${sel.safeTxHash}:\n  ${sel.callSignature} - ${sel.signed ? 'signed' : 'unsigned'} - similar\n`;
