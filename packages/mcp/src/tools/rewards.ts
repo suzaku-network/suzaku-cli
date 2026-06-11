@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { runCli, formatResult, formatGuardError, requireSigner, CliResult, RunCliOptions } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
@@ -30,6 +31,19 @@ function resolveAddress(param: string | undefined, envName: string): string | un
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : undefined;
 }
 
+/** Resolve a secret from a `<NAME>_FILE` path (compose file secret) or the direct env var. */
+function readSecretEnv(directVar: string, fileVar: string): string | undefined {
+  const file = process.env[fileVar];
+  if (file) {
+    try {
+      return readFileSync(file, 'utf8').trim();
+    } catch {
+      return undefined;
+    }
+  }
+  return process.env[directVar];
+}
+
 interface PendingQueueCheck {
   blocked: boolean;
   matches: string[];
@@ -52,10 +66,13 @@ async function checkPendingSafeQueue(
   if (!safeAddress) return { blocked: false, matches: [] };
   try {
     const headers: Record<string, string> = {};
-    if (network === 'fuji' || !process.env.SAFE_API_KEY) {
+    // Accepts the file-secret form (SAFE_API_KEY_FILE) used by the propose-bot deploy,
+    // so the mainnet queue check authenticates instead of failing open.
+    const apiKey = readSecretEnv('SAFE_API_KEY', 'SAFE_API_KEY_FILE');
+    if (network === 'fuji' || !apiKey) {
       // fuji tx service is unauthenticated; mainnet without a key will likely 401 below
     } else {
-      headers.Authorization = `Bearer ${process.env.SAFE_API_KEY}`;
+      headers.Authorization = `Bearer ${apiKey}`;
     }
     const res = await fetch(
       `${safeTxServiceBase(network)}/v1/safes/${safeAddress}/multisig-transactions/?executed=false&limit=50`,
