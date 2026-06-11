@@ -14,7 +14,76 @@ function extractData(result: CliResult, label?: string, warnings?: string[]): Re
   return result.data as Record<string, unknown>;
 }
 
-export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
+// 4-byte selectors used to spot already-queued proposals (cross-checked against abi-selectors.json)
+const SET_REWARDS_AMOUNT_SELECTOR = 'bcad858a'; // setRewardsAmountForEpochs(uint48,uint48,uint256)
+const DISTRIBUTE_REWARDS_SELECTOR = '733f44ae'; // distributeRewards(uint48,uint48)
+
+/** Same chain → tx-service mapping the CLI uses (src/client.ts) */
+function safeTxServiceBase(network?: string): string {
+  return network === 'fuji'
+    ? 'https://wallet-transaction-fuji.ash.center/api'
+    : 'https://api.safe.global/tx-service/avax/api';
+}
+
+function resolveAddress(param: string | undefined, envName: string): string | undefined {
+  const v = param ?? process.env[envName]?.trim();
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : undefined;
+}
+
+interface PendingQueueCheck {
+  blocked: boolean;
+  matches: string[];
+  warning?: string;
+}
+
+/**
+ * Scan the Safe queue for an unexecuted proposal that already carries a call with
+ * `selector` into `targetAddress` — matches both direct calls and calls nested in a
+ * MultiSend batch (substring scan of the batch calldata). Fail-open with a warning:
+ * this check is advisory; the CLI's exact-match dedup and the human signature in the
+ * Safe UI remain the hard gates.
+ */
+async function checkPendingSafeQueue(
+  network: string | undefined,
+  selector: string,
+  targetAddress: string,
+): Promise<PendingQueueCheck> {
+  const safeAddress = process.env.SUZAKU_SAFE_ADDRESS;
+  if (!safeAddress) return { blocked: false, matches: [] };
+  try {
+    const headers: Record<string, string> = {};
+    if (network === 'fuji' || !process.env.SAFE_API_KEY) {
+      // fuji tx service is unauthenticated; mainnet without a key will likely 401 below
+    } else {
+      headers.Authorization = `Bearer ${process.env.SAFE_API_KEY}`;
+    }
+    const res = await fetch(
+      `${safeTxServiceBase(network)}/v1/safes/${safeAddress}/multisig-transactions/?executed=false&limit=50`,
+      { headers },
+    );
+    if (!res.ok) {
+      return { blocked: false, matches: [], warning: `Safe queue check unavailable (HTTP ${res.status}) — verify the queue manually before signing` };
+    }
+    const body = await res.json() as { results?: Array<{ safeTxHash?: string; to?: string; data?: string | null }> };
+    const target = targetAddress.toLowerCase().replace(/^0x/, '');
+    const matches = (body.results ?? [])
+      .filter((tx) => {
+        const data = (tx.data ?? '').toLowerCase();
+        if (!data.includes(selector)) return false;
+        return (tx.to ?? '').toLowerCase() === targetAddress.toLowerCase() || data.includes(target);
+      })
+      .map((tx) => tx.safeTxHash ?? 'unknown');
+    return { blocked: matches.length > 0, matches };
+  } catch (err) {
+    return {
+      blocked: false,
+      matches: [],
+      warning: `Safe queue check failed (${err instanceof Error ? err.message : String(err)}) — verify the queue manually before signing`,
+    };
+  }
+}
+
+export function registerRewardsTools(server: McpServer, readOnly?: boolean, proposeOnly?: boolean) {
   // ── Reads ──
 
   server.tool(
@@ -339,6 +408,12 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
 
   if (readOnly) return;
 
+  if (!proposeOnly) registerDirectWriteTools(server);
+
+  registerProposeTools(server);
+}
+
+function registerDirectWriteTools(server: McpServer) {
   // ── Writes ──
 
   server.tool(
@@ -441,6 +516,250 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
       const args = ['rewards', 'claim-undistributed', rewardsAddress, epoch];
       if (recipient) args.push('--recipient', recipient);
       return formatResult(await runCli(args, { network, rpcUrl, privateKey: true }));
+    },
+  );
+}
+
+// ── Safe propose tools ──
+// These never send a transaction: the CLI (with --safe and a DELEGATE key) submits an
+// off-chain proposal to the Safe transaction service; owners review the decoded
+// calldata in the Safe UI and sign there. bypassSuggest is sound ONLY because of that
+// human signature gate.
+function registerProposeTools(server: McpServer) {
+  server.tool(
+    'rewards_set_amount_propose',
+    'Propose (never execute) the weekly rewards funding for ONE epoch to the Safe queue: a single MultiSend batch of ERC20 approve + setRewardsAmountForEpochs(epoch, 1, amount). ' +
+    'Hard-refuses if the epoch already has rewards set on-chain (set-amount ACCUMULATES — the epoch 35/36 incident), if the epoch is outside the settable window, if the amount fails bounds, or if a matching proposal is already queued. ' +
+    'Requires SUZAKU_SAFE_ADDRESS and a Safe DELEGATE key. Humans must verify the decoded calldata in the Safe UI before signing.',
+    {
+      epoch: z.string().describe('The single completed epoch to set rewards for'),
+      rewardsAmount: z.string().describe('Rewards amount in human-readable decimal token units (e.g. "10450" for 10450 ALOT). The CLI converts to wei from on-chain token decimals.'),
+      rewardsAddress: Address.optional().describe('Rewards contract address (defaults to SUZAKU_REWARDS_ADDRESS)'),
+      middlewareAddress: Address.optional().describe('L1Middleware address for epoch-window checks (defaults to SUZAKU_MIDDLEWARE_ADDRESS)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { destructiveHint: true },
+    async ({ epoch, rewardsAmount, rewardsAddress: rewardsParam, middlewareAddress: middlewareParam, network, rpcUrl }) => {
+      const pkErr = requireSigner();
+      if (pkErr) return pkErr;
+      if (!process.env.SUZAKU_SAFE_ADDRESS) {
+        return formatGuardError('rewards_set_amount_propose requires SUZAKU_SAFE_ADDRESS — this tool only proposes to a Safe queue, it never sends transactions');
+      }
+      const rewardsAddress = resolveAddress(rewardsParam, 'SUZAKU_REWARDS_ADDRESS');
+      if (!rewardsAddress) return formatGuardError('No rewards contract address: pass rewardsAddress or set SUZAKU_REWARDS_ADDRESS');
+      const middlewareAddress = resolveAddress(middlewareParam, 'SUZAKU_MIDDLEWARE_ADDRESS');
+      if (!middlewareAddress) return formatGuardError('No middleware address: pass middlewareAddress or set SUZAKU_MIDDLEWARE_ADDRESS (needed to verify the epoch window)');
+
+      const guardErr = await guardWriteOperation('rewards_set_amount_propose', { rewardsAddress, epoch, rewardsAmount, network, rpcUrl });
+      if (guardErr) return formatGuardError(guardErr);
+
+      const epochNum = Number(epoch);
+      if (!Number.isInteger(epochNum) || epochNum < 0) return formatGuardError(`epoch must be a non-negative integer, got "${epoch}"`);
+      if (!/^\d+(\.\d+)?$/.test(rewardsAmount) || Number(rewardsAmount) <= 0) {
+        return formatGuardError(`rewardsAmount must be a positive decimal number, got "${rewardsAmount}"`);
+      }
+      const warnings: string[] = [];
+      const cap = Number(process.env.SUZAKU_MAX_REWARDS_AMOUNT ?? '');
+      if (Number.isFinite(cap) && cap > 0) {
+        if (Number(rewardsAmount) >= cap) {
+          return formatGuardError(`rewardsAmount ${rewardsAmount} is at or above the configured cap (SUZAKU_MAX_REWARDS_AMOUNT=${cap}) — refusing`);
+        }
+      } else {
+        warnings.push('SUZAKU_MAX_REWARDS_AMOUNT is not configured — no upper bound was enforced on the proposed amount');
+      }
+
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
+
+      // Hard gate (fail-closed): the epoch must have NO rewards set — set-amount accumulates.
+      const epochRewardsResult = await runCli(['rewards', 'get-epoch-rewards', rewardsAddress, epoch], opts);
+      if (!epochRewardsResult.success) {
+        return formatGuardError(`Pre-check failed (get-epoch-rewards): ${epochRewardsResult.error ?? 'no data'} — refusing to propose without verifying on-chain state`);
+      }
+      const epochRewardsWei = String(extractData(epochRewardsResult).epochRewards ?? '0');
+      if (!/^0+$/.test(epochRewardsWei)) {
+        return formatGuardError(
+          `Epoch ${epoch} already has rewards set on-chain (epochRewards=${epochRewardsWei} wei). ` +
+          'set-amount ACCUMULATES — proposing again would ADD to the existing amount (the epoch 35/36 incident). Refusing. ' +
+          'Run rewards_epoch_diagnosis for the full history.',
+        );
+      }
+
+      // Epoch window (fail-closed): only the last completed epoch or the one before it.
+      const currentEpochResult = await runCli(['middleware', 'get-current-epoch', middlewareAddress], { ...opts, skipDedup: true });
+      const currentEpoch = Number(extractData(currentEpochResult).epoch);
+      if (!currentEpochResult.success || !Number.isInteger(currentEpoch)) {
+        return formatGuardError(`Pre-check failed (get-current-epoch): ${currentEpochResult.error ?? 'no data'} — refusing to propose without verifying the epoch window`);
+      }
+      if (epochNum >= currentEpoch) {
+        return formatGuardError(`Epoch ${epoch} has not completed yet (current epoch is ${currentEpoch}) — rewards are set for completed epochs only`);
+      }
+      if (epochNum < currentEpoch - 2) {
+        return formatGuardError(`Epoch ${epoch} is stale (current epoch is ${currentEpoch}); refusing to set rewards this far back — if intentional, run the CLI manually`);
+      }
+
+      // Best-effort: event history catches edge states epochRewards alone can miss.
+      let setAmountEventCount: number | null = null;
+      const eventsResult = await runCli(
+        ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress],
+        { ...opts, timeout: 180_000 },
+      );
+      if (eventsResult.success) {
+        const ev = extractData(eventsResult).rewardsAmountSetEvents as Record<string, unknown> | undefined;
+        setAmountEventCount = Number(ev?.eventCount ?? 0);
+        if (setAmountEventCount > 0) {
+          return formatGuardError(`${setAmountEventCount} set-amount event(s) already exist for epoch ${epoch} — refusing (accumulation guard)`);
+        }
+      } else {
+        warnings.push(`set-amount event history unavailable (${eventsResult.error ?? 'no data'}) — pre-check relied on epochRewards only`);
+      }
+
+      // Advisory: a matching proposal already sitting unsigned in the Safe queue.
+      const pending = await checkPendingSafeQueue(network, SET_REWARDS_AMOUNT_SELECTOR, rewardsAddress);
+      if (pending.blocked) {
+        return formatGuardError(
+          `A pending Safe proposal already contains setRewardsAmountForEpochs for this rewards contract (${pending.matches.join(', ')}). ` +
+          'Sign or delete it in the Safe before proposing again.',
+        );
+      }
+      if (pending.warning) warnings.push(pending.warning);
+
+      const preCheckAt = new Date().toISOString();
+      const proposeResult = await runCli(
+        ['rewards', 'set-amount', rewardsAddress, epoch, '1', rewardsAmount],
+        { network, rpcUrl, privateKey: true, bypassSuggest: true, timeout: 180_000 },
+      );
+      if (!proposeResult.success) return formatResult(proposeResult);
+      const data = extractData(proposeResult);
+
+      return formatResult({
+        success: true,
+        data: {
+          proposed: true,
+          safeTxHash: data.safeTxHash ?? null,
+          safeQueueUrl: data.safeQueueUrl ?? null,
+          proposal: {
+            rewardsContract: rewardsAddress,
+            batch: ['ERC20.approve(rewardsContract, amount)', `setRewardsAmountForEpochs(${epochNum}, 1, amount)`],
+            epoch: epochNum,
+            numberOfEpochs: 1,
+            amountHuman: rewardsAmount,
+            amountNote: 'wei value is computed by the CLI from on-chain token decimals — verify it in the decoded Safe calldata',
+          },
+          preCheck: {
+            at: preCheckAt,
+            epochRewardsWei,
+            setAmountEventCount,
+            currentEpoch,
+            note: 'point-in-time — on-chain state may have changed since',
+          },
+          verifyBeforeSigning: [
+            `In the Safe UI, decode the batch and check it is exactly: approve(${rewardsAddress}, amount) + setRewardsAmountForEpochs(${epochNum}, 1, amount) with amount = ${rewardsAmount} tokens in wei`,
+            `Re-run rewards_epoch_diagnosis for epoch ${epochNum} immediately before signing — the pre-check above is from ${preCheckAt} and may be stale`,
+            `rewards_get_epoch_rewards(${epochNum}) must still be 0 at signing time`,
+            'Do not sign on the bot\'s say-so — the decoded calldata in the Safe UI is the source of truth',
+          ],
+          ...(warnings.length > 0 ? { _warnings: warnings } : {}),
+        },
+      });
+    },
+  );
+
+  server.tool(
+    'rewards_distribute_propose',
+    'Propose (never execute) a rewards distribution batch for an epoch to the Safe queue. ' +
+    'Refuses if the epoch has no rewards set; returns early if distribution is already complete; refuses if a matching distribute proposal is already queued. ' +
+    'Requires SUZAKU_SAFE_ADDRESS and a Safe DELEGATE key. Humans must verify the decoded calldata in the Safe UI before signing.',
+    {
+      epoch: z.string().describe('Epoch to distribute rewards for'),
+      batchSize: z.string().describe('Positive integer — number of operators to process in this distribution batch'),
+      rewardsAddress: Address.optional().describe('Rewards contract address (defaults to SUZAKU_REWARDS_ADDRESS)'),
+      network: Network,
+      rpcUrl: RpcUrl,
+    },
+    { destructiveHint: true },
+    async ({ epoch, batchSize, rewardsAddress: rewardsParam, network, rpcUrl }) => {
+      const pkErr = requireSigner();
+      if (pkErr) return pkErr;
+      if (!process.env.SUZAKU_SAFE_ADDRESS) {
+        return formatGuardError('rewards_distribute_propose requires SUZAKU_SAFE_ADDRESS — this tool only proposes to a Safe queue, it never sends transactions');
+      }
+      const rewardsAddress = resolveAddress(rewardsParam, 'SUZAKU_REWARDS_ADDRESS');
+      if (!rewardsAddress) return formatGuardError('No rewards contract address: pass rewardsAddress or set SUZAKU_REWARDS_ADDRESS');
+
+      const guardErr = await guardWriteOperation('rewards_distribute_propose', { rewardsAddress, epoch, batchSize, network, rpcUrl });
+      if (guardErr) return formatGuardError(guardErr);
+
+      const epochNum = Number(epoch);
+      if (!Number.isInteger(epochNum) || epochNum < 0) return formatGuardError(`epoch must be a non-negative integer, got "${epoch}"`);
+      if (!/^[1-9]\d*$/.test(batchSize)) return formatGuardError(`batchSize must be a positive integer, got "${batchSize}"`);
+
+      const warnings: string[] = [];
+      const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
+
+      // Fail-closed: rewards must be set before distribution can be proposed.
+      const epochRewardsResult = await runCli(['rewards', 'get-epoch-rewards', rewardsAddress, epoch], opts);
+      if (!epochRewardsResult.success) {
+        return formatGuardError(`Pre-check failed (get-epoch-rewards): ${epochRewardsResult.error ?? 'no data'} — refusing to propose without verifying on-chain state`);
+      }
+      const epochRewardsWei = String(extractData(epochRewardsResult).epochRewards ?? '0');
+      if (/^0+$/.test(epochRewardsWei)) {
+        return formatGuardError(`Epoch ${epoch} has no rewards set (epochRewards=0) — run rewards_set_amount_propose first; distributing now would be a no-op`);
+      }
+
+      // Early return: nothing left to distribute.
+      const batchResult = await runCli(['rewards', 'get-distribution-batch', rewardsAddress, epoch], opts);
+      const batch = extractData(batchResult, 'get-distribution-batch', warnings).distributionBatch as Record<string, unknown> | undefined;
+      if (batch?.isComplete === true || batch?.isComplete === 'true') {
+        return formatResult({
+          success: true,
+          data: { proposed: false, reason: `Distribution for epoch ${epoch} is already complete — nothing to propose`, distributionBatch: batch },
+        });
+      }
+
+      const pending = await checkPendingSafeQueue(network, DISTRIBUTE_REWARDS_SELECTOR, rewardsAddress);
+      if (pending.blocked) {
+        return formatGuardError(
+          `A pending Safe proposal already contains distributeRewards for this rewards contract (${pending.matches.join(', ')}). ` +
+          'Sign or delete it in the Safe before proposing again.',
+        );
+      }
+      if (pending.warning) warnings.push(pending.warning);
+
+      const preCheckAt = new Date().toISOString();
+      const proposeResult = await runCli(
+        ['rewards', 'distribute', rewardsAddress, epoch, batchSize],
+        { network, rpcUrl, privateKey: true, bypassSuggest: true, timeout: 180_000 },
+      );
+      if (!proposeResult.success) return formatResult(proposeResult);
+      const data = extractData(proposeResult);
+
+      return formatResult({
+        success: true,
+        data: {
+          proposed: true,
+          safeTxHash: data.safeTxHash ?? null,
+          safeQueueUrl: data.safeQueueUrl ?? null,
+          proposal: {
+            rewardsContract: rewardsAddress,
+            function: `distributeRewards(${epochNum}, ${batchSize})`,
+            epoch: epochNum,
+            batchSize: Number(batchSize),
+          },
+          preCheck: {
+            at: preCheckAt,
+            epochRewardsWei,
+            distributionBatch: batch ?? null,
+            note: 'point-in-time — on-chain state may have changed since',
+          },
+          verifyBeforeSigning: [
+            `In the Safe UI, decode the call and check it is exactly distributeRewards(${epochNum}, ${batchSize}) on ${rewardsAddress}`,
+            `Re-run rewards_epoch_diagnosis for epoch ${epochNum} immediately before signing — the pre-check above is from ${preCheckAt} and may be stale`,
+            'Do not sign on the bot\'s say-so — the decoded calldata in the Safe UI is the source of truth',
+          ],
+          ...(warnings.length > 0 ? { _warnings: warnings } : {}),
+        },
+      });
     },
   );
 }
