@@ -6,7 +6,6 @@ TypeScript CLI for the Suzaku restaking protocol on Avalanche. Built with Comman
 
 ```
 /                   CLI package (this level)
-packages/keeper/    Keeper bot for StakingVault operations — see keeper-review.md for open issues
 packages/mcp/       MCP server (127 tools wrapping this CLI; --read-only and --propose-only profiles) — see packages/mcp/CLAUDE.md
 ```
 
@@ -47,7 +46,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 | `commandUtils.ts` | Monkey-patches `Command.prototype.action` to wrap all actions with error handling + `logger.printJson()` |
 | `cliParser.ts` | Argument/option parsers (`ParserPrivateKey`, `ParserAddress`, `ParserHex`, `ParserNodeID`, `ParserAVAX`). **Mainnet raw-PK guard (Guard A) lives here**; relaxed only for `--safe` + `--safe-propose` |
 | `viemUtils.ts` | `curriedContract()` — curried contract factory with ABI validation. `withSafeWrite()` — proxy adding simulate-then-execute, Safe tx strategy, cast mode, event log parsing. `contractAbiValidation()` — selector matching with Aho-Corasick + proxy detection |
-| `chainList.ts` | Chain definitions (mainnet, fuji, anvil, kitetestnet, custom). `setCustomChainRpcUrl()` for `--rpc-url` |
+| `chainList.ts` | Chain definitions (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom). `setCustomChainRpcUrl()` for `--rpc-url` |
 | `castUtils.ts` | `--cast` mode: formats equivalent `cast call`/`cast send`/`curl` commands instead of executing |
 | `safeUtils.ts` | Safe multisig transaction strategy: `handleTransactionStrategy` (match pending txs, confirm/propose/skip) and `handleBatchTransaction` (atomic batch send/propose for `rewards set-amount`/`distribute` whenever `--safe` is active; pins nonce for a deterministic, idempotent SafeTxHash; `--safe-propose` sets `proposeOnly` to refuse owner keys). Also exports `safeQueueUrl` |
 | `ledgerUtils.ts` | Ledger hardware wallet integration (account derivation, Safe provider adapter) |
@@ -75,7 +74,7 @@ One file per contract: `L1Middleware`, `VaultTokenized`, `VaultFactory`, `Operat
 
 | Flag | Env | Purpose |
 |---|---|---|
-| `-n, --network <network>` | — | Chain selector: `mainnet` (default), `fuji`, `anvil`, `kitetestnet`, `custom` |
+| `-n, --network <network>` | — | Chain selector: `mainnet` (default), `fuji`, `anvil`, `kiteaitestnet`, `kiteai`, `custom` |
 | `-r, --rpc-url <rpcUrl>` | — | RPC URL; auto-sets `--network custom`, resolves chain ID + network ID from the node |
 | `-k, --private-key <pk>` | `PK` | EVM private key (hex). Conflicts with `--secret-name`, `--ledger` |
 | `-s, --secret-name <name>` | — | GPG keystore secret. Conflicts with `--private-key`, `--ledger` |
@@ -100,7 +99,8 @@ Defined in `src/lib/chainList.ts`:
 | `mainnet` | 43114 | Avalanche C-Chain default | no | `mainnet` |
 | `fuji` | 43113 | Avalanche Fuji default | yes | `fuji` |
 | `anvil` | 31337 | `http://localhost:8545` | yes | `fuji` |
-| `kitetestnet` | 2368 | `https://rpc-testnet.gokite.ai/` | yes | `fuji` |
+| `kiteaitestnet` | 2368 | `https://rpc-testnet.gokite.ai/` | yes | `fuji` |
+| `kiteai` | 2366 | `https://rpc.gokite.ai` | no | `mainnet` |
 | `custom` | dynamic | from `--rpc-url` | auto-detected | auto-detected |
 
 `--rpc-url` triggers `setCustomChainRpcUrl()` which queries the node for network ID and chain ID, then overrides the `custom` chain definition. If network ID is `"1"`, it's treated as mainnet; otherwise fuji/testnet.
