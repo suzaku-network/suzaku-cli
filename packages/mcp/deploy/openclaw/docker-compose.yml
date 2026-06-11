@@ -24,6 +24,11 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_ADMIN_USER_ID=${TELEGRAM_ADMIN_USER_ID}
       - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
+      # OpenClaw (≥2026.x) refuses to start its gateway in a container without auth
+      # ("Refusing to bind gateway to auto without auth") — any random secret works,
+      # e.g. `openssl rand -hex 24`. The gateway port is not published; the token only
+      # gates access within the compose network.
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
     networks:
       - suzaku-net
 
@@ -70,6 +75,8 @@ services:
       - SUZAKU_REWARDS_ADDRESS=${SUZAKU_REWARDS_ADDRESS}
       - SUZAKU_MIDDLEWARE_ADDRESS=${SUZAKU_MIDDLEWARE_ADDRESS}
       - SUZAKU_MAX_REWARDS_AMOUNT=${SUZAKU_MAX_REWARDS_AMOUNT}
+      # Same gateway-auth requirement as suzaku-bot above.
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
     networks:
       - suzaku-net
 

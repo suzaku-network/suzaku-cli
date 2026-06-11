@@ -21,8 +21,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_ADMIN_USER_ID=123456789
 TELEGRAM_GROUP_ID=-100123456789
+OPENCLAW_GATEWAY_TOKEN=<random secret — generate with: openssl rand -hex 24>
 EOF
 ```
+
+`OPENCLAW_GATEWAY_TOKEN` is **required**: OpenClaw refuses to start its gateway inside a container without an auth credential (the container crash-loops with "Refusing to bind gateway to auto without auth"). Any random secret works — nothing else needs to know it; the gateway port is not published outside the compose network.
 
 ### 3. Build and run
 
@@ -71,12 +74,13 @@ curl -fsSL https://get.docker.com | sh
 git clone <your-repo-url> /opt/suzaku
 cd /opt/suzaku/packages/mcp/deploy/openclaw
 
-# 5. Create .env (same as local testing)
+# 5. Create .env (same as local testing — OPENCLAW_GATEWAY_TOKEN is required, see Quick Start)
 cat > .env <<'EOF'
 ANTHROPIC_API_KEY=sk-ant-...
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_ADMIN_USER_ID=123456789
 TELEGRAM_GROUP_ID=-100123456789
+OPENCLAW_GATEWAY_TOKEN=<random secret — generate with: openssl rand -hex 24>
 EOF
 chmod 600 .env
 
@@ -192,15 +196,27 @@ suzaku-propose-bot (compose profile "propose")
 | `SUZAKU_DELEGATE_PK_FILE` | optional | Host path to the delegate-key secret file (default `./secrets/delegate_pk`) |
 | `SUZAKU_SAFE_API_KEY_FILE` | optional | Host path to the Safe API key secret file (default `./secrets/safe_api_key`). Distinct from the container-internal `SAFE_API_KEY_FILE` — do not set that one on the host |
 
+Append the required ones to the same `.env` you created in the Quick Start (the propose bot reuses `ANTHROPIC_API_KEY`, `TELEGRAM_ADMIN_USER_ID`, and `OPENCLAW_GATEWAY_TOKEN` from there):
+
+```bash
+cat >> .env <<'EOF'
+TELEGRAM_PROPOSE_BOT_TOKEN=987654:XYZ-...
+SUZAKU_SAFE_ADDRESS=0x<rewards-safe>
+SUZAKU_REWARDS_ADDRESS=0x<rewards-contract>
+SUZAKU_MIDDLEWARE_ADDRESS=0x<l1-middleware>
+SUZAKU_MAX_REWARDS_AMOUNT=10500
+EOF
+```
+
 **Secrets are delivered as files, not env vars.** The delegate EOA key and the Safe tx-service API key are compose **file secrets** mounted at `/run/secrets/delegate_pk` and `/run/secrets/safe_api_key`; the MCP runner reads them at spawn time via `SUZAKU_PK_FILE` / `SAFE_API_KEY_FILE` and injects them only into each CLI subprocess. They never appear in `docker inspect`, `/proc/PID/environ`, the compose env block, or the rendered `mcporter.json` (which carries only the static `/run/secrets/...` paths). The rendered `mcporter.json` is `chmod 600`.
 
 > Note on standalone compose: a file secret is a read-only bind-mount of a host file (mode 0444 by default) — plaintext on host disk, **not** tmpfs/encrypted (that is Swarm-only). The gain over env vars is removing the `docker inspect`/`environ`/child-inherit leaks. Keep the host files `chmod 600`, never commit them, and rely on host-disk encryption + VPS isolation for at-rest protection. The genuine "key never in container" upgrade is KMS signing (see CLAUDE.md → Future).
 
 ### One-time setup (in order)
 
-1. **Generate the delegate key** (a fresh EOA; it needs **no AVAX** — it only signs EIP-712 Safe-proposal payloads off-chain and never sends an on-chain transaction) and write it to the secret file: `mkdir -p ./secrets && printf '%s' 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk`. On mainnet also `printf '%s' <safe-api-key> > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key` (get the key at developer.safe.global). Never commit `./secrets/`.
+1. **Generate the delegate key** (a fresh EOA; it needs **no AVAX** — it only signs EIP-712 Safe-proposal payloads off-chain and never sends an on-chain transaction): `cast wallet new` prints a key and its address — keep the **address**, you need it as `DELEGATE_ADDRESS` in step 3 (for an existing key: `cast wallet address 0x<delegate-key>`). Write the key to the secret file: `mkdir -p ./secrets && printf '%s' 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk`. On mainnet also `printf '%s' <safe-api-key> > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key` (get the key at developer.safe.global). Never commit `./secrets/`.
 2. **Grant the Safe the rewards role and fund it** (owner action): the Safe must hold `REWARDS_MANAGER_ROLE` on the rewards contract (`suzaku-cli access-control ...` or the protocol admin does it) and a sufficient ALOT balance — the proposed batch pulls tokens from the Safe when executed. Verify: `cast call <rewards> "hasRole(bytes32,address)(bool)" $(cast keccak "REWARDS_MANAGER_ROLE") <safe>`.
-3. **Register the delegate** (owner action, from the repo root):
+3. **Register the delegate** (owner action, from the repo root; needs `node_modules` — run `pnpm install` first on a fresh clone). `DELEGATE_ADDRESS` is the address derived in step 1:
    ```bash
    NETWORK=fuji SAFE_ADDRESS=0x... DELEGATE_ADDRESS=0x... OWNER_PK=0x... \
      node scripts/add-safe-delegate.mjs
