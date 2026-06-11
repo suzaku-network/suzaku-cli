@@ -176,6 +176,20 @@ export async function handleTransactionStrategy(
 
   // Prompt a message which summarizes the pending transactions and asks the user to choose between available actions: 'confirm' | 'skip' | 'new'.
   if (selections.length > 0) {
+    // Non-interactive runs (--json or no TTY) cannot answer the prompt: logger.prompt
+    // returns 'y' in json mode (never a valid choice) and readline hangs on a silent
+    // stdin pipe. Surface the partial matches and fall through to the default action.
+    if (logger.getConfig().jsonMode || !process.stdin.isTTY) {
+      logger.log(`Found ${selections.length} similar pending Safe transaction(s); defaulting to '${newOrProposal}'.`);
+      logger.addData('similarPendingSafeTxs', selections.map((sel) => ({
+        safeTxHash: sel.safeTxHash,
+        callSignature: sel.callSignature,
+        nonce: sel.txNonce,
+        signed: sel.signed,
+      })));
+      return { action: newOrProposal };
+    }
+
     let promptMessage = `Similar pending transactions found in the Safe:\n`;
     selections.forEach((sel, index) => {
       promptMessage += `[${index + 1}] ${sel.safeTxHash}:\n  ${sel.callSignature} - ${sel.signed ? 'signed' : 'unsigned'} - similar\n`;
