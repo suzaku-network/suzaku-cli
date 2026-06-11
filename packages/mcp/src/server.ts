@@ -32,6 +32,13 @@ import { registerUptimeTools } from './tools/uptime.js';
 import { registerHeartbeatTools } from './tools/heartbeat.js';
 
 const readOnly = process.argv.includes('--read-only');
+// Propose-only profile: all reads + ONLY the Safe propose tools (rewards_*_propose).
+// The full write surface is never registered, so it cannot appear in tools/list.
+const proposeOnly = process.argv.includes('--propose-only');
+if (readOnly && proposeOnly) {
+  console.error('--read-only and --propose-only are mutually exclusive');
+  process.exit(1);
+}
 
 const server = new McpServer({
   name: 'suzaku',
@@ -251,7 +258,7 @@ server.tool(
   { readOnlyHint: true, idempotentHint: true },
   async ({ network, rpcUrl }) => {
     const publicHealth = process.env.SUZAKU_MCP_PUBLIC_HEALTH === 'true';
-    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly };
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly, proposeOnly };
 
     // In public health mode, suppress internal config details (signer type, Safe, guard config)
     if (!publicHealth) {
@@ -316,19 +323,22 @@ server.tool(
 
 // ── Tool Groups ──
 
-registerMiddlewareTools(server, readOnly);
-registerVaultTools(server, readOnly);
-registerOperatorTools(server, readOnly);
-registerL1RegistryTools(server, readOnly);
-registerOptInTools(server, readOnly);
-registerRewardsTools(server, readOnly);
-registerKiteStakingTools(server, readOnly);
-registerStakingVaultTools(server, readOnly);
-registerBalancerTools(server, readOnly);
-if (!readOnly) registerPoaSecurityModuleTools(server);
-registerLstWrapperTools(server, readOnly);
+// In propose-only mode every group except rewards is registered as read-only;
+// rewards additionally registers the two Safe propose tools.
+const suppressWrites = readOnly || proposeOnly;
+registerMiddlewareTools(server, suppressWrites);
+registerVaultTools(server, suppressWrites);
+registerOperatorTools(server, suppressWrites);
+registerL1RegistryTools(server, suppressWrites);
+registerOptInTools(server, suppressWrites);
+registerRewardsTools(server, readOnly, proposeOnly);
+registerKiteStakingTools(server, suppressWrites);
+registerStakingVaultTools(server, suppressWrites);
+registerBalancerTools(server, suppressWrites);
+if (!suppressWrites) registerPoaSecurityModuleTools(server);
+registerLstWrapperTools(server, suppressWrites);
 registerVaultHelperTools(server);
-registerUptimeTools(server, readOnly);
+registerUptimeTools(server, suppressWrites);
 registerHeartbeatTools(server);
 
 const transport = new StdioServerTransport();

@@ -49,6 +49,8 @@ const WRITE_TOOLS = [
   'poa_complete_validator_removal', 'poa_init_weight_update', 'poa_complete_weight_update',
   // rewards (new write tools)
   'rewards_set_amount', 'rewards_claim_undistributed',
+  // rewards (Safe propose tools — off-chain proposal, humans sign in the Safe UI)
+  'rewards_set_amount_propose', 'rewards_distribute_propose',
   // lst-wrapper (write subset)
   'lst_wrapper_deposit', 'lst_wrapper_redeem', 'lst_wrapper_harvest',
   // uptime (write subset)
@@ -60,20 +62,22 @@ function getToolNames(server: McpServer): string[] {
   return Object.keys((server as any)._registeredTools);
 }
 
-function registerAllTools(server: McpServer, readOnly: boolean) {
-  registerMiddlewareTools(server, readOnly);
-  registerVaultTools(server, readOnly);
-  registerOperatorTools(server, readOnly);
-  registerL1RegistryTools(server, readOnly);
-  registerOptInTools(server, readOnly);
-  registerRewardsTools(server, readOnly);
-  registerKiteStakingTools(server, readOnly);
-  registerStakingVaultTools(server, readOnly);
-  registerBalancerTools(server, readOnly);
-  if (!readOnly) registerPoaSecurityModuleTools(server);
-  registerLstWrapperTools(server, readOnly);
+// Mirrors the registration wiring in server.ts
+function registerAllTools(server: McpServer, readOnly: boolean, proposeOnly = false) {
+  const suppressWrites = readOnly || proposeOnly;
+  registerMiddlewareTools(server, suppressWrites);
+  registerVaultTools(server, suppressWrites);
+  registerOperatorTools(server, suppressWrites);
+  registerL1RegistryTools(server, suppressWrites);
+  registerOptInTools(server, suppressWrites);
+  registerRewardsTools(server, readOnly, proposeOnly);
+  registerKiteStakingTools(server, suppressWrites);
+  registerStakingVaultTools(server, suppressWrites);
+  registerBalancerTools(server, suppressWrites);
+  if (!suppressWrites) registerPoaSecurityModuleTools(server);
+  registerLstWrapperTools(server, suppressWrites);
   registerVaultHelperTools(server);
-  registerUptimeTools(server, readOnly);
+  registerUptimeTools(server, suppressWrites);
   registerHeartbeatTools(server);
 }
 
@@ -123,5 +127,44 @@ describe('--read-only mode', () => {
     }
     // Total should be read + write
     expect(tools.length).toBeGreaterThan(WRITE_TOOLS.length);
+  });
+});
+
+describe('--propose-only mode', () => {
+  const PROPOSE_TOOLS = ['rewards_set_amount_propose', 'rewards_distribute_propose'];
+
+  it('registers exactly the two propose tools out of the write surface', () => {
+    const server = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(server, false, true);
+
+    const tools = getToolNames(server);
+    const writeToolsPresent = tools.filter(t => WRITE_TOOLS.includes(t));
+    expect(writeToolsPresent.sort()).toEqual([...PROPOSE_TOOLS].sort());
+  });
+
+  it('registers no destructive tool beyond the two propose tools (catches future write leakage)', () => {
+    const server = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(server, false, true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registered = (server as any)._registeredTools as Record<string, { annotations?: { destructiveHint?: boolean } }>;
+    const destructive = Object.entries(registered)
+      .filter(([, t]) => t.annotations?.destructiveHint === true)
+      .map(([name]) => name);
+    expect(destructive.sort()).toEqual([...PROPOSE_TOOLS].sort());
+  });
+
+  it('keeps the full read surface available', () => {
+    const readOnlyServer = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(readOnlyServer, true);
+    const proposeServer = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(proposeServer, false, true);
+
+    const readTools = getToolNames(readOnlyServer);
+    const proposeTools = getToolNames(proposeServer);
+    for (const tool of readTools) {
+      expect(proposeTools).toContain(tool);
+    }
+    expect(proposeTools.length).toBe(readTools.length + PROPOSE_TOOLS.length);
   });
 });
