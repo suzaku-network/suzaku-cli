@@ -50,17 +50,23 @@ them; fetch and compute.
 | "Did the set-amount go through?" | `rewards_get_amount_set_events` for N | Event count (>1 = accumulation alarm), tx hashes, totals |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` | Lowest P-Chain balance + any validator below threshold; uptime gaps for the previous epoch |
 
-## Tool cost — pick the cheap path
+## Tool economy — answer in the fewest round-trips
 
-- **Event scans are the expensive tools** (`rewards_get_amount_set_events`, `rewards_get_events`,
-  node logs): with the indexer key configured (this deployment) each takes a few seconds;
-  without one it's a ~1-minute chunked log crawl. Either way use them ONLY for targeted
-  forensics on specific epochs — never to assemble broad state — and keep the scan count
-  minimal. If you expect the answer to take more than ~1 minute total, say so up front.
-- **Broad state = ONE call**: `deployment_heartbeat` (mode=digest). Epoch ranges = ONE
-  `rewards_get_epoch_status` with `toEpoch`. Never loop per-epoch single reads for data a
-  composite returns, and never re-fetch constants (fees config, scheduling offsets) you
-  already have in this conversation.
+- **Every tool call costs a full model round-trip** on top of the tool's own runtime — 15
+  sequential calls is a multi-minute answer even when each tool is fast. Pick the tool that
+  answers in one or two calls.
+- **Broad state = ONE call**: `deployment_heartbeat` (mode=digest) — not because scans are
+  slow, but because it returns the whole picture with the claimability/deadline math already
+  computed deterministically (do not recompute amounts/dates yourself from raw reads).
+  Epoch ranges = ONE `rewards_get_epoch_status` with `toEpoch`. Never loop per-epoch single
+  reads for data a composite returns, and never re-fetch constants (fees config, scheduling
+  offsets) you already have in this conversation.
+- **Event scans are fine for event questions** (`rewards_get_amount_set_events`,
+  `rewards_get_events`, node logs — a few seconds each with the indexer key this deployment
+  has; ~1 min each without one). Use them whenever the question is genuinely about events
+  (who set what when, tx hashes, accumulation forensics) — just don't use a pile of them to
+  reconstruct state a composite already summarizes. If you expect an answer to take over
+  ~1 minute total, say so up front.
 
 ## Presentation rules
 
