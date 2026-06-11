@@ -17,18 +17,6 @@ interface TransactionStrategyResponse {
 }
 
 /**
- * ALLOW_SAFE_DELEGATE_MAINNET grants a software key the right to PROPOSE only.
- * An owner key would take the execute branches (send/confirm) instead of proposing,
- * so it is refused outright while the opt-in is active — this is the safety pairing
- * for the mainnet guard relaxation in cliParser.ts / cli.ts.
- */
-function assertDelegateOnly(isOwner: boolean): void {
-  if (process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true' && isOwner) {
-    logger.exitError(['ALLOW_SAFE_DELEGATE_MAINNET is set but the signer is a Safe OWNER; this mode only permits delegate (propose-only) keys. Unset the env var to transact as an owner.'])
-  }
-}
-
-/**
  * Human-facing link to review a proposal: the Safe web UI queue on mainnet, the
  * Ash-hosted transaction-service API on fuji (no public Safe UI fronts it).
  */
@@ -61,7 +49,8 @@ export async function handleBatchTransaction(
   txs: SafeBatchTx[],
   client: SafeClient,
   clientAddress: Hex,
-  network: string): Promise<BatchTransactionResponse> {
+  network: string,
+  proposeOnly: boolean = false): Promise<BatchTransactionResponse> {
   const sender = getAddress(clientAddress)
   clientAddress = clientAddress.toLowerCase() as Hex
   const [safeAddress, nonce] = await Promise.all([client.getAddress(), client.getNonce()]);
@@ -73,7 +62,11 @@ export async function handleBatchTransaction(
   if (!isOwner && !delegates.includes(clientAddress)) {
     logger.exitError(['You are neither an owner or a delegate of this Safe'])
   }
-  assertDelegateOnly(isOwner)
+  // Propose-only mode (--safe-propose) refuses owner keys: an owner would take the
+  // execute branch instead of proposing.
+  if (proposeOnly && isOwner) {
+    logger.exitError(['--safe-propose only permits a Safe delegate (propose-only) key, but this signer is a Safe OWNER. Drop --safe-propose to transact as an owner.'])
+  }
 
   // Pin the nonce we just read so the hash is deterministic across reruns (idempotency)
   // and the delegate proposal below is internally consistent under a concurrent-nonce race.

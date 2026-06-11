@@ -242,11 +242,12 @@ async function main() {
             logger.error('Error: --rpc-url is required when using --network custom');
             process.exit(1);
         }
-        // Block manually private key on mainnet. Exception: a Safe delegate software key
-        // (propose-only flow) behind an explicit env opt-in — owner keys are refused at
-        // the Safe layer (safeUtils), so this cannot widen into on-chain execution.
+        // Block manually private key on mainnet. Exception: the Safe delegate propose-only
+        // flow — a software key is permitted only with --safe AND --safe-propose (valid
+        // only on rewards set-amount/distribute, which refuse owner keys), so it cannot
+        // widen into on-chain execution.
         if (opts.privateKey! && chainList[opts.network].testnet === false
-            && !(opts.safe && process.env.ALLOW_SAFE_DELEGATE_MAINNET === 'true')) {
+            && !(opts.safe && process.argv.includes('--safe-propose'))) {
             logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }
@@ -4021,9 +4022,13 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to distribute rewards for"))
         .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
-        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize) => {
+        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
+        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             const client = config.client;
+            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
+                throw new Error('--safe-propose requires --safe <address>');
+            }
             if ('safe' in client && client.safe != undefined && !isCastMode()) {
                 // Route through the batch helper so the Safe propose path surfaces the
                 // safeTxHash and enforces propose-only, without touching the shared proxy.
@@ -4037,7 +4042,7 @@ async function main() {
                         }),
                         value: '0',
                     },
-                ], client.safe, client.account!.address as Hex, client.network);
+                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
                 if (batch.ethereumTxHash) {
                     await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
                 }
@@ -4211,7 +4216,8 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .argument("rewardsAmount", "Amount of rewards in decimal format")
-        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount) => {
+        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
+        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             if (rewardsContract.name !== 'RewardsNativeToken') {
                 throw new Error('Rewards contract is not a RewardsNativeToken');
@@ -4222,6 +4228,9 @@ async function main() {
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
             const client = config.client;
+            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
+                throw new Error('--safe-propose requires --safe <address>');
+            }
             if ('safe' in client && client.safe != undefined && !isCastMode()) {
                 // One atomic MultiSend: separate approve/set proposals would collide on
                 // the Safe nonce, and the set call cannot be simulated (or executed)
@@ -4246,7 +4255,7 @@ async function main() {
                         }),
                         value: '0',
                     },
-                ], client.safe, client.account!.address as Hex, client.network);
+                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
                 if (batch.ethereumTxHash) {
                     await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
                 }
