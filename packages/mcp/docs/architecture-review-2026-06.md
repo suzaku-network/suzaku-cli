@@ -30,7 +30,7 @@ Two CLI behavior changes were identified but deliberately left OUT of this branc
 
 ### New surface (36 tools → 121 total, 65R/56W)
 
-> Update (June 2026, post-safe-propose): current total is **127 (69R / 58W)** — +4 reads from the heartbeat work and +2 Safe propose writes (`rewards_set_amount_propose`, `rewards_distribute_propose`). A third server profile `--propose-only` was added (69 reads + the 2 propose tools), and a second `suzaku-propose-bot` OpenClaw service holds a Safe delegate key via compose file secrets. Test count is now 191. See `packages/mcp/CLAUDE.md` and `deploy/openclaw/README.md`.
+> Update (June 2026, post-safe-propose): current total is **127 (69R / 58W)** — +4 reads from the heartbeat work and +2 Safe propose writes (`rewards_set_amount_propose`, `rewards_distribute_propose`). A third server profile `--propose-only` was added (69 reads + the 2 propose tools), and a second `suzaku-propose-bot` OpenClaw service holds a Safe delegate key via compose file secrets. Test count is now 191. See `packages/mcp/CLAUDE.md` and `packages/mcp/deploy/openclaw/README.md`.
 
 | Group | Added | Why |
 |---|---|---|
@@ -64,7 +64,7 @@ The structural weakness exposed by this rebase: **the tool surface is hand-synch
 
 1. **CLI-drift regression test** — a `test:cli-compat` suite that extracts every tool's command path and runs `node bin/cli.js <path> --help` (offline, seconds), asserting exit 0 and that every flag the tool passes appears in the help text. This single test would have caught ~50 of the 58 breakages at CI time. The natural follow-up is generating the arg tables from one declarative source.
 2. **Composite-tool result mapping** — `middleware.ts` composites slice flat `Promise.all` arrays by hand-computed offsets (17 sites). One added read shifts every index. Replace with named-key maps (`promiseMap({activeNodes: …, available: …})`). Same files: under concurrency saturation, fan-out sub-calls beyond `MAX_CONCURRENT` fail into `_warnings` and produce silently partial dashboards — queue (semaphore) instead of reject, and add a top-level `_degraded: true` flag.
-3. **SDK posture** — `elicitInput` and `sendLoggingMessage` are reached through `as unknown as` casts into SDK internals; a minor SDK bump can silently turn mainnet confirmations into failures and drop all logging. Add fail-fast startup assertions now; plan the SDK upgrade (current pin 1.12.0) to get typed elicitation, `outputSchema` (currently `structuredContent` is emitted without one, which strict clients may ignore), resource templates, and completions.
+3. **SDK posture** — `elicitInput` and `sendLoggingMessage` are reached through `as unknown as` casts into SDK internals; a minor SDK bump can silently turn mainnet confirmations into failures and drop all logging. Add fail-fast startup assertions now. *(Update: the SDK was since bumped to `^1.29.0` — the remaining work is auditing the `as unknown as` casts written against 1.12.0: typed elicitation, `outputSchema` (currently `structuredContent` is emitted without one, which strict clients may ignore), resource templates, and completions may now be available natively.)*
 4. **Unbounded subprocess buffers** — stdout/stderr accumulate without cap; a runaway composite can OOM the server. Cap at a few MB with truncation markers.
 
 ### Medium

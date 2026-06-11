@@ -2,7 +2,9 @@
 
 MCP server for the Suzaku restaking protocol on Avalanche — 127 tools wrapping `suzaku-cli`.
 
-Mainnet writes never auto-execute. Testnet writes run immediately. The two Safe propose tools (`rewards_set_amount_propose`, `rewards_distribute_propose`) always queue an off-chain Safe proposal regardless of network — they never execute a transaction.
+Mainnet writes never auto-execute. Testnet writes run immediately (unless `SUZAKU_MCP_SUGGEST=true` or `SUZAKU_MCP_REQUIRE_CONFIRM=true`). The two Safe propose tools (`rewards_set_amount_propose`, `rewards_distribute_propose`) always queue an off-chain Safe proposal regardless of network — they never execute a transaction.
+
+**Scope note:** tool coverage spans every CLI domain, including KiteStakingManager (`kite_*`) and StakingVault (`staking_vault_*`). The composite layer — `deployment_heartbeat`, the `epoch-rewards-runbook` playbook, the Safe propose tools, and the OpenClaw bot deploys — is built for suzaku-core restaking deployments (e.g. Dexalot) and watches the suzaku-core contracts (L1Middleware, Rewards, LSTWrapper, UptimeTracker). The Kite/StakingVault domains expose raw per-contract tools only — no heartbeat checks or rewards playbooks for them (the `validator-lifecycle` prompt is the one exception: it guides both `manager=kite|vault`).
 
 ## Setup
 
@@ -41,7 +43,9 @@ Start flags select which tools are registered:
 - **Discover network**: `discover_network` — returns all L1s, middlewares, operators, and linked addresses for a network (no address input needed).
 - **Check operator health**: `check-operator-health` prompt — runs 5 read tools and summarizes operator status.
 - **Register a new operator**: `register-new-operator` prompt — guides through registry, opt-ins, middleware registration, and node addition.
-- **Register / remove a validator**: `validator-lifecycle` prompt — two-phase C-Chain + P-Chain lifecycle (needs `SUZAKU_PCHAIN_PK`).
+- **Register / remove a validator**: `validator-lifecycle` prompt — two-phase C-Chain + P-Chain lifecycle (needs `SUZAKU_PCHAIN_PK`); covers both `manager=kite|vault`.
+- **Weekly epoch rewards (Dexalot)**: `epoch-rewards-runbook` prompt — 6-step workflow: report validator uptimes → compute operator uptime → diagnose rewards state (warns on set-amount accumulation) → set rewards → distribute → harvest the LST wrapper.
+- **Monitor a deployment**: `deployment_heartbeat` — `mode=digest` (per-epoch changes, rewards activity, claimability table) or `mode=alerts` (4-hourly checks, quiet unless something trips).
 - **Monitor network state**: `middleware_network_overview` — operators, nodes, stakes, epoch config, and vault listing in one call.
 - **Deposit into a vault**: `vault_deposit` — on mainnet returns the CLI command to run manually (suggest mode).
 - **Propose weekly rewards (mainnet, Safe)**: `rewards_set_amount_propose` / `rewards_distribute_propose` — queue an off-chain Safe proposal for owners to review and sign. Requires `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key.
@@ -69,7 +73,7 @@ The Safe propose tools bypass this matrix entirely — they always queue an off-
 
 ### Safe propose tools
 
-`rewards_set_amount_propose` and `rewards_distribute_propose` never execute; they queue a Safe proposal. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key (`SUZAKU_PK`/`SUZAKU_PK_FILE`) — the CLI refuses Safe owner keys for this flow. `rewards_set_amount_propose` hard-refuses if the epoch already has rewards set, has set-amount events (accumulation guard), is outside the settable window, is at or above `SUZAKU_MAX_REWARDS_AMOUNT` (or the cap is unset), or a matching proposal is already pending. `rewards_distribute_propose` refuses if the epoch has no rewards set, returns early if distribution is complete, and refuses a duplicate pending proposal.
+`rewards_set_amount_propose` and `rewards_distribute_propose` never execute; they queue a Safe proposal. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key (`SUZAKU_PK`/`SUZAKU_PK_FILE`) — the CLI refuses Safe owner keys for this flow. `rewards_set_amount_propose` hard-refuses if the epoch already has rewards set, has set-amount events (accumulation guard), is outside the settable window, is at or above `SUZAKU_MAX_REWARDS_AMOUNT` (or the cap is unset), or a matching proposal is already pending. `rewards_distribute_propose` refuses if the epoch has no rewards set, returns early if distribution is complete, and refuses a duplicate pending proposal. The pending-proposal checks need the Safe API reachable and authenticated — they **fail open** with a warning on API errors (the CLI's exact-hash dedup and the human signature in the Safe UI remain the hard gates).
 
 ### Signing methods (priority order)
 
@@ -130,8 +134,15 @@ Add `SUZAKU_SAFE_ADDRESS` for Safe multisig overlay (works with any method).
 | `SUZAKU_MCP_DENY_TOOLS` | Comma-separated tool denylist |
 | `SUZAKU_MCP_DRY_RUN` | `true` for dry-run mode |
 | `SUZAKU_CLI_PATH` | Override CLI binary path |
-| `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (default 60000 ms) |
+| `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window for read calls (default 60000 ms; writes always bypass) |
 | `SUZAKU_MCP_DEBUG` | Forward subprocess stderr |
+| `SUZAKU_MCP_WAIT` | Append `--wait <n>` to every CLI call (e.g. `1` for instant-mining forks/anvil) |
+| `SUZAKU_MCP_MAX_CONCURRENT` | Max parallel CLI subprocesses (default 10; excess calls are rejected) |
+| `SUZAKU_MCP_RATE_MAX_CALLS` / `SUZAKU_MCP_RATE_WINDOW_MS` | Rate limit: max calls per sliding window (defaults 60 per 60000 ms) |
+| `SUZAKU_MCP_MAX_OPERATORS` | Cap on operators processed by composite middleware tools (default 50) |
+| `SUZAKU_MCP_AUDIT_DIR` | Override audit log directory (useful for Docker volume mounts) |
+| `SUZAKU_MCP_AUDIT_MAX_MB` | Audit log rotation size (default 50 MB; keeps max 2 files) |
+| `SUZAKU_MCP_PUBLIC_HEALTH` | `true` hides signer type, Safe address, and guard config from `health_check` |
 
 ## Build
 

@@ -92,7 +92,7 @@ After `docker compose up`, run the iptables rules on the Docker host to block co
 sudo bash iptables-setup.sh
 ```
 
-This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918 and link-local ranges.
+This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918, link-local, and loopback (`127.0.0.0/8`) ranges.
 
 ### Set Anthropic spending limits
 
@@ -208,7 +208,7 @@ suzaku-propose-bot (compose profile "propose")
    curl "https://wallet-transaction-fuji.ash.center/api/v1/safes/<safe>/delegates/"
    ```
    On mainnet add `SAFE_API_KEY=...` and verify against `https://api.safe.global/tx-service/avax/api`.
-4. **Start the bot**: `docker compose --profile propose up -d --build`.
+4. **Start the bot**: `docker compose --profile propose up -d --build`. Note this also starts (or restarts) `suzaku-bot` — the read-only service has no compose profile, so it matches every `up`. If the group bot is already live and you only want the propose bot: `docker compose --profile propose up -d --build suzaku-propose-bot`.
 
 Roll out **fuji first**: the fuji Safe tx service is Ash-hosted (`wallet-transaction-fuji.ash.center`) — confirm the delegates endpoint responds (step 3's curl) before relying on it. Note `--safe` does not work on anvil (the CLI blocks Safe on non-fuji testnets), so fuji is the only testnet path.
 

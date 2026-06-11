@@ -14,9 +14,9 @@ export function setMcpServer(server: McpServer) {
 }
 
 // ── SDK typed wrappers ──
-// McpServer in SDK 1.12.0 does not expose `elicitInput` or `server.sendLoggingMessage`
-// on its public type surface. These wrappers centralise the `as any` casts so tool code
-// stays type-safe. When upgrading to SDK v2 these can be replaced with ctx.mcpReq methods.
+// Written against SDK 1.12.0, which did not expose `elicitInput` or `server.sendLoggingMessage`
+// on its public type surface; verified working through ^1.29.0. These wrappers centralise the
+// casts so tool code stays type-safe — re-check on SDK bumps whether typed equivalents exist.
 
 interface ElicitResult {
   action: string;

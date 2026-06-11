@@ -108,9 +108,9 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 | Funding deadline at risk | epoch unset and < 1 epoch to `FundingWindowClosed` | `rewards_get_epoch_rewards` (+ `epochStatus`) |
 | Set-amount accumulation | `eventCount > 1` for any epoch in window | `rewards_epoch_diagnosis` |
 | Distribution stalled | started but `isComplete=false` two runs running | `rewards_get_distribution_batch` |
-| Validator not Active / stuck-pending | status ∉ {Active}, or Initiated w/o Completed | `balancer_get_validator_status` |
+| Validator not Active / stuck-pending | status ∉ {Active}, or Initiated w/o Completed | `middleware_get_validator_balances` (P-Chain list) + stuck two-phase event detection — see Implementation status |
 | LST deposits paused | `paused=true` | `lst_wrapper_paused` |
-| P-Chain fee balance low | balance < threshold | ❌ no read tool yet (gap #2) |
+| P-Chain fee balance low | balance < threshold | `middleware_get_validator_balances` (was gap #4, now implemented) |
 
 **Kite profile (separate, not Dexalot):** vault epoch lag / pause, keeper `/health` — only where a StakingVault + keeper run.
 
@@ -124,8 +124,8 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 `deployment_heartbeat` — `{ readOnlyHint: true }`, `skipLimiter: true`, new `packages/mcp/src/tools/heartbeat.ts`.
 
-- Params: `middlewareAddress`, `rewardsAddress`, `balancerAddress`, `lstWrapperAddress`, `vaultAddress`, `uptimeTrackerAddress`, `network`, `rpcUrl`; optional `mode: 'digest' | 'alerts'` (default `alerts`), `windowEpochs` (default 6 for the table), thresholds with defaults.
-- Returns `{ epoch, windowStartBlock, changed: {nodes[], validators[], operators, tvl, rate}, rewards: { activity[], claimability[] }, checks: [{name, epoch?, status, detail, human}] }` — `human` fields pre-humanized.
+- Params (as implemented): `middlewareAddress`, `rewardsAddress`, `lstWrapperAddress` (optional), `uptimeTrackerAddress` (optional), `network`, `rpcUrl`; optional `mode: 'digest' | 'alerts'` (default `alerts`), `windowEpochs` (default 6 for the table), thresholds `pChainMinAVAX` (default 0.05), `cacheLateDays` (default 1), `uptimeMissingEpochFraction` (default 0.5). (`balancerAddress`/`vaultAddress` were planned but dropped — see behavior notes.)
+- Returns `{ epoch, windowStartEpoch, changed: {nodes[], validators[], operators, tvl, rate}, rewards: { activity[], claimability[] }, checks: [{name, epoch?, status, detail, human}] }` — `human` fields pre-humanized.
 - ~12–18 CLI sub-calls per digest (more event scans than the alert mode); at the digest cadence this is negligible on a dedicated RPC.
 
 ## Gaps to close (ordered)
