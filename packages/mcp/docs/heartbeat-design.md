@@ -144,7 +144,7 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 ## Implementation status (June 2026)
 
-Implemented in `packages/mcp/src/tools/heartbeat.ts` as the `deployment_heartbeat` tool (read-only; registered in both normal and `--read-only` mode). CLI gaps 1–4 are closed:
+Implemented in `packages/mcp/src/tools/heartbeat.ts` as the `deployment_heartbeat` tool (read-only; registered in all three server modes — full, `--read-only`, and `--propose-only`). CLI gaps 1–4 are closed:
 
 1. `rewards get-epoch-status <addr> <epoch> [--to-epoch <n>]` — wraps `epochStatus` + `getEpochRewards` + scheduling constants; one call covers the whole claimability window. MCP: `rewards_get_epoch_status`.
 2. `rewards get-events <addr> --middleware <mw> --from-epoch <n> [--to-epoch <n>]` — single-pass scan of all 8 lifecycle events with per-type counts. MCP: `rewards_get_events`.

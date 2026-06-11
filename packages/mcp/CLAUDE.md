@@ -58,7 +58,12 @@ Five layers, checked in order for every write operation:
 
 Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountField?)`.
 
-**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. They append the CLI `--safe-propose` flag, which (a) permits a software key on mainnet with `--safe` and (b) makes the CLI refuse Safe OWNER keys (propose-only). Before proposing they hard-refuse on: epoch already has rewards set or set-amount events (accumulation guard), epoch outside the settable window, amount out of bounds (`SUZAKU_MAX_REWARDS_AMOUNT`), or a matching proposal already pending in the Safe queue. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key.
+**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. They append the CLI `--safe-propose` flag, which (a) permits a software key on mainnet with `--safe` and (b) makes the CLI refuse Safe OWNER keys (propose-only). Both require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key, and run all pre-check reads with `skipDedup: true` (a stale cache must never green-light a duplicate). Their pre-checks differ:
+
+- `rewards_set_amount_propose` hard-refuses on: epoch already has rewards set on-chain, set-amount events already exist (accumulation guard), epoch outside the settable window (`currentEpoch-2 ≤ epoch < currentEpoch`), amount missing/unconfigured-cap/at-or-above `SUZAKU_MAX_REWARDS_AMOUNT`, or a matching `setRewardsAmountForEpochs` proposal already pending in the Safe queue.
+- `rewards_distribute_propose` hard-refuses on: epoch has no rewards set (`epochRewards == 0`) or a matching `distributeRewards` proposal already pending; returns early (non-error) if distribution is already complete. It does **not** check the epoch window, accumulation, or the amount cap.
+
+The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or HTTP 4xx returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
 
 ## Network-Aware Decision Matrix
 
@@ -89,7 +94,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
 | `SUZAKU_PCHAIN_PK` / `SUZAKU_PCHAIN_PK_FILE` | P-Chain key (direct or file) for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
 | `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` to the child env | — |
-| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file. Child env only, never argv | — |
+| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file, never argv. Injected into the CLI child env for Safe calls, and read by the server process for the propose tools' pending-queue check | — |
 
 ### Safe propose tools
 
@@ -97,7 +102,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 |---|---|---|
 | `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for `rewards_*_propose` (param overrides) | — |
 | `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check | — |
-| `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused | — (warns, no bound) |
+| `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused. **Required under `--propose-only`** (server exits at startup if unset or ≤ 0); in full mode `rewards_set_amount_propose` hard-refuses per-call if unset. No effect on `rewards_distribute_propose` | — |
 
 ### Safety / Guard
 
@@ -252,10 +257,10 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
 5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
 6. **Dedup is write-agnostic** — Cache key is args+network+rpcUrl. Write calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`.
-7. **Two-phase lifecycle needs P-Chain key** — `complete_*` tools require `SUZAKU_PCHAIN_PK` and use 5-minute timeout.
+7. **Two-phase lifecycle uses a P-Chain key** — `complete_*` tools inject `PK_PCHAIN` (from `SUZAKU_PCHAIN_PK`/`_FILE`) into the child env and use a 5-minute timeout. **Known limitation:** the CLI does not yet read `PK_PCHAIN` — it falls back to the main key for P-Chain transactions (see Signing Methods).
 8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` (or `SUZAKU_MCP_AUDIT_DIR`) via non-blocking `appendFile`. Auto-rotates at `SUZAKU_MCP_AUDIT_MAX_MB` (default 50 MB), keeping max 2 files. Failures are silently ignored.
 9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
 12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
-13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`).
+13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Mutually exclusive with `--read-only` (the server exits if both are passed), and requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set to a positive number at startup. `health_check` reports `proposeOnly` and warns (`safeApiKeyWarning`) when `SAFE_API_KEY` is unset (the pending-queue check fails open without it).

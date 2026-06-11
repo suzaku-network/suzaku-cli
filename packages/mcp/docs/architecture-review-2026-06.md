@@ -30,6 +30,8 @@ Two CLI behavior changes were identified but deliberately left OUT of this branc
 
 ### New surface (36 tools → 121 total, 65R/56W)
 
+> Update (June 2026, post-safe-propose): current total is **127 (69R / 58W)** — +4 reads from the heartbeat work and +2 Safe propose writes (`rewards_set_amount_propose`, `rewards_distribute_propose`). A third server profile `--propose-only` was added (69 reads + the 2 propose tools), and a second `suzaku-propose-bot` OpenClaw service holds a Safe delegate key via compose file secrets. Test count is now 191. See `packages/mcp/CLAUDE.md` and `deploy/openclaw/README.md`.
+
 | Group | Added | Why |
 |---|---|---|
 | rewards | 7 reads + `set_amount`, `claim_undistributed` + **`rewards_epoch_diagnosis`** | The entire Dexalot rewards lifecycle was unreachable. The diagnosis composite answers "why is claim-undistributed weird for epoch N" directly. |

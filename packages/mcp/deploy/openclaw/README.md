@@ -195,7 +195,7 @@ suzaku-propose-bot (compose profile "propose")
 
 ### One-time setup (in order)
 
-1. **Generate the delegate key** (a fresh EOA; it needs a little AVAX for nothing — it never sends transactions) and write it to the secret file: `mkdir -p ./secrets && printf '%s' 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk`. On mainnet also `printf '%s' <safe-api-key> > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key` (get the key at developer.safe.global). Never commit `./secrets/`.
+1. **Generate the delegate key** (a fresh EOA; it needs **no AVAX** — it only signs EIP-712 Safe-proposal payloads off-chain and never sends an on-chain transaction) and write it to the secret file: `mkdir -p ./secrets && printf '%s' 0x<delegate-key> > ./secrets/delegate_pk && chmod 600 ./secrets/delegate_pk`. On mainnet also `printf '%s' <safe-api-key> > ./secrets/safe_api_key && chmod 600 ./secrets/safe_api_key` (get the key at developer.safe.global). Never commit `./secrets/`.
 2. **Grant the Safe the rewards role and fund it** (owner action): the Safe must hold `REWARDS_MANAGER_ROLE` on the rewards contract (`suzaku-cli access-control ...` or the protocol admin does it) and a sufficient ALOT balance — the proposed batch pulls tokens from the Safe when executed. Verify: `cast call <rewards> "hasRole(bytes32,address)(bool)" $(cast keccak "REWARDS_MANAGER_ROLE") <safe>`.
 3. **Register the delegate** (owner action, from the repo root):
    ```bash
@@ -269,7 +269,8 @@ Once the bot is running, try these in a DM:
 | Bot doesn't respond to DM | Check `docker compose logs` — verify Telegram token is valid |
 | Bot responds in wrong group | Verify `TELEGRAM_GROUP_ID` in `.env` matches your group; rebuild with `docker compose up --build` |
 | Bot answers non-mentioned group messages | Known upstream bug (config persistence on restart) — restart the container and re-verify; see Upgrading OpenClaw step 4 |
-| Container crash-loops | Check logs; if `read_only` causes issues, remove it temporarily and file a bug |
-| `docker inspect` shows API keys | Expected — Docker env vars are visible to host root. This is why VPS isolation matters |
+| Container crash-loops | Check logs (`docker compose logs --tail 200`); examine recent image/config changes |
+| `docker inspect` shows the group bot's API keys | Expected — those are env vars, visible to host root; this is why VPS isolation matters. The propose bot's delegate key and Safe API key are file secrets (`/run/secrets/...`) and do **not** appear in `docker inspect` |
+| Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key (`SAFE_API_KEY_FILE` secret); the mainnet pending-queue check needs it |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower |
 | High API costs | Set a billing cap at console.anthropic.com; consider switching to `claude-haiku-4-5` in `openclaw.json` |
