@@ -759,8 +759,10 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Get all collateral class IDs from the middleware.
 - **get-active-collateral-classes `<middlewareAddress>`**
   Get active collateral classes (primary and secondary).
-- **node-logs `<middlewareAddress>` [--node-id `<nodeId>] [--snowscan-api-key `<string>]**
-  Get middleware node logs.
+- **node-logs `<middlewareAddress>` [--node-id `<nodeId>`] [--from-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--snowscan-api-key `<string>`]**
+  Get middleware node logs (node lifecycle, stake updates, leftover-stake events) over an epoch- or block-scoped range.
+- **get-validator-balances `<middlewareAddress>`**
+  Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only).
 - **get-last-node-validation-id `<middlewareAddress>` `<nodeId>`**
   Get last node validation ID.
 - **to-vault-epoch `<middlewareAddress>` `<vaultAddress>` `<middlewareEpoch>`**
@@ -852,8 +854,8 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
 
 ### Rewards Commands (`rewards`)
 
-- **distribute `<rewardsAddress>` `<epoch>` `<batchSize>`**
-  Distribute rewards for a specific epoch.
+- **distribute `<rewardsAddress>` `<epoch>` `<batchSize>` [--safe-propose]**
+  Distribute rewards for a specific epoch. With `--safe`, routes through an atomic Safe batch; `--safe-propose` additionally forces propose-only mode (queues a Safe proposal as a delegate, refuses owner keys, never executes — the only flow that permits a software key on mainnet).
 - **claim `<rewardsAddress>` [--recipient `<recipient>]**
   Claim rewards for a staker in batch of 64 epochs.
 - **claim-operator-fee `<rewardsAddress>` [--recipient `<recipient>]**
@@ -864,8 +866,8 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Claim protocol fees (only for protocol owner).
 - **claim-undistributed `<rewardsAddress>` `<epoch>` [--recipient `<recipient>]**
   Claim undistributed rewards (admin only).
-- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsAmount>`**
-  Set rewards amount for epochs.
+- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsAmount>` [--safe-propose]**
+  Set rewards amount for epochs. With `--safe`, batches `approve` + `setRewardsAmountForEpochs` into one atomic MultiSend (the contract pulls tokens at set time, so separate transactions would fail); `--safe-propose` additionally forces propose-only mode (delegate key queues a proposal, owner keys refused).
 - **set-bips-collateral-class `<rewardsAddress>` `<collateralClass>` `<bips>`**
   Set rewards bips for collateral class.
 - **set-min-uptime `<rewardsAddress>` `<minUptime>`**
@@ -904,6 +906,12 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Get last claimed epoch for an operator.
 - **get-last-claimed-curator `<rewardsAddress>` `<curator>` `<rewardToken>`**
   Get last claimed epoch for a curator.
+- **get-amount-set-events `<rewardsAddress>` `<epoch>` [--middleware `<address>`] [--from-block `<n>`] [--to-block `<n>`]**
+  List every `RewardsAmountSet` event covering a given epoch — diagnose multiple set-amount calls for the same epoch (amounts accumulate on-chain).
+- **get-epoch-status `<rewardsAddress>` `<epoch>` [--to-epoch `<n>`]**
+  Get funded/distribution-complete status and the set rewards amount for one epoch or a range.
+- **get-events `<rewardsAddress>` [--middleware `<address>`] [--from-epoch `<n>`] [--to-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--events `<names>`]**
+  Scan rewards lifecycle events (set, distributed, claimed, fees, zero-claims) over a block or epoch range in a single pass.
 
 ### Key Store Commands (`key`)
 

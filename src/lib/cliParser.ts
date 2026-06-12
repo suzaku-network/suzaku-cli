@@ -56,7 +56,11 @@ export const ParserPrivateKey = (value: string): Hex | 'ledger' => {
   if (!value.startsWith('0x')) {
     return parseSecretName(value,).trim() as Hex;
   }
-  if (process.argv.includes('mainnet')) {
+  // --safe-propose (only valid on rewards set-amount/distribute) permits a software key
+  // on mainnet for the propose-only delegate flow; those commands refuse owner keys, so
+  // this cannot widen into on-chain execution. Belt check — Guard B in cli.ts is authoritative.
+  if (process.argv.includes('mainnet')
+    && !(process.argv.includes('--safe') && process.argv.includes('--safe-propose'))) {
     throw new Error('Using private key on mainnet is not allowed. Use the secret keystore instead.');
   }
   return ParserHex(value, 32, 'Invalid Private Key format. Private key must be a 32-byte Hex string');

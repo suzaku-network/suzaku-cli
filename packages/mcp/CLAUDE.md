@@ -1,0 +1,267 @@
+# @suzaku/mcp
+
+MCP server exposing 127 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+
+Three server profiles: full (127 tools), `--read-only` (69 read tools, the public group bot), `--propose-only` (69 reads + the 2 Safe propose tools, the DM-only propose bot).
+
+## Architecture
+
+```
+src/
+├── server.ts            # Entry point: creates McpServer, registers tools/resources/prompts, starts stdio transport
+├── cli-runner.ts        # Subprocess engine: resolves CLI path, builds restricted env, applies signing + suggest/confirm matrix, spawns child process, dedup cache, audit log, concurrency/rate limiter
+├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
+├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl (with SSRF blocklist)
+├── tools/
+│   ├── middleware.ts    # 23 tools — L1Middleware contract (19 read: 10 atomic + 9 composite, 4 write)
+│   ├── vault.ts         # 11 tools — Symbiotic vault (8 read, 3 write)
+│   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
+│   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
+│   ├── opt-in.ts        # 6 tools — operator opt-in/out (2 read, 4 write)
+│   ├── rewards.ts       # 17 tools — Rewards contract (11 read, 4 write, 2 Safe propose)
+│   ├── kite-staking.ts  # 12 tools — KiteStakingManager (3 read, 9 write, two-phase lifecycle)
+│   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
+│   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
+│   ├── poa-security-module.ts # 6 tools — PoASecurityModule (all write, two-phase lifecycle)
+│   ├── lst-wrapper.ts   # 9 tools — LSTWrapper/wsALOT (6 read, 3 write)
+│   ├── vault-helper.ts  # 4 tools — VaultHelper (all read)
+│   ├── uptime.ts        # 3 tools — UptimeTracker (1 read, 2 write)
+│   └── heartbeat.ts     # 1 tool — deployment_heartbeat composite monitor (read; digest + alerts modes)
+```
+
+**Data flow** (write tool):
+
+```
+MCP client → server.ts (tool handler)
+  → requireSigner()            [cli-runner.ts]  fail-fast if no signing method
+  → guardWriteOperation()      [guard.ts]       access list → value limit → elicitation confirm
+  → runCli(args, opts)         [cli-runner.ts]  suggest/confirm matrix → spawn child
+    → subprocess: node CLI_PATH args --json --yes
+    → stdout JSON captured, stderr buffered
+    → output sanitized (PK redacted), cached, audit-logged
+  → formatResult() → MCP response
+```
+
+Read tools skip `requireSigner()` and `guardWriteOperation()` — they always execute immediately.
+
+## Safety Model
+
+Five layers, checked in order for every write operation:
+
+| # | Guard | Location | What it does |
+|---|---|---|---|
+| 1 | `requireSigner()` | `cli-runner.ts` | Blocks if no signing method configured (`SUZAKU_PK`, `SUZAKU_PK_FILE`, `SUZAKU_SECRET_NAME`, or `SUZAKU_MCP_LEDGER`) |
+| 2 | `checkToolAccess()` | `guard.ts` | Checks `SUZAKU_MCP_DENY_TOOLS` then `SUZAKU_MCP_ALLOW_TOOLS`; deny wins |
+| 3 | `checkValueLimit()` | `guard.ts` | Rejects if amount exceeds `SUZAKU_MCP_MAX_AVAX_PER_TX` |
+| 4 | `confirmWriteOperation()` | `guard.ts` | On testnet with `SUZAKU_MCP_REQUIRE_CONFIRM=true`: MCP elicitation dialog |
+| 5 | suggest/confirm matrix | `cli-runner.ts` | Network-aware execution control (see next section) |
+
+Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountField?)`.
+
+**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. They append the CLI `--safe-propose` flag, which (a) permits a software key on mainnet with `--safe` and (b) makes the CLI refuse Safe OWNER keys (propose-only). Both require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key, and run all pre-check reads with `skipDedup: true` (a stale cache must never green-light a duplicate). Their pre-checks differ:
+
+- `rewards_set_amount_propose` hard-refuses on: epoch already has rewards set on-chain, set-amount events already exist (accumulation guard), epoch outside the settable window (`currentEpoch-2 ≤ epoch < currentEpoch`), amount missing/unconfigured-cap/at-or-above `SUZAKU_MAX_REWARDS_AMOUNT`, or a matching `setRewardsAmountForEpochs` proposal already pending in the Safe queue.
+- `rewards_distribute_propose` hard-refuses on: epoch has no rewards set (`epochRewards == 0`) or a matching `distributeRewards` proposal already pending; returns early (non-error) if distribution is already complete. It does **not** check the epoch window, accumulation, or the amount cap.
+
+The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or any non-OK HTTP response returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
+
+## Network-Aware Decision Matrix
+
+Only applies to write tools (where `options.privateKey === true`):
+
+| Network | `SUZAKU_MCP_SUGGEST` | Behavior |
+|---|---|---|
+| mainnet | unset (default) | **Suggest** — returns command string, does NOT execute |
+| mainnet | `'true'` | **Suggest** — returns command string, does NOT execute |
+| mainnet | `'false'` | **Confirm** — elicits human approval; blocks if client lacks elicitation |
+| testnet | unset (default) | **Execute** — spawns subprocess directly |
+| testnet | `'true'` | **Suggest** — returns command string, does NOT execute |
+| testnet | `'false'` | **Execute** — spawns subprocess directly |
+
+Formula: `shouldSuggest = suggestEnv === 'true' || (suggestEnv !== 'false' && !isTestnet)`
+
+Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`, `kiteai` (unknown/custom networks are treated as mainnet-safe). The `Network` schema defaults to `'mainnet'` when omitted.
+
+## Environment Variables
+
+### Signing
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SUZAKU_PK` | Raw EVM private key (hex). Injected as `PK` in child env — never on CLI args | — |
+| `SUZAKU_PK_FILE` | Path to a file holding the key (compose/Docker file secret). Read at spawn time → child `PK`; preferred over `SUZAKU_PK`. Keeps the key out of the container env | — |
+| `SUZAKU_SECRET_NAME` | GPG keystore secret name. Passed as `--secret-name` flag | — |
+| `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
+| `SUZAKU_PCHAIN_PK` / `SUZAKU_PCHAIN_PK_FILE` | P-Chain key (direct or file) for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
+| `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` to the child env | — |
+| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file, never argv. Injected into the CLI child env for Safe calls, and read by the server process for the propose tools' pending-queue check | — |
+
+### Safe propose tools
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for `rewards_*_propose` (param overrides) | — |
+| `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check | — |
+| `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused. **Required under `--propose-only`** (server exits at startup if unset or ≤ 0); in full mode `rewards_set_amount_propose` hard-refuses per-call if unset. No effect on `rewards_distribute_propose` | — |
+
+### Safety / Guard
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SUZAKU_MCP_SUGGEST` | `'true'`=always suggest; `'false'`=disable suggest. See matrix above | unset (mainnet=suggest, testnet=execute) |
+| `SUZAKU_MCP_REQUIRE_CONFIRM` | `'true'`=require MCP elicitation for testnet writes | — |
+| `SUZAKU_MCP_MAX_AVAX_PER_TX` | Max AVAX per tx (float). Blocks writes exceeding this | — (no limit) |
+| `SUZAKU_MCP_ALLOW_TOOLS` | Comma-separated allowlist of tool names | — (all allowed) |
+| `SUZAKU_MCP_DENY_TOOLS` | Comma-separated denylist of tool names (checked before allow) | — (none denied) |
+| `SUZAKU_MCP_DRY_RUN` | `'true'` appends `--cast` for dry-run/simulate mode | — |
+
+### Operational
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SUZAKU_CLI_PATH` | Override CLI binary path. Falls back to `../../../bin/cli.js` then `which suzaku-cli` | — |
+| `SUZAKU_MCP_DEDUP_WINDOW_MS` | Dedup window (ms). Identical read calls within window return cached result (writes always bypass) | `60000` |
+| `SUZAKU_MCP_DEBUG` | Forwards subprocess stderr to server stderr in real time (server-side only — not passed to child process) | — |
+| `SUZAKU_MCP_WAIT` | Confirmation-depth override: appends `--wait <n>` to every CLI call (e.g. `1` for instant-mining forks/anvil) | — (CLI default `2`) |
+| `SUZAKU_MCP_MAX_CONCURRENT` | Max parallel CLI subprocesses. Rejects with error when exceeded | `10` |
+| `SUZAKU_MCP_RATE_MAX_CALLS` | Max CLI calls per sliding window. Rejects with error when exceeded | `60` |
+| `SUZAKU_MCP_RATE_WINDOW_MS` | Sliding window duration (ms) for rate limiter | `60000` |
+| `SUZAKU_MCP_AUDIT_DIR` | Override audit log directory (for Docker volume mount) | `~/.suzaku-cli` |
+| `SUZAKU_MCP_AUDIT_MAX_MB` | Max audit log size (MB) before rotation. Keeps max 2 files (~2x this value) | `50` |
+| `SUZAKU_MCP_PUBLIC_HEALTH` | `'true'` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output | — |
+
+### Child Process Env (allowlist)
+
+Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. Signing secrets are injected per-call: `PK` (from `SUZAKU_PK` or `SUZAKU_PK_FILE`) for write calls, and `SAFE_API_KEY` (from `SAFE_API_KEY` or `SAFE_API_KEY_FILE`) only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`). The `_FILE` forms are read at spawn time so the raw secret never sits in the container env.
+
+## Tool Catalog
+
+127 tools total (69 read, 58 write — the W column below includes the 2 Safe propose tools, which never execute):
+
+| File | R | W | Key tools |
+|---|---|---|---|
+| `middleware.ts` | 19 | 4 | `discover_network`, `middleware_info`, `middleware_get_linked_addresses`, `middleware_get_all_operators`, `middleware_get_validator_balances`, `middleware_operator_dashboard`, `middleware_network_overview`, `middleware_get_operator_used_stake_per_epoch`, `middleware_register_operator`, `middleware_add_node`, `middleware_weight_sync` |
+| `vault.ts` | 8 | 3 | `vault_get_balance`, `vault_get_active_stake`, `vault_get_active_stake_at_epoch`, `vault_get_total_supply_at_epoch`, `vault_deposit`, `vault_withdraw`, `vault_claim` |
+| `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
+| `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
+| `opt-in.ts` | 2 | 4 | `check_opt_in_l1`, `check_opt_in_vault`, `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
+| `rewards.ts` | 11 | 6 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed`, **`rewards_set_amount_propose`**, **`rewards_distribute_propose`** (Safe propose — registered in full and `--propose-only` modes) |
+| `kite-staking.ts` | 3 | 9 | `kite_info`, `kite_info_validator`, `kite_info_delegator`, `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
+| `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
+| `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
+| `poa-security-module.ts` | 0 | 6 | `poa_add_node`, `poa_complete_validator_registration`, `poa_remove_node`, `poa_complete_validator_removal`, `poa_init_weight_update`, `poa_complete_weight_update` |
+| `lst-wrapper.ts` | 6 | 3 | `lst_wrapper_info`, `lst_wrapper_get_balance`, `lst_wrapper_preview_deposit`, `lst_wrapper_preview_redeem`, `lst_wrapper_max_deposit`, `lst_wrapper_paused`, `lst_wrapper_deposit`, `lst_wrapper_redeem`, `lst_wrapper_harvest` |
+| `vault-helper.ts` | 4 | 0 | `vault_helper_info`, `vault_helper_get_pending_withdraws`, `vault_helper_get_claimable_reward`, `vault_helper_get_latest_distributed_rewards` |
+| `uptime.ts` | 1 | 2 | `uptime_get_validation_uptime_message`, `uptime_report_validator`, `uptime_compute_operator_uptime` |
+| `heartbeat.ts` | 1 | 0 | `deployment_heartbeat` — composite monitor; `mode=digest` (per-epoch: changed nodes/stakes/validators, rewards activity, claimability table) or `mode=alerts` (4-hourly checks, non-OK findings only). See `docs/heartbeat-design.md` |
+| `server.ts` | 1 | 0 | `health_check` — verifies CLI path, signer config, optional network connectivity |
+
+## Signing Methods
+
+Priority order (first match wins in `runCli()`):
+
+1. **Ledger** (`SUZAKU_MCP_LEDGER=true`) — `--ledger` flag, timeout 180 s
+2. **GPG keystore** (`SUZAKU_SECRET_NAME`) — `--secret-name <value>` flag
+3. **Raw private key** (`SUZAKU_PK` or `SUZAKU_PK_FILE`) — resolved via `readSecret()` (file form preferred, read at spawn time); injected as `PK` env var, never on command line
+
+**Safe multisig overlay** — independent of signing method. If `SUZAKU_SAFE_ADDRESS` is set, `--safe <address>` is appended. Audit log records composite method (e.g. `SUZAKU_PK+SUZAKU_SAFE_ADDRESS`).
+
+**P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Intended for `complete_*` two-phase lifecycle tools. Known limitation: current CLI versions do not read `PK_PCHAIN` and sign P-Chain transactions with the main key instead.
+
+**Key sanitization**: `sanitizeOutput()` redacts the configured secrets and **bare** (un-prefixed) 64-char hex from all outputs, logs, and audit entries; `0x`-prefixed 64-char hex (tx hashes, role hashes, validation IDs) passes through.
+
+### Future: KMS / remote signing (key never in the container)
+
+The propose bot's delegate key currently lives in the container as a file secret (read at spawn time). The genuine custody upgrade — the key never present on the host at all — is **KMS signing**. AWS KMS (`ECC_SECG_P256K1`) and GCP Cloud KMS (`EC_SIGN_SECP256K1_SHA256`) both sign secp256k1, and Safe proposals only need an EIP-712 `signTypedData` over the SafeTxHash. The CLI already has the exact template: `src/lib/ledgerUtils.ts` builds a viem account via `toAccount()` with `signTypedData`/`signMessage`/`signTransaction` callbacks — a KMS account is the same shape with the device call replaced by a KMS `Sign` API call. Estimated ~50 LOC in `src/client.ts` + a `--kms` path in the mainnet guard (a recognized signer, like `--ledger`); the container then holds only `KMS_KEY_ID` + an IAM role, no key. Cost ~$1/mo. **Out of scope here; documented so it's on record.**
+
+## Adding a New Tool
+
+### Read tool
+
+```typescript
+// In src/tools/<group>.ts
+server.tool(
+  'my_read_tool',
+  'Description of what this reads',
+  { network: Network, address: Address },
+  { readOnlyHint: true },
+  async ({ network, address }) => {
+    const result = await runCli(
+      ['my-command', 'sub-command', '--address', address, '--network', network],
+      {},
+    );
+    return formatResult(result);
+  },
+);
+```
+
+### Write tool
+
+```typescript
+server.tool(
+  'my_write_tool',
+  'Description of what this writes',
+  { network: Network, address: Address, amount: z.string().describe('Amount in AVAX') },
+  { destructiveHint: true },
+  async ({ network, address, amount }) => {
+    const pkErr = requireSigner();
+    if (pkErr) return pkErr;
+
+    const guardErr = await guardWriteOperation('my_write_tool', { network, amount }, 'amount');
+    if (guardErr) return formatGuardError(guardErr);
+
+    const result = await runCli(
+      ['my-command', 'write-sub', '--address', address, '--amount', amount, '--network', network],
+      { privateKey: true },
+    );
+    return formatResult(result);
+  },
+);
+```
+
+For cross-chain warp tools, add `pchainPrivateKey: true` and `timeout: 300_000` to the `runCli` options.
+
+## Resources & Prompts
+
+### Resources (2)
+
+| URI | Contents |
+|---|---|
+| `config://networks` | Supported networks + RPC endpoints (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom) |
+| `config://contracts` | Discovery guide: entry point (`discover_network`), auto-resolve paths, manual tools, and non-discoverable contracts |
+
+### Prompts (4)
+
+| Name | Purpose | Key params |
+|---|---|---|
+| `check-operator-health` | Run 5 read tools to assess operator health; suggests `discover_network` if middleware unknown | `middlewareAddress`, `operatorAddress` |
+| `register-new-operator` | Step-by-step 5-phase registration; starts with `discover_network` for address discovery | `network?` |
+| `validator-lifecycle` | Two-phase validator/delegator registration or removal; suggests `discover_network` + `middleware_operator_dashboard` for address resolution | `operation` (`register`/`remove`), `manager?` (`kite`/`vault`) |
+| `epoch-rewards-runbook` | 6-step weekly epoch workflow: report validator uptimes → compute operator uptime → diagnose rewards state (warns on set-amount accumulation) → set rewards → distribute → harvest LST wrapper | `middlewareAddress`, `rewardsAddress`, `lstWrapperAddress?`, `uptimeTrackerAddress?`, `epoch?` |
+
+## Build & Verify
+
+```bash
+cd packages/mcp
+pnpm build          # tsc + chmod +x dist/server.js
+pnpm dev            # tsc --watch
+npx tsc --noEmit    # type-check only, no output
+```
+
+Start: `node packages/mcp/dist/server.js` (stdio transport).
+
+## Key Invariants
+
+1. **Mainnet-safe-by-default** — Write tools on mainnet never auto-execute. Default behavior is suggest mode. Opting out (`SUZAKU_MCP_SUGGEST=false`) still requires elicitation confirmation.
+2. **No PK on command line** — Private keys pass only via child process env (`PK`, `PK_PCHAIN`). `sanitizeOutput()` redacts the configured secrets and bare 64-char hex from all outputs (0x-prefixed hashes pass through).
+3. **Restricted child env** — Subprocess inherits only 8 explicitly allowlisted variables. No ambient env leakage.
+4. **Read tools always execute** — No guards, no suggest/confirm matrix, no signing required.
+5. **Schema defaults to mainnet** — Omitting `network` param → `'mainnet'` → suggest mode for writes.
+6. **Dedup applies to reads only** — Cache key is args+network+rpcUrl. Identical read calls within `SUZAKU_MCP_DEDUP_WINDOW_MS` return cached results with `_dedup_warning`; write calls always bypass the cache (never served from it, never stored to it).
+7. **Two-phase lifecycle uses a P-Chain key** — `complete_*` tools inject `PK_PCHAIN` (from `SUZAKU_PCHAIN_PK`/`_FILE`) into the child env and use a 5-minute timeout. **Known limitation:** the CLI does not yet read `PK_PCHAIN` — it falls back to the main key for P-Chain transactions (see Signing Methods).
+8. **Audit log is best-effort** — Written to `~/.suzaku-cli/mcp-audit.log` (or `SUZAKU_MCP_AUDIT_DIR`) via non-blocking `appendFile`. Auto-rotates at `SUZAKU_MCP_AUDIT_MAX_MB` (default 50 MB), keeping max 2 files. Failures are silently ignored.
+9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
+10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
+11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
+12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
+13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Mutually exclusive with `--read-only` (the server exits if both are passed), and requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set to a positive number at startup. `health_check` reports `proposeOnly` and warns (`safeApiKeyWarning`) when neither `SAFE_API_KEY` nor `SAFE_API_KEY_FILE` is set (the pending-queue check fails open without a key).

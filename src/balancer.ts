@@ -51,6 +51,7 @@ export async function getSecurityModules(
 
   const modules = await balancer.read.getSecurityModules();
   logger.log(modules);
+  logger.addData('securityModules', modules);
 }
 
 export async function getSecurityModuleWeights(
@@ -63,4 +64,5 @@ export async function getSecurityModuleWeights(
     [securityModule]
   );
   logger.log(val);
+  logger.addData('securityModuleWeights', { securityModule, weights: val });
 }

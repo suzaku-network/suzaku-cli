@@ -49,6 +49,7 @@ export async function getVaultCount(
 
     const val = await vaultManager.read.getVaultCount();
     logger.log("Vault count:", val);
+    logger.addData('vaultCount', Number(val));
 }
 
 export async function getVaultAtWithTimes(
@@ -59,6 +60,7 @@ export async function getVaultAtWithTimes(
 
     const val = await vaultManager.read.getVaultAtWithTimes([index]);
     logger.log("Vault at index with times:", val);
+    logger.addData('vault', { address: val[0], enabledTime: val[1].toString(), disabledTime: val[2].toString() });
 }
 
 export async function getVaultCollateralClass(
@@ -69,6 +71,7 @@ export async function getVaultCollateralClass(
 
     const val = await vaultManager.read.getVaultCollateralClass([vaultAddress]);
     logger.log("Vault collateral class:", val);
+    logger.addData('collateralClass', val.toString());
 }
 
 // info: list all vaults and show its collateral class, max limit, and times. Show the l1 stakes

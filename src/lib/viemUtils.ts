@@ -4,7 +4,7 @@ import { ExtendedClient, ExtendedWalletClient } from '../client';
 import { logger } from './logger';
 import { bigintReplacer, bytes32ToAddress, encodeNodeID, unpackGeneric } from './utils';
 import { color } from 'console-log-colors';
-import { handleTransactionStrategy } from './safeUtils';
+import { handleTransactionStrategy, safeQueueUrl } from './safeUtils';
 import AllSelectors from '../abis/abi-selectors.json';
 import AhoCorasick from 'modern-ahocorasick'
 import { isCastMode, logCastCall, logCastSend } from './castUtils';
@@ -187,18 +187,23 @@ export function withSafeWrite<T extends SuzakuABINames>(
                   break;
                 case 'propose':
                   logger.debug(`Proposing a Safe transaction as delegate`)
+                  const safeAddress = await client.safe.getAddress()
                   const safeTransaction = await client.safe.protocolKit.createTransaction({
                     transactions: [transaction]
                   })
                   const safeTxHash = await client.safe.protocolKit.getTransactionHash(safeTransaction)
                   const signature = await client.safe.protocolKit.signHash(safeTxHash)
                   await client.safe.apiKit.proposeTransaction({
-                    safeAddress: await client.safe.getAddress(),
+                    safeAddress,
                     safeTransactionData: safeTransaction.data,
                     safeTxHash,
                     senderAddress: getAddress(client.account!.address),
                     senderSignature: signature.data
                   })
+                  const queueUrl = safeQueueUrl(client.network, safeAddress)
+                  logger.log(`Proposed Safe transaction ${safeTxHash}\nReview and sign: ${queueUrl}`)
+                  logger.addData('safeTxHash', safeTxHash)
+                  logger.addData('safeQueueUrl', queueUrl)
                   hash = selection.hash!;
                   break;
                 default:// same as skip

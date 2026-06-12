@@ -11,7 +11,10 @@ console.warn = function (...args) {
 };
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
+import { Abi, encodeFunctionData, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
+import { SuzakuABI } from "./abis";
+import { handleBatchTransaction } from "./lib/safeUtils";
+import { isCastMode } from "./lib/castUtils";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -103,12 +106,16 @@ import {
     getCollateralClassIds,
     getActiveCollateralClasses,
     middlewareGetNodeLogs,
+    middlewareGetValidatorBalances,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
     weightSync,
     middlewareInfo,
     operatorsInfo as getOperatorsInfoMiddleware,
-    middlewareGetOperatorUsedStakePerEpoch
+    middlewareGetOperatorUsedStakePerEpoch,
+    middlewareGetEpochConfig,
+    middlewareGetCacheStatus,
+    middlewareGetLinkedAddresses
 } from "./middleware";
 
 import {
@@ -170,6 +177,9 @@ import {
     getLastEpochClaimedOperator,
     getLastEpochClaimedCurator,
     getRewardsClaimsCount,
+    getRewardsAmountSetEvents,
+    getRewardsEpochStatus,
+    getRewardsLifecycleEvents,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
@@ -232,8 +242,12 @@ async function main() {
             logger.error('Error: --rpc-url is required when using --network custom');
             process.exit(1);
         }
-        // Block manually private key on mainnet
-        if (opts.privateKey! && chainList[opts.network].testnet === false) {
+        // Block manually private key on mainnet. Exception: the Safe delegate propose-only
+        // flow — a software key is permitted only with --safe AND --safe-propose (valid
+        // only on rewards set-amount/distribute, which refuse owner keys), so it cannot
+        // widen into on-chain execution.
+        if (opts.privateKey! && chainList[opts.network].testnet === false
+            && !(opts.safe && process.argv.includes('--safe-propose'))) {
             logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
             process.exit(1);
         }
@@ -393,6 +407,7 @@ async function main() {
                 })
             }
             logger.logJsonTree(data)
+            logger.addData('l1s', data)
         });
 
     l1RegistryCmd
@@ -1902,6 +1917,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
             logger.log(`Operator ${operator} available stake: ${availableStake}`);
+            logger.addData('availableStake', availableStake.toString());
         });
 
     // getAllOperators (read)
@@ -1940,11 +1956,44 @@ async function main() {
             );
         });
 
+    // getEpochConfig (read)
+    middlewareCmd
+        .command("get-epoch-config")
+        .description("Get epoch timing configuration (duration, update window, current epoch, last node stake update epoch)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetEpochConfig(middlewareSvc);
+        });
+
+    // getCacheStatus (read)
+    middlewareCmd
+        .command("get-cache-status")
+        .description("Get stake cache and rebalance status for current or specified epoch")
+        .addArgument(argMiddlewareAddress)
+        .addOption(new Option('--epoch <epoch>', 'Epoch number (defaults to current)').argParser(ParserNumber))
+        .asyncAction(async (config, middlewareAddress, options) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetCacheStatus(middlewareSvc, options.epoch);
+        });
+
+    middlewareCmd
+        .command("get-linked-addresses")
+        .description("Get all linked contract addresses from the middleware (balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetLinkedAddresses(middlewareSvc);
+        });
+
     middlewareCmd
         .command("node-logs")
-        .description("Get middleware node logs")
+        .description("Get middleware node logs (NodeAdded/NodeRemoved/NodeStakeUpdated/AllNodeStakesUpdated/OperatorHasLeftoverStake plus all BalancerValidatorManager events)")
         .addArgument(argMiddlewareAddress)
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp (defaults to middleware START_TIME)").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
         .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
         .asyncAction(async (config, middlewareAddress, options) => {
             logger.log(`nodeId: ${options.nodeId}`);
@@ -1954,8 +2003,23 @@ async function main() {
                 middleware,
                 config,
                 options.nodeId,
-                options.snowscanApiKey
+                options.snowscanApiKey,
+                undefined,
+                {
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    fromEpoch: options.fromEpoch,
+                }
             );
+        });
+
+    middlewareCmd
+        .command("get-validator-balances")
+        .description("Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only; P-Chain RPC is the canonical Avalanche endpoint for the selected network, independent of --rpc-url)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetValidatorBalances(config.client, middlewareSvc, config);
         });
 
     middlewareCmd
@@ -2059,6 +2123,7 @@ async function main() {
             const roles = getRoles(middlewareSvc);
             const accessControl = await config.contracts.AccessControl(middlewareAddress);
             const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
+            const accountInfo: { [key: string]: any } = { account, isOwner: account === owner, roles: roles.filter((_, index) => hasRole[index]) };
             logger.log(`Account ${account} has the following rights: `);
             if (account === owner) {
                 logger.log(`L1 owner`);
@@ -2085,7 +2150,9 @@ async function main() {
                     formated[encodeNodeID(validator.nodeID)] = { NodeID: encodeNodeID(validator.nodeID), status, weight: validator.weight, ValidationId: validationIDs[i / 2], continuousAVAXBalance: parseUnits(pChainValidator?.balance?.toString() ?? '0', 9) }
                 }
                 logger.logJsonTree(formated);
+                accountInfo.operator = { stake, validators: formated };
             }
+            logger.addData('accountInfo', accountInfo);
         });
 
     middlewareCmd
@@ -2320,6 +2387,8 @@ async function main() {
             const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
                 logger.log("Validator status: NotRegistered");
+                logger.addData("status", "NotRegistered");
+                logger.addData("nodeId", nodeId);
                 return;
             }
             const [validator, PendingWeightUpdate] = await Promise.all([balancer.read.getValidator([validationId]), balancer.read.isValidatorPendingWeightUpdate([validationId])]);
@@ -3953,8 +4022,33 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to distribute rewards for"))
         .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
-        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize) => {
+        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
+        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            const client = config.client;
+            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
+                throw new Error('--safe-propose requires --safe <address>');
+            }
+            if ('safe' in client && client.safe != undefined && !isCastMode()) {
+                // Route through the batch helper so the Safe propose path surfaces the
+                // safeTxHash and enforces propose-only, without touching the shared proxy.
+                const batch = await handleBatchTransaction([
+                    {
+                        to: rewardsAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.RewardsNativeToken as Abi,
+                            functionName: 'distributeRewards',
+                            args: [epoch, batchSize],
+                        }),
+                        value: '0',
+                    },
+                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
+                if (batch.ethereumTxHash) {
+                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
+                }
+                logger.log(`distributeRewards for epoch ${epoch} batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
+                return;
+            }
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
@@ -4122,7 +4216,8 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .argument("rewardsAmount", "Amount of rewards in decimal format")
-        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount) => {
+        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
+        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             if (rewardsContract.name !== 'RewardsNativeToken') {
                 throw new Error('Rewards contract is not a RewardsNativeToken');
@@ -4132,6 +4227,41 @@ async function main() {
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
+            const client = config.client;
+            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
+                throw new Error('--safe-propose requires --safe <address>');
+            }
+            if ('safe' in client && client.safe != undefined && !isCastMode()) {
+                // One atomic MultiSend: separate approve/set proposals would collide on
+                // the Safe nonce, and the set call cannot be simulated (or executed)
+                // while the approve is unmined — setRewardsAmountForEpochs pulls the
+                // tokens via transferFrom at set time.
+                const batch = await handleBatchTransaction([
+                    {
+                        to: tokenAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.ERC20 as Abi,
+                            functionName: 'approve',
+                            args: [rewardsAddress, amountToApprove],
+                        }),
+                        value: '0',
+                    },
+                    {
+                        to: rewardsAddress,
+                        data: encodeFunctionData({
+                            abi: SuzakuABI.RewardsNativeToken as Abi,
+                            functionName: 'setRewardsAmountForEpochs',
+                            args: [startEpoch, numberOfEpochs, rewardsAmountWei],
+                        }),
+                        value: '0',
+                    },
+                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
+                if (batch.ethereumTxHash) {
+                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
+                }
+                logger.log(`approve + setRewardsAmountForEpochs batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
+                return;
+            }
             await token.safeWrite.approve([rewardsAddress, amountToApprove], {
                 chain: null,
                 account: config.client.account!,
@@ -4406,6 +4536,67 @@ async function main() {
             await getLastEpochClaimedCurator(
                 rewardsContract,
                 curator
+            );
+        });
+
+    rewardsCmd
+        .command("get-amount-set-events")
+        .description("List every RewardsAmountSet event that covers a given epoch — diagnose multiple set-amount calls for the same epoch")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Epoch to inspect"))
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute fromBlock from epoch start timestamp (required unless --from-block is given)"))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --middleware-derived block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsAmountSetEvents(
+                rewardsContract,
+                config,
+                epoch,
+                {
+                    middlewareAddress: options.middleware,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                }
+            );
+        });
+
+    rewardsCmd
+        .command("get-epoch-status")
+        .description("Get funded/distributionComplete status and set rewards amount for one epoch or a range of epochs")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Start epoch (the single epoch to query if --to-epoch is omitted)"))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive) for a range query").argParser(ParserNumber))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsEpochStatus(rewardsContract, epoch, options.toEpoch ?? epoch);
+        });
+
+    rewardsCmd
+        .command("get-events")
+        .description("Scan rewards lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range")
+        .addArgument(argRewardsAddress)
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute block range from epoch start timestamps (required with --from-epoch/--to-epoch)"))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive); toBlock is derived from the next epoch start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "End block for log scan (overrides --to-epoch; defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--events <names>", "Comma-separated event names to include (defaults to all lifecycle events)"))
+        .addOption(new Option("--snowscan-api-key <string>", "Snowscan API key for faster log retrieval").default(""))
+        .asyncAction(async (config, rewardsAddress, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsLifecycleEvents(
+                rewardsContract,
+                config,
+                {
+                    middlewareAddress: options.middleware,
+                    fromEpoch: options.fromEpoch,
+                    toEpoch: options.toEpoch,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    events: options.events ? options.events.split(',').map((s: string) => s.trim()) : undefined,
+                    snowscanApiKey: options.snowscanApiKey,
+                }
             );
         });
 
