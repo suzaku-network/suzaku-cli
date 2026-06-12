@@ -283,7 +283,7 @@ Upgrade procedure:
 
 ## Scheduled Epoch Alerts (cron)
 
-`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime (they live in the container filesystem, so re-register after a rebuild). The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`:
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime and persist in the `openclaw-state` volume (sqlite) — they survive rebuilds and recreates; re-register only if that volume is deleted or the OpenClaw schema migrates. The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`:
 
 ```bash
 # 1. Alerts: post only when something needs attention
