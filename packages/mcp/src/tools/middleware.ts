@@ -19,6 +19,13 @@ function extractData(result: CliResult, label?: string, warnings?: string[]): Re
   return result.data as Record<string, unknown>;
 }
 
+function isNullOrZeroLike(value: unknown): boolean {
+  if (value == null) return true;
+  if (value === 0 || value === 0n) return true;
+  if (typeof value === 'string') return /^0+$/.test(value.trim());
+  return false;
+}
+
 export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
 
@@ -423,25 +430,42 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
       // Per-operator rebalance flag
       const rebalancedThisEpoch = cacheStatusData?.rebalanceByOperator?.[operator] ?? null;
+      const availableStake = availableData.availableStake ?? null;
+      const usedStake = extractData(usedResult, 'used', _warnings).usedStake ?? null;
+      const lockedStake = extractData(lockedResult, 'locked', _warnings).lockedStake ?? null;
+      const activeNodes = activeNodesData.nodeIds ?? [];
 
-      const dashboard = {
+      const dashboard: Record<string, unknown> = {
         operator,
         epoch: currentEpoch,
         stake: {
-          available: availableData.availableStake ?? null,
-          used: extractData(usedResult, 'used', _warnings).usedStake ?? null,
-          locked: extractData(lockedResult, 'locked', _warnings).lockedStake ?? null,
+          available: availableStake,
+          used: usedStake,
+          locked: lockedStake,
           byClass,
         },
         nodes,
-        activeNodes: activeNodesData.nodeIds ?? [],
+        activeNodes,
         ...(linkedAddresses ? { linkedAddresses } : {}),
         ...(epochTiming ? { epochTiming } : {}),
         rebalancedThisEpoch,
+        dataComplete: _warnings.length === 0,
         ...(rewards ? { rewards } : {}),
         ...(uptime ? { uptime } : {}),
         ...(_warnings.length > 0 ? { _warnings } : {}),
       };
+
+      if (
+        isNullOrZeroLike(availableStake) &&
+        isNullOrZeroLike(usedStake) &&
+        isNullOrZeroLike(lockedStake) &&
+        nodes.length === 0 &&
+        Array.isArray(activeNodes) &&
+        activeNodes.length === 0 &&
+        !rewards
+      ) {
+        dashboard._note = 'operator shows no registration footprint on this middleware — verify the address';
+      }
 
       return formatResult({ success: true, data: dashboard });
     },

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { runCli, formatResult, formatGuardError, requireSigner } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
+import { augmentLstInfo } from './payload-augment.js';
 
 export function registerLstWrapperTools(server: McpServer, readOnly?: boolean) {
   // ── Reads ──
@@ -17,10 +18,12 @@ export function registerLstWrapperTools(server: McpServer, readOnly?: boolean) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ lstWrapperAddress, network, rpcUrl }) => {
-      return formatResult(await runCli(
+      const result = await runCli(
         ['lst-wrapper', 'info', lstWrapperAddress],
         { network, rpcUrl },
-      ));
+      );
+      if (result.success && result.data) result.data = augmentLstInfo(result.data);
+      return formatResult(result);
     },
   );
 
