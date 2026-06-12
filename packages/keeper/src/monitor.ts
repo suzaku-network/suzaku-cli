@@ -1,9 +1,9 @@
 import { Registry, Gauge, Counter, collectDefaultMetrics } from 'prom-client';
 import { formatUnits, type Address, type Hex, type WatchContractEventReturnType } from 'viem';
-import type { ExtendedWalletClient } from 'suzaku-cli/dist/client';
-import { SafeSuzakuContract } from 'suzaku-cli/dist/lib/viemUtils';
-import StakingVaultABI from 'suzaku-cli/dist/abis/StakingVault';
-import KiteStakingManagerABI from 'suzaku-cli/dist/abis/KiteStakingManager';
+import type { ExtendedWalletClient } from '@suzaku-network/suzaku-cli/dist/client';
+import { SafeSuzakuContract } from '@suzaku-network/suzaku-cli/dist/lib/viemUtils';
+import StakingVaultABI from '@suzaku-network/suzaku-cli/dist/abis/StakingVault';
+import KiteStakingManagerABI from '@suzaku-network/suzaku-cli/dist/abis/KiteStakingManager';
 import type { KeeperRunResult } from './keeper';
 import * as https from 'node:https';
 import * as http from 'node:http';

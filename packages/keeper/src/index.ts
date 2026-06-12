@@ -19,11 +19,11 @@ for (const [secretName, envVar] of Object.entries(DOCKER_SECRETS)) {
 }
 
 import { Command, Option } from '@commander-js/extra-typings';
-import { generateClient } from 'suzaku-cli/dist/client';
-import { getConfig } from 'suzaku-cli/dist/config';
-import { chainList, setCustomChainRpcUrl } from 'suzaku-cli/dist/lib/chainList';
-import { ParserPrivateKey, ParserNumber, ArgAddress, ParserHex } from 'suzaku-cli/dist/lib/cliParser';
-import { getValidatorManagerAddress } from 'suzaku-cli/dist/stakingVault';
+import { generateClient } from '@suzaku-network/suzaku-cli/dist/client';
+import { getConfig } from '@suzaku-network/suzaku-cli/dist/config';
+import { chainList, setCustomChainRpcUrl } from '@suzaku-network/suzaku-cli/dist/lib/chainList';
+import { ParserPrivateKey, ParserNumber, ArgAddress, ParserHex } from '@suzaku-network/suzaku-cli/dist/lib/cliParser';
+import { getValidatorManagerAddress } from '@suzaku-network/suzaku-cli/dist/stakingVault';
 import { keeperRun, keeperWatch } from './keeper';
 import { Monitor } from './monitor';
 import { startServer } from './server';
