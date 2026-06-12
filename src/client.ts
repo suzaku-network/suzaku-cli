@@ -77,7 +77,7 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
             ...createPublicClient({
                 chain: chainList[chain],
                 transport: http(),
-                
+
             }).extend(publicActions),
             network,
             safe: safe ? await createSafeClient({

@@ -889,6 +889,25 @@ export default [
     },
     {
         "type": "event",
+        "name": "StakingVault__StrandedRewardsClaimed",
+        "inputs": [
+            {
+                "name": "id",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "StakingVault__ValidatorRegistrationCompleted",
         "inputs": [
             {
@@ -915,6 +934,31 @@ export default [
                 "type": "bytes32",
                 "indexed": true,
                 "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingVault__ValidatorRemovalAdopted",
+        "inputs": [
+            {
+                "name": "operator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
             }
         ],
         "anonymous": false
@@ -1592,6 +1636,17 @@ export default [
                 "name": "caller",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "StakingVault__NotYetRemoved",
+        "inputs": [
+            {
+                "name": "id",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
@@ -3388,6 +3443,32 @@ export default [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "recoverStrandedDelegatorRewards",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "recoverStrandedValidatorRewards",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
     },
     {
         "type": "function",

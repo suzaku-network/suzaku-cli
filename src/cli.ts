@@ -139,7 +139,7 @@ import {
     getOperatorUptimeForEpoch,
     isOperatorUptimeSetForEpoch,
     getLastUptimeCheckpoint,
-    uptimeSync
+    uptimeSync,
 } from "./uptime";
 
 import {
@@ -180,7 +180,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo, submitUptimeProof } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -2789,7 +2789,7 @@ async function main() {
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("delegationID", "Delegation ID"))
         .addOption(new Option("--include-uptime-proof", "Include uptime proof in the removal").default(false))
-        .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true)"))
+        .addOption(new Option("--rpc-url <rpcUrl>", "RPC URL for getting validator uptime (required if --include-uptime-proof is true) eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .asyncAction({ signer: true }, async (config, delegationID, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await initiateDelegatorRemoval(
@@ -2806,7 +2806,7 @@ async function main() {
         .description("Complete delegator removal on the P-Chain and on the KiteStakingManager after initiating removal")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgHex("initiateRemovalTxHash", "Initiate delegator removal transaction hash"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .argument("rpcUrl <string>", "RPC URL for getting validator uptime eg. https://<ip>:<port>/ext/bc/<chainID>")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .addOption(new Option("--skip-wait-api", "Don't wait for the validator to be visible through the P-Chain API"))
         .addOption(new Option("--delegation-id <delegationID>", "Delegation ID of the delegator being removed").default([] as Hex[]).argParser(collectMultiple(ParserHex)))
@@ -2878,7 +2878,7 @@ async function main() {
         .description("Submit uptime proof for a validator")
         .addOption(optKiteStakingManagerAddress)
         .addArgument(ArgNodeID("nodeId", "Node ID of the validator"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime")
+        .argument("rpcUrl", "RPC URL for getting validator uptime eg. https://<ip>:<port>/ext/bc/<chainID>")
         .asyncAction({ signer: true }, async (config, nodeId, rpcUrl, options) => {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             await submitUptimeProof(
@@ -3196,7 +3196,7 @@ async function main() {
         .description("Complete delegator registration on the P-Chain and on the StakingVault after initiating registration")
         .addOption(optStakingVaultAddress)
         .addArgument(ArgHex("initiateTxHash", "Initiate delegator registration transaction hash"))
-        .argument("rpcUrl", "RPC URL for getting validator uptime (e.g. http(s)://domainOrIp:portIfNeeded)")
+        .argument("rpcUrl", "RPC URL for getting validator uptime (eg. https://<ip>:<port>/ext/bc/<chainID>)")
         .addOption(new Option("--pchain-tx-private-key <pchainTxPrivateKey>", "P-Chain transaction private key/secret name or 'ledger'. Defaults to the private key.").argParser(ParserPrivateKey))
         .asyncAction({ signer: true }, async (config, initiateTxHash, rpcUrl, options) => {
             const opts = program.opts();
@@ -3529,6 +3529,42 @@ async function main() {
         });
 
     stakingVaultCmd
+        .command("recover-stranded-validator")
+        .description("Recover stranded validator rewards after RewardVault refund (Zenith #23)")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgHex("validationID", "Validation ID (bytes32)"))
+        .asyncAction({ signer: true }, async (config, validationID, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            try {
+                await recoverStrandedValidatorRewardsStakingVault(config.client, stakingVault, validationID);
+            } catch (error: any) {
+                if (error.message?.includes("StakingVault__NotYetRemoved")) {
+                    logger.error("Validator is still tracked by the vault (StakingVault__NotYetRemoved). Complete the removal first — validatorToOperator[validationID] must be zero.");
+                    process.exit(1);
+                }
+                throw error;
+            }
+        });
+
+    stakingVaultCmd
+        .command("recover-stranded-delegator")
+        .description("Recover stranded delegator rewards after RewardVault refund (Zenith #23). Run before recover-stranded-validator for the same validator so commission lands in validator rewards.")
+        .addOption(optStakingVaultAddress)
+        .addArgument(ArgHex("delegationID", "Delegation ID (bytes32)"))
+        .asyncAction({ signer: true }, async (config, delegationID, options) => {
+            const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
+            try {
+                await recoverStrandedDelegatorRewardsStakingVault(config.client, stakingVault, delegationID);
+            } catch (error: any) {
+                if (error.message?.includes("StakingVault__NotYetRemoved")) {
+                    logger.error("Delegation is still tracked by the vault (StakingVault__NotYetRemoved). Complete the removal first — delegatorInfo[delegationID].operator must be zero.");
+                    process.exit(1);
+                }
+                throw error;
+            }
+        });
+
+    stakingVaultCmd
         .command("info")
         .description("Get general overview of the StakingVault")
         .addOption(optStakingVaultAddress)
@@ -3756,7 +3792,7 @@ async function main() {
     uptimeCmd
         .command("get-validation-uptime-message")
         .description("Get the validation uptime message for a given validator in the given L1 RPC")
-        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .addArgument(ArgCB58("blockchainId", "Blockchain ID"))
         .addArgument(ArgNodeID())
         .asyncAction(async (config, rpcUrl, blockchainId, nodeId) => {
@@ -3786,7 +3822,7 @@ async function main() {
     uptimeCmd
         .command("report-uptime-validator")
         .description("Gets a validator's signed uptime message and submits it to the UptimeTracker contract.")
-        .addArgument(ArgURI("rpcUrl", "RPC URL like 'http(s)://<domain or ip and port>'"))
+        .addArgument(ArgURI("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>"))
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addArgument(ArgNodeID("nodeId", "The NodeID of the validator"))
         .addArgument(argUptimeTrackerAddress)
@@ -3796,9 +3832,6 @@ async function main() {
                 logger.error("Error: Private key is required. Use -k or set PK environment variable.");
                 process.exit(1);
             }
-
-
-            // rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
 
             await reportAndSubmitValidatorUptime(
                 config.client,
@@ -3924,7 +3957,7 @@ async function main() {
         .description("Report uptime for all validators")
         .addArgument(argUptimeTrackerAddress)
         .addArgument(argMiddlewareAddress)
-        .argument("rpcUrl", "RPC URL of the network")
+        .argument("rpcUrl", "RPC URL eg. https://<ip>:<port>/ext/bc/<chainID>")
         .addArgument(ArgCB58("blockchainId", "The Blockchain ID for which the uptime is being reported"))
         .addOption(new Option("--epoch <epoch>", "Epoch number to check (defaults to current epoch)").argParser(ParserNumber))
         .asyncAction({ signer: true }, async (config, uptimeTrackerAddress, middlewareAddress, rpcUrl, blockchainId, options) => {
