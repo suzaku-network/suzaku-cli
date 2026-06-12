@@ -248,7 +248,8 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'discover_network',
-    'Top-level discovery: given only a network, returns the complete address map of all L1s (with their middleware, balancer, and linked addresses) and all global operators. No address inputs required.',
+    'Top-level discovery: given only a network, returns the complete address map of all L1s (with their middleware, balancer, and linked addresses) and all global operators. No address inputs required. ' +
+    'Skip this when the contract addresses are already known (e.g. a pinned deployment) — it runs several parallel CLI scans and is meant for exploring an unknown network, not address lookup.',
     {
       network: Network,
       rpcUrl: RpcUrl,

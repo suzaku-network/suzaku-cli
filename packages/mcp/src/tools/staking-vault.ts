@@ -128,7 +128,8 @@ export function registerStakingVaultTools(server: McpServer, readOnly?: boolean)
 
   server.tool(
     'staking_vault_full_info',
-    'Get complete vault report: combines general info, fees, operators, validators, delegators, withdrawals, and epoch info',
+    'Composite: one call replaces the 7 individual staking_vault_*_info reads (info, fees, operators, validators, delegators, withdrawals, epoch) — prefer this over calling them separately. ' +
+    'Returns the complete vault report.',
     {
       stakingVaultAddress: Address.describe('StakingVault contract address'),
       network: Network,

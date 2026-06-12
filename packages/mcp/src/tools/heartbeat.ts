@@ -475,7 +475,8 @@ export function registerHeartbeatTools(server: McpServer) {
     'mode=alerts (default): fast state checks, returns only warn/alert findings in humanLines — empty humanLines means all good, post nothing. ' +
     'mode=digest: full epoch digest with event scans — what changed (nodes/stakes/validators), rewards activity, and a per-epoch claimability table; run once per epoch rollover (compare the returned epoch to the last reported one). ' +
     'All checks are computed deterministically; humanLines are ready to post verbatim in a Telegram monospace block. ' +
-    'Digest mode scans events over the elapsed epoch (~30-60s; prefer a dedicated RPC); accumulation detection covers that window — use rewards_epoch_diagnosis for historical epochs.',
+    'Digest mode scans events over the elapsed epoch (~30-60s; prefer a dedicated RPC); accumulation detection covers that window — use rewards_epoch_diagnosis for historical epochs. ' +
+    'Event scans use SNOWSCAN_API_KEY from the server env when set (~5s per scan vs ~60s RPC-only).',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       rewardsAddress: Address.describe('Rewards contract address'),

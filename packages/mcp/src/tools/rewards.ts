@@ -439,7 +439,10 @@ function registerDirectWriteTools(server: McpServer) {
 
   server.tool(
     'rewards_distribute',
-    'Distribute rewards for an epoch (requires SUZAKU_PK)',
+    'Distribute rewards for an epoch (requires SUZAKU_PK). ' +
+    'Pre-checks: call rewards_get_distribution_batch first — if isComplete=true this is a no-op, skip it; ' +
+    'operator uptime must be recorded for the epoch or the transaction reverts with OperatorUptimeNotSet ' +
+    '(check middleware_uptime_report or the heartbeat uptime flags). Run rewards_epoch_diagnosis if the epoch state is unclear.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
       epoch: z.string().describe('Epoch number'),
@@ -462,7 +465,10 @@ function registerDirectWriteTools(server: McpServer) {
 
   server.tool(
     'rewards_claim',
-    'Claim available staker rewards (requires SUZAKU_PK)',
+    'Claim available staker rewards for the signer (requires SUZAKU_PK). ' +
+    'Rewards are claimable only once an epoch\'s distribution is complete (rewards_get_epoch_status); ' +
+    'check rewards_get_last_claimed first to see the claim cursor — claims process up to 64 epochs per call. ' +
+    'Operator/curator fee claims are separate flows not exposed by this tool.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
       recipient: Address.optional().describe('Recipient address for claimed rewards (defaults to signer)'),
