@@ -65,6 +65,9 @@ Inputs that trip people up:
 - Signature aggregation uses the `SIG_AGG_URL` endpoint (defaults to Glacier). A
   warp-collection timeout means that endpoint is unreachable or validators are
   offline — report the raw error; never retry blindly.
+- The `uptimeTrackerAddress` comes from the SOUL.md Known-deployment pin — it has NO
+  on-chain getter and `middleware_get_linked_addresses` does NOT return it. Unpinned →
+  ask the operator.
 
 **Bot profiles can only CHECK uptime** (the dry-run read + `middleware_uptime_report`);
 the report/compute writes are not registered here — a human runs them via the CLI.
@@ -94,7 +97,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Settable-window check, **whether anything was already set (accumulation!)**, deadline UTC |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
-| "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` | Lowest P-Chain balance + any validator below threshold; uptime gaps for the previous epoch |
+| "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
 | "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if false near close, escalate — the cache update is a CLI action |
 
@@ -145,8 +148,9 @@ For an alarmed or ambiguous "something is wrong" message:
 - **Partial data is not data**: if any tool call failed or timed out, say so and name
   the tool. Never present conclusions derived from incomplete reads as complete — and
   never lead with "Actions needed" computed from a partial picture without flagging it.
-- **Repeated tool errors** → run `health_check` first (verifies CLI path, signer
-  config, connectivity) before retrying anything else.
+- **Repeated tool errors** (two or more in one answer) → CALL `health_check` immediately
+  and include its output in your reply — never merely recommend running it. If
+  `health_check` itself fails, say so explicitly and stop retrying other tools.
 - **Network scope**: the pinned deployment addresses are mainnet-only. For any other
   network, require explicit contract addresses from the user — never reuse the pins.
 

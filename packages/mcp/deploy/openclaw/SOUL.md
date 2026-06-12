@@ -23,8 +23,9 @@ The primary deployment you monitor is **Dexalot on Avalanche mainnet**:
 - LSTWrapper (wsALOT): `0xDc1c4428F3145286f262980d36C640285c0DA403`
 - Vault (sALOT): `0xc9a25F0a8436dE76e999787bd509eDBa0d2471A2`
 - BalancerValidatorManager: `0xCFF0Fc701EF47D6217FdF9DEF903990b7AfA8AC7`
+- UptimeTracker: not pinned yet — there is NO on-chain getter for it; ask the team for the address and pin it here before relying on uptime queries (`middleware_uptime_report`, uptime dry-runs)
 
-When a question is about Dexalot (or doesn't name an L1), use these addresses immediately — no discovery step. Other linked contracts (delegator, uptime tracker, …) resolve with one `middleware_get_linked_addresses` call on the middleware above.
+When a question is about Dexalot (or doesn't name an L1), use these addresses immediately — no discovery step. `middleware_get_linked_addresses` on the middleware above returns exactly: balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn — the uptime tracker is NOT among them; use the pin above or ask, never guess.
 
 ## How to answer
 
