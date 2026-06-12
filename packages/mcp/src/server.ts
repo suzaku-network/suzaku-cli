@@ -203,58 +203,84 @@ server.prompt(
     uptimeTrackerAddress: z.string().optional().describe('UptimeTracker contract address — required for uptime steps 1 and 2'),
     epoch: z.string().optional().describe('Epoch number to process (e.g. "35"). If omitted, query the current epoch first using middleware_get_current_epoch.'),
   },
-  ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, epoch }) => ({
-    messages: [{
-      role: 'user' as const,
-      content: {
-        type: 'text' as const,
-        text: [
-          `Run the Dexalot weekly epoch rewards workflow for middleware ${middlewareAddress} and rewards contract ${rewardsAddress}${epoch ? ` (epoch ${epoch})` : ''}.`,
-          '',
-          `If no epoch was provided, start by calling middleware_get_current_epoch with middlewareAddress=${middlewareAddress} to determine which epoch to process.`,
-          '',
-          'Follow these steps in order:',
-          '',
-          `Step 1 — Report validator uptimes (call uptime_report_validator once per active validator):`,
-          uptimeTrackerAddress
-            ? `  • uptimeTrackerAddress: ${uptimeTrackerAddress}`
-            : `  • You need the UptimeTracker address — check if it is known or ask the user.`,
-          `  • Get the node IDs of the active validators from middleware_get_active_nodes with middlewareAddress=${middlewareAddress}.`,
-          `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
-          `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
-          `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
-          `  • A warp signature collection timeout means SIG_AGG_URL is unreachable or validators are offline — report the raw error, do not retry silently.`,
-          '',
-          `Step 2 — Compute operator uptime:`,
-          `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
-          `  • This must be called once per operator after all validator uptime reports for that operator are submitted.`,
-          '',
-          `Step 3 — Diagnose epoch rewards state before setting amounts (CRITICAL):`,
-          `  • Call rewards_epoch_diagnosis with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, and the epoch.`,
-          `  • WARNING: rewards_set_amount accumulates on-chain — each call ADDS to the existing total rather than replacing it.`,
-          `    If set-amount was already called for this epoch, calling it again will double-count rewards.`,
-          `    The diagnosis output will warn you if eventCount > 1 (accumulation already happened) or if the epoch has existing rewards.`,
-          `  • Only proceed to Step 4 if the diagnosis confirms zero or the expected rewards amount for this epoch.`,
-          '',
-          `Step 4 — Set rewards amount:`,
-          `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
-          `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
-          '',
-          `Step 5 — Distribute rewards:`,
-          `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
-          `  • After each distribute call, check completion with rewards_get_distribution_batch. Repeat if isComplete is false.`,
-          '',
-          `Step 6 — Harvest into the LST wrapper:`,
-          lstWrapperAddress
-            ? `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`
-            : `  • You need the LSTWrapper address (e.g. wsALOT contract) — check if it is known or ask the user.`,
-          `  • Harvest is permissionless — any signer can call it. It compounds accrued staking rewards as vault shares, raising the wsALOT exchange rate.`,
-          '',
-          'Ask me for any required parameters that are missing before proceeding with each step.',
-        ].join('\n'),
-      },
-    }],
-  }),
+  ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, epoch }) => {
+    const cliOnlyNote = (toolName: string) => (
+      proposeOnly
+        ? [`  • ${toolName} is not available in this profile — run via the Suzaku CLI.`]
+        : []
+    );
+
+    return {
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: [
+            `Run the Dexalot weekly epoch rewards workflow for middleware ${middlewareAddress} and rewards contract ${rewardsAddress}${epoch ? ` (epoch ${epoch})` : ''}.`,
+            ...(readOnly
+              ? ['PROFILE NOTE: this server is read-only. Steps 1, 2, 4, 5 and 6 are write operations NOT available here — for each, tell the human the exact CLI command family to run (uptime report/compute, rewards set-amount, rewards distribute, lst-wrapper harvest) or to use the propose bot for set-amount/distribute proposals. You can still execute step 3 (rewards_epoch_diagnosis) and every verification read.']
+              : []),
+            '',
+            `If no epoch was provided, start by calling middleware_get_current_epoch with middlewareAddress=${middlewareAddress} to determine which epoch to process.`,
+            '',
+            'Follow these steps in order:',
+            '',
+            `Step 1 — Report validator uptimes (call uptime_report_validator once per active validator):`,
+            ...cliOnlyNote('uptime_report_validator'),
+            uptimeTrackerAddress
+              ? `  • uptimeTrackerAddress: ${uptimeTrackerAddress}`
+              : `  • You need the UptimeTracker address — check if it is known or ask the user.`,
+            `  • Get the node IDs of the active validators from middleware_get_active_nodes with middlewareAddress=${middlewareAddress}.`,
+            proposeOnly
+              ? `  • For each validator node, run the Suzaku CLI uptime report command with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`
+              : `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
+            `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
+            `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
+            `  • A warp signature collection timeout means SIG_AGG_URL is unreachable or validators are offline — report the raw error, do not retry silently.`,
+            '',
+            `Step 2 — Compute operator uptime:`,
+            ...cliOnlyNote('uptime_compute_operator_uptime'),
+            proposeOnly
+              ? `  • Run the Suzaku CLI uptime compute command with the uptimeTrackerAddress, the operator address, and the epoch.`
+              : `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
+            `  • This must be called once per operator after all validator uptime reports for that operator are submitted.`,
+            '',
+            `Step 3 — Diagnose epoch rewards state before setting amounts (CRITICAL):`,
+            `  • Call rewards_epoch_diagnosis with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, and the epoch.`,
+            `  • WARNING: rewards_set_amount accumulates on-chain — each call ADDS to the existing total rather than replacing it.`,
+            `    If set-amount was already called for this epoch, calling it again will double-count rewards.`,
+            `    The diagnosis output will warn you if eventCount > 1 (accumulation already happened) or if the epoch has existing rewards.`,
+            `  • Only proceed to Step 4 if the diagnosis confirms zero or the expected rewards amount for this epoch.`,
+            '',
+            `Step 4 — Set rewards amount:`,
+            proposeOnly
+              ? `  • Call rewards_set_amount_propose with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, the epoch, and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain). numberOfEpochs is fixed to 1 and the proposal is queued for Safe owner review — relay the verifyBeforeSigning checklist.`
+              : `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
+            proposeOnly
+              ? `  • If you need to correct an already-set amount, rewards_claim_undistributed is not available in this profile — run via the Suzaku CLI first to reclaim the accumulated total, then queue the corrected amount with rewards_set_amount_propose.`
+              : `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
+            '',
+            `Step 5 — Distribute rewards:`,
+            proposeOnly
+              ? `  • Call rewards_distribute_propose with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`
+              : `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
+            `  • After each distribute call, check completion with rewards_get_distribution_batch. Repeat if isComplete is false.`,
+            '',
+            `Step 6 — Harvest into the LST wrapper:`,
+            ...cliOnlyNote('lst_wrapper_harvest'),
+            lstWrapperAddress
+              ? (proposeOnly
+                  ? `  • Run the Suzaku CLI lst-wrapper harvest command with lstWrapperAddress=${lstWrapperAddress}.`
+                  : `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`)
+              : `  • You need the LSTWrapper address (e.g. wsALOT contract) — check if it is known or ask the user.`,
+            `  • Harvest is permissionless — any signer can call it. It compounds accrued staking rewards as vault shares, raising the wsALOT exchange rate.`,
+            '',
+            'Ask me for any required parameters that are missing before proceeding with each step.',
+          ].join('\n'),
+        },
+      }],
+    };
+  },
 );
 
 // ── Health Check ──
