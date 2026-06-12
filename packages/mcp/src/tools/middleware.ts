@@ -455,7 +455,10 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
         ...(_warnings.length > 0 ? { _warnings } : {}),
       };
 
+      // Only conclude "no footprint" from COMPLETE data — failed sub-reads also
+      // produce nulls/empties and must not read as operator absence.
       if (
+        _warnings.length === 0 &&
         isNullOrZeroLike(availableStake) &&
         isNullOrZeroLike(usedStake) &&
         isNullOrZeroLike(lockedStake) &&

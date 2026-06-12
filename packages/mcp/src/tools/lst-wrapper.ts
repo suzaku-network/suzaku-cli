@@ -22,7 +22,7 @@ export function registerLstWrapperTools(server: McpServer, readOnly?: boolean) {
         ['lst-wrapper', 'info', lstWrapperAddress],
         { network, rpcUrl },
       );
-      if (result.success && result.data) result.data = augmentLstInfo(result.data);
+      if (result.success && result.data) return formatResult({ ...result, data: augmentLstInfo(result.data) });
       return formatResult(result);
     },
   );

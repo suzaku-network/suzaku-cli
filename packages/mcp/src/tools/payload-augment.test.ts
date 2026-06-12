@@ -69,18 +69,15 @@ describe('augmentFeesConfig', () => {
 });
 
 describe('augmentLastClaimed', () => {
-  it('marks string zero as never claimed with an explanatory note', () => {
-    const result = augmentLastClaimed({ lastClaimedEpoch: '0' }) as Record<string, unknown>;
+  it.each([['string zero', '0'], ['numeric zero', 0], ['explicit null', null]])(
+    'marks %s as never claimed with an explanatory note',
+    (_label, value) => {
+      const result = augmentLastClaimed({ lastClaimedEpoch: value }) as Record<string, unknown>;
 
-    expect(result.neverClaimed).toBe(true);
-    expect(result.lastClaimedNote).toBe('0 means no claim recorded');
-  });
-
-  it('marks numeric zero as never claimed', () => {
-    const result = augmentLastClaimed({ lastClaimedEpoch: 0 }) as Record<string, unknown>;
-
-    expect(result.neverClaimed).toBe(true);
-  });
+      expect(result.neverClaimed).toBe(true);
+      expect(result.lastClaimedNote).toBe('no claim recorded yet for this account');
+    },
+  );
 
   it('returns the original value when lastClaimedEpoch is absent or non-zero', () => {
     const absent = { account: '0xabc' };
@@ -88,6 +85,33 @@ describe('augmentLastClaimed', () => {
 
     expect(augmentLastClaimed(absent)).toBe(absent);
     expect(augmentLastClaimed(nonZero)).toBe(nonZero);
+  });
+});
+
+describe('review-fix regressions', () => {
+  it('does not invent epochRewardsHuman for rows missing the wei field', () => {
+    const result = augmentEpochStatus({
+      epochStatusTable: { epochs: [{ epoch: 40 }, { epoch: 41, epochRewards: 'not-a-number' }] },
+    }) as { epochStatusTable: { epochs: Record<string, unknown>[] } };
+
+    expect(result.epochStatusTable.epochs[0]).not.toHaveProperty('epochRewardsHuman');
+    expect(result.epochStatusTable.epochs[1]).not.toHaveProperty('epochRewardsHuman');
+  });
+
+  it('accepts numeric-string fee values', () => {
+    const result = augmentFeesConfig({ feesConfig: { protocolFee: '500' } }) as {
+      feesConfig: Record<string, unknown>;
+    };
+
+    expect(result.feesConfig.protocolFeePercent).toBe('5.00%');
+  });
+
+  it('does not mutate the input object (cache safety)', () => {
+    const input = { feesConfig: { protocolFee: 500 } };
+    const snapshot = JSON.stringify(input);
+    augmentFeesConfig(input);
+
+    expect(JSON.stringify(input)).toBe(snapshot);
   });
 });
 

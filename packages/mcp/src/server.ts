@@ -353,8 +353,11 @@ server.tool(
         status.secretName = '[configured]';
       } else if (process.env.SUZAKU_PK && !placeholderPrivateKey) {
         status.signer = 'private-key';
+      } else if (placeholderLedger || placeholderSecretName || placeholderPrivateKey) {
+        status.signer = unexpandedPlaceholderValue;
+        status.signerWarning = 'Signing env vars hold unexpanded ${...} placeholders — fix the template substitution; do not add another signer variable.';
       } else {
-        status.signer = (placeholderLedger || placeholderSecretName || placeholderPrivateKey) ? unexpandedPlaceholderValue : 'none';
+        status.signer = 'none';
         status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
       }
 

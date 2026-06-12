@@ -157,7 +157,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
         ['rewards', 'get-fees-config', rewardsAddress],
         { network, rpcUrl },
       );
-      if (result.success && result.data) result.data = augmentFeesConfig(result.data);
+      if (result.success && result.data) return formatResult({ ...result, data: augmentFeesConfig(result.data) });
       return formatResult(result);
     },
   );
@@ -254,7 +254,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
         ['rewards', subcommand, rewardsAddress, accountAddress, rewardTokenAddress],
         { network, rpcUrl },
       );
-      if (result.success && result.data) result.data = augmentLastClaimed(result.data);
+      if (result.success && result.data) return formatResult({ ...result, data: augmentLastClaimed(result.data) });
       return formatResult(result);
     },
   );
@@ -282,7 +282,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
       const args = ['rewards', 'get-epoch-status', rewardsAddress, epoch];
       if (toEpoch) args.push('--to-epoch', toEpoch);
       const result = await runCli(args, { network, rpcUrl });
-      if (result.success && result.data) result.data = augmentEpochStatus(result.data);
+      if (result.success && result.data) return formatResult({ ...result, data: augmentEpochStatus(result.data) });
       return formatResult(result);
     },
   );
@@ -411,7 +411,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
         diagnosis.push(`Distribution is complete for epoch ${epoch}.`);
       }
 
-      if (diagnosis.length === 0 && _warnings.length > 0) {
+      if (_warnings.length > 0) {
         diagnosis.push(`Diagnosis incomplete — ${_warnings.length} read(s) failed (${_warnings.join('; ')}). Do not treat this as a clean bill of health.`);
       } else if (diagnosis.length === 0) {
         diagnosis.push('No anomalies detected — check individual tool outputs for details.');

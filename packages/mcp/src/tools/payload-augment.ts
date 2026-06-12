@@ -9,9 +9,10 @@ function asWeiString(value: unknown): string {
 }
 
 function feePercent(value: unknown): string | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? `${(value / 100).toFixed(2)}%`
+  const n = typeof value === 'number' ? value
+    : typeof value === 'string' && /^\d+$/.test(value) ? Number(value)
     : undefined;
+  return n !== undefined && Number.isFinite(n) ? `${(n / 100).toFixed(2)}%` : undefined;
 }
 
 function hasOwn(record: Record<string, unknown>, key: string): boolean {
@@ -26,9 +27,13 @@ export function augmentEpochStatus<T>(data: T): T {
 
     const epochs = data.epochStatusTable.epochs.map((row) => {
       if (!isRecord(row)) return row;
+      // Only annotate when the raw value is a real wei string — a missing field must
+      // not render as "0" (BigInt('') is 0n).
+      const wei = row.epochRewards;
+      const canHumanize = typeof wei === 'string' && /^\d+$/.test(wei);
       return {
         ...row,
-        ...(!hasOwn(row, 'epochRewardsHuman') ? { epochRewardsHuman: weiToToken(asWeiString(row.epochRewards)) } : {}),
+        ...(canHumanize && !hasOwn(row, 'epochRewardsHuman') ? { epochRewardsHuman: weiToToken(wei) } : {}),
       };
     });
 
@@ -77,14 +82,18 @@ export function augmentLastClaimed<T>(data: T): T {
     if (!isRecord(data)) return data;
 
     const { lastClaimedEpoch } = data;
-    if (lastClaimedEpoch !== 0 && lastClaimedEpoch !== '0') {
+    // 0/'0' and an explicit null all mean "no claim recorded"; an ABSENT field stays
+    // unannotated (absence is not knowledge).
+    const neverClaimed = lastClaimedEpoch === 0 || lastClaimedEpoch === '0'
+      || (hasOwn(data, 'lastClaimedEpoch') && lastClaimedEpoch === null);
+    if (!neverClaimed) {
       return data;
     }
 
     return {
       ...data,
       ...(!hasOwn(data, 'neverClaimed') ? { neverClaimed: true } : {}),
-      ...(!hasOwn(data, 'lastClaimedNote') ? { lastClaimedNote: '0 means no claim recorded' } : {}),
+      ...(!hasOwn(data, 'lastClaimedNote') ? { lastClaimedNote: 'no claim recorded yet for this account' } : {}),
     } as T;
   } catch {
     return data;
