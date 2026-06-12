@@ -45,6 +45,45 @@ whenever an unset epoch is near the window edge.
 All three constants come back from one `rewards_get_epoch_status` call — never hardcode
 them; fetch and compute.
 
+## Uptime reporting
+
+The most error-prone weekly step (lifecycle 2a). The full sequence:
+
+1. Node IDs of the active set: `middleware_get_active_nodes`.
+2. Dry-run first: `uptime_get_validation_uptime_message` (a read) validates the
+   `l1RpcUrl`/`blockchainId` pair and shows the uptime a validator would report —
+   always run it before anyone commits to the 5-minute write.
+3. `uptime_report_validator` once per node (write, up to ~5 min each — warp signature
+   collection), then `uptime_compute_operator_uptime` once per operator.
+
+Inputs that trip people up:
+
+- `l1RpcUrl` is the **Dexalot L1's own RPC**, NOT the C-Chain RPC.
+- `blockchainId` is the L1's blockchain ID (CB58). No tool returns it — ask the
+  operator once, then reuse it for the whole conversation.
+- Signature aggregation uses the `SIG_AGG_URL` endpoint (defaults to Glacier). A
+  warp-collection timeout means that endpoint is unreachable or validators are
+  offline — report the raw error; never retry blindly.
+
+**Bot profiles can only CHECK uptime** (the dry-run read + `middleware_uptime_report`);
+the report/compute writes are not registered here — a human runs them via the CLI.
+Skipping uptime has a hard consequence: distributing reverts with
+`OperatorUptimeNotSet` — and through the Safe that is an ExecutionFailure that still
+consumes the nonce.
+
+## Stake cache
+
+Per-epoch stake snapshots must be cached per collateral class while the epoch runs:
+`middleware_epoch_status` → `allClassesCached` + the window close time.
+
+- The cache update is a **write** (`middleware_init_stake_update`) and is not in the
+  bot profiles — a human triggers it via the CLI.
+- `allClassesCached=false` with the window close near is **urgent**: lead with the
+  close time (UTC + time remaining) and say explicitly that a CLI action is needed.
+- If the window closes without the cache complete, escalate to the team — the
+  heartbeat fires a 🔴 `stake_cache` alert for this; do not improvise an impact
+  assessment.
+
 ## What operators actually ask, and how to answer
 
 | Question | Tools | Lead the answer with |
@@ -55,6 +94,29 @@ them; fetch and compute.
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_get_amount_set_events` for N | Event count (>1 = accumulation alarm), tx hashes, totals |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` | Lowest P-Chain balance + any validator below threshold; uptime gaps for the previous epoch |
+| "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
+| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if false near close, escalate — the cache update is a CLI action |
+
+## Urgent triage
+
+For an alarmed or ambiguous "something is wrong" message:
+
+1. **First call: `deployment_heartbeat` (mode=alerts)** — one call; empty `humanLines`
+   means nothing is burning and you can say so.
+2. 🔴 **validator P-Chain balance low** — the continuous fee drains it; at zero the
+   validator deactivates. State the balance, tell the operator to top up via the CLI
+   now. The bot cannot do this.
+3. **Stuck two-phase operation** (`stuck_two_phase`) — completing validator lifecycle
+   ops needs the CLI with a signing key; those tools are not in the bot profiles. Say
+   "requires manual intervention" and name the operation.
+4. **Accumulation detected** (2+ set-amount txs) — never attempt corrective writes and
+   never re-propose; surface the totals + tx hashes, point at the reclaim flow
+   (`rewards_claim_undistributed`, an admin CLI action after the grace period), and
+   hand off to the team.
+5. **A propose pre-check refused** — do not retry with altered parameters. Run
+   `rewards_epoch_diagnosis`, share the findings, wait for a human decision.
+6. Anything 🔴 that read tools cannot fix: say explicitly that it requires manual
+   intervention and which action — do not look for workarounds.
 
 ## Tool economy — answer in the fewest round-trips
 
@@ -73,6 +135,19 @@ them; fetch and compute.
   (who set what when, tx hashes, accumulation forensics) — just don't use a pile of them to
   reconstruct state a composite already summarizes. If you expect an answer to take over
   ~1 minute total, say so up front.
+
+## Answering discipline
+
+- **Provenance**: when you follow a procedure from this file (or a server runbook
+  prompt), say which one, and list the steps with ✅ for completed and ❌ for steps you
+  could not complete — naming the tool or error that blocked each ❌.
+- **Partial data is not data**: if any tool call failed or timed out, say so and name
+  the tool. Never present conclusions derived from incomplete reads as complete — and
+  never lead with "Actions needed" computed from a partial picture without flagging it.
+- **Repeated tool errors** → run `health_check` first (verifies CLI path, signer
+  config, connectivity) before retrying anything else.
+- **Network scope**: the pinned deployment addresses are mainnet-only. For any other
+  network, require explicit contract addresses from the user — never reuse the pins.
 
 ## Presentation rules
 
