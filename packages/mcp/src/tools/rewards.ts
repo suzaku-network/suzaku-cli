@@ -786,6 +786,7 @@ function registerProposeTools(server: McpServer) {
           },
           verifyBeforeSigning: [
             `In the Safe UI, decode the call and check it is exactly distributeRewards(${epochNum}, ${batchSize}) on ${rewardsAddress}`,
+            `Verify operator uptime is recorded for epoch ${epochNum} (middleware_uptime_report / the heartbeat uptime flags) — distributing without uptime reverts with OperatorUptimeNotSet, and a reverted Safe execution still consumes the nonce (ExecutionFailure)`,
             `Re-run rewards_epoch_diagnosis for epoch ${epochNum} immediately before signing — the pre-check above is from ${preCheckAt} and may be stale`,
             'Do not sign on the bot\'s say-so — the decoded calldata in the Safe UI is the source of truth',
           ],

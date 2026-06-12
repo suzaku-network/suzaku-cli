@@ -291,7 +291,9 @@ describe('rewards_distribute_propose', () => {
     );
     expect(proposeCall![0]).toEqual(['rewards', 'distribute', REWARDS, '46', '10', '--safe-propose']);
     expect(proposeCall![1]).toMatchObject({ privateKey: true, bypassSuggest: true });
-    expect((res.structuredContent as Record<string, unknown>).proposed).toBe(true);
+    const data = res.structuredContent as Record<string, unknown>;
+    expect(data.proposed).toBe(true);
+    expect(JSON.stringify(data.verifyBeforeSigning)).toContain('uptime');
   });
 
   it('REFUSES when the epoch has no rewards set', async () => {
