@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -111,5 +111,66 @@ describe('SOUL files stay in sync on shared security rules', () => {
 
   it('read-only SOUL points the agent at EPOCHS.md', () => {
     expect(soul).toContain('EPOCHS.md');
+  });
+});
+
+describe('docs-vs-tools census', () => {
+  const srcDir = resolve(dirname(fileURLToPath(import.meta.url)));
+  const sourceFiles = [
+    'server.ts',
+    ...readdirSync(resolve(srcDir, 'tools')).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).map((f) => `tools/${f}`),
+  ];
+  const registered = new Set<string>();
+  for (const file of sourceFiles) {
+    const src = readFileSync(resolve(srcDir, file), 'utf8');
+    for (const m of src.matchAll(/server\.tool\(\s*'([a-z0-9_]+)'/g)) registered.add(m[1]);
+  }
+
+  // Underscore tokens in docs that are legitimately NOT tool names
+  // (heartbeat check identifiers and claimability statuses quoted in EPOCHS.md).
+  const NON_TOOL_TOKENS = new Set([
+    'stake_cache', 'stuck_two_phase', 'uptime_missing', 'set_amount_accumulation',
+    'funding_deadline', 'distribution_stalled', 'pchain_balance_low', 'pchain_validators',
+    'lst_paused', 'rewards_data_unavailable', 'waiting_uptime', 'not_set',
+  ]);
+  const TOOL_PREFIXES = /^(discover|middleware|rewards|vault|lst|staking|kite|balancer|poa|opt|check|uptime|operator|l1|deployment|health)_/;
+
+  it('registers a sane number of tools', () => {
+    expect(registered.size).toBeGreaterThanOrEqual(120);
+    expect(registered.has('deployment_heartbeat')).toBe(true);
+  });
+
+  it.each(['SOUL.md', 'SOUL-propose.md', 'EPOCHS.md', 'README.md'])(
+    'every tool-like name mentioned in %s is a registered tool',
+    (doc) => {
+      const text = read(doc);
+      const mentioned = new Set<string>();
+      for (const m of text.matchAll(/`([a-z][a-z0-9_]{3,})`/g)) {
+        const token = m[1];
+        if (!token.includes('_')) continue;
+        if (NON_TOOL_TOKENS.has(token)) continue;
+        if (!TOOL_PREFIXES.test(token)) continue;
+        mentioned.add(token);
+      }
+      const phantoms = [...mentioned].filter((t) => !registered.has(t));
+      expect(phantoms, `${doc} references non-existent tools: ${phantoms.join(', ')}`).toEqual([]);
+    },
+  );
+});
+
+describe('formatting and deployment-pin invariants', () => {
+  it('EPOCHS.md carries the Telegram formatting rules', () => {
+    const epochs = read('EPOCHS.md');
+    expect(epochs).toContain('Formatting (Telegram)');
+    expect(epochs).toContain('<pre>');
+    expect(epochs).toContain('3800');
+  });
+
+  it('both SOULs point at the formatting rules and pin the UptimeTracker', () => {
+    for (const f of ['SOUL.md', 'SOUL-propose.md']) {
+      const text = read(f);
+      expect(text, `${f} formatting pointer`).toContain('Formatting (Telegram)');
+      expect(text, `${f} uptime tracker pin`).toMatch(/UptimeTracker: `0x[0-9a-fA-F]{40}`/);
+    }
   });
 });
