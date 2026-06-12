@@ -28,7 +28,8 @@ whenever an unset epoch is near the window edge.
       (`rewards_get_epoch_status` → `funded`).
       ⚠️ **Amounts ACCUMULATE**: a second set-amount for the same epoch ADDS to the
       total (the epoch 35/36 incident — both show 2 set-amount txs). Always check
-      `rewards_get_amount_set_events` / `rewards_epoch_diagnosis` before anyone sets.
+      `rewards_epoch_diagnosis` / `rewards_get_events` (filter: RewardsAmountSet)
+      before anyone sets.
       The **funding deadline** is `FUNDING_DEADLINE_OFFSET` epochs after N (currently
       4) — past it, the epoch can no longer be funded.
    c. **Distribute** (`rewards distribute`) — allowed from `DISTRIBUTION_EARLIEST_OFFSET`
@@ -92,7 +93,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | "What do I need to do this week?" | `rewards_get_epoch_status` (range: currentEpoch-4 → current), `middleware_epoch_status` | Per epoch: needs uptime? needs set-amount (and the funding deadline UTC)? needs distribution? Then the stake-cache window |
 | "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Settable-window check, **whether anything was already set (accumulation!)**, deadline UTC |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
-| "Did the set-amount go through?" | `rewards_get_amount_set_events` for N | Event count (>1 = accumulation alarm), tx hashes, totals |
+| "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` | Lowest P-Chain balance + any validator below threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
 | "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if false near close, escalate — the cache update is a CLI action |
@@ -129,8 +130,8 @@ For an alarmed or ambiguous "something is wrong" message:
   Epoch ranges = ONE `rewards_get_epoch_status` with `toEpoch`. Never loop per-epoch single
   reads for data a composite returns, and never re-fetch constants (fees config, scheduling
   offsets) you already have in this conversation.
-- **Event scans are fine for event questions** (`rewards_get_amount_set_events`,
-  `rewards_get_events`, node logs — a few seconds each with the indexer key this deployment
+- Epochs beyond the current one return all-zero rows — check the current epoch first and say 'not started' rather than 'nothing set'.
+- **Event scans are fine for event questions** (`rewards_get_events`, node logs — a few seconds each with the indexer key this deployment
   has; ~1 min each without one). Use them whenever the question is genuinely about events
   (who set what when, tx hashes, accumulation forensics) — just don't use a pile of them to
   reconstruct state a composite already summarizes. If you expect an answer to take over
@@ -160,7 +161,9 @@ For an alarmed or ambiguous "something is wrong" message:
   distribution waiting on uptime) goes at the top with its UTC time and time-remaining.
 - Epoch statuses in one compact table: epoch · set amount · #set-txs · funded ·
   distributed · status/next action.
-- Flag `2+ set-amount txs` loudly every time — that is the accumulation incident.
+- Flag `2+ set-amount txs` loudly every time — that is the accumulation incident, and
+  when the count could not be determined, say so in the first line — an unverified
+  set-amount answer is never a clean yes.
 - "claimable" means distribution is complete; say it explicitly per epoch.
 - Use human units (ALOT, AVAX) and absolute UTC datetimes, never raw wei or bare
   epoch numbers without a date.
