@@ -1,7 +1,7 @@
-import { ExtendedWalletClient } from 'suzaku-cli/dist/client';
-import { SafeSuzakuContract } from 'suzaku-cli/dist/lib/viemUtils';
-import { logger } from 'suzaku-cli/dist/lib/logger';
-import { claimDelegatorRewardsFor } from 'suzaku-cli/dist/kiteStaking';
+import { ExtendedWalletClient } from '@suzaku-network/suzaku-cli/dist/client';
+import { SafeSuzakuContract } from '@suzaku-network/suzaku-cli/dist/lib/viemUtils';
+import { logger } from '@suzaku-network/suzaku-cli/dist/lib/logger';
+import { claimDelegatorRewardsFor } from '@suzaku-network/suzaku-cli/dist/kiteStaking';
 import { Hex, parseAbiItem } from 'viem';
 
 // 7-day lookback at ~2s block cadence — matches findRemovalTxHash in keeper.ts

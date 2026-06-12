@@ -7,7 +7,11 @@ on:
       - "v*"
 
 jobs:
+  trivy:
+    uses: ./.github/workflows/trivy.yml
+
   build:
+    needs: trivy
     runs-on: ubuntu-latest
     permissions:
       contents: write

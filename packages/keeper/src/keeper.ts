@@ -1,7 +1,7 @@
-import { ExtendedWalletClient } from 'suzaku-cli/dist/client';
-import { Config } from 'suzaku-cli/dist/config';
-import { SafeSuzakuContract } from 'suzaku-cli/dist/lib/viemUtils';
-import { logger } from 'suzaku-cli/dist/lib/logger';
+import { ExtendedWalletClient } from '@suzaku-network/suzaku-cli/dist/client';
+import { Config } from '@suzaku-network/suzaku-cli/dist/config';
+import { SafeSuzakuContract } from '@suzaku-network/suzaku-cli/dist/lib/viemUtils';
+import { logger } from '@suzaku-network/suzaku-cli/dist/lib/logger';
 import { color } from 'console-log-colors';
 import { Hex, formatUnits, parseAbiItem } from 'viem';
 import type { Monitor } from './monitor';
@@ -16,7 +16,7 @@ import {
     completeDelegatorRemovalStakingVault,
     completeDelegatorRegistrationStakingVault,
     getValidatorManagerAddress,
-} from 'suzaku-cli/dist/stakingVault';
+} from '@suzaku-network/suzaku-cli/dist/stakingVault';
 import { crystallizeThirdPartyCommissions } from './thirdParty';
 
 export interface KeeperRunResult {

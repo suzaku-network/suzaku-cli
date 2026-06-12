@@ -1,5 +1,10 @@
 # Suzaku CLI
 
+[![npm version](https://img.shields.io/npm/v/@suzaku-network/suzaku-cli)](https://www.npmjs.com/package/@suzaku-network/suzaku-cli)
+[![License](https://img.shields.io/badge/license-ADDPHO-blue)](./LICENSE)
+[![Development](https://github.com/suzaku-network/suzaku-cli/actions/workflows/development.yml/badge.svg)](https://github.com/suzaku-network/suzaku-cli/actions/workflows/development.yml)
+[![Trivy](https://github.com/suzaku-network/suzaku-cli/actions/workflows/trivy.yml/badge.svg?branch=main)](https://github.com/suzaku-network/suzaku-cli/actions/workflows/trivy.yml)
+
 A simple CLI tool to interact with Suzaku core smart contracts on Avalanche. The commands let you register L1s, set up vaults, register operators, handle deposits/withdrawals, and perform middleware operations.
 
 > **Note:**

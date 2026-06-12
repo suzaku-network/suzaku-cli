@@ -1,0 +1,35 @@
+name: Trivy
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: trivy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+
+      - name: Trivy scan (table report + fail on findings)
+        run: >
+          trivy repo --include-dev-deps --severity HIGH,CRITICAL
+          --format table --output trivy-report.txt --exit-code 1 .
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
