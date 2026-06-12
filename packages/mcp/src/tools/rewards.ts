@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { runCli, formatResult, formatGuardError, requireSigner, CliResult, RunCliOptions } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
+import { augmentEpochStatus, augmentFeesConfig, augmentLastClaimed } from './payload-augment.js';
 
 /** Extract data from a CliResult, returning empty object on failure.
  *  When label and warnings are provided, records failed sub-calls for surfacing to the caller. */
@@ -152,10 +153,12 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ rewardsAddress, network, rpcUrl }) => {
-      return formatResult(await runCli(
+      const result = await runCli(
         ['rewards', 'get-fees-config', rewardsAddress],
         { network, rpcUrl },
-      ));
+      );
+      if (result.success && result.data) result.data = augmentFeesConfig(result.data);
+      return formatResult(result);
     },
   );
 
@@ -247,10 +250,12 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
     { readOnlyHint: true, idempotentHint: true },
     async ({ rewardsAddress, claimerType, accountAddress, rewardTokenAddress, network, rpcUrl }) => {
       const subcommand = `get-last-claimed-${claimerType}`;
-      return formatResult(await runCli(
+      const result = await runCli(
         ['rewards', subcommand, rewardsAddress, accountAddress, rewardTokenAddress],
         { network, rpcUrl },
-      ));
+      );
+      if (result.success && result.data) result.data = augmentLastClaimed(result.data);
+      return formatResult(result);
     },
   );
 
@@ -276,7 +281,9 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
       }
       const args = ['rewards', 'get-epoch-status', rewardsAddress, epoch];
       if (toEpoch) args.push('--to-epoch', toEpoch);
-      return formatResult(await runCli(args, { network, rpcUrl }));
+      const result = await runCli(args, { network, rpcUrl });
+      if (result.success && result.data) result.data = augmentEpochStatus(result.data);
+      return formatResult(result);
     },
   );
 
@@ -404,7 +411,9 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
         diagnosis.push(`Distribution is complete for epoch ${epoch}.`);
       }
 
-      if (diagnosis.length === 0) {
+      if (diagnosis.length === 0 && _warnings.length > 0) {
+        diagnosis.push(`Diagnosis incomplete — ${_warnings.length} read(s) failed (${_warnings.join('; ')}). Do not treat this as a clean bill of health.`);
+      } else if (diagnosis.length === 0) {
         diagnosis.push('No anomalies detected — check individual tool outputs for details.');
       }
 
