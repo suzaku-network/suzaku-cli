@@ -65,9 +65,9 @@ Inputs that trip people up:
 - Signature aggregation uses the `SIG_AGG_URL` endpoint (defaults to Glacier). A
   warp-collection timeout means that endpoint is unreachable or validators are
   offline — report the raw error; never retry blindly.
-- The `uptimeTrackerAddress` comes from the SOUL.md Known-deployment pin — it has NO
-  on-chain getter and `middleware_get_linked_addresses` does NOT return it. Unpinned →
-  ask the operator.
+- The `uptimeTrackerAddress` comes from the SOUL.md Known-deployment pin. It is NOT in
+  `middleware_get_linked_addresses` — the on-chain source of truth is the Rewards
+  contract's `uptimeTracker()` view (for a different deployment, read it there).
 
 **Bot profiles can only CHECK uptime** (the dry-run read + `middleware_uptime_report`);
 the report/compute writes are not registered here — a human runs them via the CLI.

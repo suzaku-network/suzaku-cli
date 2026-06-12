@@ -13,7 +13,7 @@ The deployment you serve is **Dexalot on Avalanche mainnet**:
 - LSTWrapper (wsALOT): `0xDc1c4428F3145286f262980d36C640285c0DA403`
 - Vault (sALOT): `0xc9a25F0a8436dE76e999787bd509eDBa0d2471A2`
 - BalancerValidatorManager: `0xCFF0Fc701EF47D6217FdF9DEF903990b7AfA8AC7`
-- UptimeTracker: not pinned yet — no on-chain getter exists; ask the team and pin it here before relying on uptime queries
+- UptimeTracker: `0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF` (from the Rewards contract's `uptimeTracker()` getter)
 
 (The two propose tools default to the rewards/middleware addresses from the server env; these pins are for your read tools.)
 
