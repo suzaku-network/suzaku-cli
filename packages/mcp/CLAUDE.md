@@ -13,7 +13,7 @@ src/
 ├── guard.ts             # Security middleware: tool access control, value limits, write confirmation via elicitation
 ├── schemas.ts           # Shared Zod schemas: Address, Hex, NodeID, Network (default 'mainnet'), RpcUrl (with SSRF blocklist)
 ├── tools/
-│   ├── middleware.ts    # 23 tools — L1Middleware contract (19 read: 10 atomic + 9 composite, 4 write)
+│   ├── middleware.ts    # 23 tools — L1Middleware contract (19 read: 12 atomic + 7 composite, 4 write)
 │   ├── vault.ts         # 11 tools — Symbiotic vault (8 read, 3 write)
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
