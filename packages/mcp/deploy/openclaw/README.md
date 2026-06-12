@@ -125,16 +125,21 @@ Notes:
 
 ```
 docker-compose.yml
-  └── suzaku-bot (single container)
-        ├── OpenClaw (Telegram bot framework)
-        │     └── mcp-adapter plugin
-        │           └── Suzaku MCP server (stdio subprocess)
-        │                 └── CLI subprocess (per tool call)
-        └── Security layers:
-              tmpfs (/tmp only)
-              cap_drop: ALL, no-new-privileges
-              pids_limit: 100, mem_limit: 2g
-              restart: unless-stopped
+  ├── suzaku-bot (read-only group bot)
+  │     ├── OpenClaw (Telegram bot framework)
+  │     │     ├── Codex runtime (gpt-5.5): native MCP registration in config.toml (entrypoint.sh)
+  │     │     └── Anthropic fallback: mcporter bridge
+  │     │           └── Suzaku MCP server --read-only (stdio subprocess)
+  │     │                 └── CLI subprocess (per tool call)
+  │     └── Security layers:
+  │           tmpfs (/tmp only)
+  │           cap_drop: ALL, no-new-privileges
+  │           pids_limit: 256, mem_limit: 2g
+  │           restart: unless-stopped
+  └── suzaku-propose-bot (DM-only, compose profile "propose")
+        ├── OpenClaw → mcporter → Suzaku MCP server --propose-only
+        │     └── delegate key + Safe API key as file secrets (/run/secrets/…)
+        └── Same security layers, separate audit volume
 ```
 
 The MCP server runs in `--read-only` mode (no write tools registered). It spawns CLI subprocesses with a restricted 8-variable environment allowlist — `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` do NOT propagate to CLI subprocesses.
@@ -170,7 +175,7 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 |---|---|
 | `cap_drop: ALL` | No Linux capabilities |
 | `no-new-privileges` | Prevents privilege escalation |
-| `pids_limit: 100` | Prevents fork bombs |
+| `pids_limit: 256` | Prevents fork bombs (100 starved the node processes mid-turn — "Transport closed"; threads count against the limit) |
 | `mem_limit: 2g` | Prevents OOM from affecting host |
 | `restart: unless-stopped` | Auto-restart on crash; stays down on manual `docker compose down` |
 
@@ -278,19 +283,23 @@ Upgrade procedure:
 
 ## Scheduled Epoch Alerts (cron)
 
-`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime (they live in the container filesystem, so re-register after a rebuild):
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime (they live in the container filesystem, so re-register after a rebuild). The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`:
 
 ```bash
-docker compose exec suzaku-bot node openclaw.mjs cron create "0 */4 * * *" \
-  "Check the current epoch status, timing, and cache readiness on mainnet using the Suzaku MCP tools. If the epoch is about to roll over or the stake cache is not ready, say so explicitly." \
-  --name "epoch-check" \
-  --session isolated \
-  --announce \
-  --channel telegram \
-  --to "<TELEGRAM_GROUP_ID>"
+# 1. Alerts: post only when something needs attention
+docker compose exec suzaku-bot node openclaw.mjs cron create \
+  --schedule "10 */4 * * *" \
+  --prompt "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group." \
+  --name "heartbeat-alerts" --session isolated --announce --channel telegram --to "<TELEGRAM_GROUP_ID>"
+
+# 2. Digest: post once per epoch rollover
+docker compose exec suzaku-bot node openclaw.mjs cron create \
+  --schedule "25 */4 * * *" \
+  --prompt "Call deployment_heartbeat with mode=digest (same addresses as the alerts cron). If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch." \
+  --name "heartbeat-digest" --session isolated --announce --channel telegram --to "<TELEGRAM_GROUP_ID>"
 ```
 
-This pushes a proactive epoch report to the group every 4 hours — useful for the rewards workflow (uptime → set-amount → distribute → harvest) where missing an epoch boundary is the most common operational mistake.
+Alerts stay quiet unless a check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, …); the digest posts one claimability/changes report per 3.5-day epoch — missing an epoch boundary is the most common operational mistake this catches.
 
 ## Example Queries
 

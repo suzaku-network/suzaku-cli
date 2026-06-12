@@ -91,6 +91,8 @@ Applied:
 
 Explicitly *not* adopted after verification: native `mcp.servers` config (does not exist in core — mcporter remains the correct bridge), native env-var interpolation in `openclaw.json` (unconfirmed; the `sed` entrypoint stays), `read_only: true` container guidance (refuted upstream). Model `anthropic/claude-sonnet-4-6` remains current and appropriate.
 
+> **Update (June 2026, post-review):** two of the conclusions above were superseded by commit `6baa0c8`. The primary model is now `openai/gpt-5.5` via the Codex subscription harness, with `claude-sonnet-4-6` as fallback (see `openclaw.json` and the deploy README "Model auth"). And the read-only bot's `entrypoint.sh` now registers the MCP server natively in the Codex `config.toml` for `gpt-5.5` turns — mcporter remains the bridge for the Anthropic-runtime path only.
+
 ## 5. Open questions for the team
 
 - Should `middleware_epoch_rewards_report` absorb the diagnosis logic (one tool fewer), or stay separate (report vs. forensics)? Current choice: separate.

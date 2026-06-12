@@ -136,7 +136,7 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 ## Tool Catalog
 
-127 tools total (69 read, 58 write):
+127 tools total (69 read, 58 write — the W column below includes the 2 Safe propose tools, which never execute):
 
 | File | R | W | Key tools |
 |---|---|---|---|

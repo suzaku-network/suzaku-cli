@@ -20,7 +20,7 @@ Proactive monitoring for the Dexalot Suzaku deployment, delivered through the Op
 | rewards `CLAIM_GRACE_PERIOD_EPOCHS` | 1 | grace before undistributed rewards are reclaimable |
 | fees | 5% protocol / 0 / 0 | live `getFeesConfiguration` |
 
-- Contract preconditions (from ABI errors): distribution requires operator uptime set (`OperatorUptimeNotSet`) and funding (`EpochNotFunded`); `setRewardsAmountForEpochs` **accumulates** and is blocked once distribution starts (`DistributionAlreadyStarted`); `epochStatus(epoch) → (funded, distributionComplete)` exists on-chain but is **not CLI-exposed yet** (gap #1).
+- Contract preconditions (from ABI errors): distribution requires operator uptime set (`OperatorUptimeNotSet`) and funding (`EpochNotFunded`); `setRewardsAmountForEpochs` **accumulates** and is blocked once distribution starts (`DistributionAlreadyStarted`); `epochStatus(epoch) → (funded, distributionComplete)` is exposed via `rewards get-epoch-status` (gap #1, closed — see Implementation status).
 
 ## The "since last digest" reference point
 
@@ -68,7 +68,7 @@ where **status** is the derived, plain-language column:
 - `reclaim after <date>` — undistributed, past grace
 - `⚠ N set-amount txs (accumulated)` — `eventCount > 1`
 
-Reads used: `rewards_get_epoch_rewards`, `rewards_get_distribution_batch`, `rewards_epoch_diagnosis`, and `epochStatus` once exposed (gap #1). Per-claimer "claimed up to epoch K" comes from `rewards_get_last_claimed` (now returns data after this PR's fix).
+Reads used: `rewards_get_epoch_rewards`, `rewards_get_distribution_batch`, `rewards_epoch_diagnosis`, and `rewards_get_epoch_status` (gap #1, closed). Per-claimer "claimed up to epoch K" comes from `rewards_get_last_claimed` (now returns data after this PR's fix).
 
 ## Telegram format (visualization is the deliverable)
 
