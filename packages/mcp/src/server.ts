@@ -294,7 +294,53 @@ server.tool(
   },
   { readOnlyHint: true, idempotentHint: true },
   async ({ network, rpcUrl }) => {
+    const isUnexpandedPlaceholder = (v: unknown): v is string =>
+      typeof v === 'string' && /^\$\{[A-Z0-9_]+\}$/.test(v);
+    const unexpandedPlaceholderValue = 'NOT CONFIGURED (unexpanded placeholder)';
     const publicHealth = process.env.SUZAKU_MCP_PUBLIC_HEALTH === 'true';
+    const configWarnings: string[] = [];
+    let hiddenPlaceholderDetected = false;
+    const addPlaceholderWarning = (envVar: string, subject: string) => {
+      if (publicHealth) {
+        hiddenPlaceholderDetected = true;
+        return;
+      }
+      configWarnings.push(`${envVar} holds an unexpanded \${...} placeholder — template substitution failed; treat ${subject} as unconfigured`);
+    };
+    const addHiddenConfigWarning = (warning: string) => {
+      if (!publicHealth) configWarnings.push(warning);
+    };
+    const placeholderPublicHealth = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_PUBLIC_HEALTH);
+    const placeholderSafeAddress = isUnexpandedPlaceholder(process.env.SUZAKU_SAFE_ADDRESS);
+    const placeholderLedger = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_LEDGER);
+    const placeholderSecretName = isUnexpandedPlaceholder(process.env.SUZAKU_SECRET_NAME);
+    const placeholderPrivateKey = isUnexpandedPlaceholder(process.env.SUZAKU_PK);
+    const placeholderPchainSigner = isUnexpandedPlaceholder(process.env.SUZAKU_PCHAIN_PK);
+    const placeholderSafeApiKey = isUnexpandedPlaceholder(process.env.SAFE_API_KEY);
+    const placeholderSafeApiKeyFile = isUnexpandedPlaceholder(process.env.SAFE_API_KEY_FILE);
+    const placeholderGuardSuggest = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_SUGGEST);
+    const placeholderGuardRequireConfirm = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_REQUIRE_CONFIRM);
+    const placeholderGuardMaxAvaxPerTx = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_MAX_AVAX_PER_TX);
+    const placeholderGuardAllowTools = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_ALLOW_TOOLS);
+    const placeholderGuardDenyTools = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_DENY_TOOLS);
+    const placeholderGuardDryRun = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_DRY_RUN);
+    if (placeholderPublicHealth) addPlaceholderWarning('SUZAKU_MCP_PUBLIC_HEALTH', 'public-health mode');
+    if (placeholderSafeAddress) addPlaceholderWarning('SUZAKU_SAFE_ADDRESS', 'Safe');
+    if (placeholderLedger) addPlaceholderWarning('SUZAKU_MCP_LEDGER', 'Ledger signer');
+    if (placeholderSecretName) addPlaceholderWarning('SUZAKU_SECRET_NAME', 'GPG keystore signer');
+    if (placeholderPrivateKey) addPlaceholderWarning('SUZAKU_PK', 'private-key signer');
+    if (placeholderPchainSigner) addPlaceholderWarning('SUZAKU_PCHAIN_PK', 'P-Chain signer');
+    if (proposeOnly && placeholderSafeApiKey) addPlaceholderWarning('SAFE_API_KEY', 'Safe API key');
+    if (proposeOnly && placeholderSafeApiKeyFile) addPlaceholderWarning('SAFE_API_KEY_FILE', 'Safe API key file');
+    if (placeholderGuardSuggest) addPlaceholderWarning('SUZAKU_MCP_SUGGEST', 'guard suggest setting');
+    if (placeholderGuardRequireConfirm) addPlaceholderWarning('SUZAKU_MCP_REQUIRE_CONFIRM', 'guard requireConfirm setting');
+    if (placeholderGuardMaxAvaxPerTx) addPlaceholderWarning('SUZAKU_MCP_MAX_AVAX_PER_TX', 'guard maxAvaxPerTx setting');
+    if (placeholderGuardAllowTools) addPlaceholderWarning('SUZAKU_MCP_ALLOW_TOOLS', 'guard allowTools setting');
+    if (placeholderGuardDenyTools) addPlaceholderWarning('SUZAKU_MCP_DENY_TOOLS', 'guard denyTools setting');
+    if (placeholderGuardDryRun) addPlaceholderWarning('SUZAKU_MCP_DRY_RUN', 'guard dryRun setting');
+    if (process.env.SUZAKU_SAFE_ADDRESS && !placeholderSafeAddress && !/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_SAFE_ADDRESS)) {
+      addHiddenConfigWarning('SUZAKU_SAFE_ADDRESS is not a valid 0x address');
+    }
     const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly, proposeOnly };
 
     // In public health mode, suppress internal config details (signer type, Safe, guard config)
@@ -302,25 +348,27 @@ server.tool(
       // Check signing method
       if (process.env.SUZAKU_MCP_LEDGER === 'true') {
         status.signer = 'ledger';
-      } else if (process.env.SUZAKU_SECRET_NAME) {
+      } else if (process.env.SUZAKU_SECRET_NAME && !placeholderSecretName) {
         status.signer = 'gpg-keystore';
         status.secretName = '[configured]';
-      } else if (process.env.SUZAKU_PK) {
+      } else if (process.env.SUZAKU_PK && !placeholderPrivateKey) {
         status.signer = 'private-key';
       } else {
-        status.signer = 'none';
+        status.signer = (placeholderLedger || placeholderSecretName || placeholderPrivateKey) ? unexpandedPlaceholderValue : 'none';
         status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
       }
 
       if (process.env.SUZAKU_SAFE_ADDRESS) {
-        status.safeAddress = process.env.SUZAKU_SAFE_ADDRESS;
+        status.safeAddress = placeholderSafeAddress ? unexpandedPlaceholderValue : process.env.SUZAKU_SAFE_ADDRESS;
       }
       if (process.env.SUZAKU_PCHAIN_PK) {
-        status.pchainSigner = 'configured';
+        status.pchainSigner = placeholderPchainSigner ? unexpandedPlaceholderValue : 'configured';
       }
       // Propose tools' Safe queue duplicate-check fails open without a mainnet API key.
       // Accept either the direct env var or the file-secret form used by the deploy.
-      if (proposeOnly && !process.env.SAFE_API_KEY && !process.env.SAFE_API_KEY_FILE) {
+      const safeApiKeyConfigured = Boolean(process.env.SAFE_API_KEY && !placeholderSafeApiKey);
+      const safeApiKeyFileConfigured = Boolean(process.env.SAFE_API_KEY_FILE && !placeholderSafeApiKeyFile);
+      if (proposeOnly && !safeApiKeyConfigured && !safeApiKeyFileConfigured) {
         status.safeApiKeyWarning = 'Neither SAFE_API_KEY nor SAFE_API_KEY_FILE is set; the Safe queue duplicate-check fails open on mainnet (HTTP 401). Set one from developer.safe.global.';
       }
     }
@@ -348,15 +396,22 @@ server.tool(
     // Report guard config (suppressed in public health mode)
     if (!publicHealth) {
       const guardConfig: Record<string, string> = {};
-      if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = process.env.SUZAKU_MCP_SUGGEST;
-      if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
-      if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
-      if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = process.env.SUZAKU_MCP_ALLOW_TOOLS;
-      if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = process.env.SUZAKU_MCP_DENY_TOOLS;
-      if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = process.env.SUZAKU_MCP_DRY_RUN;
+      if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = placeholderGuardSuggest ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_SUGGEST;
+      if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = placeholderGuardRequireConfirm ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+      if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = placeholderGuardMaxAvaxPerTx ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
+      if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = placeholderGuardAllowTools ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_ALLOW_TOOLS;
+      if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = placeholderGuardDenyTools ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_DENY_TOOLS;
+      if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = placeholderGuardDryRun ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_DRY_RUN;
       if (Object.keys(guardConfig).length > 0) {
         status.guardConfig = guardConfig;
       }
+    }
+
+    if (hiddenPlaceholderDetected) {
+      configWarnings.push('configuration placeholder detected');
+    }
+    if (configWarnings.length > 0) {
+      status.configWarnings = configWarnings;
     }
 
     return formatResult({ success: true, data: status });
