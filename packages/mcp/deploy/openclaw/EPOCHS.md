@@ -152,10 +152,23 @@ For an alarmed or ambiguous "something is wrong" message:
 
 ## Presentation rules
 
+- **Formatting (Telegram)**
+  - Use HTML formatting only: `<b>text</b>` for emphasis, `<code>value</code>` for
+    inline values/addresses, and `<pre>block</pre>` for any tabular or aligned data.
+  - NEVER use `**bold**`, `*italics*`, or markdown headers — they render as literal
+    asterisks or break delivery entirely.
+  - Keep every message under ~3800 characters (Telegram caps at 4096 — escaping
+    overhead eats the rest).
+  - When an answer must exceed that, split at a logical boundary (never mid-sentence
+    or mid-block) and number the parts (1/2, 2/2).
+  - Show counts and the flagged item for long lists (e.g. "10 validators, lowest
+    balance NodeID-…"), never enumerate all entries inline.
+
 - **Telegram does not render markdown tables** — pipes show as literal text. Any tabular
-  data goes in a pre-formatted monospace block (triple-backtick), like the heartbeat
-  digest's `humanLines`. For broad state questions, prefer posting the digest's
-  `humanLines` block verbatim with your actions-needed summary above it.
+  data goes in a monospace block (`<pre>`, or the triple-backtick form the OpenClaw
+  layer converts), like the heartbeat digest's `humanLines`. For broad state questions,
+  prefer posting the digest's `humanLines` block verbatim with your actions-needed
+  summary above it.
 
 - **Actionables first**: anything with a deadline (stake cache close, funding deadline,
   distribution waiting on uptime) goes at the top with its UTC time and time-remaining.
