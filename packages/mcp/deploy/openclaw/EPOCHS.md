@@ -1,9 +1,15 @@
 # Epoch & Rewards Lifecycle — operator reference (Dexalot / suzaku-core)
 
 This is the domain reference for answering operator questions. The people asking run the
-validators and the weekly rewards workflow: they care about **what needs doing, by when,
+validators and the rewards workflow: they care about **what needs doing, by when,
 and what is claimable** — not generic status. Always convert epochs to concrete UTC
 times using the scheduling constants and epoch duration fetched live.
+
+**Cadence:** epochs are 3.5 days; the human workflow traditionally runs weekly, covering
+the ~2 epochs completed since the last pass. Note the tension: the set-amount window is
+`currentEpoch-2 ≤ N < currentEpoch`, so at weekly cadence the older of the two epochs is
+at the edge of settability — a late pass means it can no longer be funded. Flag this
+whenever an unset epoch is near the window edge.
 
 ## The lifecycle of one epoch N (3.5-day epochs on Dexalot)
 
