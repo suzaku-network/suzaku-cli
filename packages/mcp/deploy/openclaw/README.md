@@ -301,7 +301,7 @@ suzaku-cache-bot (compose profile "cache")
 | `SUZAKU_CACHE_PK_FILE` | optional | Host path to the cache-key secret file (default `./secrets/cache_pk`) |
 | `SUZAKU_CACHE_KEY_ADDRESS` | Yes before funding | Public address of the cache key, used by `deployment_heartbeat` balance alerts |
 | `SUZAKU_CACHE_KEY_MIN_AVAX` | No | Low-balance alert threshold (default `0.05`) |
-| `SUZAKU_CACHE_DENY_TOOLS` | No | Emergency off-switch. Default is `middleware_cache_stakes`, which disables execution; set to an empty value only when enabling |
+| `SUZAKU_CACHE_DENY_TOOLS` | No | Emergency off-switch. Default is `middleware_cache_stakes`, which disables execution. To enable, set the line to an empty value (`SUZAKU_CACHE_DENY_TOOLS=`) — **do not delete the line.** Compose uses single-dash `${SUZAKU_CACHE_DENY_TOOLS-middleware_cache_stakes}`, so an *unset* variable re-applies the deny default and the tool stays blocked |
 
 Append the required ones to `.env`:
 
@@ -321,8 +321,8 @@ EOF
 1. **Prepare the group gate.** Use a private Telegram group, admin-only invites, `requireMention`, and a dedicated cache-bot token. Anyone in the group can request the cache call, so membership is the identity boundary.
 2. **Create a fresh role-less EOA.** It must not hold protocol roles, Safe ownership, token balances, or reusable operational authority. Write the key to `./secrets/cache_pk` with `chmod 600`, and set `SUZAKU_CACHE_KEY_ADDRESS` to its public address.
 3. **Start dark with no funds and the off-switch engaged.** `SUZAKU_CACHE_DENY_TOOLS=middleware_cache_stakes docker compose --profile cache up -d --build suzaku-cache-bot`. Confirm the bot starts, sees the tool profile, refuses execution due to the denylist, logs audit entries, and still respects group mention behavior.
-4. **Stage on fuji.** Set `SUZAKU_MIDDLEWARE_NETWORK=fuji` and a fuji middleware address, fund the key with test AVAX, clear `SUZAKU_CACHE_DENY_TOOLS`, and verify one real cache call plus the refreshed `cacheByClass[class]` post-read.
-5. **Enable mainnet unfunded.** Switch back to mainnet, keep the key at zero AVAX, clear `SUZAKU_CACHE_DENY_TOOLS`, and confirm the request reaches signing/broadcast failure only because the key has no gas.
+4. **Stage on fuji.** Set `SUZAKU_MIDDLEWARE_NETWORK=fuji` and a fuji middleware address, fund the key with test AVAX, set `SUZAKU_CACHE_DENY_TOOLS=` (empty value — keep the line; deleting it re-applies the deny default), and verify one real cache call plus the refreshed `cacheByClass[class]` post-read.
+5. **Enable mainnet unfunded.** Switch back to mainnet, keep the key at zero AVAX, set `SUZAKU_CACHE_DENY_TOOLS=` (empty value — do not delete the line), and confirm the request reaches signing/broadcast failure only because the key has no gas.
 6. **Fund small and monitor.** Fund with a deliberately small C-Chain AVAX balance above `SUZAKU_CACHE_KEY_MIN_AVAX` so the alert has headroom. Never auto-top up. Add `cacheKeyAddress=<cache-key>` or `SUZAKU_CACHE_KEY_ADDRESS` to `deployment_heartbeat`; it emits `cache_key_balance_low` below `SUZAKU_CACHE_KEY_MIN_AVAX`.
 
 ### Incident response

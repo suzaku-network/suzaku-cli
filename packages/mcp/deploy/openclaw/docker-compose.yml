@@ -132,6 +132,9 @@ services:
       - SUZAKU_MIDDLEWARE_NETWORK=${SUZAKU_MIDDLEWARE_NETWORK:-mainnet}
       - SUZAKU_CACHE_KEY_ADDRESS=${SUZAKU_CACHE_KEY_ADDRESS}
       - SUZAKU_CACHE_KEY_MIN_AVAX=${SUZAKU_CACHE_KEY_MIN_AVAX:-0.05}
+      # Off-switch, deny-ON by default. Single-dash '-' (NOT ':-'): the default applies
+      # only when SUZAKU_CACHE_DENY_TOOLS is UNSET. To ENABLE writes, set it to an empty
+      # value in .env (SUZAKU_CACHE_DENY_TOOLS=); deleting/omitting the line re-blocks.
       - SUZAKU_CACHE_DENY_TOOLS=${SUZAKU_CACHE_DENY_TOOLS-middleware_cache_stakes}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - SNOWSCAN_API_KEY=${SNOWSCAN_API_KEY}
