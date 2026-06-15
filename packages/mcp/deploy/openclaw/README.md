@@ -1,6 +1,6 @@
 # Suzaku Telegram Bot via OpenClaw
 
-Read-only Telegram bot for Suzaku deployment monitoring, powered by [OpenClaw](https://github.com/openclaw/openclaw) + the Suzaku MCP server.
+Telegram bots for Suzaku deployment monitoring and tightly-scoped operations, powered by [OpenClaw](https://github.com/openclaw/openclaw) + the Suzaku MCP server. The default bot is read-only. Optional compose profiles add a DM-only Safe propose bot and a separate group cache bot.
 
 ## Quick Start (Local Testing)
 
@@ -11,6 +11,7 @@ Read-only Telegram bot for Suzaku deployment monitoring, powered by [OpenClaw](h
 3. Save the bot token
 4. **Disable privacy mode** (required for group use): `/setprivacy` → select the bot → **Disable**. With privacy mode on, `@mentions` in groups are never delivered to the bot. If the bot is already in a group when you change this, remove and re-add it — Telegram applies the change only on re-join. (OpenClaw still routes only mentions to the model via `requireMention`.)
 5. Get your user ID: message [@userinfobot](https://t.me/userinfobot) and note the `Id` field. For a group's chat ID, add [@getidsbot](https://t.me/getidsbot) to the group briefly (supergroup IDs look like `-100…`)
+6. For group deployments, lock membership to admin approval. Telegram's default lets members add new people; that is acceptable for the read-only monitor only if you accept that access boundary. It is mandatory for the cache bot because the group is the human gate for a real signing key.
 
 ### 2. Create `.env`
 
@@ -136,13 +137,17 @@ docker-compose.yml
   │           cap_drop: ALL, no-new-privileges
   │           pids_limit: 256, mem_limit: 2g
   │           restart: unless-stopped
-  └── suzaku-propose-bot (DM-only, compose profile "propose")
+  ├── suzaku-propose-bot (DM-only, compose profile "propose")
         ├── OpenClaw → mcporter → Suzaku MCP server --propose-only
         │     └── delegate key + Safe API key as file secrets (/run/secrets/…)
         └── Same security layers, separate audit volume
+  └── suzaku-cache-bot (group, compose profile "cache")
+        ├── OpenClaw → mcporter → Suzaku MCP server --public-write
+        │     └── cache EOA key as file secret (/run/secrets/cache_pk)
+        └── Reads + exactly middleware_cache_stakes, separate audit volume
 ```
 
-The MCP server runs in `--read-only` mode (no write tools registered). It spawns CLI subprocesses with a restricted 8-variable environment allowlist — `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` do NOT propagate to CLI subprocesses.
+The default MCP server runs in `--read-only` mode (no write tools registered). The optional propose and cache bots use separate containers, separate Telegram bot tokens, separate SOUL files, separate MCP profiles, and separate audit volumes. CLI subprocesses inherit only a restricted environment allowlist — `ANTHROPIC_API_KEY` and Telegram tokens do NOT propagate to CLI subprocesses.
 
 ## Configuration Reference
 
@@ -167,7 +172,7 @@ The MCP server runs in `--read-only` mode (no write tools registered). It spawns
 "allowFrom": ["tg:123456789", "tg:987654321"]
 ```
 
-**Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. Anyone in that group can ask — access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to.
+**Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. Anyone in that group can ask — access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to. For the cache bot, group membership must be admin-controlled because group membership is the caller gate.
 
 ### Container hardening
 
@@ -270,6 +275,62 @@ Bad or stale proposal in the queue (wrong amount, wrong epoch, duplicate):
 
 If the delegate key is compromised: remove the delegate (`scripts/add-safe-delegate.mjs` flow in reverse via the Safe UI / `DELETE /v2/delegates/`), rotate the key in `./secrets/delegate_pk` and restart the container, then re-register. A compromised delegate can only spam the queue (or pollute a nonce) — owners should treat unexpected proposals as hostile and delete them.
 
+## Cache Bot (public stake-cache writes)
+
+A third, **group** bot from the same image that can execute exactly one write tool: `middleware_cache_stakes`. It is separate from the read-only monitor. It holds a fresh, role-less EOA funded with a deliberately small amount of C-Chain AVAX, and the MCP profile exposes all reads plus only the public cache tool.
+
+```
+suzaku-cache-bot (compose profile "cache")
+  ├── MCP server: --public-write → 69 read tools + exactly 1 write tool:
+  │     middleware_cache_stakes
+  ├── Tool behavior: pinned middleware/network only, no rpcUrl, fresh cache-status
+  │   pre-read, skip if cacheByClass[class] is already true, execute one
+  │   calcAndCacheStakes tx, fresh post-read
+  └── CLI: software key is permitted on mainnet ONLY for resolved command
+      middleware calc-operator-cache with the per-command --public-call flag
+```
+
+### Additional environment variables (cache bot)
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `TELEGRAM_CACHE_BOT_TOKEN` | Yes | Separate bot token — never reuse the read-only or propose bot token |
+| `TELEGRAM_GROUP_ID` | Yes | Group the cache bot responds in. By default this is the same group as the monitor bot, so every monitor-group member can request the cache write |
+| `SUZAKU_MIDDLEWARE_ADDRESS` | Yes | The only middleware address the cache tool may touch |
+| `SUZAKU_MIDDLEWARE_NETWORK` | No | Network pin for the cache tool (default `mainnet`; set `fuji` for staging) |
+| `SUZAKU_CACHE_PK_FILE` | optional | Host path to the cache-key secret file (default `./secrets/cache_pk`) |
+| `SUZAKU_CACHE_KEY_ADDRESS` | Yes before funding | Public address of the cache key, used by `deployment_heartbeat` balance alerts |
+| `SUZAKU_CACHE_KEY_MIN_AVAX` | No | Low-balance alert threshold (default `0.05`) |
+| `SUZAKU_CACHE_DENY_TOOLS` | No | Emergency off-switch. Default is `middleware_cache_stakes`, which disables execution; set to an empty value only when enabling |
+
+Append the required ones to `.env`:
+
+```bash
+cat >> .env <<'EOF'
+TELEGRAM_CACHE_BOT_TOKEN=555555:ABC-...
+SUZAKU_MIDDLEWARE_ADDRESS=0x<l1-middleware>
+SUZAKU_MIDDLEWARE_NETWORK=mainnet
+SUZAKU_CACHE_KEY_ADDRESS=0x<cache-key-address>
+SUZAKU_CACHE_KEY_MIN_AVAX=0.05
+SUZAKU_CACHE_DENY_TOOLS=middleware_cache_stakes
+EOF
+```
+
+### Mandatory rollout sequence
+
+1. **Prepare the group gate.** Use a private Telegram group, admin-only invites, `requireMention`, and a dedicated cache-bot token. Anyone in the group can request the cache call, so membership is the identity boundary.
+2. **Create a fresh role-less EOA.** It must not hold protocol roles, Safe ownership, token balances, or reusable operational authority. Write the key to `./secrets/cache_pk` with `chmod 600`, and set `SUZAKU_CACHE_KEY_ADDRESS` to its public address.
+3. **Start dark with no funds and the off-switch engaged.** `SUZAKU_CACHE_DENY_TOOLS=middleware_cache_stakes docker compose --profile cache up -d --build suzaku-cache-bot`. Confirm the bot starts, sees the tool profile, refuses execution due to the denylist, logs audit entries, and still respects group mention behavior.
+4. **Stage on fuji.** Set `SUZAKU_MIDDLEWARE_NETWORK=fuji` and a fuji middleware address, fund the key with test AVAX, clear `SUZAKU_CACHE_DENY_TOOLS`, and verify one real cache call plus the refreshed `cacheByClass[class]` post-read.
+5. **Enable mainnet unfunded.** Switch back to mainnet, keep the key at zero AVAX, clear `SUZAKU_CACHE_DENY_TOOLS`, and confirm the request reaches signing/broadcast failure only because the key has no gas.
+6. **Fund small and monitor.** Fund with a deliberately small C-Chain AVAX balance above `SUZAKU_CACHE_KEY_MIN_AVAX` so the alert has headroom. Never auto-top up. Add `cacheKeyAddress=<cache-key>` or `SUZAKU_CACHE_KEY_ADDRESS` to `deployment_heartbeat`; it emits `cache_key_balance_low` below `SUZAKU_CACHE_KEY_MIN_AVAX`.
+
+### Incident response
+
+- To stop execution immediately, set `SUZAKU_CACHE_DENY_TOOLS=middleware_cache_stakes` and restart `suzaku-cache-bot`.
+- If the cache key is compromised, drain or abandon it, rotate `./secrets/cache_pk`, update `SUZAKU_CACHE_KEY_ADDRESS`, restart the bot, and fund the new key only after a dark launch.
+- Do not treat cache-tool reverts as success. `CannotCacheFutureEpoch`, stale/missing class data, gas failure, or other errors mean the bot should report the error and stop; manual triage decides the next action.
+
 ## Upgrading OpenClaw
 
 The Dockerfile pins the OpenClaw image by version tag **and** digest (`2026.6.5`). Never revert to `:latest` — 2026 releases shipped several breaking config changes and the pin is also a security floor (versions before 2026.4.22 are vulnerable to the "Claw Chain" sandbox-escape advisories; 2026.6.5 includes the May/June advisory batch).
@@ -299,7 +360,9 @@ docker compose exec suzaku-bot node openclaw.mjs cron create \
   --name "heartbeat-digest" --session isolated --announce --channel telegram --to "<TELEGRAM_GROUP_ID>"
 ```
 
-Alerts stay quiet unless a check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, …); the digest posts one claimability/changes report per 3.5-day epoch — missing an epoch boundary is the most common operational mistake this catches.
+If the cache bot is deployed, include `cacheKeyAddress=<SUZAKU_CACHE_KEY_ADDRESS>` or set `SUZAKU_CACHE_KEY_ADDRESS` in the container env so `deployment_heartbeat` alerts when the C-Chain gas balance drops below `SUZAKU_CACHE_KEY_MIN_AVAX`.
+
+Alerts stay quiet unless a check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, cache-key C-Chain balance low, …); the digest posts one claimability/changes report per 3.5-day epoch — missing an epoch boundary is the most common operational mistake this catches.
 
 ## Example Queries
 
@@ -322,6 +385,9 @@ Once the bot is running, try these in a DM:
 | Container crash-loops | Check logs (`docker compose logs --tail 200`); examine recent image/config changes |
 | `docker inspect` shows the group bot's API keys | Expected — those are env vars, visible to host root; this is why VPS isolation matters. The propose bot's delegate key and Safe API key are file secrets (`/run/secrets/...`) and do **not** appear in `docker inspect` |
 | Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key via the `SAFE_API_KEY_FILE` secret; both the `health_check` warning and the mainnet pending-queue check accept the file form |
+| Cache bot refuses `middleware_cache_stakes` with denylist/access-control text | Expected before enablement: `SUZAKU_CACHE_DENY_TOOLS` defaults to `middleware_cache_stakes`. Set it to an empty value only after the dark launch/staging checks pass |
+| Cache bot says middleware or network is not pinned | Set `SUZAKU_MIDDLEWARE_ADDRESS` and, if not mainnet, `SUZAKU_MIDDLEWARE_NETWORK`; the tool intentionally rejects arbitrary addresses, networks, and `rpcUrl` |
+| Cache bot tx fails for insufficient funds | Expected during the unfunded dark launch. After validation, fund the cache key with a small C-Chain AVAX balance and monitor it with `deployment_heartbeat` |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower. Also ensure `SOUL.md` pins your deployment's contract addresses (see below) so the bot doesn't rediscover them every conversation |
 | Bot says it has no Suzaku tools / "not exposed in this session" | Thread session config is computed once — send `/new` in the chat after any model/runtime/plugin change (a gateway restart alone does not refresh existing threads) |
 | Codex login: browser shows `ERR_CONNECTION_REFUSED` on `localhost:1455` | Expected — the callback listener is inside the container. Paste the full redirect URL from the address bar into the waiting terminal prompt |

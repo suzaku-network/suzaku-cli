@@ -16,7 +16,7 @@ process.on('unhandledRejection', (err) => {
 import { setMcpServer, runCli, formatResult } from './cli-runner.js';
 import { setGuardServer } from './guard.js';
 import { Network, RpcUrl } from './schemas.js';
-import { registerMiddlewareTools } from './tools/middleware.js';
+import { registerMiddlewareTools, registerMiddlewarePublicCacheTools } from './tools/middleware.js';
 import { registerVaultTools } from './tools/vault.js';
 import { registerOperatorTools } from './tools/operator.js';
 import { registerL1RegistryTools } from './tools/l1-registry.js';
@@ -30,13 +30,15 @@ import { registerLstWrapperTools } from './tools/lst-wrapper.js';
 import { registerVaultHelperTools } from './tools/vault-helper.js';
 import { registerUptimeTools } from './tools/uptime.js';
 import { registerHeartbeatTools } from './tools/heartbeat.js';
+import { readFileSync } from 'node:fs';
 
 const readOnly = process.argv.includes('--read-only');
 // Propose-only profile: all reads + ONLY the Safe propose tools (rewards_*_propose).
 // The full write surface is never registered, so it cannot appear in tools/list.
 const proposeOnly = process.argv.includes('--propose-only');
-if (readOnly && proposeOnly) {
-  console.error('--read-only and --propose-only are mutually exclusive');
+const publicWrite = process.argv.includes('--public-write');
+if ([readOnly, proposeOnly, publicWrite].filter(Boolean).length > 1) {
+  console.error('--read-only, --propose-only, and --public-write are mutually exclusive');
   process.exit(1);
 }
 // In propose-only mode the amount cap is a required safety bound — fail at startup, not mid-proposal.
@@ -44,6 +46,36 @@ if (proposeOnly) {
   const cap = Number(process.env.SUZAKU_MAX_REWARDS_AMOUNT ?? '');
   if (!Number.isFinite(cap) || cap <= 0) {
     console.error('--propose-only requires SUZAKU_MAX_REWARDS_AMOUNT to be set to a positive number.');
+    process.exit(1);
+  }
+}
+if (publicWrite) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_MIDDLEWARE_ADDRESS?.trim() ?? '')) {
+    console.error('--public-write requires SUZAKU_MIDDLEWARE_ADDRESS to be set to the single allowed middleware address.');
+    process.exit(1);
+  }
+  const network = process.env.SUZAKU_MIDDLEWARE_NETWORK?.trim() || 'mainnet';
+  if (!['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai'].includes(network)) {
+    console.error('--public-write requires SUZAKU_MIDDLEWARE_NETWORK to be a supported non-custom network name.');
+    process.exit(1);
+  }
+  const signerFile = process.env.SUZAKU_PK_FILE?.trim();
+  if (signerFile) {
+    try {
+      if (!readFileSync(signerFile, 'utf8').trim()) {
+        console.error('--public-write SUZAKU_PK_FILE is empty.');
+        process.exit(1);
+      }
+    } catch {
+      console.error('--public-write requires SUZAKU_PK_FILE to be readable when set.');
+      process.exit(1);
+    }
+  } else if (
+    !process.env.SUZAKU_PK?.trim() &&
+    !process.env.SUZAKU_SECRET_NAME?.trim() &&
+    process.env.SUZAKU_MCP_LEDGER !== 'true'
+  ) {
+    console.error('--public-write requires a signing method: SUZAKU_PK_FILE, SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.');
     process.exit(1);
   }
 }
@@ -341,7 +373,7 @@ server.tool(
     if (process.env.SUZAKU_SAFE_ADDRESS && !placeholderSafeAddress && !/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_SAFE_ADDRESS)) {
       addHiddenConfigWarning('SUZAKU_SAFE_ADDRESS is not a valid 0x address');
     }
-    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly, proposeOnly };
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly, proposeOnly, publicWrite };
 
     // In public health mode, suppress internal config details (signer type, Safe, guard config)
     if (!publicHealth) {
@@ -423,15 +455,16 @@ server.tool(
 
 // ── Tool Groups ──
 
-// In propose-only mode every group except rewards is registered as read-only;
-// rewards additionally registers the two Safe propose tools.
-const suppressWrites = readOnly || proposeOnly;
+// In constrained profiles every normal group is registered as read-only; each
+// constrained profile then adds its own narrow write/propose surface explicitly.
+const suppressWrites = readOnly || proposeOnly || publicWrite;
 registerMiddlewareTools(server, suppressWrites);
+if (publicWrite) registerMiddlewarePublicCacheTools(server);
 registerVaultTools(server, suppressWrites);
 registerOperatorTools(server, suppressWrites);
 registerL1RegistryTools(server, suppressWrites);
 registerOptInTools(server, suppressWrites);
-registerRewardsTools(server, readOnly, proposeOnly);
+registerRewardsTools(server, readOnly || publicWrite, proposeOnly);
 registerKiteStakingTools(server, suppressWrites);
 registerStakingVaultTools(server, suppressWrites);
 registerBalancerTools(server, suppressWrites);

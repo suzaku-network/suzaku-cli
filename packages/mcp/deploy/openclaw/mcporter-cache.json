@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "suzaku": {
+      "description": "Suzaku public-write cache profile: reads + stake-cache write only",
+      "command": "node",
+      "args": ["/mcp/packages/mcp/dist/server.js", "--public-write"],
+      "env": {
+        "SUZAKU_CLI_PATH": "/mcp/bin/cli.js",
+        "SUZAKU_PK_FILE": "/run/secrets/cache_pk",
+        "SUZAKU_MIDDLEWARE_ADDRESS": "${SUZAKU_MIDDLEWARE_ADDRESS}",
+        "SUZAKU_MIDDLEWARE_NETWORK": "${SUZAKU_MIDDLEWARE_NETWORK}",
+        "SUZAKU_CACHE_KEY_ADDRESS": "${SUZAKU_CACHE_KEY_ADDRESS}",
+        "SUZAKU_CACHE_KEY_MIN_AVAX": "${SUZAKU_CACHE_KEY_MIN_AVAX}",
+        "SUZAKU_MCP_PUBLIC_HEALTH": "true",
+        "SUZAKU_MCP_DEDUP_WINDOW_MS": "30000",
+        "SUZAKU_MCP_MAX_CONCURRENT": "2",
+        "SUZAKU_MCP_RATE_MAX_CALLS": "10",
+        "SUZAKU_MCP_RATE_WINDOW_MS": "60000",
+        "SUZAKU_MCP_ALLOW_TOOLS": "middleware_cache_stakes",
+        "SUZAKU_MCP_DENY_TOOLS": "${SUZAKU_CACHE_DENY_TOOLS}",
+        "SUZAKU_MCP_AUDIT_MAX_MB": "50",
+        "SUZAKU_MCP_AUDIT_DIR": "/data/audit"
+      }
+    }
+  }
+}

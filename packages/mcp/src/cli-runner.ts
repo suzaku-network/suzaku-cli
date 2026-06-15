@@ -180,9 +180,9 @@ export interface RunCliOptions {
   /** Skip the dedup cache for calls whose result anchors follow-up reads (e.g. current epoch) */
   skipDedup?: boolean;
   /**
-   * Skip the network-aware suggest/confirm matrix. HARDCODE true only in the Safe
-   * propose tools (rewards_*_propose) — there the CLI call is an off-chain Safe
-   * proposal and the human signature in the Safe UI is the execution gate.
+   * Skip the network-aware suggest/confirm matrix. HARDCODE true only in:
+   * - Safe propose tools (off-chain Safe proposal; Safe UI signatures gate execution)
+   * - runPublicCacheCli below (one exact permissionless stake-cache call)
    * Never derive this from env or client input.
    */
   bypassSuggest?: boolean;
@@ -593,6 +593,28 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   });
 
   return result;
+}
+
+export async function runPublicCacheCli(args: string[], options: Omit<RunCliOptions, 'privateKey' | 'bypassSuggest'> = {}): Promise<CliResult> {
+  const [group, command, middlewareAddress, epoch, collateralClass, publicFlag, ...rest] = args;
+  const exactPublicCacheCall =
+    group === 'middleware' &&
+    command === 'calc-operator-cache' &&
+    /^0x[0-9a-fA-F]{40}$/.test(middlewareAddress ?? '') &&
+    /^\d+$/.test(epoch ?? '') &&
+    /^\d+$/.test(collateralClass ?? '') &&
+    publicFlag === '--public-call' &&
+    rest.length === 0;
+
+  if (!exactPublicCacheCall) {
+    return {
+      success: false,
+      data: null,
+      error: 'Internal error: public cache execution only permits middleware calc-operator-cache <middleware> <epoch> <collateralClass> --public-call',
+    };
+  }
+
+  return runCli(args, { ...options, privateKey: true, bypassSuggest: true });
 }
 
 export function formatResult(result: CliResult) {

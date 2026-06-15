@@ -1,8 +1,8 @@
 # @suzaku/mcp
 
-MCP server exposing 127 tools for the Suzaku protocol (Avalanche restaking) — with a mainnet-safe-by-default security model.
+MCP server exposing 127 full-profile tools for the Suzaku protocol (Avalanche restaking), plus one profile-only public cache tool — with a mainnet-safe-by-default security model.
 
-Three server profiles: full (127 tools), `--read-only` (69 read tools, the public group bot), `--propose-only` (69 reads + the 2 Safe propose tools, the DM-only propose bot).
+Four server profiles: full (127 tools), `--read-only` (69 read tools, the public group monitor bot), `--propose-only` (69 reads + the 2 Safe propose tools, the DM-only propose bot), `--public-write` (69 reads + exactly `middleware_cache_stakes`, the separate group cache bot).
 
 ## Architecture
 
@@ -65,6 +65,8 @@ Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountFi
 
 The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or any non-OK HTTP response returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
 
+**Public cache tool** (`middleware_cache_stakes`) also bypasses layer 5, but for the opposite reason: it broadcasts a real transaction. It is registered only under `--public-write`, where `server.ts` suppresses the entire normal write surface and then registers this one tool from `registerMiddlewarePublicCacheTools()`. The tool requires a signer, `SUZAKU_MIDDLEWARE_ADDRESS`, and non-custom `SUZAKU_MIDDLEWARE_NETWORK` (default `mainnet`), rejects `rpcUrl` and middleware/network mismatches, fresh-reads `cacheByClass[collateralClass]` with `skipDedup: true`, and calls `runPublicCacheCli()` with the exact CLI shape `middleware calc-operator-cache <middleware> <epoch> <class> --public-call`. `runPublicCacheCli()` hard-rejects any other args before it can reach `runCli({ privateKey: true, bypassSuggest: true })`. The CLI guard is the other half: `--public-call` is a per-command option on `middleware calc-operator-cache`, and mainnet software-key execution is allowed only for the resolved Commander action command `middleware/calc-operator-cache` with parsed `publicCall`.
+
 ## Network-Aware Decision Matrix
 
 Only applies to write tools (where `options.privateKey === true`):
@@ -101,7 +103,10 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | Variable | Purpose | Default |
 |---|---|---|
 | `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for `rewards_*_propose` (param overrides) | — |
-| `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check | — |
+| `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check; required under `--public-write` as the only middleware the public cache tool may touch | — |
+| `SUZAKU_MIDDLEWARE_NETWORK` | Required non-custom network for the public cache tool; defaults to `mainnet` under `--public-write` | `mainnet` |
+| `SUZAKU_CACHE_KEY_ADDRESS` | Optional cache-key address for `deployment_heartbeat` C-Chain gas-balance alert | — |
+| `SUZAKU_CACHE_KEY_MIN_AVAX` | Cache-key low-balance threshold used by `deployment_heartbeat` when `SUZAKU_CACHE_KEY_ADDRESS` is set | `0.05` |
 | `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused. **Required under `--propose-only`** (server exits at startup if unset or ≤ 0); in full mode `rewards_set_amount_propose` hard-refuses per-call if unset. No effect on `rewards_distribute_propose` | — |
 
 ### Safety / Guard
@@ -136,7 +141,7 @@ Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `P
 
 ## Tool Catalog
 
-127 tools total (69 read, 58 write — the W column below includes the 2 Safe propose tools, which never execute):
+Full profile: 127 tools total (69 read, 58 write — the W column below includes the 2 Safe propose tools, which never execute). The profile-only `middleware_cache_stakes` tool is registered only under `--public-write` and intentionally omitted from the full profile.
 
 | File | R | W | Key tools |
 |---|---|---|---|
@@ -264,4 +269,5 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
 12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
-13. **`--propose-only` registration surface** — registers all read tools + ONLY the two propose tools; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Mutually exclusive with `--read-only` (the server exits if both are passed), and requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set to a positive number at startup. `health_check` reports `proposeOnly` and warns (`safeApiKeyWarning`) when neither `SAFE_API_KEY` nor `SAFE_API_KEY_FILE` is set (the pending-queue check fails open without a key).
+13. **Public cache tool executes, but only through exact gates** — `middleware_cache_stakes` is the only `--public-write` write tool. It broadcasts a real `calcAndCacheStakes` transaction, so its `bypassSuggest: true` site lives only in `runPublicCacheCli()`, which accepts one exact command shape with `--public-call`; the CLI then permits mainnet software-key execution only for the resolved `middleware calc-operator-cache` command.
+14. **Profile registration surfaces** — `--propose-only` registers all read tools + ONLY the two propose tools; `--public-write` registers all read tools + ONLY `middleware_cache_stakes`; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Profile flags are mutually exclusive. `--propose-only` requires `SUZAKU_MAX_REWARDS_AMOUNT` at startup. `--public-write` requires a signer and `SUZAKU_MIDDLEWARE_ADDRESS` at startup.

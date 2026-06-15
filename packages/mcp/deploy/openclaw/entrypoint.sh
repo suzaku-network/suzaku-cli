@@ -13,10 +13,10 @@ if [ -f "$CONFIG_TPL" ]; then
     "$CONFIG_TPL" > "$CONFIG_OUT"
 fi
 
-# Substitute the non-secret config vars into the mcporter template (propose bot only —
-# mcporter does not inherit the container environment). The delegate key and Safe API key
-# are NOT here: they are file secrets read at spawn time (SUZAKU_PK_FILE / SAFE_API_KEY_FILE),
-# so the raw secret never lands in the rendered mcporter.json.
+# Substitute the non-secret config vars into mcporter templates (propose/cache bots —
+# mcporter does not inherit the container environment). Delegate/cache keys and Safe API
+# keys are NOT here: they are file secrets read at spawn time (SUZAKU_PK_FILE /
+# SAFE_API_KEY_FILE), so raw secrets never land in the rendered mcporter.json.
 MCPORTER_TPL="/home/node/.openclaw/workspace/config/mcporter.json.tpl"
 MCPORTER_OUT="/home/node/.openclaw/workspace/config/mcporter.json"
 
@@ -25,7 +25,11 @@ if [ -f "$MCPORTER_TPL" ]; then
     -e "s|\${SUZAKU_SAFE_ADDRESS}|${SUZAKU_SAFE_ADDRESS}|g" \
     -e "s|\${SUZAKU_REWARDS_ADDRESS}|${SUZAKU_REWARDS_ADDRESS}|g" \
     -e "s|\${SUZAKU_MIDDLEWARE_ADDRESS}|${SUZAKU_MIDDLEWARE_ADDRESS}|g" \
+    -e "s|\${SUZAKU_MIDDLEWARE_NETWORK}|${SUZAKU_MIDDLEWARE_NETWORK:-mainnet}|g" \
     -e "s|\${SUZAKU_MAX_REWARDS_AMOUNT}|${SUZAKU_MAX_REWARDS_AMOUNT}|g" \
+    -e "s|\${SUZAKU_CACHE_KEY_ADDRESS}|${SUZAKU_CACHE_KEY_ADDRESS}|g" \
+    -e "s|\${SUZAKU_CACHE_KEY_MIN_AVAX}|${SUZAKU_CACHE_KEY_MIN_AVAX:-0.05}|g" \
+    -e "s|\${SUZAKU_CACHE_DENY_TOOLS}|${SUZAKU_CACHE_DENY_TOOLS}|g" \
     "$MCPORTER_TPL" > "$MCPORTER_OUT"
   chmod 600 "$MCPORTER_OUT"
 fi
@@ -34,8 +38,8 @@ fi
 # openai/* agent turns run through Codex, which manages its OWN MCP servers — the
 # mcporter skill does not bridge into it. The block is regenerated on every start
 # (idempotent) so env changes like SNOWSCAN_API_KEY propagate. Read-only bot only
-# (the propose bot is identified by its mcporter template mount and stays on the
-# anthropic runtime).
+# (the propose/cache bots are identified by their mcporter template mount and stay on
+# the Anthropic runtime).
 CODEX_CFG="/home/node/.openclaw/agents/main/agent/codex-home/config.toml"
 if [ ! -f "$MCPORTER_TPL" ]; then
   mkdir -p "$(dirname "$CODEX_CFG")"

@@ -6,7 +6,7 @@ TypeScript CLI for the Suzaku restaking protocol on Avalanche. Built with Comman
 
 ```
 /                   CLI package (this level)
-packages/mcp/       MCP server (127 tools wrapping this CLI; --read-only and --propose-only profiles) — see packages/mcp/CLAUDE.md
+packages/mcp/       MCP server (127 full-profile tools plus one public cache profile tool; --read-only, --propose-only, and --public-write profiles) — see packages/mcp/CLAUDE.md
 ```
 
 pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
@@ -17,7 +17,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 
 | File | Role |
 |---|---|
-| `cli.ts` | Entry point. Defines `main()`, global options, all subcommands, `preSubcommand` hook (cast mode, custom RPC, **Guard B**: mainnet PK block), `preAction` hook |
+| `cli.ts` | Entry point. Defines `main()`, global options, all subcommands, `preSubcommand` hook (cast mode, custom RPC), and `preAction` hook (mainnet raw-PK guard from resolved Commander action command) |
 | `client.ts` | `generateClient()` — creates viem wallet/public client with network, account, Safe overlay |
 | `config.ts` | `getConfig()` — builds contract map, resolves registry addresses per network (mainnet/fuji/anvil) |
 | `index.ts` | Library re-exports (`cChainUtils`, `pChainUtils`, `transferUtils`, `utils`, `warpUtils`, `client`, `config`) |
@@ -44,7 +44,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 | File | Role |
 |---|---|
 | `commandUtils.ts` | Monkey-patches `Command.prototype.action` to wrap all actions with error handling + `logger.printJson()` |
-| `cliParser.ts` | Argument/option parsers (`ParserPrivateKey`, `ParserAddress`, `ParserHex`, `ParserNodeID`, `ParserAVAX`). **Mainnet raw-PK guard (Guard A) lives here**; relaxed only for `--safe` + `--safe-propose` |
+| `cliParser.ts` | Argument/option parsers (`ParserPrivateKey`, `ParserAddress`, `ParserHex`, `ParserNodeID`, `ParserAVAX`). `ParserPrivateKey` validates key shape only; mainnet execution policy lives in `cli.ts` |
 | `viemUtils.ts` | `curriedContract()` — curried contract factory with ABI validation. `withSafeWrite()` — proxy adding simulate-then-execute, Safe tx strategy, cast mode, event log parsing. `contractAbiValidation()` — selector matching with Aho-Corasick + proxy detection |
 | `chainList.ts` | Chain definitions (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom). `setCustomChainRpcUrl()` for `--rpc-url` |
 | `castUtils.ts` | `--cast` mode: formats equivalent `cast call`/`cast send`/`curl` commands instead of executing |
@@ -115,7 +115,11 @@ Defined in `src/lib/chainList.ts`:
 
 ### Mainnet raw-PK guard
 
-Two guards enforce keystore or Ledger on mainnet. **Guard A** (`ParserPrivateKey` in `cliParser.ts`) throws if a raw hex key is used with `mainnet` in `process.argv`. **Guard B** (`preSubcommand` hook in `cli.ts`) blocks a software key on any non-testnet network using the resolved options. Both relax for exactly one case: `--safe` **and** `--safe-propose` (a flag valid only on `rewards set-amount`/`distribute`), which permits a software key for the Safe delegate propose-only flow. Those commands route through `handleBatchTransaction`, which refuses Safe OWNER keys — so the relaxed key can queue proposals but never execute.
+A single guard in the `preAction` hook in `cli.ts` enforces keystore or Ledger on non-testnet networks. The hook runs after Commander has parsed the resolved leaf command, so it uses `actionCommand.parent`, `actionCommand.name()`, and the parsed per-command option booleans rather than raw `process.argv` string matching. `ParserPrivateKey` in `cliParser.ts` validates key shape only and does not make policy decisions.
+
+The guard relaxes for exactly two flows:
+- `--safe` + `--safe-propose` on `rewards set-amount` / `rewards distribute`, permitting a software key for the Safe delegate propose-only flow. Those commands route through `handleBatchTransaction`, which refuses Safe OWNER keys, so the relaxed key can queue proposals but never execute.
+- `--public-call` on `middleware calc-operator-cache`, permitting a software key for the permissionless `calcAndCacheStakes` cache call. The flag is defined only on that command; Commander rejects it everywhere else. This path executes a real transaction and is intended for the MCP `--public-write` cache bot, whose profile exposes only `middleware_cache_stakes`.
 
 ### Safe multisig
 
@@ -183,7 +187,7 @@ Type-check only: `npx tsc --noEmit`
 
 ## Key Invariants
 
-1. **Mainnet raw-PK blocked** — `ParserPrivateKey` rejects hex private keys when `mainnet` is in argv (Guard A), and the `preSubcommand` hook blocks them on any non-testnet network (Guard B, cli.ts). Use `--secret-name` or `--ledger` on mainnet. One exception: `--safe` + `--safe-propose` (a flag valid only on `rewards set-amount`/`distribute`) permits a software key for the Safe delegate propose-only flow — those commands refuse Safe OWNER keys in `handleBatchTransaction`, so the key can queue proposals but never execute.
+1. **Mainnet raw-PK blocked** — the `preAction` hook in `cli.ts` blocks raw hex private keys on non-testnet networks using Commander's resolved leaf command and parsed per-command options. Use `--secret-name` or `--ledger` for normal mainnet writes. Exceptions are limited to `--safe` + `--safe-propose` on `rewards set-amount`/`distribute` (off-chain Safe proposal; owner keys refused) and `--public-call` on `middleware calc-operator-cache` (permissionless stake-cache transaction).
 2. **ABI validation on by default** — every `curriedContract` call validates selectors against on-chain bytecode. Skip with `--skip-abi-validation`.
 3. **JSON output contract** — `--json` mode: all output goes through `logger`, `printJson()` called on success. Commands must use `logger.log`/`logger.addData` (not `console.log`).
 4. **Two-phase ops need separate P-Chain key** — `complete_*` commands require a P-Chain private key for warp message signing and P-Chain tx issuance.

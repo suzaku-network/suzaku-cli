@@ -1,8 +1,8 @@
 # @suzaku-network/mcp
 
-MCP server for the Suzaku restaking protocol on Avalanche — 127 tools wrapping `suzaku-cli`.
+MCP server for the Suzaku restaking protocol on Avalanche — 127 full-profile tools wrapping `suzaku-cli`, plus one profile-only public cache tool.
 
-Mainnet writes never auto-execute. Testnet writes run immediately (unless `SUZAKU_MCP_SUGGEST=true` or `SUZAKU_MCP_REQUIRE_CONFIRM=true`). The two Safe propose tools (`rewards_set_amount_propose`, `rewards_distribute_propose`) always queue an off-chain Safe proposal regardless of network — they never execute a transaction.
+Mainnet operator writes never auto-execute by default. Testnet writes run immediately (unless `SUZAKU_MCP_SUGGEST=true` or `SUZAKU_MCP_REQUIRE_CONFIRM=true`). The two Safe propose tools (`rewards_set_amount_propose`, `rewards_distribute_propose`) always queue an off-chain Safe proposal regardless of network — they never execute a transaction. The `--public-write` profile is the only intentional mainnet execution path: it exposes exactly `middleware_cache_stakes`, which broadcasts the permissionless `calcAndCacheStakes` cache transaction for one pinned middleware.
 
 **Scope note:** tool coverage spans every CLI domain, including KiteStakingManager (`kite_*`) and StakingVault (`staking_vault_*`). The composite layer — `deployment_heartbeat`, the `epoch-rewards-runbook` playbook, the Safe propose tools, and the OpenClaw bot deploys — is built for suzaku-core restaking deployments (e.g. Dexalot) and watches the suzaku-core contracts (L1Middleware, Rewards, LSTWrapper, UptimeTracker). The Kite/StakingVault domains expose raw per-contract tools only — no heartbeat checks or rewards playbooks for them (the `validator-lifecycle` prompt is the one exception: it guides both `manager=kite|vault`).
 
@@ -36,7 +36,7 @@ This gives you all 69 read tools immediately. Add a signing method (see [Example
 To run the server by hand (it speaks MCP over stdio — it will sit silently waiting for a client):
 
 ```bash
-node packages/mcp/dist/server.js [--read-only | --propose-only]
+node packages/mcp/dist/server.js [--read-only | --propose-only | --public-write]
 ```
 
 ## Server profiles
@@ -48,8 +48,9 @@ Start flags select which tools are registered:
 | _(none)_ | 127 (69 read + 58 write) | Full-access operator |
 | `--read-only` | 69 read only | Public/group bot — no write surface |
 | `--propose-only` | 71 (69 read + the 2 Safe propose tools) | DM-only propose bot — queues rewards proposals, no direct writes |
+| `--public-write` | 70 (69 read + `middleware_cache_stakes`) | Group cache bot — executes one permissionless stake-cache write for a pinned middleware |
 
-`--read-only` and `--propose-only` are mutually exclusive. `--propose-only` requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set at startup (the server exits if it is unset or ≤ 0).
+The three profile flags are mutually exclusive. `--propose-only` requires `SUZAKU_MAX_REWARDS_AMOUNT` to be set at startup (the server exits if it is unset or ≤ 0). `--public-write` requires a signer and `SUZAKU_MIDDLEWARE_ADDRESS`; `SUZAKU_MIDDLEWARE_NETWORK` defaults to `mainnet` and cannot be `custom`.
 
 ## Playbooks
 
@@ -62,6 +63,7 @@ Start flags select which tools are registered:
 - **Monitor network state**: `middleware_network_overview` — operators, nodes, stakes, epoch config, and vault listing in one call.
 - **Deposit into a vault**: `vault_deposit` — on mainnet returns the CLI command to run manually (suggest mode).
 - **Propose weekly rewards (mainnet, Safe)**: `rewards_set_amount_propose` / `rewards_distribute_propose` — queue an off-chain Safe proposal for owners to review and sign. Requires `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key.
+- **Cache missing stake class (mainnet, public cache bot)**: `middleware_cache_stakes` — reads `cacheByClass[class]`, skips if already cached, and otherwise broadcasts `middleware calc-operator-cache <middleware> <epoch> <class> --public-call` for the pinned middleware/network.
 
 ## Security
 
@@ -71,6 +73,7 @@ Start flags select which tools are registered:
 | Tool access control | `SUZAKU_MCP_DENY_TOOLS` / `SUZAKU_MCP_ALLOW_TOOLS` (deny wins) |
 | Value limit | `SUZAKU_MCP_MAX_AVAX_PER_TX` caps per-transaction AVAX |
 | Mainnet suggest mode | Writes return the CLI command instead of executing (default) |
+| Public-cache execution path | `--public-write` suppresses the normal write surface and exposes only `middleware_cache_stakes`; the tool rejects unpinned middleware/network/rpcUrl and calls a CLI exact-args wrapper |
 | PK never on CLI args | Keys pass via child process env only; 64-char hex strings redacted from all output |
 | Restricted child env | Subprocess inherits only `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. `PK` is injected for write operations; `SAFE_API_KEY` only for Safe-wired writes (when `SUZAKU_SAFE_ADDRESS` is set) — both read from the direct env or the `_FILE` form at spawn time |
 | Audit log | Every call logged to `~/.suzaku-cli/mcp-audit.log` |
@@ -82,11 +85,15 @@ Start flags select which tools are registered:
 | mainnet | Suggest | Suggest | Confirm (elicitation) |
 | testnet | Execute | Suggest | Execute |
 
-The Safe propose tools bypass this matrix entirely — they always queue an off-chain proposal (the human signature in the Safe UI is the execution gate).
+The Safe propose tools bypass this matrix entirely — they always queue an off-chain proposal (the human signature in the Safe UI is the execution gate). The public cache tool also bypasses suggest mode, but only in `--public-write`: it broadcasts a real transaction through an exact command wrapper and the CLI `--public-call` guard.
 
 ### Safe propose tools
 
 `rewards_set_amount_propose` and `rewards_distribute_propose` never execute; they queue a Safe proposal. They require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key (`SUZAKU_PK`/`SUZAKU_PK_FILE`) — the CLI refuses Safe owner keys for this flow. `rewards_set_amount_propose` hard-refuses if the epoch already has rewards set, has set-amount events (accumulation guard), is outside the settable window, is at or above `SUZAKU_MAX_REWARDS_AMOUNT` (or the cap is unset), or a matching proposal is already pending. `rewards_distribute_propose` refuses if the epoch has no rewards set, returns early if distribution is complete, and refuses a duplicate pending proposal. The pending-proposal checks need the Safe API reachable and authenticated — they **fail open** with a warning on API errors (the CLI's exact-hash dedup and the human signature in the Safe UI remain the hard gates).
+
+### Public cache tool
+
+`middleware_cache_stakes` is registered only in `--public-write`. It is for a separate cache bot, not the read-only monitor. The tool requires a signer, `SUZAKU_MIDDLEWARE_ADDRESS`, and the pinned non-custom network (`SUZAKU_MIDDLEWARE_NETWORK`, default `mainnet`). It rejects custom `rpcUrl`, refuses middleware/network mismatches, fresh-reads `middleware get-cache-status --epoch <epoch>` with dedup disabled, checks `cacheByClass[collateralClass]`, and only then executes `middleware calc-operator-cache <middleware> <epoch> <class> --public-call`. The key should be fresh, role-less, and funded with only enough AVAX to be the spam ceiling.
 
 ### Signing methods (priority order)
 
@@ -141,6 +148,9 @@ The examples use the published-binary form (`"command": "suzaku-mcp"`); for a so
 | `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet), direct or file — needed by the propose tools |
 | `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for the propose tools |
 | `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window check |
+| `SUZAKU_MIDDLEWARE_NETWORK` | Pinned non-custom network for `--public-write` cache calls (default `mainnet`) |
+| `SUZAKU_CACHE_KEY_ADDRESS` | Optional address monitored by `deployment_heartbeat` for cache-key C-Chain AVAX balance |
+| `SUZAKU_CACHE_KEY_MIN_AVAX` | Optional low-balance threshold for the cache key (default 0.05 AVAX when address is set) |
 | `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human units) for `rewards_set_amount_propose`; **required at startup under `--propose-only`** |
 | `SUZAKU_MCP_SUGGEST` | `true`/`false` — override suggest mode |
 | `SUZAKU_MCP_REQUIRE_CONFIRM` | `true` — elicitation for testnet writes |

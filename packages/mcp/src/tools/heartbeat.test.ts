@@ -15,7 +15,7 @@ import {
   deriveClaimabilityStatus, countSetAmountTxs, detectStuckTwoPhase,
   runAlertChecks, summarizeRewardsActivity, summarizeChangedEvents, buildHumanLines,
   registerHeartbeatTools,
-  EpochTiming, RewardsConstants, EpochStatusRow, HeartbeatEvent, ClaimabilityRow,
+  EpochTiming, RewardsConstants, EpochStatusRow, HeartbeatEvent, ClaimabilityRow, AlertCheckInput,
 } from './heartbeat.js';
 
 // Dexalot-like fixture: epoch 38 started at a fixed timestamp
@@ -199,7 +199,7 @@ describe('detectStuckTwoPhase', () => {
 });
 
 describe('runAlertChecks', () => {
-  const baseInput = () => ({
+  const baseInput = (): AlertCheckInput => ({
     timing: TIMING,
     constants: CONSTANTS,
     allClassesCached: true,
@@ -243,6 +243,12 @@ describe('runAlertChecks', () => {
     const input = baseInput();
     input.validatorBalances = [{ nodeID: 'NodeID-low', balanceAVAX: '0.01' }];
     expect(runAlertChecks(input).find((c) => c.name === 'pchain_balance_low')?.status).toBe('alert');
+  });
+
+  it('alerts on low cache-key C-Chain gas balance', () => {
+    const input = baseInput();
+    input.cacheKeyBalance = { address: '0x' + 'a'.repeat(40), balanceAVAX: '0.01', minAVAX: 0.05 };
+    expect(runAlertChecks(input).find((c) => c.name === 'cache_key_balance_low')?.status).toBe('alert');
   });
 
   it('alerts on paused LST wrapper and warns on stuck two-phase', () => {

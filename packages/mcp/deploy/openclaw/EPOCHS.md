@@ -80,8 +80,9 @@ consumes the nonce.
 Per-epoch stake snapshots must be cached per collateral class while the epoch runs:
 `middleware_epoch_status` → `allClassesCached` + the window close time.
 
-- The cache update is a **write** (`middleware_init_stake_update`) and is not in the
-  bot profiles — a human triggers it via the CLI.
+- The per-class cache update is a **public cache write** (`middleware_cache_stakes`,
+  backed by `calcAndCacheStakes`). The cache bot can execute one `(epoch, class)`
+  at a time for the pinned middleware.
 - `allClassesCached=false` with the window close near is **urgent**: lead with the
   close time (UTC + time remaining) and say explicitly that a CLI action is needed.
 - If the window closes without the cache complete, escalate to the team — the
@@ -99,7 +100,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
-| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if false near close, escalate — the cache update is a CLI action |
+| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard`, `middleware_cache_stakes` | `allClassesCached` + window close UTC; if a class is false near close, ask the cache bot to cache that `(epoch, class)` |
 
 ## Urgent triage
 

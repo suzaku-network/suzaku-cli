@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerMiddlewareTools } from './tools/middleware.js';
+import { registerMiddlewareTools, registerMiddlewarePublicCacheTools } from './tools/middleware.js';
 import { registerVaultTools } from './tools/vault.js';
 import { registerOperatorTools } from './tools/operator.js';
 import { registerL1RegistryTools } from './tools/l1-registry.js';
@@ -57,20 +57,24 @@ const WRITE_TOOLS = [
   'uptime_report_validator', 'uptime_compute_operator_uptime',
 ];
 
+const PUBLIC_WRITE_TOOLS = ['middleware_cache_stakes'];
+const ALL_WRITE_TOOLS = [...WRITE_TOOLS, ...PUBLIC_WRITE_TOOLS];
+
 function getToolNames(server: McpServer): string[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return Object.keys((server as any)._registeredTools);
 }
 
 // Mirrors the registration wiring in server.ts
-function registerAllTools(server: McpServer, readOnly: boolean, proposeOnly = false) {
-  const suppressWrites = readOnly || proposeOnly;
+function registerAllTools(server: McpServer, readOnly: boolean, proposeOnly = false, publicWrite = false) {
+  const suppressWrites = readOnly || proposeOnly || publicWrite;
   registerMiddlewareTools(server, suppressWrites);
+  if (publicWrite) registerMiddlewarePublicCacheTools(server);
   registerVaultTools(server, suppressWrites);
   registerOperatorTools(server, suppressWrites);
   registerL1RegistryTools(server, suppressWrites);
   registerOptInTools(server, suppressWrites);
-  registerRewardsTools(server, readOnly, proposeOnly);
+  registerRewardsTools(server, readOnly || publicWrite, proposeOnly);
   registerKiteStakingTools(server, suppressWrites);
   registerStakingVaultTools(server, suppressWrites);
   registerBalancerTools(server, suppressWrites);
@@ -87,7 +91,7 @@ describe('--read-only mode', () => {
     registerAllTools(server, true);
 
     const tools = getToolNames(server);
-    const writeToolsPresent = tools.filter(t => WRITE_TOOLS.includes(t));
+    const writeToolsPresent = tools.filter(t => ALL_WRITE_TOOLS.includes(t));
     expect(writeToolsPresent).toEqual([]);
   });
 
@@ -98,7 +102,7 @@ describe('--read-only mode', () => {
     const tools = getToolNames(server);
     // Every registered tool should be a read tool (not in WRITE_TOOLS)
     for (const tool of tools) {
-      expect(WRITE_TOOLS).not.toContain(tool);
+      expect(ALL_WRITE_TOOLS).not.toContain(tool);
     }
     // Should have a meaningful number of read tools (64 read tools expected across all tool files)
     expect(tools.length).toBeGreaterThanOrEqual(60);
@@ -138,7 +142,7 @@ describe('--propose-only mode', () => {
     registerAllTools(server, false, true);
 
     const tools = getToolNames(server);
-    const writeToolsPresent = tools.filter(t => WRITE_TOOLS.includes(t));
+    const writeToolsPresent = tools.filter(t => ALL_WRITE_TOOLS.includes(t));
     expect(writeToolsPresent.sort()).toEqual([...PROPOSE_TOOLS].sort());
   });
 
@@ -166,5 +170,42 @@ describe('--propose-only mode', () => {
       expect(proposeTools).toContain(tool);
     }
     expect(proposeTools.length).toBe(readTools.length + PROPOSE_TOOLS.length);
+  });
+});
+
+describe('--public-write mode', () => {
+  it('registers exactly the public cache tool out of the write surface', () => {
+    const server = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(server, false, false, true);
+
+    const tools = getToolNames(server);
+    const writeToolsPresent = tools.filter(t => ALL_WRITE_TOOLS.includes(t));
+    expect(writeToolsPresent.sort()).toEqual([...PUBLIC_WRITE_TOOLS].sort());
+  });
+
+  it('registers no destructive tool beyond the public cache tool', () => {
+    const server = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(server, false, false, true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registered = (server as any)._registeredTools as Record<string, { annotations?: { destructiveHint?: boolean } }>;
+    const destructive = Object.entries(registered)
+      .filter(([, t]) => t.annotations?.destructiveHint === true)
+      .map(([name]) => name);
+    expect(destructive.sort()).toEqual([...PUBLIC_WRITE_TOOLS].sort());
+  });
+
+  it('keeps the full read surface available', () => {
+    const readOnlyServer = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(readOnlyServer, true);
+    const publicWriteServer = new McpServer({ name: 'test', version: '0.1.0' });
+    registerAllTools(publicWriteServer, false, false, true);
+
+    const readTools = getToolNames(readOnlyServer);
+    const publicWriteTools = getToolNames(publicWriteServer);
+    for (const tool of readTools) {
+      expect(publicWriteTools).toContain(tool);
+    }
+    expect(publicWriteTools.length).toBe(readTools.length + PUBLIC_WRITE_TOOLS.length);
   });
 });

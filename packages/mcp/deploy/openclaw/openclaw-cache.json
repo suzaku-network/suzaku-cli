@@ -1,0 +1,34 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["tg:${TELEGRAM_ADMIN_USER_ID}"],
+      "groupPolicy": "allowlist",
+      "contextVisibility": "allowlist",
+      "groups": {
+        "${TELEGRAM_GROUP_ID}": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "cron": {
+    "enabled": false
+  },
+  "skills": {
+    "entries": {
+      "mcporter": {
+        "enabled": true
+      }
+    }
+  }
+}

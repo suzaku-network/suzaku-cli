@@ -242,26 +242,39 @@ async function main() {
             logger.error('Error: --rpc-url is required when using --network custom');
             process.exit(1);
         }
-        // Block manually private key on mainnet. Exception: the Safe delegate propose-only
-        // flow — a software key is permitted only with --safe AND --safe-propose (valid
-        // only on rewards set-amount/distribute, which refuse owner keys), so it cannot
-        // widen into on-chain execution.
-        if (opts.privateKey! && chainList[opts.network].testnet === false
-            && !(opts.safe && process.argv.includes('--safe-propose'))) {
-            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
-            process.exit(1);
-        }
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);
     });
 
-    program.hook("preAction", () => {
+    program.hook("preAction", (_thisCommand, actionCommand) => {
         const opts = program.opts();
+        const hasRawPrivateKey = Boolean(opts.privateKey);
         // Ensure privateKey is set if opts.secret or ledger is provided
         if (opts.secretName) {
             program.setOptionValue('privateKey', opts.secretName)
         } else if (opts.ledger) {
             program.setOptionValue('privateKey', 'ledger')
+        }
+
+        const actionParent = actionCommand.parent;
+        const actionOpts = actionCommand.opts() as { safePropose?: boolean; publicCall?: boolean };
+        const isSafeProposeAction =
+            opts.safe
+            && actionParent?.name() === 'rewards'
+            && (actionCommand.name() === 'set-amount' || actionCommand.name() === 'distribute')
+            && actionOpts.safePropose === true;
+        const isPublicCacheAction =
+            actionParent?.name() === 'middleware'
+            && actionCommand.name() === 'calc-operator-cache'
+            && actionOpts.publicCall === true;
+
+        // Raw software keys are blocked on mainnet except for two narrow flows:
+        // Safe delegate proposals (off-chain) and the public stake-cache call below.
+        if (hasRawPrivateKey && chainList[opts.network].testnet === false
+            && !isSafeProposeAction
+            && !isPublicCacheAction) {
+            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
+            process.exit(1);
         }
     });
 
@@ -1622,6 +1635,7 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
+        .addOption(new Option("--public-call", "Permit this permissionless stake-cache call to execute with a software key on mainnet"))
         .asyncAction({ signer: true }, async (config, middlewareAddress, epoch, collateralClass) => {
             logger.log("Calculating and caching stakes...");
 
