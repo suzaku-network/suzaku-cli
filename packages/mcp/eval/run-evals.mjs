@@ -1,22 +1,30 @@
 #!/usr/bin/env node
-// Monitor-bot eval runner. Two tiers:
-//   --tier 1  deterministic: run each question's ground-truth tools directly, assert
-//             sane values, record latency. No LLM, no API key, $0.
-//   --tier 2  LLM-in-loop: an Anthropic tool-runner agent with the bot's SOUL.md +
-//             EPOCHS.md system prompt answers each question through the same MCP
-//             server; scored on tool trace, facts vs live ground truth, Telegram
-//             format rules, latency, and cost. Needs ANTHROPIC_API_KEY.
+// Monitor-bot eval runner.
+//   --tier 1                 deterministic: ground-truth tools only, no LLM, $0
+//   --tier 2                 LLM-in-loop, engine selectable:
+//     --engine anthropic     (default) Anthropic API tool-runner; needs ANTHROPIC_API_KEY.
+//                            --model <id> or --models a,b,c to compare models.
+//     --engine codex         drives the LIVE bot's primary engine (gpt-5.5 via the
+//                            Codex subscription) through one-shot OpenClaw cron jobs.
+//                            Nothing is posted to any chat: the agent writes its answer
+//                            to a workspace file, jobs self-delete. Needs the deploy
+//                            compose stack running locally. No $ cost (flat sub).
+//   --benchmark              append a dated row per model/engine to eval/benchmarks.md
+//   --only id1,id2 · --fast (skip slow questions)
 //
-// Usage: node eval/run-evals.mjs --tier 1|2 [--only id1,id2] [--fast] [--model <id>]
-// Results: eval/results/<runid>-tier<N>[-model].{json,md}
+// Results: eval/results/<runid>-....{json,md} (gitignored). benchmarks.md is committed.
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   normalizeAnswer, matchFact, scoreTrace, scoreFormat, computeCost, verdict,
 } from './scoring.mjs';
+
+const execFileP = promisify(execFile);
 
 // ---------- flags ----------
 const argv = process.argv.slice(2);
@@ -27,9 +35,13 @@ function flagValue(name, dflt = null) {
 const TIER = Number(flagValue('--tier', '1'));
 const ONLY = flagValue('--only') ? flagValue('--only').split(',').map((s) => s.trim()) : null;
 const FAST = argv.includes('--fast');
-const MODEL = flagValue('--model', 'claude-sonnet-4-6');
+const ENGINE = flagValue('--engine', 'anthropic');
+const MODELS = flagValue('--models')
+  ? flagValue('--models').split(',').map((s) => s.trim())
+  : [flagValue('--model', 'claude-sonnet-4-6')];
+const BENCHMARK = argv.includes('--benchmark');
 if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--only ids] [--fast] [--model id]');
+  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex] [--models a,b] [--only ids] [--fast] [--benchmark]');
   process.exit(2);
 }
 
@@ -41,6 +53,7 @@ const PRICES = {
   'claude-opus-4-8': [5, 25],
 };
 const DEFAULT_TOOL_TIMEOUT = 120_000;
+const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
 
 // ---------- load question set ----------
 const here = new URL('.', import.meta.url);
@@ -66,13 +79,12 @@ function substitute(value, vars) {
   return value;
 }
 
-// ---------- MCP client ----------
+// ---------- MCP client (context + ground truth for both engines) ----------
 const serverEnv = {
   PATH: process.env.PATH,
   HOME: process.env.HOME,
   SUZAKU_MCP_RATE_MAX_CALLS: '600',
   SUZAKU_MCP_RATE_WINDOW_MS: '60000',
-  // tier 1 measures true tool latency; tier 2 mirrors the deployed mcporter config
   SUZAKU_MCP_DEDUP_WINDOW_MS: TIER === 1 ? '1' : '30000',
 };
 if (process.env.SNOWSCAN_API_KEY) serverEnv.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
@@ -99,7 +111,7 @@ async function callMcp(name, args, timeoutMs = DEFAULT_TOOL_TIMEOUT) {
   }
 }
 
-// ---------- preflight: catch tool-name/arg mismatches before spending time ----------
+// ---------- preflight ----------
 const preflightWarnings = [];
 function preflightCheck(toolName, args) {
   const tool = toolByName.get(toolName);
@@ -142,7 +154,7 @@ for (const ctx of spec.context) {
   }
   const n = Number(value);
   if (!Number.isFinite(n)) {
-    console.error(`context '${ctx.id}': could not extract a number (got ${JSON.stringify(value)}) from: ${res.text.slice(0, 300)}`);
+    console.error(`context '${ctx.id}': could not extract a number (got ${JSON.stringify(value)})`);
     process.exit(1);
   }
   vars[ctx.id] = n;
@@ -184,15 +196,222 @@ async function fetchGroundTruth(q) {
         : resolveFact(data ?? {}, fact);
       facts.push({ spec: fact, ...resolved, sane: resolved.value !== undefined && saneValue(fact, resolved.value) });
     }
-    out.push({ tool: gt.tool, ok: res.ok, ms: res.ms, error: res.ok ? null : res.text.slice(0, 400), facts, raw: res.text });
+    out.push({ tool: gt.tool, ok: res.ok, ms: res.ms, error: res.ok ? null : res.text.slice(0, 400), facts });
   }
   return out;
 }
 
-const results = [];
+// ---------- shared tier-2 scoring ----------
+// traceMode 'full' scores expected tools; 'info' records the trace but does not
+// gate the verdict on it (codex engine: the audit log shows CLI sub-calls, and
+// composite tools like deployment_heartbeat log their internal calls instead of
+// the MCP-level tool name, so expected-tool matching would be unfair).
+async function scoreRun(q, run, traceMode) {
+  const traceScore = traceMode === 'full'
+    ? scoreTrace(run.trace, {
+      expectedTools: q.expectedTools ?? [],
+      maxToolCalls: q.maxToolCalls ?? null,
+      forbiddenTools: q.forbiddenTools ?? [],
+    })
+    : { ...scoreTrace(run.trace, { expectedTools: [], maxToolCalls: null, forbiddenTools: q.forbiddenTools ?? [] }), informational: true };
+  const format = scoreFormat(run.answer);
+  let factsSummary;
+  const factDetails = [];
+  if (q.safety) {
+    const norm = normalizeAnswer(run.answer).toLowerCase();
+    const refusalOk = (q.refusalAny ?? []).some((s) => norm.includes(s.toLowerCase()));
+    const leaked = (q.mustNotContain ?? []).some((s) => run.answer.includes(s));
+    factsSummary = { refusalOk, leaked };
+    factDetails.push({ name: 'refusal', matched: refusalOk }, { name: 'no-leak', matched: !leaked });
+  } else {
+    const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
+    let total = 0;
+    let matched = 0;
+    for (const g of gts) {
+      for (const f of g.facts) {
+        if (f.spec.answerMatch === false) continue;
+        total += 1;
+        const ok = f.value !== undefined && matchFact(run.answer, f.spec, f.value);
+        if (ok) matched += 1;
+        factDetails.push({ name: f.spec.name, value: previewValue(f.value), via: f.via, matched: ok });
+      }
+    }
+    factsSummary = { total, matched };
+  }
+  const v = run.runError ? 'FAIL' : verdict({ trace: traceScore, facts: factsSummary, format, safety: q.safety === true });
+  return { verdict: v, traceScore, format, facts: factsSummary, factDetails };
+}
 
-// ---------- tier 1 ----------
+// ---------- engine: anthropic ----------
+async function makeAnthropicEngine(model) {
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
+  const { betaTool } = await import('@anthropic-ai/sdk/helpers/beta/json-schema');
+  const anthropic = new Anthropic();
+  const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
+  const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
+  const system = [{
+    type: 'text',
+    text: `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}`,
+    cache_control: { type: 'ephemeral' },
+  }];
+  let trace = [];
+  const agentTools = mcpTools.map((t) => betaTool({
+    name: t.name,
+    description: (t.description ?? '').slice(0, 1024),
+    inputSchema: t.inputSchema,
+    run: async (input) => {
+      const res = await callMcp(t.name, input ?? {}, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
+      trace.push({ name: t.name, ms: res.ms, isError: !res.ok });
+      return res.text.slice(0, 30_000);
+    },
+  }));
+  return async function runQuestion(q) {
+    trace = [];
+    const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+    const prompt = substitute(q.prompt, vars);
+    const t0 = performance.now();
+    let answer = '';
+    let runError = null;
+    let stopReason = null;
+    try {
+      const runner = anthropic.beta.messages.toolRunner({
+        model,
+        max_tokens: 8192,
+        system,
+        tools: agentTools,
+        messages: [{ role: 'user', content: prompt }],
+        max_iterations: 8,
+      });
+      let last = null;
+      for await (const message of runner) {
+        last = message;
+        for (const k of Object.keys(usage)) usage[k] += message.usage?.[k] ?? 0;
+      }
+      stopReason = last?.stop_reason ?? null;
+      answer = (last?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    } catch (e) {
+      runError = e.message;
+    }
+    return {
+      answer, runError, stopReason, usage,
+      wallMs: Math.round(performance.now() - t0),
+      trace: trace.map((t) => ({ name: t.name, ms: t.ms, isError: t.isError })),
+      cost: computeCost(usage, PRICES[model] ?? PRICES['claude-sonnet-4-6']),
+    };
+  };
+}
+
+// ---------- engine: codex (the live bot's primary, via one-shot cron jobs) ----------
+const COMPOSE = new URL('../deploy/openclaw/docker-compose.yml', here).pathname;
+// The bot container is capped at 1 CPU; a heavy agent turn can stall it hard enough
+// that docker exec itself fails transiently — retry with generous backoff.
+async function botExec(cmd, timeoutMs = 60_000, attempts = 4) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const { stdout } = await execFileP('docker', ['compose', '-f', COMPOSE, 'exec', '-T', 'suzaku-bot', 'sh', '-c', cmd], {
+        timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024,
+      });
+      return stdout;
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 15_000 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+function makeCodexEngine() {
+  const runIdTag = Math.trunc(performance.now() * 1000) % 1_000_000; // unique-enough per invocation
+  return async function runQuestion(q) {
+    const prompt = substitute(q.prompt, vars);
+    const answerFile = `eval/answers/${q.id}.md`;
+    const jobMessage = [
+      'Benchmark task. Do NOT send any Telegram or chat messages under any circumstances.',
+      'Answer the following operator question about the Suzaku deployment, using your Suzaku tools as needed.',
+      `Write your complete final answer, formatted exactly as you would reply in Telegram, into the workspace file ${answerFile} (create directories as needed, overwrite if it exists).`,
+      'Then reply with exactly: done.',
+      `Question: ${prompt}`,
+    ].join(' ');
+    const t0 = performance.now();
+    try {
+      await botExec(`rm -f "/home/node/.openclaw/workspace/${answerFile}"`);
+      const created = await botExec(
+        `node openclaw.mjs cron create --at +2s --message ${shellQuote(jobMessage)} --name eval-${q.id}-${runIdTag} --session isolated --no-deliver --delete-after-run --timeout-seconds 600 2>/dev/null`,
+        120_000,
+      );
+      const jobId = /"id":\s*"([a-f0-9-]+)"/.exec(created)?.[1];
+      if (!jobId) throw new Error(`cron create returned no job id: ${created.slice(0, 200)}`);
+
+      // poll the run record; exec failures while the container is CPU-pegged are
+      // expected — keep polling until the deadline instead of giving up
+      let entry = null;
+      const deadline = Date.now() + 15 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 10_000));
+        let out;
+        try {
+          out = await botExec(`node openclaw.mjs cron runs --id ${jobId} 2>/dev/null`, 60_000, 1);
+        } catch {
+          continue;
+        }
+        const parsed = parseToolJson(out);
+        entry = (parsed?.entries ?? []).find((e) => e.action === 'finished') ?? null;
+        if (entry) break;
+      }
+      if (!entry) throw new Error('cron run did not finish within 15 min');
+
+      const answer = (await botExec(`cat "/home/node/.openclaw/workspace/${answerFile}" 2>/dev/null || true`)).trim();
+      // best-effort tool trace from the bot's audit log within the run window
+      let trace = [];
+      try {
+        const audit = await botExec('cat /data/audit/mcp-audit.log 2>/dev/null || true', 60_000);
+        const start = entry.runAtMs - 2_000;
+        const end = entry.runAtMs + (entry.durationMs ?? 0) + 2_000;
+        trace = audit.split('\n').filter((l) => l.startsWith('{')).map((l) => {
+          try { return JSON.parse(l); } catch { return null; }
+        }).filter((e) => e && Date.parse(e.ts) >= start && Date.parse(e.ts) <= end)
+          .map((e) => ({ name: e.tool, ms: e.duration_ms, isError: e.success !== true }));
+      } catch { /* trace stays empty */ }
+
+      const failed = entry.status !== 'ok';
+      const noAnswer = answer.length === 0 && !failed;
+      return {
+        answer,
+        runError: failed ? `cron run status=${entry.status}: ${String(entry.summary).slice(0, 200)}` : (noAnswer ? 'run ok but no answer file written' : null),
+        stopReason: entry.status,
+        usage: entry.usage ?? {},
+        wallMs: entry.durationMs ?? Math.round(performance.now() - t0),
+        trace,
+        cost: null, // flat subscription — no per-call price exists
+      };
+    } catch (e) {
+      return { answer: '', runError: e.message, stopReason: null, usage: {}, wallMs: Math.round(performance.now() - t0), trace: [], cost: null };
+    }
+  };
+}
+
+function shellQuote(s) {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+// ---------- run ----------
+function pad(s, n) { return String(s).padEnd(n); }
+function previewValue(v) {
+  if (v === undefined) return undefined;
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+}
+function median(nums) {
+  if (nums.length === 0) return NaN;
+  const s = [...nums].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+const allRuns = []; // { label, engine, model, results }
+
 if (TIER === 1) {
+  const results = [];
   for (const q of questions) {
     const t0 = performance.now();
     const gts = await fetchGroundTruth(q);
@@ -215,171 +434,142 @@ if (TIER === 1) {
       console.log(`         ↳ fact '${f.spec.name}' unresolved/insane (via=${f.via ?? 'none'}, value=${previewValue(f.value)})`);
     }
   }
+  allRuns.push({ label: 'tier1', engine: 'none', model: null, results });
 }
 
-// ---------- tier 2 ----------
 if (TIER === 2) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('tier 2 needs ANTHROPIC_API_KEY in the environment');
-    process.exit(2);
-  }
-  const { default: Anthropic } = await import('@anthropic-ai/sdk');
-  const { betaTool } = await import('@anthropic-ai/sdk/helpers/beta/json-schema');
-  const anthropic = new Anthropic();
-  const price = PRICES[MODEL] ?? (console.log(`⚠ no pricing for ${MODEL}, using sonnet rates`), PRICES['claude-sonnet-4-6']);
-
-  const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
-  const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
-  const system = [{
-    type: 'text',
-    text: `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}`,
-    cache_control: { type: 'ephemeral' }, // caches tools+system across the sequential questions
-  }];
-
-  let trace = [];
-  const agentTools = mcpTools.map((t) => betaTool({
-    name: t.name,
-    description: (t.description ?? '').slice(0, 1024),
-    inputSchema: t.inputSchema,
-    run: async (input) => {
-      const res = await callMcp(t.name, input ?? {}, gtTimeout(t.name));
-      trace.push({ name: t.name, ms: res.ms, isError: !res.ok });
-      return res.text.slice(0, 30_000);
-    },
-  }));
-  function gtTimeout(name) {
-    const slowTools = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
-    return slowTools.includes(name) ? 300_000 : DEFAULT_TOOL_TIMEOUT;
+  const engines = ENGINE === 'codex'
+    ? [{ label: 'gpt-5.5-codex', engine: 'codex', model: 'gpt-5.5 (subscription)', run: makeCodexEngine(), traceMode: 'info' }]
+    : [];
+  if (ENGINE === 'anthropic') {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('tier 2 --engine anthropic needs ANTHROPIC_API_KEY in the environment');
+      process.exit(2);
+    }
+    for (const model of MODELS) {
+      engines.push({ label: model, engine: 'anthropic', model, run: await makeAnthropicEngine(model), traceMode: 'full' });
+    }
   }
 
-  for (const q of questions) {
-    trace = [];
-    const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
-    const prompt = substitute(q.prompt, vars);
-    const t0 = performance.now();
-    let answer = '';
-    let runError = null;
-    let stopReason = null;
-    try {
-      const runner = anthropic.beta.messages.toolRunner({
-        model: MODEL,
-        max_tokens: 8192,
-        system,
-        tools: agentTools,
-        messages: [{ role: 'user', content: prompt }],
-        max_iterations: 8,
-      });
-      let last = null;
-      for await (const message of runner) {
-        last = message;
-        for (const k of Object.keys(usage)) usage[k] += message.usage?.[k] ?? 0;
-      }
-      stopReason = last?.stop_reason ?? null;
-      answer = (last?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    } catch (e) {
-      runError = e.message;
+  for (const eng of engines) {
+    console.log(`\n=== engine ${eng.engine} — ${eng.label} ===`);
+    const results = [];
+    for (const q of questions) {
+      // let the 1-CPU container settle between codex questions
+      if (eng.engine === 'codex' && results.length > 0) await new Promise((r) => setTimeout(r, 8_000));
+      const run = await eng.run(q);
+      const score = await scoreRun(q, run, eng.traceMode);
+      results.push({ id: q.id, ...score, ...run, trace: run.trace, answer: run.answer });
+      const factStr = q.safety
+        ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked}`
+        : `facts ${score.facts.matched}/${score.facts.total}`;
+      const costStr = run.cost == null ? `${Math.round((run.usage.total_tokens ?? 0) / 1000)}k tok` : `$${run.cost.toFixed(4)}`;
+      console.log(`${pad(score.verdict, 8)} ${pad(q.id, 20)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
+      if (run.runError) console.log(`         ↳ error: ${run.runError.slice(0, 300)}`);
     }
-    const wallMs = Math.round(performance.now() - t0);
-
-    // score
-    const traceScore = scoreTrace(trace, {
-      expectedTools: q.expectedTools ?? [],
-      maxToolCalls: q.maxToolCalls ?? null,
-      forbiddenTools: q.forbiddenTools ?? [],
-    });
-    const format = scoreFormat(answer);
-    let factsSummary;
-    let factDetails = [];
-    if (q.safety) {
-      const norm = normalizeAnswer(answer).toLowerCase();
-      const refusalOk = (q.refusalAny ?? []).some((s) => norm.includes(s.toLowerCase()));
-      const leaked = (q.mustNotContain ?? []).some((s) => answer.includes(s));
-      factsSummary = { refusalOk, leaked };
-      factDetails = [{ name: 'refusal', matched: refusalOk }, { name: 'no-leak', matched: !leaked }];
-    } else {
-      const gts = await fetchGroundTruth(q); // after the agent so dedup can't pre-warm it
-      let total = 0;
-      let matched = 0;
-      for (const g of gts) {
-        for (const f of g.facts) {
-          if (f.spec.answerMatch === false) continue;
-          total += 1;
-          const ok = f.value !== undefined && matchFact(answer, f.spec, f.value);
-          if (ok) matched += 1;
-          factDetails.push({ name: f.spec.name, value: previewValue(f.value), via: f.via, matched: ok });
-        }
-      }
-      factsSummary = { total, matched };
-    }
-    const v = runError ? 'FAIL' : verdict({ trace: traceScore, facts: factsSummary, format, safety: q.safety === true });
-    const cost = computeCost(usage, price);
-    results.push({
-      id: q.id, verdict: v, wallMs, cost, usage, stopReason, runError,
-      trace: trace.map((t) => ({ name: t.name, ms: t.ms, isError: t.isError })),
-      traceScore, format, facts: factsSummary, factDetails,
-      answer,
-    });
-    const factStr = q.safety
-      ? `refusal=${factsSummary.refusalOk} leak=${factsSummary.leaked}`
-      : `facts ${factsSummary.matched}/${factsSummary.total}`;
-    console.log(`${pad(v, 8)} ${pad(q.id, 20)} tools ${traceScore.groupsSatisfied}/${traceScore.groupsTotal} calls=${traceScore.calls} ${factStr} fmt=${format.ok ? 'ok' : format.violations.join('+')} ${(wallMs / 1000).toFixed(1)}s $${cost.toFixed(4)}`);
-    if (runError) console.log(`         ↳ error: ${runError.slice(0, 300)}`);
+    allRuns.push({ label: eng.label, engine: eng.engine, model: eng.model, results });
   }
 }
 
 // ---------- report ----------
-function pad(s, n) { return String(s).padEnd(n); }
-function previewValue(v) {
-  if (v === undefined) return undefined;
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-  return s.length > 80 ? `${s.slice(0, 80)}…` : s;
-}
-
-const passed = results.filter((r) => r.verdict === 'PASS').length;
-const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
-const failed = results.filter((r) => r.verdict === 'FAIL').length;
-const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
-console.log(`\n${passed} PASS / ${partial} PARTIAL / ${failed} FAIL of ${results.length}${TIER === 2 ? ` — total cost $${totalCost.toFixed(3)} (${MODEL})` : ''}`);
-
 const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const resultsDir = new URL('./results/', here);
 mkdirSync(resultsDir, { recursive: true });
-const baseName = `${runId}-tier${TIER}${TIER === 2 ? `-${MODEL}` : ''}`;
-writeFileSync(new URL(`./${baseName}.json`, resultsDir), JSON.stringify({ runId, tier: TIER, model: TIER === 2 ? MODEL : null, vars, results }, null, 2));
 
-const md = [];
-md.push(`# Eval run ${runId} — tier ${TIER}${TIER === 2 ? ` — ${MODEL}` : ''}`);
-md.push('');
-md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL** of ${results.length}${TIER === 2 ? ` — total cost $${totalCost.toFixed(3)}` : ''}`);
-md.push('');
-md.push(TIER === 2
-  ? '| question | verdict | tool groups | calls | facts | format | wall | cost |\n|---|---|---|---|---|---|---|---|'
-  : '| question | verdict | tool latency | wall |\n|---|---|---|---|');
-for (const r of results) {
-  if (TIER === 2) {
-    const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
-    md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | $${r.cost.toFixed(4)} |`);
-  } else {
-    md.push(`| ${r.id} | ${r.verdict} | ${r.toolMs}ms | ${r.wallMs}ms |`);
-  }
-}
-if (TIER === 2) {
+for (const runSet of allRuns) {
+  const { results } = runSet;
+  const passed = results.filter((r) => r.verdict === 'PASS').length;
+  const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
+  const failed = results.filter((r) => r.verdict === 'FAIL').length;
+  const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
+  const suffix = TIER === 1 ? 'tier1' : `tier2-${runSet.label.replace(/[^a-zA-Z0-9.-]+/g, '_')}`;
+  const baseName = `${runId}-${suffix}`;
+  writeFileSync(new URL(`./${baseName}.json`, resultsDir), JSON.stringify({ runId, tier: TIER, engine: runSet.engine, model: runSet.model, vars, results }, null, 2));
+
+  const md = [];
+  md.push(`# Eval run ${runId} — ${suffix}`);
   md.push('');
-  for (const r of results) {
-    md.push(`## ${r.id} — ${r.verdict}`);
+  md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL** of ${results.length}${runSet.engine === 'anthropic' ? ` — total cost $${totalCost.toFixed(3)}` : ''}`);
+  md.push('');
+  if (TIER === 2) {
+    md.push('| question | verdict | tool groups | calls | facts | format | wall | cost |');
+    md.push('|---|---|---|---|---|---|---|---|');
+    for (const r of results) {
+      const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
+      const costStr = r.cost == null ? `${Math.round((r.usage?.total_tokens ?? 0) / 1000)}k tok` : `$${r.cost.toFixed(4)}`;
+      md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
+    }
     md.push('');
-    md.push(`Trace: ${r.trace.map((t) => `${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls)'}`);
-    if (r.runError) md.push(`\nError: ${r.runError}`);
-    md.push('');
-    md.push('Answer:');
-    md.push('```');
-    md.push((r.answer ?? '').slice(0, 2500));
-    md.push('```');
-    md.push('');
+    for (const r of results) {
+      md.push(`## ${r.id} — ${r.verdict}`);
+      md.push('');
+      md.push(`Trace: ${(r.trace ?? []).map((t) => `${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls recorded)'}`);
+      if (r.runError) md.push(`\nError: ${r.runError}`);
+      md.push('');
+      md.push('Answer:');
+      md.push('```');
+      md.push((r.answer ?? '').slice(0, 2500));
+      md.push('```');
+      md.push('');
+    }
+  } else {
+    md.push('| question | verdict | tool latency | wall |');
+    md.push('|---|---|---|---|');
+    for (const r of results) md.push(`| ${r.id} | ${r.verdict} | ${r.toolMs}ms | ${r.wallMs}ms |`);
+  }
+  writeFileSync(new URL(`./${baseName}.md`, resultsDir), md.join('\n'));
+  console.log(`\n[${runSet.label}] ${passed} PASS / ${partial} PARTIAL / ${failed} FAIL of ${results.length}${runSet.engine === 'anthropic' ? ` — cost $${totalCost.toFixed(3)}` : ''} → results/${baseName}.md`);
+}
+
+// cross-model comparison (multiple tier-2 runs)
+if (TIER === 2 && allRuns.length > 1) {
+  console.log(`\n${pad('question', 20)} ${allRuns.map((r) => pad(r.label, 26)).join(' ')}`);
+  for (let i = 0; i < questions.length; i++) {
+    const cells = allRuns.map((r) => {
+      const res = r.results[i];
+      const costStr = res.cost == null ? '' : ` $${res.cost.toFixed(3)}`;
+      return pad(`${res.verdict} ${(res.wallMs / 1000).toFixed(0)}s${costStr}`, 26);
+    });
+    console.log(`${pad(questions[i].id, 20)} ${cells.join(' ')}`);
   }
 }
-writeFileSync(new URL(`./${baseName}.md`, resultsDir), md.join('\n'));
-console.log(`results: eval/results/${baseName}.{json,md}`);
+
+// ---------- benchmarks.md ----------
+if (BENCHMARK && TIER === 2) {
+  const benchPath = new URL('./benchmarks.md', here);
+  if (!existsSync(benchPath)) {
+    writeFileSync(benchPath, [
+      '# Monitor-bot eval benchmarks',
+      '',
+      'One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.',
+      'Raw per-question reports live in `eval/results/` (gitignored, local only).',
+      'Suite = which questions ran (`fast` skips slow/event-scan questions). Codex engine',
+      'latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).',
+      '',
+      '| date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |',
+      '|---|---|---|---|---|---|---|---|---|---|---|',
+      '',
+    ].join('\n'));
+  }
+  for (const runSet of allRuns) {
+    if (runSet.engine === 'none') continue;
+    const { results } = runSet;
+    const passed = results.filter((r) => r.verdict === 'PASS').length;
+    const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
+    const failed = results.filter((r) => r.verdict === 'FAIL').length;
+    const factsTotal = results.reduce((s, r) => s + (r.facts?.total ?? 0), 0);
+    const factsOk = results.reduce((s, r) => s + (r.facts?.matched ?? 0), 0);
+    const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
+    const p95 = walls[Math.min(walls.length - 1, Math.ceil(0.95 * walls.length) - 1)];
+    const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
+    const costStr = runSet.engine === 'codex' ? 'sub' : `$${totalCost.toFixed(3)}`;
+    const suite = `${FAST ? 'fast' : 'full'}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
+    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | |`;
+    appendFileSync(benchPath, `${row}\n`);
+    console.log(`benchmarks.md ← ${runSet.label}`);
+  }
+}
 
 await mcp.close();
-process.exit(failed > 0 ? 1 : 0);
+const anyFail = allRuns.some((r) => r.results.some((x) => x.verdict === 'FAIL'));
+process.exit(anyFail ? 1 : 0);

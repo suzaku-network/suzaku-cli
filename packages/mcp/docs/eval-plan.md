@@ -12,7 +12,9 @@ The monitor bot answers operator questions on mainnet with zero measurement of a
 |---|---|---|
 | `eval/questions.json` | ~14 canned operator questions (from `EPOCHS.md`'s "what operators actually ask" + README examples), each with expected tool calls and **live-fetched ground truth** — no stale golden values; mainnet drift can't rot the suite | — |
 | `eval/run-evals.mjs --tier 1` | Deterministic: runs each question's ground-truth tools directly against Dexalot mainnet, asserts sane values, records per-tool latency | built repo, RPC access |
-| `eval/run-evals.mjs --tier 2` | LLM-in-loop: an Anthropic tool-runner agent gets the bot's real system prompt (`SOUL.md` + `EPOCHS.md`) and the same `--read-only` MCP server, answers each question; scored on tool trace, facts vs ground truth, Telegram format rules, wall time, and $ cost | `ANTHROPIC_API_KEY` |
+| `eval/run-evals.mjs --tier 2` | LLM-in-loop: an Anthropic tool-runner agent gets the bot's real system prompt (`SOUL.md` + `EPOCHS.md`) and the same `--read-only` MCP server, answers each question; scored on tool trace, facts vs ground truth, Telegram format rules, wall time, and $ cost. `--models a,b,c` compares several models in one run | `ANTHROPIC_API_KEY` |
+| `eval/run-evals.mjs --tier 2 --engine codex` | Same questions through the **live bot's primary engine** (gpt-5.5 via the Codex subscription): each question becomes a one-shot OpenClaw cron job (`--no-deliver`, self-deleting) that writes its answer to a workspace file — **nothing appears in any chat**. Answer, duration, and token usage come from the run record; the tool trace is recovered from the audit log (informational only — composites log their internal CLI calls). Latency includes session bootstrap; no $ cost exists (flat plan). Keep runs occasional — a personal subscription is not a CI backend | live compose stack |
+| `eval/benchmarks.md` | **Committed** benchmark table — one dated row per model/engine per run, appended with `--benchmark`. This is how results live in the repo while staying re-runnable: raw runs stay local, the table accumulates history so drift is visible | — |
 | `eval/scoring.mjs` + `scoring.test.mjs` | Pure scoring functions, unit-tested — CI stays green with no key and no network | — |
 | `scripts/audit-summary.mjs` | Analyzes the live bot's audit JSONL: per-tool calls, success %, p50/p95/max latency, calls/day. `--gateway-logs` mode greps OpenClaw logs for model-fallback markers | the live container |
 
@@ -29,7 +31,9 @@ pnpm eval -- --tier 1             # ~3–6 min, $0 — full deterministic pass +
 export ANTHROPIC_API_KEY=sk-ant-…  # never commit; use the bot's dedicated key once it exists
 pnpm eval -- --tier 2 --fast      # ~3–5 min, ≈$0.20–0.50
 pnpm eval -- --tier 2             # ~10–15 min, ≈$1–2 — full suite
-pnpm eval -- --tier 2 --model claude-haiku-4-5     # cost/quality comparison run
+pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-haiku-4-5 --benchmark
+                                  # 3-model comparison, ~15 min, ≈$1; appends benchmarks.md
+pnpm eval -- --tier 2 --engine codex --fast --benchmark   # the live gpt-5.5 engine, no chat contact
 pnpm eval -- --tier 2 --only operators,safety-injection   # targeted
 
 # live-bot analytics (seconds, from repo root)
