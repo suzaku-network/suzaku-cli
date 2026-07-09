@@ -132,6 +132,11 @@ describe('scoreFormat (Telegram rules)', () => {
   it('accepts HTML formatting', () => {
     expect(scoreFormat('<b>Epoch 44</b> — <pre>table</pre>').ok).toBe(true);
   });
+  it('ignores # and | inside pre/code/fenced blocks (monospace tables)', () => {
+    expect(scoreFormat('<b>1 operator</b>\n<pre>\n# Operator Address\n1  0x8533…e655\n</pre>').ok).toBe(true);
+    expect(scoreFormat('```\n| a | b |\n| 1 | 2 |\n```').ok).toBe(true);
+    expect(scoreFormat('<code># not a header</code>').ok).toBe(true);
+  });
   it('rejects markdown bold, headers, tables, oversize', () => {
     expect(scoreFormat('**bold** text').violations).toContain('markdown-bold');
     expect(scoreFormat('# Header\nbody').violations).toContain('markdown-header');

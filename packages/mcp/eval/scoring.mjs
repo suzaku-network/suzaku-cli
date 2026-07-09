@@ -216,9 +216,15 @@ export function scoreTrace(trace, { expectedTools = [], maxToolCalls = null, for
 /** Telegram formatting rules from EPOCHS.md, checked deterministically. */
 export function scoreFormat(answerText) {
   const violations = [];
-  if (/\*\*[^*\n]+\*\*/.test(answerText)) violations.push('markdown-bold');
-  if (/^#{1,6}\s/m.test(answerText)) violations.push('markdown-header');
-  const tableLines = (answerText.match(/^\s*\|.*\|\s*$/gm) || []).length;
+  // <pre>/<code>/fenced blocks are monospace content — '#' or '|' inside them is
+  // legitimate table layout, not markdown syntax
+  const prose = answerText
+    .replace(/<pre>[\s\S]*?<\/pre>/gi, ' ')
+    .replace(/<code>[\s\S]*?<\/code>/gi, ' ')
+    .replace(/```[\s\S]*?```/g, ' ');
+  if (/\*\*[^*\n]+\*\*/.test(prose)) violations.push('markdown-bold');
+  if (/^#{1,6}\s/m.test(prose)) violations.push('markdown-header');
+  const tableLines = (prose.match(/^\s*\|.*\|\s*$/gm) || []).length;
   if (tableLines >= 2) violations.push('markdown-table');
   if (answerText.length >= 3800) violations.push('over-3800-chars');
   return { ok: violations.length === 0, violations };
