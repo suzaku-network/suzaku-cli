@@ -21,7 +21,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
-  normalizeAnswer, matchFact, scoreTrace, scoreFormat, computeCost, verdict,
+  matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict,
 } from './scoring.mjs';
 
 const execFileP = promisify(execFile);
@@ -79,37 +79,47 @@ function substitute(value, vars) {
   return value;
 }
 
-// ---------- MCP client (context + ground truth for both engines) ----------
-const serverEnv = {
-  PATH: process.env.PATH,
-  HOME: process.env.HOME,
-  SUZAKU_MCP_RATE_MAX_CALLS: '600',
-  SUZAKU_MCP_RATE_WINDOW_MS: '60000',
-  SUZAKU_MCP_DEDUP_WINDOW_MS: TIER === 1 ? '1' : '30000',
-};
-if (process.env.SNOWSCAN_API_KEY) serverEnv.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
+// ---------- MCP clients ----------
+// Two separate server instances: the agent under test uses one with the deployed
+// 30 s dedup window; ground truth + context use an INDEPENDENT one with dedup off,
+// so ground truth can never be served from a cache the agent just populated.
+function makeMcpConnection(dedupMs) {
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    SUZAKU_MCP_RATE_MAX_CALLS: '600',
+    SUZAKU_MCP_RATE_WINDOW_MS: '60000',
+    SUZAKU_MCP_DEDUP_WINDOW_MS: String(dedupMs),
+  };
+  if (process.env.SNOWSCAN_API_KEY) env.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
+  const transport = new StdioClientTransport({
+    command: 'node',
+    args: [new URL('../dist/server.js', here).pathname, '--read-only'],
+    env,
+  });
+  return { transport, client: new Client({ name: 'suzaku-eval', version: '0.0.1' }) };
+}
 
-const transport = new StdioClientTransport({
-  command: 'node',
-  args: [new URL('../dist/server.js', here).pathname, '--read-only'],
-  env: serverEnv,
-});
-const mcp = new Client({ name: 'suzaku-eval', version: '0.0.1' });
-await mcp.connect(transport);
-const { tools: mcpTools } = await mcp.listTools();
+const gtConn = makeMcpConnection(1);
+await gtConn.client.connect(gtConn.transport);
+const agentConn = TIER === 2 && ENGINE === 'anthropic' ? makeMcpConnection(30000) : null;
+if (agentConn) await agentConn.client.connect(agentConn.transport);
+const { tools: mcpTools } = await gtConn.client.listTools();
 const toolByName = new Map(mcpTools.map((t) => [t.name, t]));
-console.log(`MCP server up: ${mcpTools.length} tools (read-only profile)`);
+console.log(`MCP server up: ${mcpTools.length} tools (read-only profile)${agentConn ? ' — separate agent + ground-truth instances' : ''}`);
 
-async function callMcp(name, args, timeoutMs = DEFAULT_TOOL_TIMEOUT) {
+async function callVia(client, name, args, timeoutMs = DEFAULT_TOOL_TIMEOUT) {
   const t0 = performance.now();
   try {
-    const res = await mcp.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
+    const res = await client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
     const text = res.content?.map((c) => c.text).join('\n') ?? '';
     return { ok: res.isError !== true, text, ms: Math.round(performance.now() - t0) };
   } catch (e) {
     return { ok: false, text: `EXCEPTION: ${e.message}`, ms: Math.round(performance.now() - t0) };
   }
 }
+const callGt = (name, args, timeoutMs) => callVia(gtConn.client, name, args, timeoutMs);
+const callAgent = (name, args, timeoutMs) => callVia((agentConn ?? gtConn).client, name, args, timeoutMs);
 
 // ---------- preflight ----------
 const preflightWarnings = [];
@@ -135,7 +145,7 @@ const vars = { ...spec.deployment };
 for (const ctx of spec.context) {
   const args = substitute(ctx.args, vars);
   preflightCheck(ctx.tool, args);
-  const res = await callMcp(ctx.tool, args);
+  const res = await callGt(ctx.tool, args);
   if (!res.ok) {
     console.error(`context fetch failed (${ctx.tool}): ${res.text.slice(0, 300)}`);
     process.exit(1);
@@ -185,7 +195,7 @@ async function fetchGroundTruth(q) {
   const out = [];
   for (const gt of q.groundTruth ?? []) {
     const args = substitute(gt.args, vars);
-    const res = await callMcp(gt.tool, args, gt.timeoutMs ?? DEFAULT_TOOL_TIMEOUT);
+    const res = await callGt(gt.tool, args, gt.timeoutMs ?? DEFAULT_TOOL_TIMEOUT);
     const data = res.ok ? parseToolJson(res.text) : null;
     const facts = [];
     for (const factSpec of gt.facts ?? []) {
@@ -218,11 +228,12 @@ async function scoreRun(q, run, traceMode) {
   let factsSummary;
   const factDetails = [];
   if (q.safety) {
-    const norm = normalizeAnswer(run.answer).toLowerCase();
-    const refusalOk = (q.refusalAny ?? []).some((s) => norm.includes(s.toLowerCase()));
-    const leaked = (q.mustNotContain ?? []).some((s) => run.answer.includes(s));
-    factsSummary = { refusalOk, leaked };
-    factDetails.push({ name: 'refusal', matched: refusalOk }, { name: 'no-leak', matched: !leaked });
+    factsSummary = scoreSafety(run.answer, q);
+    factDetails.push(
+      { name: 'refusal-early', matched: factsSummary.refusalOk },
+      { name: 'no-leak', matched: !factsSummary.leaked },
+      { name: 'no-false-success', matched: !factsSummary.falseSuccess },
+    );
   } else {
     const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
     let total = 0;
@@ -260,7 +271,7 @@ async function makeAnthropicEngine(model) {
     description: (t.description ?? '').slice(0, 1024),
     inputSchema: t.inputSchema,
     run: async (input) => {
-      const res = await callMcp(t.name, input ?? {}, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
+      const res = await callAgent(t.name, input ?? {}, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
       trace.push({ name: t.name, ms: res.ms, isError: !res.ok });
       return res.text.slice(0, 30_000);
     },
@@ -359,7 +370,12 @@ function makeCodexEngine() {
         entry = (parsed?.entries ?? []).find((e) => e.action === 'finished') ?? null;
         if (entry) break;
       }
-      if (!entry) throw new Error('cron run did not finish within 15 min');
+      if (!entry) {
+        // kill the runaway job — abandoned jobs otherwise keep grinding the bot's
+        // cgroup until the pid limit starves the container (observed live)
+        try { await botExec(`node openclaw.mjs cron rm ${jobId} 2>/dev/null`, 60_000, 2); } catch { /* best effort */ }
+        throw new Error('cron run did not finish within 15 min (job removed)');
+      }
 
       const answer = (await botExec(`cat "/home/node/.openclaw/workspace/${answerFile}" 2>/dev/null || true`)).trim();
       // best-effort tool trace from the bot's audit log within the run window
@@ -455,16 +471,33 @@ if (TIER === 2) {
     console.log(`\n=== engine ${eng.engine} — ${eng.label} ===`);
     const results = [];
     for (const q of questions) {
-      // let the 1-CPU container settle between codex questions
-      if (eng.engine === 'codex' && results.length > 0) await new Promise((r) => setTimeout(r, 8_000));
+      // between codex questions: settle, then require the container to be responsive
+      // (fork-able) before creating the next job — otherwise a still-grinding previous
+      // turn cascades into exec failures for everything that follows
+      if (eng.engine === 'codex' && results.length > 0) {
+        await new Promise((r) => setTimeout(r, 8_000));
+        const readyDeadline = Date.now() + 5 * 60_000;
+        let ready = false;
+        while (Date.now() < readyDeadline) {
+          try {
+            await botExec('echo ok', 30_000, 1);
+            ready = true;
+            break;
+          } catch {
+            await new Promise((r) => setTimeout(r, 20_000));
+          }
+        }
+        if (!ready) console.log('⚠ container unresponsive for 5 min — proceeding anyway');
+      }
       const run = await eng.run(q);
       const score = await scoreRun(q, run, eng.traceMode);
       results.push({ id: q.id, ...score, ...run, trace: run.trace, answer: run.answer });
       const factStr = q.safety
-        ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked}`
+        ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked} fabricated=${score.facts.falseSuccess}`
         : `facts ${score.facts.matched}/${score.facts.total}`;
       const costStr = run.cost == null ? `${Math.round((run.usage.total_tokens ?? 0) / 1000)}k tok` : `$${run.cost.toFixed(4)}`;
-      console.log(`${pad(score.verdict, 8)} ${pad(q.id, 20)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
+      const errStr = score.traceScore.erroredCalls > 0 ? ` errTools=${score.traceScore.erroredCalls}` : '';
+      console.log(`${pad(score.verdict, 8)} ${pad(q.id, 26)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls}${errStr} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
       if (run.runError) console.log(`         ↳ error: ${run.runError.slice(0, 300)}`);
     }
     allRuns.push({ label: eng.label, engine: eng.engine, model: eng.model, results });
@@ -563,13 +596,14 @@ if (BENCHMARK && TIER === 2) {
     const p95 = walls[Math.min(walls.length - 1, Math.ceil(0.95 * walls.length) - 1)];
     const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
     const costStr = runSet.engine === 'codex' ? 'sub' : `$${totalCost.toFixed(3)}`;
-    const suite = `${FAST ? 'fast' : 'full'}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
-    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | |`;
+    const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
+    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${vars.currentEpoch ?? '?'} |`;
     appendFileSync(benchPath, `${row}\n`);
     console.log(`benchmarks.md ← ${runSet.label}`);
   }
 }
 
-await mcp.close();
+await gtConn.client.close();
+if (agentConn) await agentConn.client.close();
 const anyFail = allRuns.some((r) => r.results.some((x) => x.verdict === 'FAIL'));
 process.exit(anyFail ? 1 : 0);
