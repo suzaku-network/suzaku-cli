@@ -344,21 +344,21 @@ Upgrade procedure:
 
 ## Scheduled Epoch Alerts (cron)
 
-`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime and persist in the `openclaw-state` volume (sqlite) — they survive rebuilds and recreates; re-register only if that volume is deleted or the OpenClaw schema migrates. The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`:
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime and persist in the `openclaw-state` volume — they survive rebuilds and recreates; re-register only if that volume is deleted or the OpenClaw schema migrates. **Verify with `cron list` after any upgrade or recreate** — an empty audit log for days means the crons are silently gone. The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`. Syntax below is for OpenClaw ≥ 2026.6.x (schedule and message are positional; there is no `--schedule`/`--prompt`; `--timeout-seconds` must exceed the heartbeat's runtime — the 30 s default kills the job):
 
 ```bash
 # 1. Alerts: post only when something needs attention
-docker compose exec suzaku-bot node openclaw.mjs cron create \
-  --schedule "10 */4 * * *" \
-  --prompt "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group." \
-  --name "heartbeat-alerts" --session isolated --announce --channel telegram --to "<TELEGRAM_GROUP_ID>"
+docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "10 */4 * * *" \
+  "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group." \
+  --name heartbeat-alerts --session isolated --announce --channel telegram --to "$TELEGRAM_GROUP_ID" --timeout-seconds 600'
 
 # 2. Digest: post once per epoch rollover
-docker compose exec suzaku-bot node openclaw.mjs cron create \
-  --schedule "25 */4 * * *" \
-  --prompt "Call deployment_heartbeat with mode=digest (same addresses as the alerts cron). If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch." \
-  --name "heartbeat-digest" --session isolated --announce --channel telegram --to "<TELEGRAM_GROUP_ID>"
+docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "25 */4 * * *" \
+  "Call deployment_heartbeat with mode=digest, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch." \
+  --name heartbeat-digest --session isolated --announce --channel telegram --to "$TELEGRAM_GROUP_ID" --timeout-seconds 600'
 ```
+
+`$TELEGRAM_GROUP_ID` expands inside the container, so you don't need the raw id on your host shell.
 
 If the cache bot is deployed, include `cacheKeyAddress=<SUZAKU_CACHE_KEY_ADDRESS>` or set `SUZAKU_CACHE_KEY_ADDRESS` in the container env so `deployment_heartbeat` alerts when the C-Chain gas balance drops below `SUZAKU_CACHE_KEY_MIN_AVAX`.
 
@@ -390,6 +390,8 @@ Once the bot is running, try these in a DM:
 | Cache bot tx fails for insufficient funds | Expected during the unfunded dark launch. After validation, fund the cache key with a small C-Chain AVAX balance and monitor it with `deployment_heartbeat` |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower. Also ensure `SOUL.md` pins your deployment's contract addresses (see below) so the bot doesn't rediscover them every conversation |
 | Bot says it has no Suzaku tools / "not exposed in this session" | Thread session config is computed once — send `/new` in the chat after any model/runtime/plugin change (a gateway restart alone does not refresh existing threads) |
+| CLI (`cron create`, `devices remove`, …) fails with "pairing required: device is asking for more scopes than currently approved" | On OpenClaw ≥ 2026.6.x the exec'd CLI TOFU-pairs on loopback with `operator.read` only; write commands need a scope upgrade, and **self-approval from the same host is racy by design** (every CLI connect replaces the pending requestId, so `devices approve <id>` reports "unknown requestId"). Sanctioned fix: approve from an already-authorized device. Same-host fix: `docker compose stop suzaku-bot`, patch `devices/paired.json` in the `openclaw-state` volume (set `scopes`, `approvedScopes`, and `tokens.*.scopes` to the requested set, empty `pending.json`), then `docker compose start suzaku-bot` |
+| Audit log empty at `/data/audit` despite bot activity | Two MCP instances write audit separately: the mcporter path uses `/data/audit`; the Codex path uses the `SUZAKU_MCP_AUDIT_DIR` set in `entrypoint.sh`'s config.toml block. Also check the volume mountpoint is owned by `node` (a root-owned dir silently swallows best-effort audit writes) |
 | Codex login: browser shows `ERR_CONNECTION_REFUSED` on `localhost:1455` | Expected — the callback listener is inside the container. Paste the full redirect URL from the address bar into the waiting terminal prompt |
 | `models auth login requires an interactive TTY` | Run the login from a real terminal, not piped/scripted |
 | High API costs | Set a billing cap at console.anthropic.com; consider switching crons to `claude-haiku-4-5`, or the subscription route (see Model auth) for interactive use |
