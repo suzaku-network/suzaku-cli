@@ -360,6 +360,8 @@ docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "25 */4 * * 
 
 `$TELEGRAM_GROUP_ID` expands inside the container, so you don't need the raw id on your host shell.
 
+**Forum groups (topics):** a Telegram message sent with only the chat id lands in the **General** topic. If the team talks to the bot in a dedicated topic, extend the prompt's send instruction with `in message thread <TOPIC_THREAD_ID> (always pass messageThreadId <TOPIC_THREAD_ID>)`. Find the id from a message link inside the topic (`t.me/c/<chat>/<topicId>/<msgId>`) or from the gateway state: `grep -rhoE '"threadId": [0-9]+' ~/.openclaw/state ~/.openclaw/agents | sort -u` (General is `1`). Also note: one-shot `--at` jobs require `--message "<text>"` — only positional-schedule jobs accept the message as a positional argument.
+
 **Use `--no-deliver`, and have the agent send the message itself** (as the prompts above do). The default delivery mode is announce, which fallback-forwards the agent's final text **and any job-failure notice** to a chat — that double-posts every digest (content + a "Posted digest…" meta line) and spams the group with "⚠️ Cron job failed" on transient errors. With `--no-deliver` the only group message is the one the agent deliberately sends; check job health with `cron list` (Last column) or `cron runs <id>` instead.
 
 If the cache bot is deployed, include `cacheKeyAddress=<SUZAKU_CACHE_KEY_ADDRESS>` or set `SUZAKU_CACHE_KEY_ADDRESS` in the container env so `deployment_heartbeat` alerts when the C-Chain gas balance drops below `SUZAKU_CACHE_KEY_MIN_AVAX`.
