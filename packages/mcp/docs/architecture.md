@@ -59,6 +59,28 @@ Telegram ops group (ID via TELEGRAM_GROUP_ID)       Admin DMs (allowlist by nume
 
 Sessions: OpenClaw keeps one session per Telegram chat/thread; a thread's model/runtime/tool config is computed once at session start, so after any config change you send `/new` in the chat. Cron jobs run in isolated sessions.
 
+### Runtime requirements
+
+**Production target:** run the OpenClaw deployment on a dedicated VPS/VM, not a personal workstation. A VM is the generic machine abstraction; a VPS is the hosted VM product from providers such as Hetzner, DigitalOcean, OVH, Linode, Vultr, AWS, GCP, or Azure. The practical requirement is an always-on Linux VM dedicated to this bot stack, so a container compromise has a small blast radius and cannot reach local wallets, browsers, dev services, or personal files.
+
+| Layer | Requirement |
+|---|---|
+| Host size | 2 vCPU / 4 GB RAM recommended; the compose services cap each bot at `cpus: 1.0`, `mem_limit: 2g`, and `pids_limit: 256` |
+| OS/runtime | Linux host with Docker Engine and Docker Compose |
+| Network | Outbound internet for Telegram, LLM APIs, Avalanche RPC, Safe tx service, and optional Snowscan; inbound firewall should allow SSH only |
+| Deployment path | `cd packages/mcp/deploy/openclaw && docker compose up --build -d` |
+| Mandatory monitor env | `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_USER_ID`, `TELEGRAM_GROUP_ID`, `OPENCLAW_GATEWAY_TOKEN` |
+| Optional monitor env | `SNOWSCAN_API_KEY` for faster event scans; Codex/OpenAI OAuth state in `openclaw-state` when using the default `openai/gpt-5.5` primary model |
+| Host hardening | Key-only SSH, host firewall, `iptables-setup.sh` after compose creates `br-suzaku`, secrets and `.env` mode `600` |
+| Persistence | Docker volumes for audit logs and OpenClaw state; file secrets for propose/cache signing keys |
+
+**Supported runtime shapes:**
+
+- **OpenClaw bot target (recommended):** the `bot` Docker target installs the native `libusb-1.0-0` / `libudev1` runtime libraries required by the CLI's eagerly loaded Ledger subtree, even though the read-only bot does not use Ledger signing.
+- **Local/dev stdio MCP:** a developer can run `node packages/mcp/dist/server.js [--read-only | --propose-only | --public-write]` from a built checkout and attach it to an MCP client. This is fine for development and one-off reads, but it is not the production bot topology.
+- **Standalone distroless MCP target:** exists for plain MCP clients, but do not treat it as the production path until the known Ledger native-library gap is fixed or Ledger imports are lazy-loaded.
+- **Serverless:** not a fit without redesign; OpenClaw is a long-running Telegram gateway with persisted sessions, cron state, audit logs, and stdio MCP subprocesses.
+
 ## 3. The three bots
 
 | | `suzaku-bot` (monitor) | `suzaku-propose-bot` | `suzaku-cache-bot` |
