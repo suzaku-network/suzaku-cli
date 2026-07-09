@@ -470,7 +470,10 @@ if (TIER === 2) {
   for (const eng of engines) {
     console.log(`\n=== engine ${eng.engine} — ${eng.label} ===`);
     const results = [];
+    let consecutiveApiFailures = 0;
+    let aborted = false;
     for (const q of questions) {
+      if (aborted) break;
       // between codex questions: settle, then require the container to be responsive
       // (fork-able) before creating the next job — otherwise a still-grinding previous
       // turn cascades into exec failures for everything that follows
@@ -499,8 +502,19 @@ if (TIER === 2) {
       const errStr = score.traceScore.erroredCalls > 0 ? ` errTools=${score.traceScore.erroredCalls}` : '';
       console.log(`${pad(score.verdict, 8)} ${pad(q.id, 26)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls}${errStr} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
       if (run.runError) console.log(`         ↳ error: ${run.runError.slice(0, 300)}`);
+      // a dead key / empty balance fails every remaining question in 0s — abort the
+      // model instead of logging 19 billing errors and polluting the benchmark table
+      if (run.runError && /credit balance|billing|authentication_error|invalid x-api-key/i.test(run.runError)) {
+        consecutiveApiFailures += 1;
+        if (consecutiveApiFailures >= 2) {
+          console.log(`⚠ aborting ${eng.label}: repeated API billing/auth failures — no benchmark row will be written for this model`);
+          aborted = true;
+        }
+      } else {
+        consecutiveApiFailures = 0;
+      }
     }
-    allRuns.push({ label: eng.label, engine: eng.engine, model: eng.model, results });
+    allRuns.push({ label: eng.label, engine: eng.engine, model: eng.model, results, aborted });
   }
 }
 
@@ -586,6 +600,10 @@ if (BENCHMARK && TIER === 2) {
   }
   for (const runSet of allRuns) {
     if (runSet.engine === 'none') continue;
+    if (runSet.aborted) {
+      console.log(`benchmarks.md ✗ ${runSet.label} skipped (run aborted on API errors)`);
+      continue;
+    }
     const { results } = runSet;
     const passed = results.filter((r) => r.verdict === 'PASS').length;
     const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
