@@ -349,16 +349,18 @@ Upgrade procedure:
 ```bash
 # 1. Alerts: post only when something needs attention
 docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "10 */4 * * *" \
-  "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group." \
-  --name heartbeat-alerts --session isolated --announce --channel telegram --to "$TELEGRAM_GROUP_ID" --timeout-seconds 600'
+  "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, reply with exactly: OK. Do not post anything to any chat. If humanLines is NOT empty, send humanLines verbatim as one monospace block message to Telegram chat $TELEGRAM_GROUP_ID, then reply with exactly: posted." \
+  --name heartbeat-alerts --session isolated --no-deliver --timeout-seconds 600'
 
 # 2. Digest: post once per epoch rollover
 docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "25 */4 * * *" \
-  "Call deployment_heartbeat with mode=digest, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch." \
-  --name heartbeat-digest --session isolated --announce --channel telegram --to "$TELEGRAM_GROUP_ID" --timeout-seconds 600'
+  "Call deployment_heartbeat with mode=digest, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. Read memory/heartbeat-digest-state.json if it exists; if the returned epoch equals the epoch recorded there, reply with exactly: OK. Do not post anything. Otherwise send humanLines verbatim as one monospace block message to Telegram chat $TELEGRAM_GROUP_ID, update memory/heartbeat-digest-state.json with the new epoch, then reply with exactly: posted." \
+  --name heartbeat-digest --session isolated --no-deliver --timeout-seconds 600'
 ```
 
 `$TELEGRAM_GROUP_ID` expands inside the container, so you don't need the raw id on your host shell.
+
+**Use `--no-deliver`, and have the agent send the message itself** (as the prompts above do). The default delivery mode is announce, which fallback-forwards the agent's final text **and any job-failure notice** to a chat — that double-posts every digest (content + a "Posted digest…" meta line) and spams the group with "⚠️ Cron job failed" on transient errors. With `--no-deliver` the only group message is the one the agent deliberately sends; check job health with `cron list` (Last column) or `cron runs <id>` instead.
 
 If the cache bot is deployed, include `cacheKeyAddress=<SUZAKU_CACHE_KEY_ADDRESS>` or set `SUZAKU_CACHE_KEY_ADDRESS` in the container env so `deployment_heartbeat` alerts when the C-Chain gas balance drops below `SUZAKU_CACHE_KEY_MIN_AVAX`.
 
