@@ -55,7 +55,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g mcporter@0.12.0 \
     && mkdir -p /home/node/.openclaw/workspace/config \
-    && chown -R node:node /home/node/.openclaw
+    && chown -R node:node /home/node/.openclaw \
+    # audit volume mountpoint must be node-writable (audit writes are silent best-effort;
+    # a root-owned dir loses them without a trace). Seeds ownership for FRESH volumes only —
+    # a pre-existing volume keeps its ownership and needs a one-time chown.
+    && mkdir -p /data/audit && chown node:node /data/audit
 COPY --chmod=755 packages/mcp/deploy/openclaw/entrypoint.sh /usr/local/bin/suzaku-entrypoint.sh
 USER node
 

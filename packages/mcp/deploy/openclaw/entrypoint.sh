@@ -51,7 +51,7 @@ if [ ! -f "$MCPORTER_TPL" ]; then
 [mcp_servers.suzaku]
 command = "node"
 args = ["/mcp/packages/mcp/dist/server.js", "--read-only"]
-env = { PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", HOME = "/home/node", SNOWSCAN_API_KEY = "${SNOWSCAN_API_KEY}", SUZAKU_MCP_PUBLIC_HEALTH = "true" }
+env = { PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", HOME = "/home/node", SNOWSCAN_API_KEY = "${SNOWSCAN_API_KEY}", SUZAKU_MCP_PUBLIC_HEALTH = "true", SUZAKU_MCP_AUDIT_DIR = "/data/audit" }
 EOF
 fi
 
