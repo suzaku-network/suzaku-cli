@@ -14,7 +14,10 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: 2g
-    cpus: 1.0
+    # 2.0: the codex app-server + MCP server + CLI subprocesses share this cgroup; at
+    # 1.0 a heavy multi-tool turn starves the gateway event loop (observed 18 s stalls,
+    # failed docker execs, 100 s digests). Two cores keep the gateway responsive.
+    cpus: 2.0
     tmpfs:
       - /tmp:size=128m
     volumes:
