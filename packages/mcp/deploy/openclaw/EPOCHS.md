@@ -27,7 +27,8 @@ whenever an unset epoch is near the window edge.
       `transferFrom` immediately — "funded" and "set" happen together
       (`rewards_get_epoch_status` → `funded`).
       ⚠️ **Amounts ACCUMULATE**: a second set-amount for the same epoch ADDS to the
-      total (the epoch 35/36 incident — both show 2 set-amount txs). Always check
+      total (the epoch 35/36 incident — epoch 35 has 3 set-amount txs, epoch 36 has 2;
+      windowed scans have undercounted 35 before, so verify live, never from this file). Always check
       `rewards_epoch_diagnosis` / `rewards_get_events` (filter: RewardsAmountSet)
       before anyone sets.
       The **funding deadline** is `FUNDING_DEADLINE_OFFSET` epochs after N (currently

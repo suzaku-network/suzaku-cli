@@ -115,10 +115,17 @@ reflected lax grading more than model quality.** Implemented the same day (suite
 - **Benchmark policy**: rows carry `@v<suiteVersion>` and the epoch they ran at; `@v1` rows are
   annotated as non-comparable; slow questions get committed full-suite rows.
 
+**Bot-side fixes shipped from the review** (the eval → fix → re-eval loop in action): SOUL.md
+"How to answer" rules 5–6 (identity-first — ask for the address instead of running
+deployment-wide tools; cannot-attribute / no-slashing-read-path honesty) and a strengthened
+rule 4 (never fill tool-failure gaps from memory or this file's examples); EPOCHS.md's
+epoch-35 incident count corrected (3 set-amount txs, not 2 — the wrong number the bot
+fabricated from). Verify with `--only identity-ambiguity-my-node,slashing-cannot-confirm`.
+
 Backlog from the review (not yet done): tool-argument assertions; `--repeat N` for variance;
 Telegram-HTML validation (allow-list + well-formedness); drop the bare-wei number-scaling heuristic
 in favor of human-unit ground-truth paths; a fault-injection question forcing `health_check`
-escalation; SOUL.md identity-resolution rule + EPOCHS.md cannot-attribute rule; multi-turn support;
+escalation; multi-turn support;
 read-path gaps (slashing events, uptime in `rewards_epoch_diagnosis`); commit a results manifest.
 
 ## Future work (deliberately parked)
