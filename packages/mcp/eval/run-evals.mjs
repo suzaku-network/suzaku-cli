@@ -574,6 +574,7 @@ if (TIER === 2 && allRuns.length > 1) {
   for (let i = 0; i < questions.length; i++) {
     const cells = allRuns.map((r) => {
       const res = r.results[i];
+      if (!res) return pad('— (aborted)', 26);
       const costStr = res.cost == null ? '' : ` $${res.cost.toFixed(3)}`;
       return pad(`${res.verdict} ${(res.wallMs / 1000).toFixed(0)}s${costStr}`, 26);
     });
