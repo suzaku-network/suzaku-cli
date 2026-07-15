@@ -6,6 +6,9 @@ Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading
 **`@v1` rows used lax grading** (content facts unchecked, errored tool calls counted, whole-answer
 number matching — see `docs/eval-plan.md` § Adversarial review) — do not compare them with `@v2`+ rows.
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
+Cursor engine (`cursor-agent`/Composer) runs its own read-only MCP server; tool trace is informational
+(`traceMode: info` — the tool-groups column isn't gated), and cost shows `cur.api` when cursor-agent
+doesn't report token usage.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|

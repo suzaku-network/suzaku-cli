@@ -9,6 +9,10 @@
 //                            Nothing is posted to any chat: the agent writes its answer
 //                            to a workspace file, jobs self-delete. Needs the deploy
 //                            compose stack running locally. No $ cost (flat sub).
+//     --engine cursor        Cursor CLI (cursor-agent) — benchmark Composer models.
+//                            Self-contained: cursor-agent runs its OWN read-only Suzaku
+//                            MCP server (never touches the bot). Needs `cursor-agent` on
+//                            PATH + CURSOR_API_KEY. --models composer-2.5[,...].
 //   --benchmark              append a dated row per model/engine to eval/benchmarks.md
 //   --only id1,id2 · --fast (skip slow questions)
 //
@@ -23,6 +27,7 @@ import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict,
 } from './scoring.mjs';
+import { parseCursorStream, buildMcpConfig, isCursorAuthError } from './cursor.mjs';
 
 const execFileP = promisify(execFile);
 
@@ -41,7 +46,7 @@ const MODELS = flagValue('--models')
   : [flagValue('--model', 'claude-sonnet-4-6')];
 const BENCHMARK = argv.includes('--benchmark');
 if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex] [--models a,b] [--only ids] [--fast] [--benchmark]');
+  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|cursor] [--models a,b] [--only ids] [--fast] [--benchmark]');
   process.exit(2);
 }
 
@@ -54,6 +59,11 @@ const PRICES = {
 };
 const DEFAULT_TOOL_TIMEOUT = 120_000;
 const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
+
+// cursor engine — ⚠ confirm the exact model id via `cursor-agent models` at smoke
+const CURSOR_MODEL_DEFAULT = 'composer-2.5';
+const CURSOR_PRICES = { 'composer-2.5-fast': [3, 15] }; // standard composer-2.5 price TBD → cost stays null
+const CURSOR_FLAGS = ['--output-format', 'stream-json', '--approve-mcps', '--force'];
 
 // ---------- load question set ----------
 const here = new URL('.', import.meta.url);
@@ -411,8 +421,71 @@ function shellQuote(s) {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
+// ---------- engine: cursor (Cursor CLI / Composer — self-contained, own MCP) ----------
+// cursor-agent spawns its OWN read-only Suzaku MCP server from a project-level
+// .cursor/mcp.json in a dedicated temp cwd (never touches the user's global ~/.cursor
+// or the deployed bot). Ground truth keeps using gtConn, so nothing is circular.
+function makeCursorEngine(model) {
+  const cursorWork = new URL('./.cursor-work/', here).pathname;
+  const cursorDotDir = `${cursorWork}.cursor`;
+  const serverPath = new URL('../dist/server.js', here).pathname;
+  const mcpEnv = {
+    PATH: process.env.PATH, HOME: process.env.HOME,
+    SUZAKU_MCP_DEDUP_WINDOW_MS: '30000', SUZAKU_MCP_RATE_MAX_CALLS: '600', SUZAKU_MCP_RATE_WINDOW_MS: '60000',
+  };
+  if (process.env.SNOWSCAN_API_KEY) mcpEnv.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
+  mkdirSync(cursorDotDir, { recursive: true });
+  writeFileSync(`${cursorDotDir}/mcp.json`, JSON.stringify(buildMcpConfig(serverPath, mcpEnv), null, 2));
+
+  const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
+  const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
+  const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram, using your Suzaku MCP tools as needed (call them directly; do not ask permission).\n\nQuestion: `;
+
+  return async function runQuestion(q) {
+    const prompt = preamble + substitute(q.prompt, vars);
+    const timeoutMs = q.slow ? 600_000 : 300_000;
+    const t0 = performance.now();
+    let stdout = '';
+    let runError = null;
+    let authError = false;
+    // auth/quota is detected from STDERR only — never stdout, which embeds the model's
+    // answer (bare "insufficient"/"quota" in a correct answer must not read as a failure).
+    try {
+      const res = await execFileP('cursor-agent', ['-p', prompt, '--model', model, ...CURSOR_FLAGS], {
+        cwd: cursorWork, env: process.env, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
+      });
+      stdout = res.stdout ?? '';
+      if (isCursorAuthError(res.stderr)) { authError = true; runError = `cursor auth error: ${String(res.stderr).slice(0, 200)}`; }
+    } catch (e) {
+      stdout = e.stdout ?? '';
+      const stderr = String(e.stderr ?? e.message ?? '');
+      if (isCursorAuthError(stderr)) { authError = true; runError = `cursor auth error: ${stderr.slice(0, 200)}`; }
+      else runError = e.killed ? `cursor-agent timed out after ${timeoutMs / 1000}s` : `cursor-agent exited: ${stderr.slice(0, 200)}`;
+    }
+    const parsed = parseCursorStream(stdout);
+    if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
+    if (!runError && parsed.answer.length === 0) {
+      runError = parsed.events === 0
+        ? 'cursor-agent produced no parseable stream-json (check --output-format / flags)'
+        : 'cursor-agent returned no answer text';
+    }
+    const price = CURSOR_PRICES[model];
+    const cost = price && parsed.usage?.input_tokens != null ? computeCost(parsed.usage, price) : null;
+    return {
+      answer: parsed.answer,
+      runError, authError,
+      stopReason: runError ? 'error' : 'ok',
+      usage: parsed.usage ?? {},
+      wallMs: parsed.durationMs ?? Math.round(performance.now() - t0),
+      trace: parsed.trace,
+      cost,
+    };
+  };
+}
+
 // ---------- run ----------
 function pad(s, n) { return String(s).padEnd(n); }
+function tokCount(usage) { return usage?.total_tokens ?? ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0)); }
 function previewValue(v) {
   if (v === undefined) return undefined;
   const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
@@ -466,6 +539,23 @@ if (TIER === 2) {
       engines.push({ label: model, engine: 'anthropic', model, run: await makeAnthropicEngine(model), traceMode: 'full' });
     }
   }
+  if (ENGINE === 'cursor') {
+    if (!process.env.CURSOR_API_KEY) {
+      console.error('tier 2 --engine cursor needs CURSOR_API_KEY in the environment');
+      process.exit(2);
+    }
+    try {
+      await execFileP('cursor-agent', ['--version'], { timeout: 15_000 });
+    } catch {
+      console.error('tier 2 --engine cursor needs `cursor-agent` on PATH (install: curl https://cursor.com/install -fsS | bash)');
+      process.exit(2);
+    }
+    // default to Composer when no model was explicitly requested
+    const cursorModels = (flagValue('--models') || flagValue('--model')) ? MODELS : [CURSOR_MODEL_DEFAULT];
+    for (const model of cursorModels) {
+      engines.push({ label: model, engine: 'cursor', model, run: makeCursorEngine(model), traceMode: 'info' });
+    }
+  }
 
   for (const eng of engines) {
     console.log(`\n=== engine ${eng.engine} — ${eng.label} ===`);
@@ -498,13 +588,15 @@ if (TIER === 2) {
       const factStr = q.safety
         ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked} fabricated=${score.facts.falseSuccess}`
         : `facts ${score.facts.matched}/${score.facts.total}`;
-      const costStr = run.cost == null ? `${Math.round((run.usage.total_tokens ?? 0) / 1000)}k tok` : `$${run.cost.toFixed(4)}`;
+      const costStr = run.cost == null ? `${Math.round(tokCount(run.usage) / 1000)}k tok` : `$${run.cost.toFixed(4)}`;
       const errStr = score.traceScore.erroredCalls > 0 ? ` errTools=${score.traceScore.erroredCalls}` : '';
       console.log(`${pad(score.verdict, 8)} ${pad(q.id, 26)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls}${errStr} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
       if (run.runError) console.log(`         ↳ error: ${run.runError.slice(0, 300)}`);
       // a dead key / empty balance fails every remaining question in 0s — abort the
       // model instead of logging 19 billing errors and polluting the benchmark table
-      if (run.runError && /credit balance|billing|authentication_error|invalid x-api-key/i.test(run.runError)) {
+      // structured authError (cursor) OR the anthropic billing-error phrasing — NOT bare
+      // domain words, which would false-trip on legitimate codex/anthropic op failures
+      if (run.runError && (run.authError || /credit balance|billing|authentication_error|invalid x-api-key/i.test(run.runError))) {
         consecutiveApiFailures += 1;
         if (consecutiveApiFailures >= 2) {
           console.log(`⚠ aborting ${eng.label}: repeated API billing/auth failures — no benchmark row will be written for this model`);
@@ -543,7 +635,7 @@ for (const runSet of allRuns) {
     md.push('|---|---|---|---|---|---|---|---|');
     for (const r of results) {
       const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
-      const costStr = r.cost == null ? `${Math.round((r.usage?.total_tokens ?? 0) / 1000)}k tok` : `$${r.cost.toFixed(4)}`;
+      const costStr = r.cost == null ? `${Math.round(tokCount(r.usage) / 1000)}k tok` : `$${r.cost.toFixed(4)}`;
       md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
     md.push('');
@@ -614,7 +706,8 @@ if (BENCHMARK && TIER === 2) {
     const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
     const p95 = walls[Math.min(walls.length - 1, Math.ceil(0.95 * walls.length) - 1)];
     const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
-    const costStr = runSet.engine === 'codex' ? 'sub' : `$${totalCost.toFixed(3)}`;
+    const costStr = runSet.engine === 'codex' ? 'sub'
+      : (runSet.engine === 'cursor' && totalCost === 0 ? 'cur.api' : `$${totalCost.toFixed(3)}`);
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
     const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${vars.currentEpoch ?? '?'} |`;
     appendFileSync(benchPath, `${row}\n`);
