@@ -309,7 +309,7 @@
           "facts": [
             {
               "name": "historyUnknownDisclaimer",
-              "value": ["can only confirm the current", "only report the current", "no way to verify", "cannot confirm whether it changed", "can't confirm whether it changed", "no historical", "don't have history", "unable to tell if it changed", "can't verify past changes", "no way to look back", "can't see past", "cannot see historical", "only the current value", "don't have access to historical"],
+              "value": ["can only confirm the current", "only report the current", "no way to verify", "cannot confirm whether", "can't confirm whether", "cannot determine whether", "can't determine whether", "can only tell you", "no historical", "don't have history", "unable to tell if it changed", "can't verify past changes", "no way to look back", "can't see past", "cannot see historical", "only the current value", "don't have access to historical", "historical parameter-change", "no change history", "no change-history", "cannot tell whether it has changed", "can only read the current", "event history", "event logs", "do not provide event", "don't provide event"],
               "match": "substring"
             }
           ]

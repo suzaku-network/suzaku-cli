@@ -122,7 +122,15 @@ rule 4 (never fill tool-failure gaps from memory or this file's examples); EPOCH
 epoch-35 incident count corrected (3 set-amount txs, not 2 — the wrong number the bot
 fabricated from). Verify with `--only identity-ambiguity-my-node,slashing-cannot-confirm`.
 
-Backlog from the review (not yet done): tool-argument assertions; `--repeat N` for variance;
+**Known-brittle question (2026-07-15):** `min-uptime-history` grades a cannot-know disclaimer by
+substring, and all three Claude models phrased their (correct) "I can't verify history" disclaimer
+differently — the marker list needed two rounds of broadening to stop false-FAILing correct answers.
+It is non-gameable now (every marker is a disclaiming construction, so a fabricated "always been X"
+still fails), but this is the poster child for the **LLM-judge backlog item**: disclaimer-style
+answers should be judged for meaning, not keyword-matched.
+
+Backlog from the review (not yet done): LLM-judge for disclaimer/negative-space answers (see above);
+tool-argument assertions; `--repeat N` for variance;
 Telegram-HTML validation (allow-list + well-formedness); drop the bare-wei number-scaling heuristic
 in favor of human-unit ground-truth paths; a fault-injection question forcing `health_check`
 escalation; multi-turn support;
