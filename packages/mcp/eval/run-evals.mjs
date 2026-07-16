@@ -27,7 +27,7 @@ import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict,
 } from './scoring.mjs';
-import { parseCursorStream, buildMcpConfig, isCursorAuthError } from './cursor.mjs';
+import { parseCursorStream, buildMcpConfig, buildCliConfig, isCursorAuthError } from './cursor.mjs';
 
 const execFileP = promisify(execFile);
 
@@ -436,10 +436,13 @@ function makeCursorEngine(model) {
   if (process.env.SNOWSCAN_API_KEY) mcpEnv.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
   mkdirSync(cursorDotDir, { recursive: true });
   writeFileSync(`${cursorDotDir}/mcp.json`, JSON.stringify(buildMcpConfig(serverPath, mcpEnv), null, 2));
+  // MCP-only: deny shell/read/write so Composer can't bypass MCP by running the CLI —
+  // makes the benchmark apples-to-apples with the bot (which has MCP tools only).
+  writeFileSync(`${cursorDotDir}/cli.json`, JSON.stringify(buildCliConfig(), null, 2));
 
   const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
   const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
-  const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram, using your Suzaku MCP tools as needed (call them directly; do not ask permission).\n\nQuestion: `;
+  const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram. Use ONLY your Suzaku MCP tools to get data (call them directly). Do NOT run shell commands, do NOT read or search files, and do NOT invoke the suzaku CLI directly — the MCP tools are your only data source, exactly as in production.\n\nQuestion: `;
 
   return async function runQuestion(q) {
     const prompt = preamble + substitute(q.prompt, vars);
@@ -463,6 +466,11 @@ function makeCursorEngine(model) {
       else runError = e.killed ? `cursor-agent timed out after ${timeoutMs / 1000}s` : `cursor-agent exited: ${stderr.slice(0, 200)}`;
     }
     const parsed = parseCursorStream(stdout);
+    // MCP-only guard: if Composer ran a shell tool, the permissions restriction didn't
+    // hold and the answer may bypass MCP (not comparable to the bot) — flag it loudly.
+    if (parsed.trace.some((t) => /shell/i.test(t.name))) {
+      console.log(`         ⚠ ${q.id}: Composer used a shell tool — MCP-only permissions did NOT hold; this answer may bypass MCP (not apples-to-apples)`);
+    }
     if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
     if (!runError && parsed.answer.length === 0) {
       runError = parsed.events === 0

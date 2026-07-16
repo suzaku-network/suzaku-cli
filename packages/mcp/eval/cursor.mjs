@@ -54,7 +54,7 @@ export function parseCursorStream(stdout) {
           answer: contentText(result),
           trace: [],
           durationMs: pick(obj, ['duration_ms', 'durationMs']) ?? null,
-          usage: pick(obj, ['usage', 'tokens']) ?? {},
+          usage: normalizeUsage(pick(obj, ['usage', 'tokens']) ?? {}),
           resultError: pick(obj, ['is_error', 'isError']) === true ? (pick(obj, ['error', 'message']) ?? 'result.is_error') : null,
           events: 1,
         };
@@ -143,7 +143,7 @@ export function parseCursorStream(stdout) {
   // duration/usage/error come ONLY from the terminal result event — never the first
   // match anywhere (a per-call duration or an init-event usage would be wrong).
   const durationMs = resultEvt ? (pick(resultEvt, ['duration_ms', 'durationMs']) ?? null) : null;
-  const usage = resultEvt ? (pick(resultEvt, ['usage', 'tokens']) ?? {}) : {};
+  const usage = normalizeUsage(resultEvt ? (pick(resultEvt, ['usage', 'tokens']) ?? {}) : {});
   const resultError = resultEvt && pick(resultEvt, ['is_error', 'isError']) === true
     ? (pick(resultEvt, ['error', 'message']) ?? 'result.is_error')
     : null;
@@ -162,6 +162,36 @@ export function buildMcpConfig(serverPath, env = {}) {
       },
     },
   };
+}
+
+/**
+ * Cursor CLI permissions config (project-level .cursor/cli.json) that restricts the
+ * agent to ONLY the Suzaku MCP tools — denying the built-in shell/read/write/search
+ * tools so Composer can't bypass MCP by running `suzaku-cli` in a shell or reading
+ * files. This makes the benchmark apples-to-apples with the bot (which has MCP only).
+ * NOTE: Cursor documents permissions as best-effort, not a hard boundary — a smoke run
+ * must confirm the trace shows MCP tool names, not shellToolCall.
+ */
+export function buildCliConfig() {
+  return {
+    permissions: {
+      deny: ['Shell(*)', 'Read(*)', 'Write(*)', 'Search(*)'],
+      allow: ['Mcp(suzaku:*)'],
+    },
+  };
+}
+
+/** Map cursor-agent's camelCase usage (inputTokens…) to the snake_case computeCost expects. */
+export function normalizeUsage(u) {
+  if (!u || typeof u !== 'object') return {};
+  const g = (a, b) => (u[a] ?? u[b]);
+  const out = {};
+  const it = g('input_tokens', 'inputTokens'); if (it != null) out.input_tokens = it;
+  const ot = g('output_tokens', 'outputTokens'); if (ot != null) out.output_tokens = ot;
+  const cr = g('cache_read_input_tokens', 'cacheReadTokens'); if (cr != null) out.cache_read_input_tokens = cr;
+  const cw = g('cache_creation_input_tokens', 'cacheWriteTokens'); if (cw != null) out.cache_creation_input_tokens = cw;
+  const tt = g('total_tokens', 'totalTokens'); if (tt != null) out.total_tokens = tt;
+  return out;
 }
 
 /**

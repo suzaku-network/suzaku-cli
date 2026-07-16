@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCursorStream, buildMcpConfig, isCursorAuthError } from './cursor.mjs';
+import { parseCursorStream, buildMcpConfig, buildCliConfig, normalizeUsage, isCursorAuthError } from './cursor.mjs';
 
 // Synthetic stream-json transcript in the documented shape: system/init, buffered
 // assistant text, an MCP tool_call started→completed pair, and a terminal result.
@@ -108,6 +108,27 @@ describe('buildMcpConfig', () => {
         suzaku: { command: 'node', args: ['/abs/dist/server.js', '--read-only'], env: { PATH: '/usr/bin', SNOWSCAN_API_KEY: 'x' } },
       },
     });
+  });
+});
+
+describe('buildCliConfig', () => {
+  it('denies built-in tools and allows only the suzaku MCP server', () => {
+    const c = buildCliConfig();
+    expect(c.permissions.deny).toEqual(expect.arrayContaining(['Shell(*)', 'Read(*)', 'Write(*)']));
+    expect(c.permissions.allow).toEqual(['Mcp(suzaku:*)']);
+  });
+});
+
+describe('normalizeUsage', () => {
+  it('maps cursor camelCase usage to the snake_case computeCost expects', () => {
+    // exactly the shape observed from a real composer-2.5 run
+    expect(normalizeUsage({ inputTokens: 36345, outputTokens: 1430, cacheReadTokens: 259514, cacheWriteTokens: 0 }))
+      .toEqual({ input_tokens: 36345, output_tokens: 1430, cache_read_input_tokens: 259514, cache_creation_input_tokens: 0 });
+  });
+  it('passes snake_case through and tolerates junk', () => {
+    expect(normalizeUsage({ input_tokens: 5, output_tokens: 2 })).toEqual({ input_tokens: 5, output_tokens: 2 });
+    expect(normalizeUsage(null)).toEqual({});
+    expect(normalizeUsage('x')).toEqual({});
   });
 });
 
