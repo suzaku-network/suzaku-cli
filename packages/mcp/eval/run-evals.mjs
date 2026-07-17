@@ -18,16 +18,23 @@
 //
 // Results: eval/results/<runid>-....{json,md} (gitignored). benchmarks.md is committed.
 
-import { readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
+import {
+  readFileSync, mkdirSync, mkdtempSync, writeFileSync, existsSync, appendFileSync, rmSync,
+} from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { tmpdir } from 'node:os';
+import { delimiter, dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict,
 } from './scoring.mjs';
-import { parseCursorStream, buildMcpConfig, buildCliConfig, isCursorAuthError } from './cursor.mjs';
+import {
+  parseCursorStream, auditCursorBoundary, parseCursorToolList, compareCursorToolList,
+  buildMcpConfig, buildCliConfig, isCursorAuthError,
+} from './cursor.mjs';
 
 const execFileP = promisify(execFile);
 
@@ -62,8 +69,11 @@ const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'mi
 
 // cursor engine — ⚠ confirm the exact model id via `cursor-agent models` at smoke
 const CURSOR_MODEL_DEFAULT = 'composer-2.5';
-const CURSOR_PRICES = { 'composer-2.5-fast': [3, 15] }; // standard composer-2.5 price TBD → cost stays null
-const CURSOR_FLAGS = ['--output-format', 'stream-json', '--approve-mcps', '--force'];
+const CURSOR_RATE_CARDS = {
+  'composer-2.5': { input: 0.5, output: 2.5, calibrated: false },
+  'composer-2.5-fast': { input: 3, output: 15, calibrated: false },
+};
+const CURSOR_FLAGS = ['--output-format', 'stream-json', '--approve-mcps', '--trust'];
 
 // ---------- load question set ----------
 const here = new URL('.', import.meta.url);
@@ -227,13 +237,14 @@ async function fetchGroundTruth(q) {
 // composite tools like deployment_heartbeat log their internal calls instead of
 // the MCP-level tool name, so expected-tool matching would be unfair).
 async function scoreRun(q, run, traceMode) {
+  const scoringTrace = run.scoringTrace ?? run.trace;
   const traceScore = traceMode === 'full'
-    ? scoreTrace(run.trace, {
+    ? scoreTrace(scoringTrace, {
       expectedTools: q.expectedTools ?? [],
       maxToolCalls: q.maxToolCalls ?? null,
       forbiddenTools: q.forbiddenTools ?? [],
     })
-    : { ...scoreTrace(run.trace, { expectedTools: [], maxToolCalls: null, forbiddenTools: q.forbiddenTools ?? [] }), informational: true };
+    : { ...scoreTrace(scoringTrace, { expectedTools: [], maxToolCalls: null, forbiddenTools: q.forbiddenTools ?? [] }), informational: true };
   const format = scoreFormat(run.answer);
   let factsSummary;
   const factDetails = [];
@@ -259,7 +270,9 @@ async function scoreRun(q, run, traceMode) {
     }
     factsSummary = { total, matched };
   }
-  const v = run.runError ? 'FAIL' : verdict({ trace: traceScore, facts: factsSummary, format, safety: q.safety === true });
+  const v = run.runError || run.boundaryViolation
+    ? 'FAIL'
+    : verdict({ trace: traceScore, facts: factsSummary, format, safety: q.safety === true });
   return { verdict: v, traceScore, format, facts: factsSummary, factDetails };
 }
 
@@ -422,72 +435,145 @@ function shellQuote(s) {
 }
 
 // ---------- engine: cursor (Cursor CLI / Composer — self-contained, own MCP) ----------
-// cursor-agent spawns its OWN read-only Suzaku MCP server from a project-level
-// .cursor/mcp.json in a dedicated temp cwd (never touches the user's global ~/.cursor
-// or the deployed bot). Ground truth keeps using gtConn, so nothing is circular.
-function makeCursorEngine(model) {
-  const cursorWork = new URL('./.cursor-work/', here).pathname;
-  const cursorDotDir = `${cursorWork}.cursor`;
-  const serverPath = new URL('../dist/server.js', here).pathname;
+// Every invocation gets a fresh HOME + workspace under the OS temp directory. Both
+// global and workspace config are written because this Cursor build's `mcp` subcommand
+// reads global config while print mode also consults the workspace config.
+function makeCursorSandbox(harness) {
+  const root = mkdtempSync(join(tmpdir(), 'suzaku-cursor-eval-'));
+  const home = join(root, 'home');
+  const workspace = join(root, 'workspace');
+  const homeCursor = join(home, '.cursor');
+  const workspaceCursor = join(workspace, '.cursor');
+  mkdirSync(homeCursor, { recursive: true });
+  mkdirSync(workspaceCursor, { recursive: true });
   const mcpEnv = {
-    PATH: process.env.PATH, HOME: process.env.HOME,
-    SUZAKU_MCP_DEDUP_WINDOW_MS: '30000', SUZAKU_MCP_RATE_MAX_CALLS: '600', SUZAKU_MCP_RATE_WINDOW_MS: '60000',
+    PATH: harness.cleanPath,
+    HOME: home,
+    SUZAKU_MCP_DEDUP_WINDOW_MS: '30000',
+    SUZAKU_MCP_RATE_MAX_CALLS: '600',
+    SUZAKU_MCP_RATE_WINDOW_MS: '60000',
   };
-  if (process.env.SNOWSCAN_API_KEY) mcpEnv.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
-  mkdirSync(cursorDotDir, { recursive: true });
-  writeFileSync(`${cursorDotDir}/mcp.json`, JSON.stringify(buildMcpConfig(serverPath, mcpEnv), null, 2));
-  // MCP-only: deny shell/read/write so Composer can't bypass MCP by running the CLI —
-  // makes the benchmark apples-to-apples with the bot (which has MCP tools only).
-  writeFileSync(`${cursorDotDir}/cli.json`, JSON.stringify(buildCliConfig(), null, 2));
+  for (const key of ['SNOWSCAN_API_KEY', 'SIG_AGG_URL']) {
+    if (process.env[key]) mcpEnv[key] = process.env[key];
+  }
+  const mcpConfig = JSON.stringify(buildMcpConfig(harness.serverPath, mcpEnv, process.execPath), null, 2);
+  const cliConfig = JSON.stringify(buildCliConfig(), null, 2);
+  writeFileSync(join(homeCursor, 'mcp.json'), mcpConfig);
+  writeFileSync(join(workspaceCursor, 'mcp.json'), mcpConfig);
+  writeFileSync(join(homeCursor, 'cli-config.json'), cliConfig);
+  writeFileSync(join(workspaceCursor, 'cli.json'), cliConfig);
+  const env = {
+    PATH: harness.cleanPath,
+    HOME: home,
+    CURSOR_API_KEY: process.env.CURSOR_API_KEY,
+    NO_OPEN_BROWSER: '1',
+  };
+  return { root, home, workspace, env };
+}
 
+async function prepareCursorHarness() {
+  const { stdout: cursorPathOut } = await execFileP('which', ['cursor-agent'], { timeout: 15_000 });
+  const cursorAgentPath = cursorPathOut.trim();
+  if (!cursorAgentPath) throw new Error('cursor-agent was not found on PATH');
+  const cleanPath = [...new Set([dirname(cursorAgentPath), dirname(process.execPath), '/usr/bin', '/bin'])].join(delimiter);
+  const harness = {
+    cursorAgentPath,
+    cleanPath,
+    serverPath: new URL('../dist/server.js', here).pathname,
+  };
+  const sandbox = makeCursorSandbox(harness);
+  try {
+    const { stdout } = await execFileP(cursorAgentPath, [
+      '--workspace', sandbox.workspace, '--trust', 'mcp', 'list-tools', 'suzaku',
+    ], {
+      cwd: sandbox.workspace, env: sandbox.env, timeout: 60_000, maxBuffer: 8 * 1024 * 1024,
+    });
+    const parsed = parseCursorToolList(stdout);
+    const parity = compareCursorToolList(parsed, mcpTools);
+    if (!parity.ok || parsed.server !== 'suzaku') {
+      throw new Error(`Cursor MCP preflight mismatch: ${JSON.stringify({ server: parsed.server, ...parity }).slice(0, 4000)}`);
+    }
+    return { ...harness, preflight: { tools: parsed.tools.length, argsMatched: true } };
+  } finally {
+    rmSync(sandbox.root, { recursive: true, force: true });
+  }
+}
+
+function makeCursorEngine(model, harness) {
   const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
   const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
   const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram. Use ONLY your Suzaku MCP tools to get data (call them directly). Do NOT run shell commands, do NOT read or search files, and do NOT invoke the suzaku CLI directly — the MCP tools are your only data source, exactly as in production.\n\nQuestion: `;
 
   return async function runQuestion(q) {
+    const sandbox = makeCursorSandbox(harness);
     const prompt = preamble + substitute(q.prompt, vars);
     const timeoutMs = q.slow ? 600_000 : 300_000;
     const t0 = performance.now();
     let stdout = '';
     let runError = null;
     let authError = false;
-    // auth/quota is detected from STDERR only — never stdout, which embeds the model's
-    // answer (bare "insufficient"/"quota" in a correct answer must not read as a failure).
     try {
-      const res = await execFileP('cursor-agent', ['-p', prompt, '--model', model, ...CURSOR_FLAGS], {
-        cwd: cursorWork, env: process.env, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
-      });
-      stdout = res.stdout ?? '';
-      if (isCursorAuthError(res.stderr)) { authError = true; runError = `cursor auth error: ${String(res.stderr).slice(0, 200)}`; }
-    } catch (e) {
-      stdout = e.stdout ?? '';
-      const stderr = String(e.stderr ?? e.message ?? '');
-      if (isCursorAuthError(stderr)) { authError = true; runError = `cursor auth error: ${stderr.slice(0, 200)}`; }
-      else runError = e.killed ? `cursor-agent timed out after ${timeoutMs / 1000}s` : `cursor-agent exited: ${stderr.slice(0, 200)}`;
+      try {
+        const res = await execFileP(harness.cursorAgentPath, [
+          '-p', prompt, '--model', model, '--workspace', sandbox.workspace, ...CURSOR_FLAGS,
+        ], {
+          cwd: sandbox.workspace, env: sandbox.env, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
+        });
+        stdout = res.stdout ?? '';
+        if (isCursorAuthError(res.stderr)) {
+          authError = true;
+          runError = `cursor auth error: ${String(res.stderr).slice(0, 200)}`;
+        }
+      } catch (error) {
+        stdout = error.stdout ?? '';
+        const stderr = String(error.stderr ?? error.message ?? '');
+        if (isCursorAuthError(stderr)) {
+          authError = true;
+          runError = `cursor auth error: ${stderr.slice(0, 200)}`;
+        } else {
+          runError = error.killed
+            ? `cursor-agent timed out after ${timeoutMs / 1000}s`
+            : `cursor-agent exited: ${stderr.slice(0, 200)}`;
+        }
+      }
+      const parsed = parseCursorStream(stdout);
+      const boundary = auditCursorBoundary(parsed, toolByName.keys());
+      if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
+      if (!runError && parsed.parseErrors.length > 0) runError = `cursor stream parse error: ${parsed.parseErrors[0]}`;
+      if (!runError && !parsed.terminalSeen) runError = 'cursor-agent stream ended without a terminal result event';
+      if (!runError && parsed.answer.length === 0) {
+        runError = parsed.events === 0
+          ? 'cursor-agent produced no parseable stream-json (check --output-format / flags)'
+          : 'cursor-agent returned no answer text';
+      }
+      const scoringTrace = parsed.trace.filter((call) => call.kind === 'mcpToolCall');
+      const needsToolEvidence = (q.expectedTools ?? []).length > 0;
+      const benchmarkEligible = !boundary.boundaryViolation
+        && parsed.resolvedModel != null
+        && (!needsToolEvidence || boundary.argsVisible === true);
+      return {
+        answer: parsed.answer,
+        runError,
+        authError,
+        stopReason: boundary.boundaryViolation ? 'boundary-violation' : (runError ? 'error' : 'ok'),
+        usage: parsed.usage ?? {},
+        wallMs: parsed.durationMs ?? Math.round(performance.now() - t0),
+        trace: parsed.trace,
+        scoringTrace,
+        cost: null,
+        costStatus: 'unverified',
+        rateCard: CURSOR_RATE_CARDS[model] ?? null,
+        resolvedModel: parsed.resolvedModel,
+        cursorInit: parsed.init,
+        rawSha256: parsed.rawSha256,
+        toolArgsVisible: boundary.argsVisible,
+        benchmarkEligible,
+        boundaryViolation: boundary.boundaryViolation,
+        boundaryViolations: boundary.violations,
+      };
+    } finally {
+      rmSync(sandbox.root, { recursive: true, force: true });
     }
-    const parsed = parseCursorStream(stdout);
-    // MCP-only guard: if Composer ran a shell tool, the permissions restriction didn't
-    // hold and the answer may bypass MCP (not comparable to the bot) — flag it loudly.
-    if (parsed.trace.some((t) => /shell/i.test(t.name))) {
-      console.log(`         ⚠ ${q.id}: Composer used a shell tool — MCP-only permissions did NOT hold; this answer may bypass MCP (not apples-to-apples)`);
-    }
-    if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
-    if (!runError && parsed.answer.length === 0) {
-      runError = parsed.events === 0
-        ? 'cursor-agent produced no parseable stream-json (check --output-format / flags)'
-        : 'cursor-agent returned no answer text';
-    }
-    const price = CURSOR_PRICES[model];
-    const cost = price && parsed.usage?.input_tokens != null ? computeCost(parsed.usage, price) : null;
-    return {
-      answer: parsed.answer,
-      runError, authError,
-      stopReason: runError ? 'error' : 'ok',
-      usage: parsed.usage ?? {},
-      wallMs: parsed.durationMs ?? Math.round(performance.now() - t0),
-      trace: parsed.trace,
-      cost,
-    };
   };
 }
 
@@ -552,16 +638,24 @@ if (TIER === 2) {
       console.error('tier 2 --engine cursor needs CURSOR_API_KEY in the environment');
       process.exit(2);
     }
+    let cursorHarness;
     try {
-      await execFileP('cursor-agent', ['--version'], { timeout: 15_000 });
-    } catch {
-      console.error('tier 2 --engine cursor needs `cursor-agent` on PATH (install: curl https://cursor.com/install -fsS | bash)');
+      cursorHarness = await prepareCursorHarness();
+      const { stdout: version } = await execFileP(cursorHarness.cursorAgentPath, ['--version'], { timeout: 15_000 });
+      cursorHarness.version = version.trim();
+      console.log(`Cursor preflight: ${cursorHarness.preflight.tools} exact Suzaku tools + args (${cursorHarness.version})`);
+    } catch (error) {
+      console.error(`Cursor MCP preflight failed before paid inference: ${error.message}`);
       process.exit(2);
     }
     // default to Composer when no model was explicitly requested
     const cursorModels = (flagValue('--models') || flagValue('--model')) ? MODELS : [CURSOR_MODEL_DEFAULT];
     for (const model of cursorModels) {
-      engines.push({ label: model, engine: 'cursor', model, run: makeCursorEngine(model), traceMode: 'info' });
+      engines.push({
+        label: model, engine: 'cursor', model,
+        run: makeCursorEngine(model, cursorHarness), traceMode: 'full',
+        engineVersion: cursorHarness.version, preflight: cursorHarness.preflight,
+      });
     }
   }
 
@@ -596,10 +690,15 @@ if (TIER === 2) {
       const factStr = q.safety
         ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked} fabricated=${score.facts.falseSuccess}`
         : `facts ${score.facts.matched}/${score.facts.total}`;
-      const costStr = run.cost == null ? `${Math.round(tokCount(run.usage) / 1000)}k tok` : `$${run.cost.toFixed(4)}`;
+      const costStr = run.costStatus === 'unverified'
+        ? `cost=unverified ${Math.round(tokCount(run.usage) / 1000)}k tok`
+        : (run.cost == null ? `${Math.round(tokCount(run.usage) / 1000)}k tok` : `$${run.cost.toFixed(4)}`);
       const errStr = score.traceScore.erroredCalls > 0 ? ` errTools=${score.traceScore.erroredCalls}` : '';
       console.log(`${pad(score.verdict, 8)} ${pad(q.id, 26)} tools ${score.traceScore.groupsSatisfied}/${score.traceScore.groupsTotal}${score.traceScore.informational ? '*' : ''} calls=${score.traceScore.calls}${errStr} ${factStr} fmt=${score.format.ok ? 'ok' : score.format.violations.join('+')} ${(run.wallMs / 1000).toFixed(1)}s ${costStr}`);
       if (run.runError) console.log(`         ↳ error: ${run.runError.slice(0, 300)}`);
+      if (run.boundaryViolation) {
+        console.log(`         ↳ BOUNDARY FAIL: ${run.boundaryViolations.map((v) => `${v.code}:${v.detail}`).join(' | ').slice(0, 500)}`);
+      }
       // a dead key / empty balance fails every remaining question in 0s — abort the
       // model instead of logging 19 billing errors and polluting the benchmark table
       // structured authError (cursor) OR the anthropic billing-error phrasing — NOT bare
@@ -614,7 +713,10 @@ if (TIER === 2) {
         consecutiveApiFailures = 0;
       }
     }
-    allRuns.push({ label: eng.label, engine: eng.engine, model: eng.model, results, aborted });
+    allRuns.push({
+      label: eng.label, engine: eng.engine, model: eng.model, results, aborted,
+      engineVersion: eng.engineVersion ?? null, preflight: eng.preflight ?? null,
+    });
   }
 }
 
@@ -631,7 +733,11 @@ for (const runSet of allRuns) {
   const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
   const suffix = TIER === 1 ? 'tier1' : `tier2-${runSet.label.replace(/[^a-zA-Z0-9.-]+/g, '_')}`;
   const baseName = `${runId}-${suffix}`;
-  writeFileSync(new URL(`./${baseName}.json`, resultsDir), JSON.stringify({ runId, tier: TIER, engine: runSet.engine, model: runSet.model, vars, results }, null, 2));
+  writeFileSync(new URL(`./${baseName}.json`, resultsDir), JSON.stringify({
+    runId, tier: TIER, engine: runSet.engine, model: runSet.model,
+    engineVersion: runSet.engineVersion ?? null, preflight: runSet.preflight ?? null,
+    vars, results,
+  }, null, 2));
 
   const md = [];
   md.push(`# Eval run ${runId} — ${suffix}`);
@@ -643,14 +749,17 @@ for (const runSet of allRuns) {
     md.push('|---|---|---|---|---|---|---|---|');
     for (const r of results) {
       const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
-      const costStr = r.cost == null ? `${Math.round(tokCount(r.usage) / 1000)}k tok` : `$${r.cost.toFixed(4)}`;
+      const costStr = r.costStatus === 'unverified'
+        ? `unverified (${Math.round(tokCount(r.usage) / 1000)}k tok)`
+        : (r.cost == null ? `${Math.round(tokCount(r.usage) / 1000)}k tok` : `$${r.cost.toFixed(4)}`);
       md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
     md.push('');
     for (const r of results) {
       md.push(`## ${r.id} — ${r.verdict}`);
       md.push('');
-      md.push(`Trace: ${(r.trace ?? []).map((t) => `${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls recorded)'}`);
+      md.push(`Trace: ${(r.trace ?? []).map((t) => `${t.kind ?? 'tool'}:${t.server ? `${t.server}:` : ''}${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls recorded)'}`);
+      if (r.boundaryViolation) md.push(`\nBoundary violations: ${r.boundaryViolations.map((v) => `${v.code}:${v.detail}`).join(' | ')}`);
       if (r.runError) md.push(`\nError: ${r.runError}`);
       md.push('');
       md.push('Answer:');
@@ -706,6 +815,15 @@ if (BENCHMARK && TIER === 2) {
       continue;
     }
     const { results } = runSet;
+    const boundaryViolations = results.filter((r) => r.boundaryViolation).length;
+    if (runSet.engine === 'cursor' && results.length > 0 && boundaryViolations === results.length) {
+      console.log(`benchmarks.md ✗ ${runSet.label} skipped (every question violated the MCP boundary; harness wiring invalid)`);
+      continue;
+    }
+    if (runSet.engine === 'cursor' && results.some((r) => r.benchmarkEligible !== true)) {
+      console.log(`benchmarks.md ✗ ${runSet.label} skipped (resolved model/tool arguments were not observable on every applicable run)`);
+      continue;
+    }
     const passed = results.filter((r) => r.verdict === 'PASS').length;
     const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
     const failed = results.filter((r) => r.verdict === 'FAIL').length;
@@ -715,9 +833,12 @@ if (BENCHMARK && TIER === 2) {
     const p95 = walls[Math.min(walls.length - 1, Math.ceil(0.95 * walls.length) - 1)];
     const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
     const costStr = runSet.engine === 'codex' ? 'sub'
-      : (runSet.engine === 'cursor' && totalCost === 0 ? 'cur.api' : `$${totalCost.toFixed(3)}`);
+      : (runSet.engine === 'cursor' ? 'unverified' : `$${totalCost.toFixed(3)}`);
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
-    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${vars.currentEpoch ?? '?'} |`;
+    const cursorNote = runSet.engine === 'cursor'
+      ? `; resolved ${[...new Set(results.map((r) => r.resolvedModel).filter(Boolean))].join('+') || '?'}; boundary violations ${boundaryViolations}; cost unverified`
+      : '';
+    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(median(walls) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${vars.currentEpoch ?? '?'}${cursorNote} |`;
     appendFileSync(benchPath, `${row}\n`);
     console.log(`benchmarks.md ← ${runSet.label}`);
   }
