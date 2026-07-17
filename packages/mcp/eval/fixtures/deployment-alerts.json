@@ -1,0 +1,23 @@
+{
+  "mode": "alerts",
+  "epoch": 48,
+  "rewards": {
+    "claimability": [
+      { "epoch": 46, "funded": true, "distributionComplete": true, "status": "claimable" },
+      { "epoch": 47, "funded": true, "distributionComplete": false, "status": "waiting_uptime" },
+      { "epoch": 48, "funded": false, "distributionComplete": false, "status": "current_epoch" }
+    ]
+  },
+  "validators": { "count": 10 },
+  "checks": [
+    {
+      "name": "stake_cache",
+      "status": "warn",
+      "detail": "cache incomplete, window closes Jul 17 14:00 UTC"
+    }
+  ],
+  "humanLines": [
+    "Suzaku heartbeat — epoch 48 · 1 check(s) need attention",
+    "stake cache not ready — update window closes Jul 17 14:00 UTC"
+  ]
+}

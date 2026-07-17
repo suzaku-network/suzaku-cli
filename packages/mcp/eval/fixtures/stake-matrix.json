@@ -1,0 +1,14 @@
+{
+  "epoch": "48",
+  "operators": [
+    "0x853323787b0F515d2C2b1c64994BA7D312B6e655"
+  ],
+  "collateralClasses": ["1"],
+  "matrix": {
+    "0x853323787b0F515d2C2b1c64994BA7D312B6e655": {
+      "usedStake": "5000000000000000000000000",
+      "lockedStake": "0",
+      "byClass": { "1": "5000000000000000000000000" }
+    }
+  }
+}

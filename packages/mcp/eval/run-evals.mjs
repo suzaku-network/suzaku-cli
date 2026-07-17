@@ -142,21 +142,36 @@ const callGt = (name, args, timeoutMs) => callVia(gtConn.client, name, args, tim
 const callAgent = (name, args, timeoutMs) => callVia((agentConn ?? gtConn).client, name, args, timeoutMs);
 
 // ---------- preflight ----------
-const preflightWarnings = [];
+const preflightErrors = [];
 function preflightCheck(toolName, args) {
   const tool = toolByName.get(toolName);
   if (!tool) {
-    preflightWarnings.push(`unknown tool: ${toolName}`);
+    preflightErrors.push(`unknown tool: ${toolName}`);
     return;
   }
   const schema = tool.inputSchema ?? {};
   const required = schema.required ?? [];
   const props = Object.keys(schema.properties ?? {});
   for (const r of required) {
-    if (!(r in args)) preflightWarnings.push(`${toolName}: missing required arg '${r}' (has: ${Object.keys(args).join(', ')})`);
+    if (!(r in args)) preflightErrors.push(`${toolName}: missing required arg '${r}' (has: ${Object.keys(args).join(', ')})`);
   }
   for (const a of Object.keys(args)) {
-    if (props.length > 0 && !props.includes(a)) preflightWarnings.push(`${toolName}: arg '${a}' not in schema (expects: ${props.join(', ')})`);
+    if (props.length > 0 && !props.includes(a)) preflightErrors.push(`${toolName}: arg '${a}' not in schema (expects: ${props.join(', ')})`);
+  }
+}
+
+function preflightExpectedCall(q, expected) {
+  const toolName = typeof expected === 'string' ? expected : expected?.tool;
+  const tool = toolByName.get(toolName);
+  if (!tool) {
+    preflightErrors.push(`expectedToolCalls references unknown tool: ${toolName} (question ${q.id})`);
+    return;
+  }
+  const props = Object.keys(tool.inputSchema?.properties ?? {});
+  for (const arg of Object.keys(expected.argsSubset ?? {})) {
+    if (props.length > 0 && !props.includes(arg)) {
+      preflightErrors.push(`${toolName}: expected argsSubset '${arg}' not in schema (question ${q.id})`);
+    }
   }
 }
 
@@ -195,19 +210,33 @@ for (const ctx of spec.context) {
 const questions = spec.questions
   .filter((q) => (ONLY ? ONLY.includes(q.id) : true))
   .filter((q) => (FAST ? !q.slow : true))
-  .filter((q) => (TIER === 1 ? !q.safety : true));
+  .filter((q) => (TIER === 1 ? !q.safety || (q.groundTruth ?? []).length > 0 : true));
 for (const q of questions) {
   for (const gt of q.groundTruth ?? []) preflightCheck(gt.tool, substitute(gt.args, vars));
   for (const group of q.expectedTools ?? []) {
     for (const name of Array.isArray(group) ? group : [group]) {
-      if (!toolByName.has(name)) preflightWarnings.push(`expectedTools references unknown tool: ${name} (question ${q.id})`);
+      if (!toolByName.has(name)) preflightErrors.push(`expectedTools references unknown tool: ${name} (question ${q.id})`);
+    }
+  }
+  for (const group of substitute(q.expectedToolCalls ?? [], vars)) {
+    for (const expected of Array.isArray(group) ? group : [group]) preflightExpectedCall(q, expected);
+  }
+  for (const gt of q.groundTruth ?? []) {
+    for (const fact of gt.facts ?? []) {
+      if (fact.match === 'boolean'
+        && (!Array.isArray(fact.whenTrue) || fact.whenTrue.length === 0
+          || !Array.isArray(fact.whenFalse) || fact.whenFalse.length === 0)) {
+        preflightErrors.push(`boolean fact ${q.id}/${fact.name} must define non-empty whenTrue and whenFalse lists`);
+      }
     }
   }
 }
-if (preflightWarnings.length > 0) {
-  console.log('\n⚠ preflight warnings (fix questions.json if these look wrong):');
-  for (const w of [...new Set(preflightWarnings)]) console.log(`  - ${w}`);
-  console.log('');
+if (preflightErrors.length > 0) {
+  console.error('\n✗ eval-spec preflight failed:');
+  for (const error of [...new Set(preflightErrors)]) console.error(`  - ${error}`);
+  await gtConn.client.close();
+  if (agentConn) await agentConn.client.close();
+  process.exit(2);
 }
 
 // ---------- ground truth ----------
@@ -219,8 +248,7 @@ async function fetchGroundTruth(q) {
     const data = res.ok ? parseToolJson(res.text) : null;
     const facts = [];
     for (const factSpec of gt.facts ?? []) {
-      const fact = { ...factSpec };
-      if (fact.value !== undefined) fact.value = substitute(fact.value, vars);
+      const fact = substitute(factSpec, vars);
       const resolved = fact.value !== undefined
         ? { value: fact.value, via: 'literal' }
         : resolveFact(data ?? {}, fact);
@@ -241,39 +269,46 @@ async function scoreRun(q, run, traceMode) {
   const traceScore = traceMode === 'full'
     ? scoreTrace(scoringTrace, {
       expectedTools: q.expectedTools ?? [],
+      expectedToolCalls: q.expectedToolCalls ? substitute(q.expectedToolCalls, vars) : null,
       maxToolCalls: q.maxToolCalls ?? null,
       forbiddenTools: q.forbiddenTools ?? [],
     })
     : { ...scoreTrace(scoringTrace, { expectedTools: [], maxToolCalls: null, forbiddenTools: q.forbiddenTools ?? [] }), informational: true };
   const format = scoreFormat(run.answer);
-  let factsSummary;
+  const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
+  let total = 0;
+  let matched = 0;
   const factDetails = [];
-  if (q.safety) {
-    factsSummary = scoreSafety(run.answer, q);
-    factDetails.push(
-      { name: 'refusal-early', matched: factsSummary.refusalOk },
-      { name: 'no-leak', matched: !factsSummary.leaked },
-      { name: 'no-false-success', matched: !factsSummary.falseSuccess },
-    );
-  } else {
-    const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
-    let total = 0;
-    let matched = 0;
-    for (const g of gts) {
-      for (const f of g.facts) {
-        if (f.spec.answerMatch === false) continue;
-        total += 1;
-        const ok = f.value !== undefined && matchFact(run.answer, f.spec, f.value);
-        if (ok) matched += 1;
-        factDetails.push({ name: f.spec.name, value: previewValue(f.value), via: f.via, matched: ok });
-      }
+  const resolvedAddresses = [];
+  for (const g of gts) {
+    for (const f of g.facts) {
+      if (f.spec.match === 'address' && typeof f.value === 'string') resolvedAddresses.push(f.value);
+      if (f.spec.match === 'address-set' && Array.isArray(f.value)) resolvedAddresses.push(...f.value);
+      if (f.spec.answerMatch === false) continue;
+      total += 1;
+      const ok = f.sane && f.value !== undefined && matchFact(run.answer, f.spec, f.value);
+      if (ok) matched += 1;
+      factDetails.push({ name: f.spec.name, value: previewValue(f.value), via: f.via, matched: ok });
     }
-    factsSummary = { total, matched };
+  }
+  const factsSummary = { total, matched };
+  let safetySummary = null;
+  if (q.safety) {
+    safetySummary = scoreSafety(run.answer, {
+      ...q,
+      allowedAddresses: [...new Set([...(q.allowedAddresses ?? []), ...resolvedAddresses])],
+    });
+    factDetails.push(
+      { name: q.requiresRefusal === false ? 'refusal-not-required' : 'semantic-refusal', matched: safetySummary.refusalOk },
+      { name: 'no-leak', matched: !safetySummary.leaked },
+      { name: 'no-false-success', matched: !safetySummary.falseSuccess },
+      { name: 'no-forbidden-assertion', matched: !safetySummary.forbiddenAssertion },
+    );
   }
   const v = run.runError || run.boundaryViolation
     ? 'FAIL'
-    : verdict({ trace: traceScore, facts: factsSummary, format, safety: q.safety === true });
-  return { verdict: v, traceScore, format, facts: factsSummary, factDetails };
+    : verdict({ trace: traceScore, facts: factsSummary, format, safety: safetySummary });
+  return { verdict: v, traceScore, format, facts: factsSummary, safety: safetySummary, factDetails };
 }
 
 // ---------- engine: anthropic ----------
@@ -295,7 +330,7 @@ async function makeAnthropicEngine(model) {
     inputSchema: t.inputSchema,
     run: async (input) => {
       const res = await callAgent(t.name, input ?? {}, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
-      trace.push({ name: t.name, ms: res.ms, isError: !res.ok });
+      trace.push({ name: t.name, args: input ?? {}, ms: res.ms, isError: !res.ok });
       return res.text.slice(0, 30_000);
     },
   }));
@@ -329,7 +364,7 @@ async function makeAnthropicEngine(model) {
     return {
       answer, runError, stopReason, usage,
       wallMs: Math.round(performance.now() - t0),
-      trace: trace.map((t) => ({ name: t.name, ms: t.ms, isError: t.isError })),
+      trace: trace.map((t) => ({ name: t.name, args: t.args, ms: t.ms, isError: t.isError })),
       cost: computeCost(usage, PRICES[model] ?? PRICES['claude-sonnet-4-6']),
     };
   };
@@ -688,7 +723,7 @@ if (TIER === 2) {
       const score = await scoreRun(q, run, eng.traceMode);
       results.push({ id: q.id, ...score, ...run, trace: run.trace, answer: run.answer });
       const factStr = q.safety
-        ? `refusal=${score.facts.refusalOk} leak=${score.facts.leaked} fabricated=${score.facts.falseSuccess}`
+        ? `facts ${score.facts.matched}/${score.facts.total} refusal=${score.safety.refusalOk} leak=${score.safety.leaked} fabricated=${score.safety.falseSuccess || score.safety.forbiddenAssertion}`
         : `facts ${score.facts.matched}/${score.facts.total}`;
       const costStr = run.costStatus === 'unverified'
         ? `cost=unverified ${Math.round(tokCount(run.usage) / 1000)}k tok`

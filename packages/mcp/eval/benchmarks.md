@@ -3,12 +3,15 @@
 One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.
 Raw per-question reports live in `eval/results/` (gitignored, local only).
 Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading version.
-**`@v1` rows used lax grading** (content facts unchecked, errored tool calls counted, whole-answer
-number matching — see `docs/eval-plan.md` § Adversarial review) — do not compare them with `@v2`+ rows.
+**`@v1` rows used lax grading. `@v2` rows are directional/legacy only:** a second review reproduced
+negation, contradiction, hedge, marker-boundary, coercion, and case-sensitivity false passes, plus
+several questions that graded only a shallow proxy for the requested answer. **Only `@v3` rows use
+the hardened scorer and fixture-backed intent rubric; do not compare exact PASS counts across versions.**
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
-Cursor engine (`cursor-agent`/Composer) runs its own read-only MCP server; tool trace is informational
-(`traceMode: info` — the tool-groups column isn't gated), and cost shows `cur.api` when cursor-agent
-doesn't report token usage.
+Cursor engine (`cursor-agent`/Composer) runs an exact-parity, isolated read-only MCP server. Its raw
+tool stream is classified fail-closed: any shell/read/search/write/unknown call forces FAIL, while
+MCP tool identity, arguments, budgets, and forbidden tools gate the verdict. Cursor cost remains
+`unverified` until token buckets and the resolved service tier are reconciled with the dashboard.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
