@@ -5,7 +5,7 @@ import {
 } from './cursor.mjs';
 
 const STREAM = [
-  { type: 'system', subtype: 'init', model: 'composer-2.5', agent_version: '2026.07.09' },
+  { type: 'system', subtype: 'init', model: 'composer-2.5', service_tier: 'standard', agent_version: '2026.07.09' },
   {
     type: 'tool_call', subtype: 'started', tool_call_id: 'c1', timestamp_ms: 1000,
     tool_call: {
@@ -36,6 +36,7 @@ describe('parseCursorStream', () => {
     expect(r.durationMs).toBe(4200);
     expect(r.usage).toEqual({ input_tokens: 1200, output_tokens: 90 });
     expect(r.resolvedModel).toBe('composer-2.5');
+    expect(r.resolvedServiceTier).toBe('standard');
     expect(r.init.version).toBe('2026.07.09');
     expect(r.terminalSeen).toBe(true);
     expect(r.parseErrors).toEqual([]);

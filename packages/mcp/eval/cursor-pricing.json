@@ -1,0 +1,19 @@
+{
+  "$comment": "Cursor costs remain unverified until a resolved model + service tier is visible and either two token-diverse, matching-variant dashboard samples or dashboard category rates reproduce this card within 5%. Cache input is billed at the full input rate because no Composer cache discount is published.",
+  "models": {
+    "composer-2.5": {
+      "resolvedModel": "composer-2.5",
+      "serviceTier": "standard",
+      "rateCard": { "inputPerMTok": 0.5, "outputPerMTok": 2.5, "cacheInputMultiplier": 1 },
+      "dashboardCategoryRates": null,
+      "samples": []
+    },
+    "composer-2.5-fast": {
+      "resolvedModel": "composer-2.5",
+      "serviceTier": "fast",
+      "rateCard": { "inputPerMTok": 3, "outputPerMTok": 15, "cacheInputMultiplier": 1 },
+      "dashboardCategoryRates": null,
+      "samples": []
+    }
+  }
+}

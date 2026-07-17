@@ -137,7 +137,7 @@ export function parseCursorStream(stdout) {
   const empty = {
     answer: '', trace: [], toolEvents: [], durationMs: null, usage: {},
     resultError: null, events: 0, parseErrors: [], streamIssues: [],
-    terminalSeen: false, init: {}, resolvedModel: null, rawSha256,
+    terminalSeen: false, init: {}, resolvedModel: null, resolvedServiceTier: null, rawSha256,
   };
   if (raw.trim().length === 0) return empty;
 
@@ -240,8 +240,12 @@ export function parseCursorStream(stdout) {
   const resolvedModel = pick(initEvt, ['model', 'resolved_model', 'resolvedModel'])
     ?? pick(resultEvt ?? {}, ['model', 'resolved_model', 'resolvedModel'])
     ?? null;
+  const resolvedServiceTier = pick(initEvt, ['service_tier', 'serviceTier', 'tier', 'mode'])
+    ?? pick(resultEvt ?? {}, ['service_tier', 'serviceTier', 'tier', 'mode'])
+    ?? null;
   const init = {
     model: resolvedModel,
+    serviceTier: resolvedServiceTier,
     version: pick(initEvt, ['version', 'agent_version', 'agentVersion']) ?? null,
     sessionId: pick(initEvt, ['session_id', 'sessionId', 'chat_id', 'chatId']) ?? null,
   };
@@ -249,7 +253,7 @@ export function parseCursorStream(stdout) {
   return {
     answer, trace, toolEvents, durationMs, usage, resultError,
     events: events.length, parseErrors, streamIssues,
-    terminalSeen: Boolean(resultEvt), init, resolvedModel, rawSha256,
+    terminalSeen: Boolean(resultEvt), init, resolvedModel, resolvedServiceTier, rawSha256,
   };
 }
 

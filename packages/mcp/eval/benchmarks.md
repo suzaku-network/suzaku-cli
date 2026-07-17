@@ -1,6 +1,6 @@
 # Monitor-bot eval benchmarks
 
-One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.
+One row per valid model repetition, appended by `pnpm eval -- --tier 2 --benchmark …`.
 Raw per-question reports live in `eval/results/` (gitignored, local only).
 Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading version.
 **`@v1` rows used lax grading. `@v2` rows are directional/legacy only:** a second review reproduced
@@ -10,8 +10,9 @@ the hardened scorer and fixture-backed intent rubric; do not compare exact PASS 
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
 Cursor engine (`cursor-agent`/Composer) runs an exact-parity, isolated read-only MCP server. Its raw
 tool stream is classified fail-closed: any shell/read/search/write/unknown call forces FAIL, while
-MCP tool identity, arguments, budgets, and forbidden tools gate the verdict. Cursor cost remains
-`unverified` until token buckets and the resolved service tier are reconciled with the dashboard.
+MCP tool identity, arguments, budgets, forbidden tools, and the requested model/service-tier variant
+gate row eligibility. Cursor cost remains `unverified` until matching-variant token buckets are
+reconciled with the dashboard under the committed calibration rule.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|

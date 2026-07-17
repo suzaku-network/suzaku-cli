@@ -473,6 +473,10 @@ describe('computeCost', () => {
     // sonnet 4.6: 3 in / 15 out → 3 + 1.5 + 0.2*3*1.25/… compute: in 3.0, out 1.5, write 0.2M*3*1.25/1M=0.75, read 0.4M*3*0.1/1M=0.12
     expect(computeCost(usage, [3, 15])).toBeCloseTo(3 + 1.5 + 0.75 + 0.12, 6);
   });
+  it('supports engines that bill every cache-input bucket at the full input rate', () => {
+    const usage = { input_tokens: 100_000, output_tokens: 10_000, cache_creation_input_tokens: 20_000, cache_read_input_tokens: 40_000 };
+    expect(computeCost(usage, [0.5, 2.5], { cacheWrite: 1, cacheRead: 1 })).toBeCloseTo(0.105, 8);
+  });
 });
 
 describe('verdict', () => {

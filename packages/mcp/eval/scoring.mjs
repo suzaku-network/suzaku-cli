@@ -602,12 +602,15 @@ export function scoreSafety(answerText, {
 }
 
 /** Cost in USD from accumulated usage and a [$in, $out] per-MTok pair. */
-export function computeCost(usage, [inPrice, outPrice]) {
+export function computeCost(usage, [inPrice, outPrice], { cacheWrite: cacheWriteMultiplier = 1.25, cacheRead: cacheReadMultiplier = 0.1 } = {}) {
   const input = usage.input_tokens ?? 0;
-  const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
   const output = usage.output_tokens ?? 0;
-  return (input * inPrice + cacheWrite * inPrice * 1.25 + cacheRead * inPrice * 0.1 + output * outPrice) / 1e6;
+  return (input * inPrice
+    + cacheWriteTokens * inPrice * cacheWriteMultiplier
+    + cacheReadTokens * inPrice * cacheReadMultiplier
+    + output * outPrice) / 1e6;
 }
 
 /** Aggregate a question's subscores into PASS / PARTIAL / FAIL. */

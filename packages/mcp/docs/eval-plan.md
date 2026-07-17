@@ -12,10 +12,11 @@ The monitor bot answers operator questions on mainnet with zero measurement of a
 |---|---|---|
 | `eval/questions.json` | 22 canned operator and safety questions, each with expected tool calls and **live-fetched ground truth**; committed trimmed fixtures lock the expected payload shapes without freezing live values | — |
 | `eval/run-evals.mjs --tier 1` | Deterministic: runs each question's ground-truth tools directly against Dexalot mainnet, asserts sane values, records per-tool latency | built repo, RPC access |
-| `eval/run-evals.mjs --tier 2` | LLM-in-loop: an Anthropic tool-runner agent gets the bot's real system prompt (`SOUL.md` + `EPOCHS.md`) and the same `--read-only` MCP server, answers each question; scored on tool trace, facts vs ground truth, Telegram format rules, wall time, and $ cost. `--models a,b,c` compares several models in one run | `ANTHROPIC_API_KEY` |
+| `eval/run-evals.mjs --tier 2` | LLM-in-loop runner for Anthropic, Cursor, and the live Codex path. `--repeat N` runs repeat → question → engine/model (interleaved against live-state drift); `--canary` gates wiring before the suite; `--engines` plus engine-specific model lists compares providers in one batch | provider keys for selected engines |
 | `eval/run-evals.mjs --tier 2 --engine codex` | Same questions through the **live bot's primary engine** (gpt-5.5 via the Codex subscription): each question becomes a one-shot OpenClaw cron job (`--no-deliver`, self-deleting) that writes its answer to a workspace file — **nothing appears in any chat**. Answer, duration, and token usage come from the run record; the tool trace is recovered from the audit log (informational only — composites log their internal CLI calls). Latency includes session bootstrap; no $ cost exists (flat plan). Keep runs occasional — a personal subscription is not a CI backend | live compose stack |
-| `eval/run-evals.mjs --tier 2 --engine cursor` | Same questions through **Cursor's CLI (`cursor-agent`)** to benchmark Composer. Every question gets a fresh HOME/workspace outside the repo and a minimal environment. Before inference, `cursor-agent mcp list-tools` must exactly match the harness's 69 read-only tool names and argument schemas. The raw stream is classified fail-closed: only known `mcpToolCall`s (plus internal MCP listing) are allowed; shell/read/grep/glob/write/unknown/malformed or unfinished calls force FAIL. Tool names, arguments, budgets, and forbidden tools gate the verdict. The first pre-hardening smoke used a shell bypass, so no Cursor quality/cost claim is valid until the new canary is clean. Cost is deliberately `unverified` until the resolved tier and dashboard bill reconcile. | `cursor-agent` on PATH + `CURSOR_API_KEY` |
-| `eval/benchmarks.md` | **Committed** benchmark table — one dated row per model/engine per run, appended with `--benchmark`. This is how results live in the repo while staying re-runnable: raw runs stay local, the table accumulates history so drift is visible | — |
+| `eval/run-evals.mjs --tier 2 --engine cursor` | Same questions through **Cursor's CLI (`cursor-agent`)** to benchmark Composer. Every question gets a fresh HOME/workspace outside the repo and a minimal environment. Before inference, `cursor-agent mcp list-tools` must exactly match the harness's 69 read-only tool names and argument schemas. The raw stream is classified fail-closed: only known `mcpToolCall`s (plus internal MCP listing) are allowed; shell/read/grep/glob/write/unknown/malformed or unfinished calls force FAIL. Tool names, arguments, budgets, and forbidden tools gate the verdict, and the observed model/service tier must match the requested variant. The first pre-hardening smoke used a shell bypass, so no Cursor quality/cost claim is valid until the new canary is clean. Cost is deliberately `unverified` until matching-variant dashboard evidence calibrates it. | `cursor-agent` on PATH + `CURSOR_API_KEY` |
+| `eval/benchmarks.md` | **Committed** benchmark table — one dated row per valid model/engine repetition, appended with `--benchmark`. This is how results live in the repo while staying re-runnable: raw runs stay local, the table accumulates history so drift is visible | — |
+| `eval/manifests/` | One compact manifest per tier-2 batch, including failed setup/canaries: revision + input/binary/schema hashes, repeats, epoch, resolved variants, verdicts/facts, raw token buckets, pricing status, boundary violations, and hashes of local reports | — |
 | `eval/scoring.mjs` + `scoring.test.mjs` | Pure scoring functions, unit-tested — CI stays green with no key and no network | — |
 | `scripts/audit-summary.mjs` | Analyzes the live bot's audit JSONL: per-tool calls, success %, p50/p95/max latency, calls/day. `--gateway-logs` mode greps OpenClaw logs for model-fallback markers | the live container |
 
@@ -33,9 +34,14 @@ export ANTHROPIC_API_KEY=sk-ant-…  # never commit; use the bot's dedicated key
 pnpm eval -- --tier 2 --fast      # ~3–5 min, ≈$0.20–0.50
 pnpm eval -- --tier 2             # ~10–15 min, ≈$1–2 — full suite
 pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-haiku-4-5 --benchmark
-                                  # 3-model comparison, ~15 min, ≈$1; appends benchmarks.md
+                                  # backwards-compatible Anthropic-only comparison
+export CURSOR_API_KEY=…
+pnpm eval -- --tier 2 --fast --engines anthropic,cursor \
+  --anthropic-models claude-sonnet-5,claude-sonnet-4-6,claude-haiku-4-5 \
+  --cursor-models composer-2.5 --repeat 3 --canary --benchmark
+                                  # defensible interleaved comparison + manifest
 pnpm eval -- --tier 2 --engine codex --fast --benchmark   # the live gpt-5.5 engine, no chat contact
-pnpm eval -- --tier 2 --only operators,safety-injection   # targeted
+pnpm eval -- --tier 2 --only operators,safety-persona-swap   # targeted
 # exploratory only: --no-build skips the pre-eval build; it is rejected with --benchmark
 
 # transport/integration smoke
@@ -49,7 +55,16 @@ docker compose -f packages/mcp/deploy/openclaw/docker-compose.yml logs suzaku-bo
   | node packages/mcp/scripts/audit-summary.mjs --gateway-logs
 ```
 
-Reports land in `eval/results/<runid>-tier<N>[-model].{json,md}` (gitignored). Exit code is non-zero when any question FAILs, so both tiers can run on a cron.
+Raw reports land in `eval/results/<runid>-tier<N>[-model][-rN].{json,md}` (gitignored). Tier-2
+also writes `eval/manifests/<runid>.json`. Exit code is non-zero on a question FAIL, invalid/incomplete
+repeat, setup/canary failure, boundary violation, or benchmark epoch drift.
+
+`--fast` is the 20-question subset (it skips the two event-scan questions), not the full suite.
+For `--benchmark`, tracked files must be clean; the initial epoch is frozen and any drift invalidates
+the affected repeat and aborts the batch. Exploratory runs warn and tag drift instead. Canary answers
+do not affect quality scores—their run errors, boundary violations, model/tier mismatch, or invisible
+Cursor arguments only decide whether that target is wired well enough to continue. A failed post-repeat
+epoch check is also invalid in benchmark mode; it cannot be treated as proof that the epoch stayed fixed.
 
 ## Scoring semantics (tier 2, suite v3)
 
@@ -61,9 +76,10 @@ Reports land in `eval/results/<runid>-tier<N>[-model].{json,md}` (gitignored). E
 
 ## What the numbers mean / caveats
 
-- **Tier 2 measures the Anthropic path** (`claude-sonnet-4-6`, the deployed fallback) — the production primary is `openai/gpt-5.5` via the Codex subscription harness, which cannot be driven headless. Treat tier-2 results as "what the bot does when it falls back", and as the A/B rig for choosing Anthropic models.
+- Anthropic measures the deployed fallback prompt/tool surface; Codex uses the production subscription bot path; Cursor uses an isolated, exact-parity read-only MCP surface. They share questions and facts, but the Codex trace remains informational and its latency includes OpenClaw bootstrap.
 - Thinking is left at the model default (off for sonnet-4-6 when the param is omitted); OpenClaw's own runtime settings may differ — comparable across runs, not a byte-exact replica of production.
 - The system prompt gets a `cache_control` breakpoint, so sequential questions read the tools+system prefix from cache (~90% cheaper after Q1 within the 5-minute TTL). Costs in the report use list prices: sonnet-4-6 $3/$15, haiku-4-5 $1/$5 per MTok (cache write 1.25×, cache read 0.1× input).
+- Cursor cost remains `unverified` until the stream exposes the configured model **and service tier** and `cursor-pricing.json` has either two token-diverse dashboard samples for that same resolved variant or dashboard-confirmed category rates within 5% of the card. Cache-read/write buckets are priced at full input rate; no unpublished discount is assumed.
 - Ground-truth paths are fixture-backed. A `via: "deep-global"` resolution is considered a rubric defect to tighten before benchmarking; tier-1 reports the resolution route.
 - The eval spawns its **own** MCP server (rate limit raised to 600/min so the limiter never skews latency; tier 1 disables the read-dedup cache to measure true latency, tier 2 keeps the deployed 30 s window).
 
@@ -145,11 +161,10 @@ and treats Cursor's raw tool stream as a fail-closed MCP boundary. A v3 benchmar
 until tier-1 resolves every fact and Cursor's isolated canary makes only known MCP calls.
 
 Backlog from the review (not yet done): LLM-judge for disclaimer/negative-space answers (see above);
-`--repeat N` for variance;
 Telegram-HTML validation (allow-list + well-formedness); drop the bare-wei number-scaling heuristic
 in favor of human-unit ground-truth paths; a fault-injection question forcing `health_check`
 escalation; multi-turn support;
-read-path gaps (slashing events, uptime in `rewards_epoch_diagnosis`); commit a results manifest.
+read-path gaps (slashing events, uptime in `rewards_epoch_diagnosis`).
 
 ## Future work (deliberately parked)
 
