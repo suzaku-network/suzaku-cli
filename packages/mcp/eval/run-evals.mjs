@@ -52,9 +52,27 @@ const MODELS = flagValue('--models')
   ? flagValue('--models').split(',').map((s) => s.trim())
   : [flagValue('--model', 'claude-sonnet-4-6')];
 const BENCHMARK = argv.includes('--benchmark');
+const NO_BUILD = argv.includes('--no-build');
 if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|cursor] [--models a,b] [--only ids] [--fast] [--benchmark]');
+  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|cursor] [--models a,b] [--only ids] [--fast] [--benchmark] [--no-build]');
   process.exit(2);
+}
+if (NO_BUILD && BENCHMARK) {
+  console.error('--no-build is not allowed with --benchmark; benchmark runs must rebuild both the root CLI and MCP server');
+  process.exit(2);
+}
+
+const rootDir = new URL('../../../', import.meta.url).pathname;
+const mcpDir = new URL('../', import.meta.url).pathname;
+if (!NO_BUILD) {
+  console.log('Building root CLI + MCP server before eval…');
+  try {
+    await execFileP('pnpm', ['build'], { cwd: rootDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+    await execFileP('pnpm', ['build'], { cwd: mcpDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+  } catch (error) {
+    console.error(`pre-eval build failed: ${String(error.stderr ?? error.message).slice(0, 2000)}`);
+    process.exit(2);
+  }
 }
 
 // $ per MTok [input, output]; cache write = 1.25x input, cache read = 0.1x input

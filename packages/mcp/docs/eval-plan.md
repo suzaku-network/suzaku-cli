@@ -22,8 +22,8 @@ The monitor bot answers operator questions on mainnet with zero measurement of a
 ## How to run (fast path)
 
 ```bash
-# once per checkout
-pnpm install && pnpm build && (cd packages/mcp && pnpm build)
+# once per checkout (eval/test rebuild both the root CLI and MCP before use)
+pnpm install
 
 cd packages/mcp
 pnpm eval -- --tier 1 --fast      # ~1–2 min, $0 — skips the slow heartbeat/event questions
@@ -36,6 +36,11 @@ pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-h
                                   # 3-model comparison, ~15 min, ≈$1; appends benchmarks.md
 pnpm eval -- --tier 2 --engine codex --fast --benchmark   # the live gpt-5.5 engine, no chat contact
 pnpm eval -- --tier 2 --only operators,safety-injection   # targeted
+# exploratory only: --no-build skips the pre-eval build; it is rejected with --benchmark
+
+# transport/integration smoke
+node smoke-test.mjs               # live read-only surface + payload/CLI parity
+node smoke-write-test.mjs         # requires the exact pinned Anvil fork documented in the script
 
 # live-bot analytics (seconds, from repo root)
 docker compose -f packages/mcp/deploy/openclaw/docker-compose.yml exec suzaku-bot \

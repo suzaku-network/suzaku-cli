@@ -14,50 +14,15 @@ import { registerLstWrapperTools } from './tools/lst-wrapper.js';
 import { registerVaultHelperTools } from './tools/vault-helper.js';
 import { registerUptimeTools } from './tools/uptime.js';
 import { registerHeartbeatTools } from './tools/heartbeat.js';
+import {
+  EXPECTED_PROFILE_TOOL_NAMES,
+  FULL_WRITE_TOOL_NAMES,
+  PROPOSE_TOOL_NAMES,
+  PUBLIC_WRITE_TOOL_NAMES,
+} from './test-support/tool-surfaces.js';
 
-/** Tool names known to be write operations (destructiveHint: true). */
-const WRITE_TOOLS = [
-  // middleware
-  'middleware_register_operator', 'middleware_add_node', 'middleware_init_stake_update', 'middleware_weight_sync',
-  // vault
-  'vault_deposit', 'vault_withdraw', 'vault_claim',
-  // operator
-  'operator_registry_register',
-  // l1-registry
-  'l1_registry_register',
-  // opt-in (all write)
-  'opt_in_l1', 'opt_out_l1', 'opt_in_vault', 'opt_out_vault',
-  // rewards
-  'rewards_distribute', 'rewards_claim',
-  // kite-staking (all write)
-  'kite_update_staking_config', 'kite_initiate_validator_registration', 'kite_complete_validator_registration',
-  'kite_initiate_validator_removal', 'kite_complete_validator_removal',
-  'kite_initiate_delegator_registration', 'kite_complete_delegator_registration',
-  'kite_initiate_delegator_removal', 'kite_complete_delegator_removal',
-  // staking-vault (write subset)
-  'staking_vault_deposit', 'staking_vault_request_withdrawal', 'staking_vault_claim_withdrawal',
-  'staking_vault_process_epoch', 'staking_vault_add_operator', 'staking_vault_update_operator_allocations',
-  'staking_vault_initiate_validator_registration', 'staking_vault_complete_validator_registration',
-  'staking_vault_initiate_validator_removal', 'staking_vault_complete_validator_removal',
-  'staking_vault_initiate_delegator_registration', 'staking_vault_complete_delegator_registration',
-  'staking_vault_initiate_delegator_removal', 'staking_vault_complete_delegator_removal',
-  // balancer
-  'balancer_set_up_security_module', 'balancer_resend_validator_registration',
-  'balancer_resend_weight_update', 'balancer_resend_validator_removal', 'balancer_transfer_l1_ownership',
-  // poa-security-module (all write)
-  'poa_add_node', 'poa_complete_validator_registration', 'poa_remove_node',
-  'poa_complete_validator_removal', 'poa_init_weight_update', 'poa_complete_weight_update',
-  // rewards (new write tools)
-  'rewards_set_amount', 'rewards_claim_undistributed',
-  // rewards (Safe propose tools — off-chain proposal, humans sign in the Safe UI)
-  'rewards_set_amount_propose', 'rewards_distribute_propose',
-  // lst-wrapper (write subset)
-  'lst_wrapper_deposit', 'lst_wrapper_redeem', 'lst_wrapper_harvest',
-  // uptime (write subset)
-  'uptime_report_validator', 'uptime_compute_operator_uptime',
-];
-
-const PUBLIC_WRITE_TOOLS = ['middleware_cache_stakes'];
+const WRITE_TOOLS: readonly string[] = FULL_WRITE_TOOL_NAMES;
+const PUBLIC_WRITE_TOOLS: readonly string[] = PUBLIC_WRITE_TOOL_NAMES;
 const ALL_WRITE_TOOLS = [...WRITE_TOOLS, ...PUBLIC_WRITE_TOOLS];
 
 function getToolNames(server: McpServer): string[] {
@@ -104,8 +69,8 @@ describe('--read-only mode', () => {
     for (const tool of tools) {
       expect(ALL_WRITE_TOOLS).not.toContain(tool);
     }
-    // Should have a meaningful number of read tools (64 read tools expected across all tool files)
-    expect(tools.length).toBeGreaterThanOrEqual(60);
+    // health_check is registered directly in server.ts, outside registerAllTools.
+    expect([...tools, 'health_check'].sort()).toEqual(EXPECTED_PROFILE_TOOL_NAMES.readOnly);
   });
 
   it('registers no tool with destructiveHint when readOnly is true (catches unguarded future write tools)', () => {
@@ -129,13 +94,12 @@ describe('--read-only mode', () => {
     for (const writeTool of WRITE_TOOLS) {
       expect(tools).toContain(writeTool);
     }
-    // Total should be read + write
-    expect(tools.length).toBeGreaterThan(WRITE_TOOLS.length);
+    expect([...tools, 'health_check'].sort()).toEqual(EXPECTED_PROFILE_TOOL_NAMES.full);
   });
 });
 
 describe('--propose-only mode', () => {
-  const PROPOSE_TOOLS = ['rewards_set_amount_propose', 'rewards_distribute_propose'];
+  const PROPOSE_TOOLS: readonly string[] = PROPOSE_TOOL_NAMES;
 
   it('registers exactly the two propose tools out of the write surface', () => {
     const server = new McpServer({ name: 'test', version: '0.1.0' });
@@ -169,7 +133,7 @@ describe('--propose-only mode', () => {
     for (const tool of readTools) {
       expect(proposeTools).toContain(tool);
     }
-    expect(proposeTools.length).toBe(readTools.length + PROPOSE_TOOLS.length);
+    expect([...proposeTools, 'health_check'].sort()).toEqual(EXPECTED_PROFILE_TOOL_NAMES.proposeOnly);
   });
 });
 
@@ -206,6 +170,6 @@ describe('--public-write mode', () => {
     for (const tool of readTools) {
       expect(publicWriteTools).toContain(tool);
     }
-    expect(publicWriteTools.length).toBe(readTools.length + PUBLIC_WRITE_TOOLS.length);
+    expect([...publicWriteTools, 'health_check'].sort()).toEqual(EXPECTED_PROFILE_TOOL_NAMES.publicWrite);
   });
 });
