@@ -88,16 +88,15 @@ function canonicalToolEvent(event, index) {
   let kind = null;
   let inner = null;
   let malformed = false;
-  let protobufWrapper = false;
   if (tc && typeof tc === 'object' && !Array.isArray(tc)) {
-    // Cursor CLI 2026.07 serializes its protobuf ToolCall directly. The oneof lives
-    // under `tool`, while sibling keys contain IDs/timestamps/context metadata:
-    //   { tool: { case: 'mcpToolCall', value: {...} }, toolCallId, startedAtMs, ... }
-    // Older fixtures/builds used the shorthand `{ mcpToolCall: {...} }`; retain it
-    // as a compatibility path, but keep every ambiguous/invalid shape fail-closed.
+    // Cursor CLI 2026.07 flattens the protobuf oneof to a `*ToolCall` key and keeps
+    // IDs/timestamps/hook context as siblings. Field additions are allowed by the
+    // stream contract, so classify by exactly one tool-variant key rather than by
+    // total key count. The in-memory `{tool:{case,value}}` shape is also accepted.
     if (Object.prototype.hasOwnProperty.call(tc, 'tool')) {
-      protobufWrapper = true;
       const union = tc.tool;
+      const flattenedVariants = Object.keys(tc).filter((key) => /ToolCall$/.test(key));
+      if (flattenedVariants.length > 0) malformed = true;
       if (!union || typeof union !== 'object' || Array.isArray(union)
         || typeof union.case !== 'string' || union.case.length === 0
         || !union.value || typeof union.value !== 'object' || Array.isArray(union.value)) {
@@ -107,11 +106,14 @@ function canonicalToolEvent(event, index) {
         inner = union.value;
       }
     } else {
-      const keys = Object.keys(tc);
-      if (keys.length !== 1) malformed = true;
-      kind = keys[0] ?? null;
-      inner = kind == null ? null : tc[kind];
-      if (inner != null && (typeof inner !== 'object' || Array.isArray(inner))) malformed = true;
+      const variants = Object.keys(tc).filter((key) => /ToolCall$/.test(key));
+      if (variants.length !== 1) {
+        malformed = true;
+      } else {
+        [kind] = variants;
+        inner = tc[kind];
+        if (!inner || typeof inner !== 'object' || Array.isArray(inner)) malformed = true;
+      }
     }
   }
   if (!kind && String(event.type ?? '').toLowerCase() === 'mcp_tool_call') kind = 'mcpToolCall';
@@ -120,13 +122,13 @@ function canonicalToolEvent(event, index) {
 
   const rawName = pick(inner, ['args.toolName', 'name', 'tool', 'toolName', 'tool_name'])
     ?? pick(event, ['name', 'tool', 'toolName', 'tool_name', 'server_tool_name']);
-  const rawServer = pick(inner, ['args.providerIdentifier', 'server', 'serverName', 'server_name', 'mcpServer', 'mcp_server_name'])
+  const rawServer = pick(inner, ['args.providerIdentifier', 'args.server', 'server', 'serverName', 'server_name', 'mcpServer', 'mcp_server_name'])
     ?? pick(event, ['server', 'serverName', 'server_name', 'mcp_server_name']);
   const { name: splitName, server } = splitMcpName(rawName, rawServer);
   const internal = kind === 'getMcpToolsToolCall';
   const name = splitName ?? (internal || kind !== 'mcpToolCall' ? kind : null);
-  const argsValue = (protobufWrapper && kind === 'mcpToolCall'
-    ? pick(inner, ['args.args', 'input', 'arguments', 'params'])
+  const argsValue = (kind === 'mcpToolCall'
+    ? pick(inner, ['args.args', 'args', 'input', 'arguments', 'params'])
     : pick(inner, ['args', 'input', 'arguments', 'params']))
     ?? pick(event, ['args', 'input', 'arguments', 'params']);
   const args = normalizeArgs(argsValue);
@@ -134,8 +136,12 @@ function canonicalToolEvent(event, index) {
   if (argsValue != null && args == null) malformed = true;
   const state = canonicalState(event);
   const nestedResultCase = String(pick(inner, ['result.result.case', 'result.case']) ?? '').toLowerCase();
+  const nestedResultError = pick(inner, ['result.success.isError', 'result.success.is_error']) === true
+    || ['error', 'failure', 'rejected', 'permissionDenied', 'cancelled', 'aborted']
+      .some((key) => Object.prototype.hasOwnProperty.call(inner?.result ?? {}, key));
   const explicitError = pick(event, ['is_error', 'isError']) === true
     || Boolean(pick(event, ['error']))
+    || nestedResultError
     || /error|fail|reject|denied|cancel|abort/.test(nestedResultCase)
     || state === 'error';
   const wrapperTs = state === 'started'

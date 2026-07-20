@@ -24,20 +24,19 @@ const STREAM = [
 ].map((e) => JSON.stringify(e)).join('\n');
 
 describe('parseCursorStream', () => {
-  it('parses the live Cursor protobuf-JSON tool wrapper', () => {
+  // Trimmed from retained live run 2026-07-20T08-24-37-590Z (Cursor CLI 2026.07.09).
+  it('parses the live Cursor wrapper with tool metadata siblings', () => {
     const live = [
       { type: 'system', subtype: 'init', model: 'Composer 2.5', permissionMode: 'default' },
       {
         type: 'tool_call', subtype: 'started', call_id: 'live-1', timestamp_ms: 1000,
         tool_call: {
-          tool: {
-            case: 'mcpToolCall',
-            value: {
-              args: {
-                providerIdentifier: 'suzaku',
-                toolName: 'middleware_get_all_operators',
-                args: { middlewareAddress: '0xabc', network: 'mainnet' },
-              },
+          mcpToolCall: {
+            args: {
+              name: 'suzaku-middleware_get_all_operators',
+              providerIdentifier: 'suzaku',
+              toolName: 'middleware_get_all_operators',
+              args: { middlewareAddress: '0xabc', network: 'mainnet' },
             },
           },
           toolCallId: 'live-1',
@@ -48,16 +47,14 @@ describe('parseCursorStream', () => {
       {
         type: 'tool_call', subtype: 'completed', call_id: 'live-1', timestamp_ms: 1700,
         tool_call: {
-          tool: {
-            case: 'mcpToolCall',
-            value: {
-              args: {
-                providerIdentifier: 'suzaku',
-                toolName: 'middleware_get_all_operators',
-                args: { middlewareAddress: '0xabc', network: 'mainnet' },
-              },
-              result: { result: { case: 'success', value: { content: [] } } },
+          mcpToolCall: {
+            args: {
+              name: 'suzaku-middleware_get_all_operators',
+              providerIdentifier: 'suzaku',
+              toolName: 'middleware_get_all_operators',
+              args: { middlewareAddress: '0xabc', network: 'mainnet' },
             },
+            result: { success: { content: [], isError: false } },
           },
           toolCallId: 'live-1',
           startedAtMs: 1000,
@@ -88,20 +85,67 @@ describe('parseCursorStream', () => {
       {
         type: 'tool_call', subtype: 'completed', call_id: 'live-error',
         tool_call: {
-          tool: {
-            case: 'mcpToolCall',
-            value: {
-              args: { providerIdentifier: 'suzaku', toolName: 'health_check', args: {} },
-              result: { result: { case: 'permissionDenied', value: {} } },
-            },
+          mcpToolCall: {
+            args: { providerIdentifier: 'suzaku', toolName: 'health_check', args: {} },
+            result: { success: { content: [], isError: true } },
           },
           toolCallId: 'live-error',
         },
       },
     ].map(JSON.stringify).join('\n');
-    expect(parseCursorStream(live).trace).toEqual([
+    const parsed = parseCursorStream(live);
+    expect(parsed.toolEvents[0]).toMatchObject({ kind: 'mcpToolCall', malformed: false });
+    expect(parsed.trace).toEqual([
       expect.objectContaining({ name: 'health_check', state: 'completed', isError: true }),
     ]);
+  });
+
+  it('allows live internal MCP discovery events with metadata siblings', () => {
+    const live = [
+      {
+        type: 'tool_call', subtype: 'started', call_id: 'discover-1', timestamp_ms: 1000,
+        tool_call: {
+          getMcpToolsToolCall: {
+            args: {
+              server: 'suzaku', toolName: 'middleware_get_all_operators', toolCallId: 'discover-1',
+            },
+          },
+          hookAdditionalContexts: [], toolCallId: 'discover-1', startedAtMs: '1000',
+        },
+      },
+      {
+        type: 'tool_call', subtype: 'completed', call_id: 'discover-1', timestamp_ms: 1100,
+        tool_call: {
+          getMcpToolsToolCall: {
+            args: {
+              server: 'suzaku', toolName: 'middleware_get_all_operators', toolCallId: 'discover-1',
+            },
+            result: { success: { content: '{"mode":"single_tool"}' } },
+          },
+          hookAdditionalContexts: [], toolCallId: 'discover-1',
+          startedAtMs: '1000', completedAtMs: '1100',
+        },
+      },
+    ].map(JSON.stringify).join('\n');
+    expect(auditCursorBoundary(parseCursorStream(live), [])).toMatchObject({
+      ok: true, boundaryViolation: false, mcpCalls: 0, internalCalls: 1, argsVisible: null,
+    });
+  });
+
+  it('fails closed when metadata contains more than one tool-call variant', () => {
+    const live = JSON.stringify({
+      type: 'tool_call', subtype: 'completed', call_id: 'ambiguous',
+      tool_call: {
+        mcpToolCall: {
+          args: { providerIdentifier: 'suzaku', toolName: 'health_check', args: {} },
+        },
+        shellToolCall: { args: { command: 'suzaku-cli health' } },
+        toolCallId: 'ambiguous',
+      },
+    });
+    const parsed = parseCursorStream(live);
+    expect(parsed.toolEvents[0]).toMatchObject({ malformed: true });
+    expect(auditCursorBoundary(parsed, ['health_check']).boundaryViolation).toBe(true);
   });
 
   it('extracts canonical trace, metadata, duration, usage, and a raw hash', () => {
