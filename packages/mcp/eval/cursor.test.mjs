@@ -24,6 +24,86 @@ const STREAM = [
 ].map((e) => JSON.stringify(e)).join('\n');
 
 describe('parseCursorStream', () => {
+  it('parses the live Cursor protobuf-JSON tool wrapper', () => {
+    const live = [
+      { type: 'system', subtype: 'init', model: 'Composer 2.5', permissionMode: 'default' },
+      {
+        type: 'tool_call', subtype: 'started', call_id: 'live-1', timestamp_ms: 1000,
+        tool_call: {
+          tool: {
+            case: 'mcpToolCall',
+            value: {
+              args: {
+                providerIdentifier: 'suzaku',
+                toolName: 'middleware_get_all_operators',
+                args: { middlewareAddress: '0xabc', network: 'mainnet' },
+              },
+            },
+          },
+          toolCallId: 'live-1',
+          startedAtMs: 1000,
+          hookAdditionalContexts: [],
+        },
+      },
+      {
+        type: 'tool_call', subtype: 'completed', call_id: 'live-1', timestamp_ms: 1700,
+        tool_call: {
+          tool: {
+            case: 'mcpToolCall',
+            value: {
+              args: {
+                providerIdentifier: 'suzaku',
+                toolName: 'middleware_get_all_operators',
+                args: { middlewareAddress: '0xabc', network: 'mainnet' },
+              },
+              result: { result: { case: 'success', value: { content: [] } } },
+            },
+          },
+          toolCallId: 'live-1',
+          startedAtMs: 1000,
+          completedAtMs: 1700,
+        },
+      },
+      { type: 'result', subtype: 'success', result: 'There is 1 operator.' },
+    ].map(JSON.stringify).join('\n');
+
+    const parsed = parseCursorStream(live);
+    expect(parsed.resolvedModel).toBe('Composer 2.5');
+    expect(parsed.resolvedServiceTier).toBeNull();
+    expect(parsed.trace).toEqual([{
+      kind: 'mcpToolCall', server: 'suzaku', name: 'middleware_get_all_operators',
+      args: { middlewareAddress: '0xabc', network: 'mainnet' },
+      state: 'completed', ms: 700, isError: false,
+    }]);
+    expect(parsed.toolEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'mcpToolCall', malformed: false }),
+    ]));
+    expect(auditCursorBoundary(parsed, ['middleware_get_all_operators'])).toMatchObject({
+      ok: true, boundaryViolation: false, mcpCalls: 1, argsVisible: true,
+    });
+  });
+
+  it('marks a nested live Cursor MCP failure as errored', () => {
+    const live = [
+      {
+        type: 'tool_call', subtype: 'completed', call_id: 'live-error',
+        tool_call: {
+          tool: {
+            case: 'mcpToolCall',
+            value: {
+              args: { providerIdentifier: 'suzaku', toolName: 'health_check', args: {} },
+              result: { result: { case: 'permissionDenied', value: {} } },
+            },
+          },
+          toolCallId: 'live-error',
+        },
+      },
+    ].map(JSON.stringify).join('\n');
+    expect(parseCursorStream(live).trace).toEqual([
+      expect.objectContaining({ name: 'health_check', state: 'completed', isError: true }),
+    ]);
+  });
+
   it('extracts canonical trace, metadata, duration, usage, and a raw hash', () => {
     const r = parseCursorStream(STREAM);
     expect(r.answer).toBe('There is <b>1 operator</b> registered.');
@@ -49,6 +129,14 @@ describe('parseCursorStream', () => {
     expect(r.durationMs).toBe(3000);
     expect(r.trace).toEqual([]);
     expect(r.terminalSeen).toBe(true);
+  });
+
+  it('does not mistake Cursor execution mode for a service tier', () => {
+    const r = parseCursorStream([
+      JSON.stringify({ type: 'system', subtype: 'init', model: 'Composer 2.5', mode: 'ask' }),
+      JSON.stringify({ type: 'result', subtype: 'success', result: 'ok', mode: 'default' }),
+    ].join('\n'));
+    expect(r.resolvedServiceTier).toBeNull();
   });
 
   it('reconstructs from deltas when no buffered flush exists', () => {

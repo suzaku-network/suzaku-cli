@@ -42,6 +42,7 @@ import {
 } from './cursor.mjs';
 import {
   aggregateRunSets, assessCursorEligibility, isValidRunSet, percentile, priceCursorRun,
+  validateCursorVariantConfig,
 } from './reproducibility.mjs';
 
 const execFileP = promisify(execFile);
@@ -136,10 +137,14 @@ function sha256File(url) {
   try { return sha256Text(readFileSync(url)); } catch { return null; }
 }
 
-// $ per MTok [input, output]; cache write = 1.25x input, cache read = 0.1x input
+// $ per MTok [input, output]; cache write = 1.25x input, cache read = 0.1x input.
+// Sonnet 5 has official introductory pricing through 2026-08-31; automatically
+// use the published post-intro card for runs on/after 2026-09-01 UTC.
+const SONNET_5_INTRO_END = '2026-09-01T00:00:00Z';
+const SONNET_5_PRICE = Date.now() < Date.parse(SONNET_5_INTRO_END) ? [2, 10] : [3, 15];
 const PRICES = {
   'claude-sonnet-4-6': [3, 15],
-  'claude-sonnet-5': [3, 15],
+  'claude-sonnet-5': SONNET_5_PRICE,
   'claude-haiku-4-5': [1, 5],
   'claude-opus-4-8': [5, 25],
 };
@@ -630,8 +635,11 @@ function makeCursorEngine(model, harness) {
   const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
   const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
   const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram. Use ONLY your Suzaku MCP tools to get data (call them directly). Do NOT run shell commands, do NOT read or search files, and do NOT invoke the suzaku CLI directly — the MCP tools are your only data source, exactly as in production.\n\nQuestion: `;
+  const variant = cursorPricing.models?.[model];
+  const cliModel = variant?.cliModel ?? model;
 
-  return async function runQuestion(q) {
+  let streamSequence = 0;
+  return async function runQuestion(q, execution = {}) {
     const sandbox = makeCursorSandbox(harness);
     const prompt = preamble + substitute(q.prompt, vars);
     const timeoutMs = q.slow ? 600_000 : 300_000;
@@ -642,7 +650,7 @@ function makeCursorEngine(model, harness) {
     try {
       try {
         const res = await execFileP(harness.cursorAgentPath, [
-          '-p', prompt, '--model', model, '--workspace', sandbox.workspace, ...CURSOR_FLAGS,
+          '-p', prompt, '--model', cliModel, '--workspace', sandbox.workspace, ...CURSOR_FLAGS,
         ], {
           cwd: sandbox.workspace, env: sandbox.env, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
         });
@@ -663,6 +671,13 @@ function makeCursorEngine(model, harness) {
             : `cursor-agent exited: ${stderr.slice(0, 200)}`;
         }
       }
+      streamSequence += 1;
+      const safe = (value) => String(value).replace(/[^a-zA-Z0-9.-]+/g, '_');
+      const streamName = `${runId}-${safe(model)}-${execution.canary ? 'canary' : `r${execution.repeat ?? 0}`}-${safe(q.id)}-${streamSequence}.ndjson`;
+      const streamDir = new URL('./results/cursor-streams/', here);
+      mkdirSync(streamDir, { recursive: true });
+      writeFileSync(new URL(`./${streamName}`, streamDir), stdout);
+      const rawTranscript = `results/cursor-streams/${streamName}`;
       const parsed = parseCursorStream(stdout);
       const boundary = auditCursorBoundary(parsed, toolByName.keys());
       if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
@@ -677,10 +692,16 @@ function makeCursorEngine(model, harness) {
       const needsToolEvidence = (q.expectedTools ?? []).length > 0 || (q.expectedToolCalls ?? []).length > 0;
       const eligibility = assessCursorEligibility(
         cursorPricing, model, parsed.resolvedModel, parsed.resolvedServiceTier,
-        { boundaryViolation: boundary.boundaryViolation, needsToolEvidence, argsVisible: boundary.argsVisible },
+        {
+          boundaryViolation: boundary.boundaryViolation,
+          needsToolEvidence,
+          argsVisible: boundary.argsVisible,
+          requestedCliModel: cliModel,
+        },
       );
       const pricing = priceCursorRun(
-        cursorPricing, model, parsed.resolvedModel, parsed.resolvedServiceTier, parsed.usage ?? {},
+        cursorPricing, model, parsed.resolvedModel,
+        eligibility.effectiveServiceTier ?? parsed.resolvedServiceTier, parsed.usage ?? {},
       );
       return {
         answer: parsed.answer,
@@ -692,13 +713,18 @@ function makeCursorEngine(model, harness) {
         trace: parsed.trace,
         scoringTrace,
         cost: pricing.cost,
+        estimatedCost: pricing.estimatedCost,
         costStatus: pricing.status,
         costReason: pricing.reason,
         rateCard: pricing.rateCard,
         resolvedModel: parsed.resolvedModel,
         resolvedServiceTier: parsed.resolvedServiceTier,
+        requestedServiceTier: variant?.serviceTier ?? null,
+        serviceTierEvidence: eligibility.serviceTierEvidence ?? null,
+        cursorCliModel: cliModel,
         cursorInit: parsed.init,
         rawSha256: parsed.rawSha256,
+        rawTranscript,
         toolArgsVisible: boundary.argsVisible,
         benchmarkEligible: eligibility.eligible,
         benchmarkIneligibleReason: eligibility.reason,
@@ -713,7 +739,12 @@ function makeCursorEngine(model, harness) {
 
 // ---------- run ----------
 function pad(s, n) { return String(s).padEnd(n); }
-function tokCount(usage) { return usage?.total_tokens ?? ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0)); }
+function tokCount(usage) {
+  return Number(usage?.input_tokens ?? 0)
+    + Number(usage?.output_tokens ?? 0)
+    + Number(usage?.cache_read_input_tokens ?? 0)
+    + Number(usage?.cache_creation_input_tokens ?? 0);
+}
 function previewValue(v) {
   if (v === undefined) return undefined;
   const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
@@ -788,7 +819,7 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   await waitForCodex(target);
   let result;
   try {
-    const run = await target.run(q);
+    const run = await target.run(q, { repeat, canary });
     const score = await scoreRun(q, run, target.traceMode);
     result = { id: q.id, repeat, canary, ...score, ...run, trace: run.trace, answer: run.answer };
   } catch (error) {
@@ -799,7 +830,7 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
     ? `facts ${result.facts.matched}/${result.facts.total} refusal=${result.safety?.refusalOk ?? false} leak=${result.safety?.leaked ?? false} fabricated=${Boolean(result.safety?.falseSuccess || result.safety?.forbiddenAssertion)}`
     : `facts ${result.facts.matched}/${result.facts.total}`;
   const costStr = result.costStatus === 'unverified'
-    ? `cost=unverified(${result.costReason ?? 'uncalibrated'}) ${Math.round(tokCount(result.usage) / 1000)}k tok`
+    ? `cost${Number.isFinite(result.estimatedCost) ? `≈$${result.estimatedCost.toFixed(4)} ` : '='}unverified(${result.costReason ?? 'uncalibrated'}) ${Math.round(tokCount(result.usage) / 1000)}k tok`
     : (result.cost == null ? `${Math.round(tokCount(result.usage) / 1000)}k tok` : `$${result.cost.toFixed(4)}`);
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
@@ -842,11 +873,15 @@ if (TIER === 2) {
       setupFailures.push({ engine: 'cursor', error: 'CURSOR_API_KEY is not set' });
     } else {
       try {
+        const variantErrors = validateCursorVariantConfig(cursorPricing, CURSOR_MODELS);
+        if (variantErrors.length > 0) throw new Error(`Cursor variant config: ${variantErrors.join('; ')}`);
         const cursorHarness = await prepareCursorHarness();
         const { stdout: version } = await execFileP(cursorHarness.cursorAgentPath, ['--version'], { timeout: 15_000 });
         cursorHarness.version = version.trim();
         console.log(`Cursor preflight: ${cursorHarness.preflight.tools} exact Suzaku tools + args (${cursorHarness.version})`);
         for (const model of CURSOR_MODELS) {
+          const variant = cursorPricing.models[model];
+          console.log(`Cursor variant: ${model} → ${variant.cliModel} (${variant.serviceTier} requested; stream tier unobservable)`);
           targets.push({
             id: `cursor:${model}`, label: model, engine: 'cursor', model,
             run: makeCursorEngine(model, cursorHarness), traceMode: 'full',
@@ -872,8 +907,13 @@ if (TIER === 2) {
           runError: result.runError ?? null, boundaryViolation: result.boundaryViolation === true,
           benchmarkEligible: result.benchmarkEligible ?? null, resolvedModel: result.resolvedModel ?? null,
           resolvedServiceTier: result.resolvedServiceTier ?? null, usage: result.usage ?? {},
+          requestedServiceTier: result.requestedServiceTier ?? null,
+          serviceTierEvidence: result.serviceTierEvidence ?? null,
+          cursorCliModel: result.cursorCliModel ?? null,
           benchmarkIneligibleReason: result.benchmarkIneligibleReason ?? null,
-          cost: result.cost ?? null, costStatus: result.costStatus ?? null, rawSha256: result.rawSha256 ?? null,
+          cost: result.cost ?? null, costStatus: result.costStatus ?? null,
+          estimatedCost: result.estimatedCost ?? null,
+          rawSha256: result.rawSha256 ?? null, rawTranscript: result.rawTranscript ?? null,
         });
         const wiringFailure = Boolean(result.runError || result.boundaryViolation
           || (target.engine === 'cursor' && result.benchmarkEligible !== true));
@@ -1011,7 +1051,7 @@ for (const runSet of allRuns) {
     for (const r of results) {
       const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
       const costStr = r.costStatus === 'unverified'
-        ? `unverified (${Math.round(tokCount(r.usage) / 1000)}k tok)`
+        ? `${Number.isFinite(r.estimatedCost) ? `≈$${r.estimatedCost.toFixed(4)} ` : ''}unverified (${Math.round(tokCount(r.usage) / 1000)}k tok)`
         : (r.cost == null ? `${Math.round(tokCount(r.usage) / 1000)}k tok` : `$${r.cost.toFixed(4)}`);
       md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
@@ -1055,7 +1095,9 @@ if (TIER === 2) {
     console.log('\n=== aggregate comparison ===');
     for (const runSets of grouped.values()) {
       const summary = aggregateRunSets(runSets, questions.length);
-      const costPerPass = summary.costPerPass == null ? 'unverified/sub' : `$${summary.costPerPass.toFixed(4)}`;
+      const costPerPass = summary.costPerPass != null
+        ? `$${summary.costPerPass.toFixed(4)}`
+        : (summary.estimatedCostPerPass != null ? `≈$${summary.estimatedCostPerPass.toFixed(4)} unverified` : 'unverified/sub');
       console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · boundary ${summary.boundaryRuns}/${summary.attemptedRuns} (${(summary.boundaryRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · cost/PASS ${costPerPass}`);
       const valid = runSets.filter((run) => isValidRunSet(run, questions.length));
       const flips = [];
@@ -1109,13 +1151,17 @@ if (BENCHMARK && TIER === 2) {
     const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
     const p95 = percentile(walls, 0.95);
     const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
+    const estimatedCosts = results.map((result) => result.estimatedCost).filter(Number.isFinite);
+    const totalEstimatedCost = estimatedCosts.reduce((sum, cost) => sum + cost, 0);
     const cursorCostVerified = runSet.engine === 'cursor'
       && results.every((result) => result.costStatus === 'verified' && Number.isFinite(result.cost));
     const costStr = runSet.engine === 'codex' ? 'sub'
-      : (runSet.engine === 'cursor' && !cursorCostVerified ? 'unverified' : `$${totalCost.toFixed(3)}`);
+      : (runSet.engine === 'cursor' && !cursorCostVerified
+        ? (estimatedCosts.length === results.length ? `≈$${totalEstimatedCost.toFixed(3)} unverified` : 'unverified')
+        : `$${totalCost.toFixed(3)}`);
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
     const cursorNote = runSet.engine === 'cursor'
-      ? `; resolved ${[...new Set(results.map((r) => r.resolvedModel).filter(Boolean))].join('+') || '?'} tier ${[...new Set(results.map((r) => r.resolvedServiceTier).filter(Boolean))].join('+') || '?'}; boundary violations ${boundaryViolations}; cost ${cursorCostVerified ? 'verified' : 'unverified'}`
+      ? `; resolved ${[...new Set(results.map((r) => r.resolvedModel).filter(Boolean))].join('+') || '?'}; requested tier ${[...new Set(results.map((r) => r.requestedServiceTier).filter(Boolean))].join('+') || '?'} (${[...new Set(results.map((r) => r.serviceTierEvidence).filter(Boolean))].join('+') || 'unobserved'}); boundary violations ${boundaryViolations}; cost ${cursorCostVerified ? 'verified' : 'unverified'}`
       : '';
     const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(percentile(walls, 0.5) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${runSet.epochAtRun ?? '?'}; repeat ${runSet.repeat}/${REPEAT}; ${gitState.sha?.slice(0, 8) ?? 'no-sha'}${cursorNote} |`;
     appendFileSync(benchPath, `${row}\n`);
@@ -1147,6 +1193,9 @@ if (TIER === 2) {
       epochAtRun: runSet.epochAtRun,
       resolvedModels: [...new Set(results.map((result) => result.resolvedModel).filter(Boolean))],
       resolvedServiceTiers: [...new Set(results.map((result) => result.resolvedServiceTier).filter(Boolean))],
+      requestedServiceTiers: [...new Set(results.map((result) => result.requestedServiceTier).filter(Boolean))],
+      serviceTierEvidence: [...new Set(results.map((result) => result.serviceTierEvidence).filter(Boolean))],
+      cursorCliModels: [...new Set(results.map((result) => result.cursorCliModel).filter(Boolean))],
       verdicts: Object.fromEntries(results.map((result) => [result.id, result.verdict])),
       facts: {
         matched: results.reduce((sum, result) => sum + Number(result.facts?.matched ?? 0), 0),
@@ -1170,9 +1219,13 @@ if (TIER === 2) {
       },
       usage: aggregateUsage(results),
       cost: cursorVerified && completeCost ? costs.reduce((sum, cost) => sum + cost, 0) : null,
+      estimatedCost: results.length > 0 && results.every((result) => Number.isFinite(result.estimatedCost))
+        ? results.reduce((sum, result) => sum + result.estimatedCost, 0)
+        : null,
       costStatus: runSet.engine === 'codex' ? 'subscription' : (cursorVerified && completeCost ? 'verified' : 'unverified'),
       boundaryViolations: results.filter((result) => result.boundaryViolation).length,
       rawStreamSha256: results.map((result) => result.rawSha256).filter(Boolean),
+      rawTranscripts: results.map((result) => result.rawTranscript).filter(Boolean),
       aborted: runSet.aborted ?? false,
       abortReason: runSet.abortReason ?? null,
       invalidReason: runSet.invalidReason ?? null,
@@ -1215,6 +1268,11 @@ if (TIER === 2) {
       repeat: REPEAT,
       canary: CANARY,
       benchmark: BENCHMARK,
+    },
+    pricing: {
+      anthropicPerMTok: PRICES,
+      sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
+      cursorConfig: 'eval/cursor-pricing.json',
     },
     initialEpoch,
     epochDriftAbort,

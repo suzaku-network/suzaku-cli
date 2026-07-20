@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregateRunSets, assessCursorEligibility, interleavedSchedule, isValidRunSet,
-  priceCursorRun, validateCursorCalibration,
+  priceCursorRun, validateCursorCalibration, validateCursorVariantConfig,
 } from './reproducibility.mjs';
 
 const RATE_CARD = { inputPerMTok: 0.5, outputPerMTok: 2.5, cacheInputMultiplier: 1 };
@@ -49,22 +49,77 @@ describe('Cursor calibration', () => {
     const config = { models: { 'composer-2.5': entry } };
     expect(priceCursorRun(config, 'composer-2.5', 'composer-2.5', null, {}).status).toBe('unverified');
     expect(priceCursorRun(config, 'composer-2.5', 'composer-2.5', 'standard', { input_tokens: 100_000, output_tokens: 10_000 }))
-      .toMatchObject({ status: 'verified', cost: 0.075 });
+      .toMatchObject({ status: 'verified', cost: 0.075, estimatedCost: 0.075 });
+    expect(priceCursorRun(
+      { models: { 'composer-2.5': { ...entry, samples: entry.samples.slice(0, 1) } } },
+      'composer-2.5',
+      'Composer 2.5',
+      'standard',
+      { input_tokens: 100_000, output_tokens: 10_000 },
+    )).toMatchObject({
+      status: 'unverified', cost: null, estimatedCost: 0.075, reason: 'need-two-dashboard-samples',
+    });
   });
 
   it('requires the requested variant and observable tool arguments for row eligibility', () => {
     const config = { models: { 'composer-2.5': entry } };
     const evidence = { needsToolEvidence: true, argsVisible: true };
     expect(assessCursorEligibility(config, 'composer-2.5', 'composer-2.5', 'standard', evidence))
-      .toEqual({ eligible: true, reason: null });
+      .toEqual({
+        eligible: true, reason: null, effectiveServiceTier: 'standard', serviceTierEvidence: 'stream',
+      });
     expect(assessCursorEligibility(config, 'composer-2.5', 'composer-2.5', null, evidence))
-      .toMatchObject({ eligible: false, reason: 'resolved-service-tier-unobserved-or-mismatched' });
+      .toMatchObject({ eligible: false, reason: 'resolved-service-tier-unobserved-or-variant-not-pinned' });
     expect(assessCursorEligibility(config, 'composer-2.5', 'composer-2.5', 'standard', {
       ...evidence, argsVisible: false,
     })).toMatchObject({ eligible: false, reason: 'mcp-tool-arguments-unobserved' });
     expect(assessCursorEligibility(config, 'composer-2.5', 'composer-2.5', 'standard', {
       ...evidence, boundaryViolation: true,
     })).toMatchObject({ eligible: false, reason: 'mcp-boundary-violation' });
+  });
+
+  it('accepts an unobserved tier only when the exact CLI model parameter pins it', () => {
+    const pinned = {
+      ...entry,
+      resolvedModel: 'Composer 2.5',
+      cliModel: 'composer-2.5[fast=false]',
+    };
+    const config = { models: { 'composer-2.5': pinned } };
+    const evidence = {
+      needsToolEvidence: true,
+      argsVisible: true,
+      requestedCliModel: 'composer-2.5[fast=false]',
+    };
+    expect(assessCursorEligibility(config, 'composer-2.5', 'Composer 2.5', null, evidence))
+      .toEqual({
+        eligible: true,
+        reason: null,
+        effectiveServiceTier: 'standard',
+        serviceTierEvidence: 'exact-cli-model-parameter',
+      });
+    expect(assessCursorEligibility(config, 'composer-2.5', 'Composer 2.5', null, {
+      ...evidence,
+      requestedCliModel: 'composer-2.5',
+    })).toMatchObject({ eligible: false, reason: 'resolved-service-tier-unobserved-or-variant-not-pinned' });
+    expect(assessCursorEligibility(config, 'composer-2.5', 'Composer 2.5 Fast', null, evidence))
+      .toMatchObject({ eligible: false, reason: 'resolved-model-mismatch' });
+  });
+});
+
+describe('Cursor variant config', () => {
+  it('requires an explicit fast parameter that agrees with the priced tier', () => {
+    const standard = {
+      cliModel: 'composer-2.5[fast=false]', resolvedModel: 'Composer 2.5',
+      serviceTier: 'standard', rateCard: RATE_CARD,
+    };
+    expect(validateCursorVariantConfig({ models: { composer: standard } }, ['composer'])).toEqual([]);
+    expect(validateCursorVariantConfig({ models: { composer: {
+      ...standard, cliModel: 'composer-2.5',
+    } } }, ['composer'])).toContain('composer: cliModel must explicitly set fast=false');
+    expect(validateCursorVariantConfig({ models: { composer: {
+      ...standard, cliModel: 'composer-2.5[fast=true]',
+    } } }, ['composer'])).toContain('composer: cliModel must explicitly set fast=false');
+    expect(validateCursorVariantConfig({ models: {} }, ['missing'])).toContain('missing: missing variant config');
   });
 });
 

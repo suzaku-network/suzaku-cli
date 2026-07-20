@@ -88,42 +88,70 @@ function canonicalToolEvent(event, index) {
   let kind = null;
   let inner = null;
   let malformed = false;
+  let protobufWrapper = false;
   if (tc && typeof tc === 'object' && !Array.isArray(tc)) {
-    const keys = Object.keys(tc);
-    if (keys.length !== 1) malformed = true;
-    kind = keys[0] ?? null;
-    inner = kind == null ? null : tc[kind];
-    if (inner != null && (typeof inner !== 'object' || Array.isArray(inner))) malformed = true;
+    // Cursor CLI 2026.07 serializes its protobuf ToolCall directly. The oneof lives
+    // under `tool`, while sibling keys contain IDs/timestamps/context metadata:
+    //   { tool: { case: 'mcpToolCall', value: {...} }, toolCallId, startedAtMs, ... }
+    // Older fixtures/builds used the shorthand `{ mcpToolCall: {...} }`; retain it
+    // as a compatibility path, but keep every ambiguous/invalid shape fail-closed.
+    if (Object.prototype.hasOwnProperty.call(tc, 'tool')) {
+      protobufWrapper = true;
+      const union = tc.tool;
+      if (!union || typeof union !== 'object' || Array.isArray(union)
+        || typeof union.case !== 'string' || union.case.length === 0
+        || !union.value || typeof union.value !== 'object' || Array.isArray(union.value)) {
+        malformed = true;
+      } else {
+        kind = union.case;
+        inner = union.value;
+      }
+    } else {
+      const keys = Object.keys(tc);
+      if (keys.length !== 1) malformed = true;
+      kind = keys[0] ?? null;
+      inner = kind == null ? null : tc[kind];
+      if (inner != null && (typeof inner !== 'object' || Array.isArray(inner))) malformed = true;
+    }
   }
   if (!kind && String(event.type ?? '').toLowerCase() === 'mcp_tool_call') kind = 'mcpToolCall';
   kind ??= String(pick(event, ['kind', 'tool_kind', 'toolKind']) ?? 'unknownToolCall');
   inner = inner && typeof inner === 'object' ? inner : {};
 
-  const rawName = pick(inner, ['name', 'tool', 'toolName', 'tool_name'])
+  const rawName = pick(inner, ['args.toolName', 'name', 'tool', 'toolName', 'tool_name'])
     ?? pick(event, ['name', 'tool', 'toolName', 'tool_name', 'server_tool_name']);
-  const rawServer = pick(inner, ['server', 'serverName', 'server_name', 'mcpServer', 'mcp_server_name'])
+  const rawServer = pick(inner, ['args.providerIdentifier', 'server', 'serverName', 'server_name', 'mcpServer', 'mcp_server_name'])
     ?? pick(event, ['server', 'serverName', 'server_name', 'mcp_server_name']);
   const { name: splitName, server } = splitMcpName(rawName, rawServer);
   const internal = kind === 'getMcpToolsToolCall';
   const name = splitName ?? (internal || kind !== 'mcpToolCall' ? kind : null);
-  const argsValue = pick(inner, ['args', 'input', 'arguments', 'params'])
+  const argsValue = (protobufWrapper && kind === 'mcpToolCall'
+    ? pick(inner, ['args.args', 'input', 'arguments', 'params'])
+    : pick(inner, ['args', 'input', 'arguments', 'params']))
     ?? pick(event, ['args', 'input', 'arguments', 'params']);
   const args = normalizeArgs(argsValue);
   if (kind === 'mcpToolCall' && !name) malformed = true;
   if (argsValue != null && args == null) malformed = true;
   const state = canonicalState(event);
+  const nestedResultCase = String(pick(inner, ['result.result.case', 'result.case']) ?? '').toLowerCase();
   const explicitError = pick(event, ['is_error', 'isError']) === true
     || Boolean(pick(event, ['error']))
+    || /error|fail|reject|denied|cancel|abort/.test(nestedResultCase)
     || state === 'error';
+  const wrapperTs = state === 'started'
+    ? pick(tc ?? {}, ['startedAtMs', 'started_at_ms'])
+    : pick(tc ?? {}, ['completedAtMs', 'completed_at_ms']);
   return {
     index,
-    callId: String(pick(event, ['call_id', 'tool_call_id', 'id', 'toolCallId']) ?? `${kind}:${server ?? ''}:${name ?? ''}`),
+    callId: String(pick(event, ['call_id', 'tool_call_id', 'id', 'toolCallId'])
+      ?? pick(tc ?? {}, ['toolCallId', 'tool_call_id'])
+      ?? `${kind}:${server ?? ''}:${name ?? ''}`),
     kind,
     server,
     name,
     args,
     state,
-    ts: pick(event, ['timestamp_ms', 'ts', 'time_ms']) ?? null,
+    ts: pick(event, ['timestamp_ms', 'ts', 'time_ms']) ?? wrapperTs ?? null,
     ms: pick(event, ['duration_ms', 'durationMs']) ?? null,
     isError: explicitError,
     malformed,
@@ -240,8 +268,10 @@ export function parseCursorStream(stdout) {
   const resolvedModel = pick(initEvt, ['model', 'resolved_model', 'resolvedModel'])
     ?? pick(resultEvt ?? {}, ['model', 'resolved_model', 'resolvedModel'])
     ?? null;
-  const resolvedServiceTier = pick(initEvt, ['service_tier', 'serviceTier', 'tier', 'mode'])
-    ?? pick(resultEvt ?? {}, ['service_tier', 'serviceTier', 'tier', 'mode'])
+  // `mode` is Cursor's execution mode (ask/plan), not a billing/service tier.
+  // Current stream-json emits no tier field, so never manufacture one from it.
+  const resolvedServiceTier = pick(initEvt, ['service_tier', 'serviceTier', 'tier'])
+    ?? pick(resultEvt ?? {}, ['service_tier', 'serviceTier', 'tier'])
     ?? null;
   const init = {
     model: resolvedModel,

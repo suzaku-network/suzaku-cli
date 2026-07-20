@@ -10,9 +10,11 @@ the hardened scorer and fixture-backed intent rubric; do not compare exact PASS 
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
 Cursor engine (`cursor-agent`/Composer) runs an exact-parity, isolated read-only MCP server. Its raw
 tool stream is classified fail-closed: any shell/read/search/write/unknown call forces FAIL, while
-MCP tool identity, arguments, budgets, forbidden tools, and the requested model/service-tier variant
-gate row eligibility. Cursor cost remains `unverified` until matching-variant token buckets are
-reconciled with the dashboard under the committed calibration rule.
+MCP tool identity, arguments, budgets, forbidden tools, and the explicitly parameterized model variant
+gate row eligibility. Stream-json exposes the model display name but not its service tier, so standard
+is requested with `fast=false` and recorded as request evidence—not mislabeled as observed. Published-card
+estimates remain `unverified` until matching-variant token buckets are reconciled with the dashboard under
+the committed calibration rule. Raw Cursor NDJSON stays local under the gitignored results directory.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
