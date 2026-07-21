@@ -34,8 +34,9 @@ import {
 } from './scoring.mjs';
 import {
   aggregateRunSets, aggregateUsage, canaryAllowsScheduling, formatUsageCost,
-  hasCompleteUsage, interleavedSchedule, isCommitReadyBenchmark, isValidRunSet,
-  manifestDestinations, percentile, summarizeUsage, usageTokenCount, validateCanaryPolicy,
+  epochTransitionFailure, groundTruthTrustFailure, hasCompleteUsage, hasExactTargetSetup,
+  interleavedSchedule, isCommitReadyBenchmark, isValidRunSet, manifestDestinations,
+  percentile, summarizeUsage, usageTokenCount, validateCanaryPolicy,
 } from './reproducibility.mjs';
 
 const execFileP = promisify(execFile);
@@ -221,6 +222,7 @@ async function main() {
           checks: (result.factDetails ?? []).map((fact) => ({ name: fact.name, matched: fact.matched })),
         },
         runError: result.runError ?? null,
+        infrastructureError: result.infrastructureError ?? null,
         timedOut: result.timedOut === true,
         authError: result.authError === true,
         usage: result.usage ?? null,
@@ -539,7 +541,14 @@ async function fetchGroundTruth(q) {
         : resolveFact(data ?? {}, fact);
       facts.push({ spec: fact, ...resolved, sane: resolved.value !== undefined && saneValue(fact, resolved.value) });
     }
-    out.push({ tool: gt.tool, ok: res.ok, ms: res.ms, error: res.ok ? null : res.text.slice(0, 400), facts });
+    out.push({
+      tool: gt.tool,
+      ok: res.ok,
+      parsed: data !== null,
+      ms: res.ms,
+      error: res.ok ? null : res.text.slice(0, 400),
+      facts,
+    });
   }
   return out;
 }
@@ -561,6 +570,25 @@ async function scoreRun(q, run, traceMode) {
     : { ...scoreTrace(scoringTrace, { expectedTools: [], maxToolCalls: null, forbiddenTools: q.forbiddenTools ?? [] }), informational: true };
   const format = scoreFormat(run.answer);
   const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
+  const infrastructureError = groundTruthTrustFailure(gts);
+  if (infrastructureError) {
+    const failedFacts = gts.flatMap((group) => group.facts ?? [])
+      .filter((fact) => fact.spec?.answerMatch !== false);
+    return {
+      verdict: 'FAIL',
+      traceScore,
+      format,
+      facts: { total: failedFacts.length, matched: 0 },
+      safety: null,
+      factDetails: failedFacts.map((fact) => ({
+        name: fact.spec?.name ?? 'unnamed-fact',
+        value: previewValue(fact.value),
+        via: fact.via,
+        matched: false,
+      })),
+      infrastructureError,
+    };
+  }
   let total = 0;
   let matched = 0;
   const factDetails = [];
@@ -593,7 +621,10 @@ async function scoreRun(q, run, traceMode) {
   const v = run.runError
     ? 'FAIL'
     : verdict({ trace: traceScore, facts: factsSummary, format, safety: safetySummary });
-  return { verdict: v, traceScore, format, facts: factsSummary, safety: safetySummary, factDetails };
+  return {
+    verdict: v, traceScore, format, facts: factsSummary, safety: safetySummary,
+    factDetails, infrastructureError: null,
+  };
 }
 
 // ---------- engine: anthropic ----------
@@ -785,21 +816,25 @@ if (TIER === 1) {
   for (const q of questions) {
     const t0 = performance.now();
     const gts = await fetchGroundTruth(q);
+    const infrastructureError = groundTruthTrustFailure(gts);
     const allCallsOk = gts.every((g) => g.ok);
     const allFacts = gts.flatMap((g) => g.facts);
     const saneFacts = allFacts.filter((f) => f.sane);
-    const v = allCallsOk && saneFacts.length === allFacts.length ? 'PASS'
-      : allCallsOk && saneFacts.length > 0 ? 'PARTIAL' : 'FAIL';
+    const v = infrastructureError ? 'FAIL'
+      : allCallsOk && saneFacts.length === allFacts.length ? 'PASS'
+        : allCallsOk && saneFacts.length > 0 ? 'PARTIAL' : 'FAIL';
     results.push({
       id: q.id, verdict: v,
+      infrastructureError,
       toolMs: gts.reduce((s, g) => s + g.ms, 0),
       wallMs: Math.round(performance.now() - t0),
       detail: {
-        calls: gts.map((g) => ({ tool: g.tool, ok: g.ok, ms: g.ms, error: g.error })),
+        calls: gts.map((g) => ({ tool: g.tool, ok: g.ok, parsed: g.parsed, ms: g.ms, error: g.error })),
         facts: allFacts.map((f) => ({ name: f.spec.name, value: previewValue(f.value), via: f.via, sane: f.sane })),
       },
     });
     console.log(`${pad(v, 8)} ${pad(q.id, 20)} tools ${gts.map((g) => `${g.tool}:${g.ok ? 'ok' : 'ERR'}:${g.ms}ms`).join(' ')}`);
+    if (infrastructureError) console.log(`         ↳ infrastructure: ${infrastructureError}`);
     for (const f of allFacts.filter((x) => !x.sane)) {
       console.log(`         ↳ fact '${f.spec.name}' unresolved/insane (via=${f.via ?? 'none'}, value=${previewValue(f.value)})`);
     }
@@ -860,6 +895,7 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
   if (result.runError) console.log(`         ↳ error: ${result.runError.slice(0, 300)}`);
+  if (result.infrastructureError) console.log(`         ↳ infrastructure: ${result.infrastructureError}`);
   return result;
 }
 
@@ -890,13 +926,14 @@ if (TIER === 2) {
   }
   for (const failure of setupFailures) console.error(`setup failed [${failure.engine}]: ${failure.error}`);
   setupComplete = setupFailures.length === 0
-    && requestedTargetIds.length === targets.length
-    && requestedTargetIds.every((id) => targets.some((target) => target.id === id));
+    && hasExactTargetSetup(requestedTargetIds, targets.map((target) => target.id));
 
-  if (RUN_CANARY && !setupComplete) {
+  if (!setupComplete) {
+    const runnableIds = new Set(targets.map((target) => target.id));
+    const missing = requestedTargetIds.filter((targetId) => !runnableIds.has(targetId));
     batchAborted = true;
-    batchAbortReason = 'canary setup failed';
-    return finalizeAttempt(1, { stage: 'canary-setup', error: batchAbortReason });
+    batchAbortReason = `target setup incomplete${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`;
+    return finalizeAttempt(1, { stage: 'engine-setup', error: batchAbortReason });
   }
   if (targets.length === 0) {
     batchAborted = true;
@@ -913,6 +950,7 @@ if (TIER === 2) {
           targetId: target.id, engine: target.engine, model: target.model,
           question: q.id, verdict: result.verdict,
           runError: result.runError ?? null,
+          infrastructureError: result.infrastructureError ?? null,
           timedOut: result.timedOut === true,
           authError: result.authError === true,
           usage: result.usage ?? null,
@@ -921,8 +959,15 @@ if (TIER === 2) {
         };
         canaryRecords.push(record);
         if (!canaryAllowsScheduling(record)) {
+          if (result.infrastructureError) {
+            setupFailures.push({
+              stage: 'ground-truth', engine: 'ground-truth', question: q.id,
+              error: result.infrastructureError,
+            });
+          }
           batchAborted = true;
-          batchAbortReason = `canary ${result.verdict} on ${target.label}/${q.id}${result.runError ? `: ${result.runError}` : ''}`;
+          const reason = result.infrastructureError ?? result.runError;
+          batchAbortReason = `canary ${result.verdict} on ${target.label}/${q.id}${reason ? `: ${reason}` : ''}`;
           console.log(`⚠ aborting batch: ${batchAbortReason}`);
           return finalizeAttempt(1, { stage: 'canary', error: batchAbortReason });
         }
@@ -980,6 +1025,22 @@ if (TIER === 2) {
       }
       const result = await executeQuestion(target, q, { repeat });
       runSet.results.push(result);
+      if (result.infrastructureError) {
+        const message = `${q.id}: ${result.infrastructureError}`;
+        setupFailures.push({
+          stage: 'ground-truth', engine: 'ground-truth', question: q.id,
+          error: result.infrastructureError,
+        });
+        batchAborted = true;
+        batchAbortReason = message;
+        for (const item of runSets.values()) {
+          item.aborted = true;
+          item.abortReason = message;
+          item.invalidReason = message;
+        }
+        console.log(`⚠ aborting batch: ${message}`);
+        break;
+      }
       if (isAuthFailure(result)) {
         target.consecutiveApiFailures += 1;
         if (target.consecutiveApiFailures >= 2) {
@@ -992,6 +1053,38 @@ if (TIER === 2) {
       } else {
         target.consecutiveApiFailures = 0;
       }
+    }
+    if (batchAborted) break;
+
+    try {
+      await refreshContext();
+    } catch (error) {
+      const message = `post-repeat ${repeat} context: ${error.message}`;
+      setupFailures.push({ stage: 'post-repeat-context', engine: 'ground-truth', error: message });
+      batchAborted = true;
+      batchAbortReason = message;
+      for (const runSet of runSets.values()) {
+        runSet.aborted = true;
+        runSet.abortReason = message;
+        runSet.invalidReason = message;
+      }
+      break;
+    }
+    const epochAfterRun = vars.currentEpoch ?? null;
+    const epochTransitionError = epochTransitionFailure(repeat, epochAtRun, epochAfterRun);
+    if (epochTransitionError) {
+      const message = epochTransitionError;
+      console.warn(`⚠ ${message}`);
+      if (BENCHMARK) {
+        for (const runSet of runSets.values()) {
+          runSet.aborted = true;
+          runSet.abortReason = message;
+          runSet.invalidReason = message;
+        }
+        epochDriftAbort = true;
+        break;
+      }
+      for (const runSet of runSets.values()) runSet.driftWarning = message;
     }
   }
 }
@@ -1054,6 +1147,7 @@ for (const runSet of allRuns) {
       md.push('');
       md.push(`Trace: ${(r.trace ?? []).map((t) => `${t.kind ?? 'tool'}:${t.server ? `${t.server}:` : ''}${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls recorded)'}`);
       if (r.runError) md.push(`\nError: ${r.runError}`);
+      if (r.infrastructureError) md.push(`\nInfrastructure error: ${r.infrastructureError}`);
       md.push('');
       md.push('Answer:');
       md.push('```');

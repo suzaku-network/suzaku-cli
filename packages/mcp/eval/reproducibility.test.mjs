@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregateRunSets, aggregateUsage, canaryAllowsScheduling, formatUsageCost,
-  hasCompleteUsage, interleavedSchedule, isCommitReadyBenchmark, isValidRunSet,
-  manifestDestinations, summarizeUsage, usageTokenCount, validateCanaryPolicy,
+  epochTransitionFailure, groundTruthTrustFailure, hasCompleteUsage, hasExactTargetSetup,
+  interleavedSchedule, isCommitReadyBenchmark, isValidRunSet, manifestDestinations,
+  summarizeUsage, usageTokenCount, validateCanaryPolicy,
 } from './reproducibility.mjs';
 
 const USAGE = { input_tokens: 100, output_tokens: 20 };
@@ -19,6 +20,41 @@ describe('interleavedSchedule', () => {
       { repeat: 2, question: 'q2', target: 'a' },
       { repeat: 2, question: 'q2', target: 'b' },
     ]);
+  });
+});
+
+describe('infrastructure trust policy', () => {
+  const trustedFact = {
+    spec: { name: 'epoch' }, value: 49, sane: true, via: 'path',
+  };
+  const trusted = [{ tool: 'epoch_status', ok: true, parsed: true, facts: [trustedFact] }];
+
+  it('requires the exact requested target set before scheduling', () => {
+    expect(hasExactTargetSetup(['anthropic:a', 'codex:b'], ['codex:b', 'anthropic:a'])).toBe(true);
+    expect(hasExactTargetSetup(['anthropic:a', 'codex:b'], ['anthropic:a'])).toBe(false);
+    expect(hasExactTargetSetup(['anthropic:a'], ['anthropic:a', 'codex:b'])).toBe(false);
+    expect(hasExactTargetSetup(['anthropic:a', 'anthropic:a'], ['anthropic:a', 'anthropic:a'])).toBe(false);
+  });
+
+  it('accepts only parsed, resolved, sane, scoped ground truth', () => {
+    expect(groundTruthTrustFailure([])).toBeNull();
+    expect(groundTruthTrustFailure(trusted)).toBeNull();
+    expect(groundTruthTrustFailure([{ ...trusted[0], ok: false, error: 'RPC down' }]))
+      .toBe('ground-truth call failed (epoch_status): RPC down');
+    expect(groundTruthTrustFailure([{ ...trusted[0], parsed: false }]))
+      .toBe('ground-truth JSON parse failed (epoch_status)');
+    expect(groundTruthTrustFailure([{ ...trusted[0], facts: [{ ...trustedFact, value: undefined }] }]))
+      .toBe('ground-truth fact unresolved (epoch_status/epoch)');
+    expect(groundTruthTrustFailure([{ ...trusted[0], facts: [{ ...trustedFact, sane: false }] }]))
+      .toBe('ground-truth fact insane (epoch_status/epoch)');
+    expect(groundTruthTrustFailure([{ ...trusted[0], facts: [{ ...trustedFact, via: 'deep-global' }] }]))
+      .toBe('ground-truth fact used deep-global (epoch_status/epoch)');
+  });
+
+  it('detects drift after the final repeat instead of relying on a later refresh', () => {
+    expect(epochTransitionFailure(1, 49, 49)).toBeNull();
+    expect(epochTransitionFailure(1, 49, 50))
+      .toBe('epoch drift during repeat 1: started=49, ended=50');
   });
 });
 
@@ -45,6 +81,7 @@ describe('canary policy', () => {
     expect(canaryAllowsScheduling({ verdict: 'PARTIAL', runError: null })).toBe(false);
     expect(canaryAllowsScheduling({ verdict: 'FAIL', runError: null })).toBe(false);
     expect(canaryAllowsScheduling({ verdict: 'PASS', runError: 'timeout' })).toBe(false);
+    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, infrastructureError: 'oracle failed' })).toBe(false);
     expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, timedOut: true })).toBe(false);
     expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, authError: true })).toBe(false);
   });
@@ -89,6 +126,7 @@ describe('generic run validity', () => {
     expect(isValidRunSet(complete, 2)).toBe(true);
     expect(isValidRunSet({ ...complete, aborted: true }, 2)).toBe(false);
     expect(isValidRunSet({ ...complete, invalidReason: 'epoch drift' }, 2)).toBe(false);
+    expect(isValidRunSet({ ...complete, driftWarning: 'epoch drift' }, 2)).toBe(false);
     expect(isValidRunSet({ ...complete, results: complete.results.slice(0, 1) }, 2)).toBe(false);
     expect(isValidRunSet({
       ...complete,
@@ -97,6 +135,10 @@ describe('generic run validity', () => {
     expect(isValidRunSet({
       ...complete,
       results: [{ ...complete.results[0], usage: {} }, complete.results[1]],
+    }, 2)).toBe(false);
+    expect(isValidRunSet({
+      ...complete,
+      results: [{ ...complete.results[0], infrastructureError: 'oracle failed' }, complete.results[1]],
     }, 2)).toBe(false);
   });
 });
@@ -163,6 +205,12 @@ describe('commit-ready benchmark policy', () => {
       ...ready,
       runSets: runSets.map((run, index) => index === 0
         ? { ...run, results: [{ ...run.results[0], usage: null }, run.results[1]] }
+        : run),
+    })).toBe(false);
+    expect(isCommitReadyBenchmark({
+      ...ready,
+      runSets: runSets.map((run, index) => index === 0
+        ? { ...run, results: [{ ...run.results[0], infrastructureError: 'oracle failed' }, run.results[1]] }
         : run),
     })).toBe(false);
   });

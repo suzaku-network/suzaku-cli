@@ -17,6 +17,43 @@ export function interleavedSchedule(repeats, questionIds, targetIds) {
   return schedule;
 }
 
+/** A comparison may start only when every requested target was constructed exactly once. */
+export function hasExactTargetSetup(requestedTargetIds, runnableTargetIds) {
+  if (!Array.isArray(requestedTargetIds) || !Array.isArray(runnableTargetIds)
+    || requestedTargetIds.length !== runnableTargetIds.length) return false;
+  const requested = new Set(requestedTargetIds);
+  const runnable = new Set(runnableTargetIds);
+  return requested.size === requestedTargetIds.length
+    && runnable.size === runnableTargetIds.length
+    && [...requested].every((targetId) => runnable.has(targetId));
+}
+
+/** Return a deterministic reason when MCP ground truth cannot be trusted. */
+export function groundTruthTrustFailure(groups) {
+  if (!Array.isArray(groups)) return 'ground truth result is not an array';
+  for (const group of groups) {
+    const tool = group?.tool ?? 'unknown-tool';
+    if (group?.ok !== true) {
+      return `ground-truth call failed (${tool}): ${group?.error ?? 'unknown error'}`;
+    }
+    if (group.parsed !== true) return `ground-truth JSON parse failed (${tool})`;
+    if (!Array.isArray(group.facts)) return `ground-truth facts missing (${tool})`;
+    for (const fact of group.facts) {
+      const name = fact?.spec?.name ?? 'unnamed-fact';
+      if (fact?.value === undefined) return `ground-truth fact unresolved (${tool}/${name})`;
+      if (fact?.sane !== true) return `ground-truth fact insane (${tool}/${name})`;
+      if (fact?.via === 'deep-global') return `ground-truth fact used deep-global (${tool}/${name})`;
+    }
+  }
+  return null;
+}
+
+/** A repeat is comparable only when the live epoch is unchanged at its end. */
+export function epochTransitionFailure(repeat, startedEpoch, endedEpoch) {
+  if (startedEpoch === endedEpoch) return null;
+  return `epoch drift during repeat ${repeat}: started=${startedEpoch}, ended=${endedEpoch}`;
+}
+
 export function validateCanaryPolicy({
   tier, canary = false, canaryOnly = false, benchmark = false,
   only = null, repeat = 1, repeatExplicit = false,
@@ -35,6 +72,7 @@ export function validateCanaryPolicy({
 export function canaryAllowsScheduling(result) {
   return result?.verdict === 'PASS'
     && !result.runError
+    && !result.infrastructureError
     && result.timedOut !== true
     && result.authError !== true;
 }
@@ -93,10 +131,12 @@ export function formatUsageCost(result, engine) {
 export function isValidRunSet(run, expectedQuestions) {
   return !run.aborted
     && !run.invalidReason
+    && !run.driftWarning
     && Array.isArray(run.results)
     && run.results.length === expectedQuestions
     && !run.results.some((result) => (
-      result.runError || result.timedOut || result.authError || !hasCompleteUsage(result.usage)
+      result.runError || result.infrastructureError || result.timedOut || result.authError
+      || !hasCompleteUsage(result.usage)
     ));
 }
 
