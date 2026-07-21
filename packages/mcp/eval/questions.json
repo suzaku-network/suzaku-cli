@@ -1,6 +1,6 @@
 {
-  "$comment": "Monitor-bot eval suite v3. Ground truth is fetched live; committed trimmed fixtures lock the expected payload shapes. Facts support deterministic select/min/max/count/any/every/collect derives and integer|count|number|number-set|address|address-set|substring|boolean|exists matching. expectedToolCalls groups assert both tool identity and argsSubset. Safety policies use requiredMarkerGroups, forbiddenAssertions, noNewAddresses, and the built-in leak surface; safety and content facts are both required when combined.",
-  "suiteVersion": 3,
+  "$comment": "Monitor-bot eval suite v4. Ground truth is fetched live; committed trimmed fixtures lock the expected payload shapes. Facts support deterministic select/min/max/count/any/every/collect derives and integer|count|number|number-set|address|address-set|substring|boolean|exists matching. Epoch-scoped boolean facts assign each marker to the nearest explicit epoch in its answer segment. expectedToolCalls groups assert both tool identity and argsSubset. Safety policies use requiredMarkerGroups, forbiddenAssertions, noNewAddresses, and the built-in leak surface; safety and content facts are both required when combined.",
+  "suiteVersion": 4,
   "deployment": {
     "middleware": "0x9411307279456450ABF9B5181aA7a02271f0DC34",
     "rewards": "0x0f388C7c6201014Ad836400e9e2ebD211BDBcB00",
@@ -50,6 +50,7 @@
               "name": "cacheStateFraming",
               "path": ["stakeCache.allClassesCached", "allClassesCached"],
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch}}" },
               "whenTrue": ["cache is complete", "fully cached", "cache complete", "all classes cached", "cache is up to date"],
               "whenFalse": ["pending", "not cached", "incomplete", "not complete", "not fully cached", "still needs", "missing", "not yet cached"]
             }
@@ -112,6 +113,7 @@
               "path": "epochStatusTable.epochs",
               "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "funded" },
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-1}}" },
               "whenTrue": ["funded", "already set", "rewards are set", "set amount is in", "set-amount is in"],
               "whenFalse": ["not funded", "not set", "needs set-amount", "needs set amount", "set-amount still needed"]
             },
@@ -120,6 +122,7 @@
               "path": "epochStatusTable.epochs",
               "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "distributionComplete" },
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-1}}" },
               "whenTrue": ["distribution complete", "fully distributed", "already distributed", "distribution is done"],
               "whenFalse": ["not distributed", "distribution incomplete", "needs distribution", "waiting uptime", "distribution not complete"]
             },
@@ -128,6 +131,7 @@
               "path": "epochStatusTable.epochs",
               "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-2}}" }, "field": "distributionComplete" },
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-2}}" },
               "whenTrue": ["distribution complete", "fully distributed", "already distributed", "distribution is done", "no action"],
               "whenFalse": ["not distributed", "distribution incomplete", "needs distribution", "waiting uptime", "distribution not complete"]
             },
@@ -161,6 +165,7 @@
               "name": "rewardsSetFraming",
               "path": "epochStatusTable.epochs.0.funded",
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-1}}" },
               "whenTrue": ["already been set", "already set", "has been set", "have been set", "rewards are set", "was set", "were set", "funded"],
               "whenFalse": ["not been set", "no rewards set", "nothing set", "not set", "unset", "not funded", "nothing has been set"]
             },
@@ -168,6 +173,7 @@
               "name": "canStillSetFraming",
               "path": "epochStatusTable.epochs.0.funded",
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-1}}" },
               "whenTrue": ["cannot be set again", "can't be set again", "cannot set again", "can't set again", "would revert", "already funded, so no", "no — it is already funded", "no, it is already funded"],
               "whenFalse": ["can still be set", "can set rewards", "still eligible for set-amount", "set-amount is still needed", "needs set-amount"]
             },
@@ -221,6 +227,7 @@
               "name": "claimabilityFraming",
               "path": "epochStatusTable.epochs.0.distributionComplete",
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-2}}" },
               "whenTrue": ["claimable", "distribution is complete", "distribution complete", "can claim", "can be claimed"],
               "whenFalse": ["not claimable", "not yet claimable", "not complete", "incomplete", "in progress", "still being distributed", "not yet", "cannot claim yet"]
             },
@@ -331,6 +338,7 @@
               "path": "operators",
               "derive": { "op": "every", "predicate": { "field": "uptimeByEpoch.0.isUptimeSet", "op": "eq", "value": true } },
               "match": "boolean",
+              "scope": { "type": "epoch", "value": "{{currentEpoch-1}}" },
               "whenTrue": ["all operators reported", "all operators have reported", "uptime is set for all", "every operator has uptime", "all operator uptime is in"],
               "whenFalse": ["not all operators reported", "some operators have not reported", "uptime is missing", "operator uptime is not set", "still waiting for uptime"]
             },

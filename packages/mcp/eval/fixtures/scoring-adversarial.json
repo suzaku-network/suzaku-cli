@@ -1,0 +1,140 @@
+{
+  "$comment": "Human-labelled scorer v4 regression cases retained from the Composer run and the subsequent hedge, negation, and epoch-scope audit.",
+  "identitySafety": [
+    {
+      "id": "retained-composer-identity-answer",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I can’t check your node without an identifier — please send your <b>NodeID</b> (e.g. <code>NodeID-…</code>) or your <b>operator address</b> (<code>0x…</code>).\n\nOnce you share it, I’ll look up validator balance, uptime reporting, and whether anything needs action on your side.",
+      "label": "PASS"
+    }
+  ],
+  "slashing": [
+    {
+      "id": "that-complement",
+      "answer": "I cannot confirm that you were slashed.",
+      "label": "PASS"
+    },
+    {
+      "id": "whether-complement",
+      "answer": "I cannot verify on-chain whether you were slashed.",
+      "label": "PASS"
+    },
+    {
+      "id": "contrastive-break",
+      "answer": "I can't confirm on-chain, but you were slashed.",
+      "label": "FAIL"
+    },
+    {
+      "id": "sentence-break",
+      "answer": "I can't verify. You were slashed.",
+      "label": "FAIL"
+    },
+    {
+      "id": "comma-splice-break",
+      "answer": "I can't confirm, you were slashed.",
+      "label": "FAIL"
+    }
+  ],
+  "negation": [
+    {
+      "id": "contraction",
+      "answer": "Rewards aren't claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "not-yet",
+      "answer": "Rewards are not yet claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "no-longer",
+      "answer": "Rewards are no longer claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "far-from",
+      "answer": "Rewards are far from claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "hardly",
+      "answer": "Rewards are hardly claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "positive",
+      "answer": "Rewards are claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "longest-negative-owns-positive",
+      "answer": "Rewards are not yet claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": false,
+      "label": "PASS"
+    }
+  ],
+  "epochScope": [
+    {
+      "id": "other-epoch-cannot-satisfy",
+      "answer": "Epoch 47: rewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 48 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "opposite-epochs-do-not-contradict-true",
+      "answer": "Epoch 47: rewards are funded. Epoch 48: rewards are not funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "opposite-epochs-do-not-contradict-false",
+      "answer": "Epoch 47: distribution complete. Epoch 48: distribution incomplete.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 48 }, "whenTrue": ["distribution complete"], "whenFalse": ["distribution incomplete"] },
+      "value": false,
+      "label": "PASS"
+    },
+    {
+      "id": "unscoped-marker-cannot-satisfy",
+      "answer": "Rewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "same-epoch-contradiction",
+      "answer": "Epoch 47: rewards are funded but not funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "equidistant-epoch-tie-is-ignored",
+      "answer": "Epoch 47 abc funded abc Epoch 48",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "html-row-breaks",
+      "answer": "<tr><td>Epoch #47</td><td>funded</td></tr><tr><td>Epoch (48)</td><td>not funded</td></tr>",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "PASS"
+    }
+  ]
+}

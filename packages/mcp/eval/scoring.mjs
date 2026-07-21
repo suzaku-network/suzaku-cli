@@ -245,12 +245,25 @@ export function saneValue(fact, value) {
   }
 }
 
+/**
+ * Canonicalize only presentation punctuation that is semantically interchangeable.
+ * Do not use Unicode normalization here: compatibility normalization can rewrite
+ * identifiers and addresses, which are deliberately compared byte-for-byte below.
+ */
+function canonicalizePresentationPunctuation(text) {
+  return String(text)
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uff0d]/g, '-')
+    .replace(/[\u00a0\u2007\u202f]/g, ' ');
+}
+
 /** Strip HTML tags and thousands separators so numeric/address matching is stable. */
 export function normalizeAnswer(text) {
   if (typeof text !== 'string') return '';
-  let out = text.replace(/<[^>]{1,80}>/g, ' ');
+  let out = canonicalizePresentationPunctuation(text).replace(/<[^>]{1,80}>/g, ' ');
   // 1,234,567 / 1 234 567 → 1234567 (only separator-shaped gaps inside digit runs)
-  for (let i = 0; i < 4; i++) out = out.replace(/(\d)[,  ](\d{3})(?!\d)/g, '$1$2');
+  for (let i = 0; i < 4; i++) out = out.replace(/(\d)[, ](\d{3})(?!\d)/g, '$1$2');
   return out.replace(/\s+/g, ' ').trim();
 }
 
@@ -356,21 +369,50 @@ const EPISTEMIC_HEDGES = [
   'cannot confirm', "can't confirm", 'could not confirm', 'unable to confirm',
   'cannot verify', "can't verify", 'could not verify', 'unable to verify',
   'cannot check', "can't check", 'could not check', 'unable to check',
+  'cannot assess', "can't assess", 'could not assess', 'unable to assess',
   "don't know", 'do not know', 'no way to know', 'not enough information',
-  'unclear whether', 'unknown whether', 'not sure whether', 'whether',
+  'unclear whether', 'unknown whether', 'not sure whether',
   'the question is', 'you asked if', 'you asked whether',
 ];
 
-function hasMarker(text, markers) {
-  return markers.some((marker) => {
+function latestMarkerBefore(text, markers) {
+  let latest = null;
+  for (const marker of markers) {
     const compiled = markerRegex(marker);
-    return compiled ? compiled.regex.test(text.toLowerCase()) : false;
-  });
+    if (!compiled) continue;
+    for (const hit of text.matchAll(compiled.regex)) {
+      const candidate = { start: hit.index, end: hit.index + hit[0].length };
+      if (!latest || candidate.end > latest.end) latest = candidate;
+    }
+  }
+  return latest;
+}
+
+/**
+ * A hedge protects only an assertion it governs. Sentence/semicolon boundaries are
+ * handled by the bounded prefix; contrastive continuations always break governance,
+ * as does a bare comma splice (an explicit that/whether/if complement is allowed).
+ */
+function epistemicallyHedged(text, assertionStart) {
+  let boundary = assertionStart;
+  while (boundary > 0 && !/[.!?;\n]/.test(text[boundary - 1])) boundary -= 1;
+  const prefix = text.slice(boundary, assertionStart);
+  const hedge = latestMarkerBefore(prefix, EPISTEMIC_HEDGES);
+  if (!hedge) return false;
+  const bridge = prefix.slice(hedge.end);
+  if (/\b(?:but|however|nevertheless)\b/.test(bridge)) return false;
+  if (/(?<!\bnot\s)\byet\b/.test(bridge)) return false;
+  if (/(?:^|,)\s*still\b(?=\s*(?:,|you\b|it\b|they\b|the\b|rewards\b|this\b|that\b))/.test(bridge)) return false;
+  if (bridge.includes(',') && !/\b(?:that|whether|if)\b/.test(bridge)) return false;
+  return true;
 }
 
 function locallyNegated(text, start) {
-  const prefix = text.slice(Math.max(0, start - 50), start).toLowerCase();
-  return /\b(?:no|not|never|didn't|did not|wasn't|was not|isn't|is not|hasn't|has not|haven't|have not)\s+(?:(?:actually|ever|yet)\s+)?$/.test(prefix);
+  let boundary = start;
+  while (boundary > 0 && !/[.!?;,\n]/.test(text[boundary - 1])) boundary -= 1;
+  const prefix = text.slice(Math.max(boundary, start - 100), start).toLowerCase();
+  const modifiers = '(?:(?:actually|currently|ever|yet|still|remotely|really|quite|fully|completely|already|now)\\s+){0,3}';
+  return new RegExp(`(?:\\b(?:no|not|never|hardly|scarcely|barely|cannot|can't|couldn't|wouldn't|shouldn't|won't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|don't|doesn't|didn't)\\s+${modifiers}|\\bno\\s+longer\\s+${modifiers}|\\bfar\\s+from\\s+(?:being\\s+)?${modifiers})$`).test(prefix);
 }
 
 function markerOccurrences(text, markers, {
@@ -388,7 +430,7 @@ function markerOccurrences(text, markers, {
       if (quotes.some(([qStart, qEnd]) => qStart <= start && qEnd >= end)) continue;
       const clause = clauseAt(norm, start, end);
       if (!allowQuestions && clause.includes('?')) continue;
-      if (ignoreHedges && hasMarker(clause, EPISTEMIC_HEDGES)) continue;
+      if (ignoreHedges && epistemicallyHedged(norm, start)) continue;
       if (rejectNegated && locallyNegated(norm, start)) continue;
       out.push({ marker: compiled.needle, start, end });
     }
@@ -400,6 +442,82 @@ function strictlyContains(outer, inner) {
   return outer.start <= inner.start
     && outer.end >= inner.end
     && (outer.end - outer.start) > (inner.end - inner.start);
+}
+
+function booleanSegments(text) {
+  const withRowBreaks = canonicalizePresentationPunctuation(text)
+    .replace(/<br\s*\/?>|<\/?tr\b[^>]*>/gi, '\n');
+  return withRowBreaks
+    .split(/(?:\r?\n)+|[.!?;]+/)
+    .map((segment) => normalizeAnswer(segment))
+    .filter(Boolean);
+}
+
+function epochMentions(segment) {
+  const mentions = [];
+  const pattern = /\bepoch(?:\s+(?:is\s+)?|\s*[:#]\s*|\s*\(\s*)(-?\d+)\s*\)?/gi;
+  for (const hit of segment.matchAll(pattern)) {
+    const value = Number(hit[1]);
+    if (Number.isInteger(value)) {
+      mentions.push({ value, start: hit.index, end: hit.index + hit[0].trimEnd().length });
+    }
+  }
+  return mentions;
+}
+
+function rangeDistance(left, right) {
+  if (left.end <= right.start) return right.start - left.end;
+  if (right.end <= left.start) return left.start - right.end;
+  return 0;
+}
+
+function assignedEpoch(occurrence, mentions) {
+  if (mentions.length === 0) return null;
+  const ranked = mentions.map((mention) => ({ mention, distance: rangeDistance(occurrence, mention) }));
+  const minimum = Math.min(...ranked.map(({ distance }) => distance));
+  const nearest = ranked.filter(({ distance }) => distance === minimum);
+  return nearest.length === 1 ? nearest[0].mention.value : null;
+}
+
+function scopedMarkerOccurrences(text, markers, options, scope) {
+  if (!scope) return markerOccurrences(text, markers, options);
+  if (scope.type !== 'epoch') return [];
+  const targetEpoch = Number(scope.value);
+  if (!Number.isInteger(targetEpoch)) return [];
+  const out = [];
+  let offset = 0;
+  for (const segment of booleanSegments(text)) {
+    const mentions = epochMentions(segment);
+    for (const occurrence of markerOccurrences(segment, markers, options)) {
+      if (assignedEpoch(occurrence, mentions) !== targetEpoch) continue;
+      out.push({
+        ...occurrence,
+        start: occurrence.start + offset,
+        end: occurrence.end + offset,
+      });
+    }
+    offset += segment.length + 1;
+  }
+  return out;
+}
+
+/** Validate the optional deterministic scope supported by boolean fact specs. */
+export function validateFactSpec(fact) {
+  const errors = [];
+  if (fact?.scope === undefined) return errors;
+  if (fact.match !== 'boolean') errors.push('scope is only supported for boolean facts');
+  if (!fact.scope || typeof fact.scope !== 'object') {
+    errors.push('scope must be an object');
+    return errors;
+  }
+  if (fact.scope.type !== 'epoch') errors.push(`unsupported scope type: ${String(fact.scope.type)}`);
+  const scopeValue = fact.scope.value;
+  const integerValue = (typeof scopeValue === 'number' && Number.isInteger(scopeValue))
+    || (typeof scopeValue === 'string' && /^-?\d+$/.test(scopeValue.trim()));
+  if (!integerValue) {
+    errors.push(`epoch scope value must resolve to an integer: ${String(fact.scope.value)}`);
+  }
+  return errors;
 }
 
 /** Does the answer text contain the fact value, per the fact's match rule? */
@@ -423,8 +541,15 @@ export function matchFact(answerText, fact, value) {
       const oppositeMarkers = truth ? fact.whenFalse : fact.whenTrue;
       if (!Array.isArray(ownMarkers) || ownMarkers.length === 0
         || !Array.isArray(oppositeMarkers) || oppositeMarkers.length === 0) return false;
-      const own = markerOccurrences(norm, ownMarkers, { ignoreHedges: true });
-      const opposite = markerOccurrences(norm, oppositeMarkers, { ignoreHedges: true });
+      const trueOccurrences = scopedMarkerOccurrences(answerText, fact.whenTrue, {
+        ignoreHedges: true,
+        rejectNegated: true,
+      }, fact.scope);
+      const falseOccurrences = scopedMarkerOccurrences(answerText, fact.whenFalse, {
+        ignoreHedges: true,
+      }, fact.scope);
+      const own = truth ? trueOccurrences : falseOccurrences;
+      const opposite = truth ? falseOccurrences : trueOccurrences;
       // A longer marker owns its contained core: "not yet claimable" suppresses
       // the embedded positive "claimable" occurrence. Uncontained markers on
       // both sides survive as a contradiction and fail the fact.

@@ -34,7 +34,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
-  matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict,
+  matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
 } from './scoring.mjs';
 import {
   parseCursorStream, auditCursorBoundary, parseCursorToolList, compareCursorToolList,
@@ -324,6 +324,9 @@ for (const q of preflightQuestions) {
         && (!Array.isArray(fact.whenTrue) || fact.whenTrue.length === 0
           || !Array.isArray(fact.whenFalse) || fact.whenFalse.length === 0)) {
         preflightErrors.push(`boolean fact ${q.id}/${fact.name} must define non-empty whenTrue and whenFalse lists`);
+      }
+      for (const error of validateFactSpec(substitute(fact, vars))) {
+        preflightErrors.push(`fact ${q.id}/${fact.name}: ${error}`);
       }
     }
   }
