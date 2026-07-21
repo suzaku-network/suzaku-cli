@@ -3,10 +3,12 @@
 One row per valid model repetition, appended by `pnpm eval -- --tier 2 --benchmark …`.
 Raw per-question reports live in `eval/results/` (gitignored, local only).
 Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading version.
-**`@v1` and `@v2` rows are legacy. `@v3` was pre-benchmark/exploratory:** scorer defects were
-subsequently reproduced in punctuation handling, hedge governance, marker negation, and cross-epoch
-boolean matching. **`@v4` is the first suite with the corrected semantics.** Historical rows are
-preserved as recorded; do not compare exact PASS counts across grading versions.
+**`@v1` and `@v2` rows are legacy. `@v3` and `@v4` were pre-benchmark/exploratory:** later audits
+reproduced scorer defects in punctuation, hedge governance, marker negation, and cross-epoch boolean
+matching, followed by runner-validity defects around ground truth, target setup, and final drift.
+**`@v5` is the current benchmark candidate; it has offline regression coverage but no paid result
+yet.** Historical rows are preserved as recorded; do not compare exact PASS counts across grading
+versions.
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
 
 **July 2026 retirement note:** the custom Cursor/Composer NDJSON route was retired after `1c886cd`.
