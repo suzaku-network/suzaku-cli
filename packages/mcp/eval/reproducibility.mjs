@@ -17,6 +17,28 @@ export function interleavedSchedule(repeats, questionIds, targetIds) {
   return schedule;
 }
 
+export function validateCanaryPolicy({
+  tier, canary = false, canaryOnly = false, benchmark = false,
+  only = null, repeat = 1, repeatExplicit = false,
+}) {
+  const errors = [];
+  if ((canary || canaryOnly) && tier !== 2) errors.push('canaries require --tier 2');
+  if (canary && canaryOnly) errors.push('--canary and --canary-only are mutually exclusive');
+  if (canaryOnly && benchmark) errors.push('--canary-only is incompatible with --benchmark');
+  if (canaryOnly && Array.isArray(only)) errors.push('--canary-only is incompatible with --only');
+  if (canaryOnly && repeatExplicit && repeat !== 1) {
+    errors.push('--canary-only requires --repeat 1');
+  }
+  return errors;
+}
+
+export function canaryAllowsScheduling(result) {
+  return result?.verdict === 'PASS'
+    && !result.runError
+    && result.timedOut !== true
+    && result.authError !== true;
+}
+
 /** Successful tier-2 runs must carry terminal input and output token counts. */
 export function hasCompleteUsage(usage) {
   return usage != null
@@ -26,12 +48,107 @@ export function hasCompleteUsage(usage) {
     ));
 }
 
+const USAGE_KEYS = [
+  'input_tokens', 'output_tokens', 'cache_creation_input_tokens',
+  'cache_read_input_tokens', 'total_tokens',
+];
+
+/** Missing terminal usage poisons the aggregate instead of becoming zero. */
+export function aggregateUsage(results) {
+  if (!Array.isArray(results) || results.length === 0
+    || results.some((result) => !hasCompleteUsage(result.usage))) return null;
+  return Object.fromEntries(USAGE_KEYS
+    .filter((key) => results.every((result) => Number.isFinite(result.usage[key])))
+    .map((key) => [key, results.reduce((sum, result) => sum + result.usage[key], 0)]));
+}
+
+/** Shared report/manifest totals: unknown values remain null. */
+export function summarizeUsage(results) {
+  const costs = Array.isArray(results)
+    ? results.map((result) => result.cost).filter(Number.isFinite)
+    : [];
+  const completeCost = Array.isArray(results) && results.length > 0 && costs.length === results.length;
+  return {
+    usage: aggregateUsage(results),
+    cost: completeCost ? costs.reduce((sum, cost) => sum + cost, 0) : null,
+  };
+}
+
+export function usageTokenCount(usage) {
+  if (!hasCompleteUsage(usage)) return null;
+  if (Number.isFinite(usage.total_tokens)) return usage.total_tokens;
+  return usage.input_tokens
+    + usage.output_tokens
+    + Number(usage.cache_read_input_tokens ?? 0)
+    + Number(usage.cache_creation_input_tokens ?? 0);
+}
+
+export function formatUsageCost(result, engine) {
+  const tokens = usageTokenCount(result?.usage);
+  const usage = tokens == null ? 'usage unknown' : `${Math.round(tokens / 1000)}k tok`;
+  if (engine === 'codex') return `sub (${usage})`;
+  return Number.isFinite(result?.cost) ? `$${result.cost.toFixed(4)} (${usage})` : usage;
+}
+
 export function isValidRunSet(run, expectedQuestions) {
   return !run.aborted
     && !run.invalidReason
     && Array.isArray(run.results)
     && run.results.length === expectedQuestions
-    && !run.results.some((result) => result.runError || !hasCompleteUsage(result.usage));
+    && !run.results.some((result) => (
+      result.runError || result.timedOut || result.authError || !hasCompleteUsage(result.usage)
+    ));
+}
+
+/** Infrastructure-valid benchmark batches may contain any quality verdict. */
+export function isCommitReadyBenchmark({
+  benchmarkRequested = false,
+  setupComplete = false,
+  setupFailures = [],
+  canaryRequested = false,
+  canaries = [],
+  epochDriftAbort = false,
+  batchAborted = false,
+  runSets = [],
+  questionIds = [],
+  targetIds = [],
+  repeats = 1,
+} = {}) {
+  if (!benchmarkRequested || !setupComplete || setupFailures.length > 0
+    || epochDriftAbort || batchAborted || questionIds.length === 0
+    || targetIds.length === 0 || !Number.isInteger(repeats) || repeats < 1) return false;
+
+  if (canaryRequested) {
+    if (canaries.length !== targetIds.length) return false;
+    const seenTargets = new Set();
+    for (const result of canaries) {
+      if (!targetIds.includes(result.targetId) || seenTargets.has(result.targetId)
+        || !canaryAllowsScheduling(result) || !hasCompleteUsage(result.usage)) return false;
+      seenTargets.add(result.targetId);
+    }
+  }
+
+  const expectedKeys = new Set();
+  for (let repeat = 1; repeat <= repeats; repeat += 1) {
+    for (const targetId of targetIds) expectedKeys.add(`${repeat}:${targetId}`);
+  }
+  if (runSets.length !== expectedKeys.size) return false;
+  const seenRunSets = new Set();
+  for (const run of runSets) {
+    const key = `${run.repeat}:${run.targetId}`;
+    if (!expectedKeys.has(key) || seenRunSets.has(key) || run.driftWarning
+      || !isValidRunSet(run, questionIds.length)) return false;
+    seenRunSets.add(key);
+    const resultIds = run.results.map((result) => result.id);
+    if (resultIds.length !== new Set(resultIds).size
+      || questionIds.some((id) => !resultIds.includes(id))) return false;
+  }
+  return seenRunSets.size === expectedKeys.size;
+}
+
+export function manifestDestinations({ tier, argsValid, commitReady }) {
+  const local = tier === 2 && argsValid === true;
+  return { local, canonical: local && commitReady === true };
 }
 
 export function aggregateRunSets(runSets, expectedQuestions) {
@@ -50,6 +167,7 @@ export function aggregateRunSets(runSets, expectedQuestions) {
     questions: results.length,
     medianWallMs: percentile(walls, 0.5),
     p95WallMs: percentile(walls, 0.95),
+    usage: aggregateUsage(results),
     cost: completeCost ? totalCost : null,
     costPerPass: completeCost && passed > 0 ? totalCost / passed : null,
   };

@@ -5,6 +5,7 @@
 //     --engines a,b          interleave multiple providers in one drift-controlled batch.
 //     --anthropic-models …   provider-specific model lists (with --engines).
 //     --repeat N --canary    repeat each target; gate wiring before paid suite calls.
+//     --canary-only          run the operators wiring check once per target, then stop.
 //     --engine anthropic     (default) Anthropic API tool-runner; needs ANTHROPIC_API_KEY.
 //                            --model <id> or --models a,b,c to compare models.
 //     --engine codex         drives the LIVE bot's primary engine (gpt-5.5 via the
@@ -12,10 +13,11 @@
 //                            Nothing is posted to any chat: the agent writes its answer
 //                            to a workspace file, jobs self-delete. Needs the deploy
 //                            compose stack running locally. No $ cost (flat sub).
-//   --benchmark              append one row per valid repetition and write a batch manifest
+//   --benchmark              append rows only for a commit-ready batch and write its canonical manifest
 //   --only id1,id2 · --fast (skip slow questions)
 //
-// Results: eval/results/<runid>-....{json,md} (gitignored). benchmarks.md is committed.
+// Results: raw reports and every tier-2 attempt manifest are gitignored under
+// eval/results/. Commit-ready benchmark manifests are also copied to eval/manifests/.
 
 import {
   readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync,
@@ -31,10 +33,14 @@ import {
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
 } from './scoring.mjs';
 import {
-  aggregateRunSets, isValidRunSet, percentile,
+  aggregateRunSets, aggregateUsage, canaryAllowsScheduling, formatUsageCost,
+  hasCompleteUsage, interleavedSchedule, isCommitReadyBenchmark, isValidRunSet,
+  manifestDestinations, percentile, summarizeUsage, usageTokenCount, validateCanaryPolicy,
 } from './reproducibility.mjs';
 
 const execFileP = promisify(execFile);
+const here = new URL('.', import.meta.url);
+const spec = JSON.parse(readFileSync(new URL('./questions.json', here), 'utf8'));
 
 // ---------- flags ----------
 const argv = process.argv.slice(2);
@@ -58,10 +64,12 @@ const ANTHROPIC_MODELS = [...new Set(flagList('--anthropic-models')
   ?? (ENGINES.length === 1 && ENGINES[0] === 'anthropic' ? LEGACY_MODELS : ['claude-sonnet-4-6']))];
 const REPEAT = Number(flagValue('--repeat', '1'));
 const CANARY = argv.includes('--canary');
+const CANARY_ONLY = argv.includes('--canary-only');
+const RUN_CANARY = CANARY || CANARY_ONLY;
 const BENCHMARK = argv.includes('--benchmark');
 const NO_BUILD = argv.includes('--no-build');
 if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary] [--only ids] [--fast] [--benchmark] [--no-build]');
+  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--no-build]');
   process.exit(2);
 }
 if (!Number.isInteger(REPEAT) || REPEAT < 1) {
@@ -82,38 +90,39 @@ if (NO_BUILD && BENCHMARK) {
   process.exit(2);
 }
 
-const rootDir = new URL('../../../', import.meta.url).pathname;
-const mcpDir = new URL('../', import.meta.url).pathname;
-if (!NO_BUILD) {
-  console.log('Building root CLI + MCP server before eval…');
-  try {
-    await execFileP('pnpm', ['build'], { cwd: rootDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
-    await execFileP('pnpm', ['build'], { cwd: mcpDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
-  } catch (error) {
-    console.error(`pre-eval build failed: ${String(error.stderr ?? error.message).slice(0, 2000)}`);
-    process.exit(2);
-  }
-}
-
-const runId = new Date().toISOString().replace(/[:.]/g, '-');
-const batchStartedAt = new Date().toISOString();
-async function readGitState() {
-  try {
-    const [{ stdout: sha }, { stdout: tracked }, { stdout: any }] = await Promise.all([
-      execFileP('git', ['rev-parse', 'HEAD'], { cwd: rootDir }),
-      execFileP('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: rootDir, maxBuffer: 8 * 1024 * 1024 }),
-      execFileP('git', ['status', '--porcelain'], { cwd: rootDir, maxBuffer: 8 * 1024 * 1024 }),
-    ]);
-    return { sha: sha.trim(), trackedDirty: tracked.trim().length > 0, dirty: any.trim().length > 0 };
-  } catch (error) {
-    return { sha: null, trackedDirty: true, dirty: true, error: error.message };
-  }
-}
-const gitState = await readGitState();
-if (BENCHMARK && gitState.trackedDirty) {
-  console.error('--benchmark requires a clean tracked worktree so manifests and rows identify one exact revision');
+const canaryPolicyErrors = validateCanaryPolicy({
+  tier: TIER,
+  canary: CANARY,
+  canaryOnly: CANARY_ONLY,
+  benchmark: BENCHMARK,
+  only: ONLY,
+  repeat: REPEAT,
+  repeatExplicit: argv.includes('--repeat'),
+});
+if (canaryPolicyErrors.length > 0) {
+  for (const error of canaryPolicyErrors) console.error(error);
   process.exit(2);
 }
+
+const knownQuestionIds = new Set(spec.questions.map((question) => question.id));
+const unknownQuestionIds = (ONLY ?? []).filter((id) => !knownQuestionIds.has(id));
+if (unknownQuestionIds.length > 0) {
+  console.error(`--only references unknown question: ${unknownQuestionIds.join(', ')}`);
+  process.exit(2);
+}
+const questions = spec.questions
+  .filter((q) => (ONLY ? ONLY.includes(q.id) : true))
+  .filter((q) => (FAST ? !q.slow : true))
+  .filter((q) => (TIER === 1 ? !q.safety || (q.groundTruth ?? []).length > 0 : true));
+if (questions.length === 0) {
+  console.error('question selection is empty');
+  process.exit(2);
+}
+
+const requestedTargetIds = [
+  ...(ENGINES.includes('codex') ? ['codex:gpt-5.5-codex'] : []),
+  ...(ENGINES.includes('anthropic') ? ANTHROPIC_MODELS.map((model) => `anthropic:${model}`) : []),
+];
 
 function sha256Text(value) {
   return createHash('sha256').update(String(value)).digest('hex');
@@ -136,9 +145,211 @@ const PRICES = {
 const DEFAULT_TOOL_TIMEOUT = 120_000;
 const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
 
-// ---------- load question set ----------
-const here = new URL('.', import.meta.url);
-const spec = JSON.parse(readFileSync(new URL('./questions.json', here), 'utf8'));
+async function main() {
+  const rootDir = new URL('../../../', import.meta.url).pathname;
+  const mcpDir = new URL('../', import.meta.url).pathname;
+  const runId = new Date().toISOString().replace(/[:.]/g, '-');
+  const batchStartedAt = new Date().toISOString();
+  let gitState = { sha: null, trackedDirty: null, dirty: null };
+  let gtConn = null;
+  let agentConn = null;
+  let mcpTools = [];
+  let toolByName = new Map();
+  const vars = { ...spec.deployment };
+  let initialEpoch = null;
+  const allRuns = [];
+  const setupFailures = [];
+  const canaryRecords = [];
+  const resultFiles = [];
+  let targets = [];
+  let setupComplete = false;
+  let epochDriftAbort = false;
+  let batchAborted = false;
+  let batchAbortReason = null;
+  let attemptFailure = null;
+  let finalized = false;
+
+  async function readGitState() {
+    try {
+      const [{ stdout: sha }, { stdout: tracked }, { stdout: any }] = await Promise.all([
+        execFileP('git', ['rev-parse', 'HEAD'], { cwd: rootDir }),
+        execFileP('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: rootDir, maxBuffer: 8 * 1024 * 1024 }),
+        execFileP('git', ['status', '--porcelain'], { cwd: rootDir, maxBuffer: 8 * 1024 * 1024 }),
+      ]);
+      return { sha: sha.trim(), trackedDirty: tracked.trim().length > 0, dirty: any.trim().length > 0 };
+    } catch (error) {
+      return { sha: null, trackedDirty: true, dirty: true, error: error.message };
+    }
+  }
+
+  function benchmarkReady() {
+    return isCommitReadyBenchmark({
+      benchmarkRequested: BENCHMARK,
+      setupComplete,
+      setupFailures,
+      canaryRequested: RUN_CANARY,
+      canaries: canaryRecords,
+      epochDriftAbort,
+      batchAborted,
+      runSets: allRuns,
+      questionIds: questions.map((question) => question.id),
+      targetIds: requestedTargetIds,
+      repeats: REPEAT,
+    });
+  }
+
+  function compactRun(runSet) {
+    const results = runSet.results;
+    const report = resultFiles.find((item) => item.runSet === runSet);
+    const totals = summarizeUsage(results);
+    return {
+      targetId: runSet.targetId,
+      engine: runSet.engine,
+      model: runSet.model,
+      repeat: runSet.repeat,
+      epochAtRun: runSet.epochAtRun,
+      verdicts: Object.fromEntries(results.map((result) => [result.id, result.verdict])),
+      facts: {
+        matched: results.reduce((sum, result) => sum + Number(result.facts?.matched ?? 0), 0),
+        total: results.reduce((sum, result) => sum + Number(result.facts?.total ?? 0), 0),
+      },
+      questionResults: Object.fromEntries(results.map((result) => [result.id, {
+        verdict: result.verdict,
+        facts: {
+          matched: result.facts?.matched ?? 0,
+          total: result.facts?.total ?? 0,
+          checks: (result.factDetails ?? []).map((fact) => ({ name: fact.name, matched: fact.matched })),
+        },
+        runError: result.runError ?? null,
+        timedOut: result.timedOut === true,
+        authError: result.authError === true,
+        usage: result.usage ?? null,
+      }])),
+      wallMs: {
+        median: percentile(results.map((result) => result.wallMs).filter(Number.isFinite), 0.5),
+        p95: percentile(results.map((result) => result.wallMs).filter(Number.isFinite), 0.95),
+      },
+      usage: totals.usage,
+      cost: totals.cost,
+      costDisplay: runSet.engine === 'codex'
+        ? 'subscription'
+        : (totals.cost == null ? null : `$${totals.cost.toFixed(6)}`),
+      aborted: runSet.aborted ?? false,
+      abortReason: runSet.abortReason ?? null,
+      invalidReason: runSet.invalidReason ?? null,
+      driftWarning: runSet.driftWarning ?? null,
+      report: report ? {
+        json: report.json, jsonSha256: report.jsonSha256,
+        markdown: report.markdown, markdownSha256: report.markdownSha256,
+      } : null,
+    };
+  }
+
+  function createManifest(exitCode, commitReady) {
+    const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
+    const definingFiles = {
+      'eval/questions.json': new URL('./questions.json', here),
+      'eval/scoring.mjs': new URL('./scoring.mjs', here),
+      'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
+      'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
+      'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
+      'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
+      'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
+      'root/dist/cli.js': join(rootDir, 'dist/cli.js'),
+      'mcp/dist/server.js': join(mcpDir, 'dist/server.js'),
+    };
+    return {
+      runId,
+      startedAt: batchStartedAt,
+      completedAt: new Date().toISOString(),
+      gitSha: gitState.sha,
+      dirty: gitState.dirty,
+      trackedDirty: gitState.trackedDirty,
+      node: process.version,
+      tier: TIER,
+      suite,
+      suiteVersion: spec.suiteVersion ?? 1,
+      requested: {
+        engines: ENGINES,
+        targets: requestedTargetIds,
+        anthropicModels: ANTHROPIC_MODELS,
+        questions: questions.map((question) => question.id),
+        repeat: REPEAT,
+        canary: CANARY,
+        canaryOnly: CANARY_ONLY,
+        benchmark: BENCHMARK,
+      },
+      outcome: {
+        exitCode,
+        setupComplete,
+        batchAborted,
+        batchAbortReason,
+        commitReady,
+        failure: attemptFailure,
+      },
+      pricing: {
+        anthropicPerMTok: PRICES,
+        sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
+      },
+      initialEpoch,
+      epochDriftAbort,
+      setupFailures,
+      canaries: canaryRecords,
+      hashes: {
+        files: Object.fromEntries(Object.entries(definingFiles).map(([name, url]) => [name, sha256File(url)])),
+        mcpToolSchemas: mcpTools.length > 0
+          ? sha256Text(JSON.stringify(mcpTools.map((tool) => ({ name: tool.name, inputSchema: tool.inputSchema }))))
+          : null,
+      },
+      repetitions: allRuns.map(compactRun),
+    };
+  }
+
+  async function finalizeAttempt(exitCode, failure = null) {
+    if (finalized) return exitCode;
+    if (failure) attemptFailure = failure;
+    try { if (gtConn) await gtConn.client.close(); } catch { /* best effort */ }
+    try { if (agentConn) await agentConn.client.close(); } catch { /* best effort */ }
+    const commitReady = benchmarkReady();
+    const destinations = manifestDestinations({ tier: TIER, argsValid: true, commitReady });
+    if (destinations.local) {
+      const serialized = `${JSON.stringify(createManifest(exitCode, commitReady), null, 2)}\n`;
+      const localDir = new URL('./results/manifests/', here);
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(new URL(`./${runId}.json`, localDir), serialized);
+      console.log(`manifest (local) ← results/manifests/${runId}.json`);
+      if (destinations.canonical) {
+        const canonicalDir = new URL('./manifests/', here);
+        mkdirSync(canonicalDir, { recursive: true });
+        writeFileSync(new URL(`./${runId}.json`, canonicalDir), serialized);
+        console.log(`manifest (canonical) ← manifests/${runId}.json`);
+      }
+    }
+    finalized = true;
+    return exitCode;
+  }
+
+  try {
+    if (!NO_BUILD) {
+      console.log('Building root CLI + MCP server before eval…');
+      try {
+        await execFileP('pnpm', ['build'], { cwd: rootDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+        await execFileP('pnpm', ['build'], { cwd: mcpDir, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+      } catch (error) {
+        const message = `pre-eval build failed: ${String(error.stderr ?? error.message).slice(0, 2000)}`;
+        console.error(message);
+        setupFailures.push({ stage: 'build', engine: 'build', error: message });
+        return finalizeAttempt(2, { stage: 'build', error: message });
+      }
+    }
+
+    gitState = await readGitState();
+    if (BENCHMARK && gitState.trackedDirty) {
+      const message = '--benchmark requires a clean tracked worktree so manifests and rows identify one exact revision';
+      console.error(message);
+      setupFailures.push({ stage: 'worktree', engine: 'git', error: message });
+      return finalizeAttempt(2, { stage: 'worktree', error: message });
+    }
 
 function substitute(value, vars) {
   if (typeof value === 'string') {
@@ -181,12 +392,12 @@ function makeMcpConnection(dedupMs) {
   return { transport, client: new Client({ name: 'suzaku-eval', version: '0.0.1' }) };
 }
 
-const gtConn = makeMcpConnection(1);
+gtConn = makeMcpConnection(1);
 await gtConn.client.connect(gtConn.transport);
-const agentConn = TIER === 2 && ENGINES.includes('anthropic') ? makeMcpConnection(30000) : null;
+agentConn = TIER === 2 && ENGINES.includes('anthropic') ? makeMcpConnection(30000) : null;
 if (agentConn) await agentConn.client.connect(agentConn.transport);
-const { tools: mcpTools } = await gtConn.client.listTools();
-const toolByName = new Map(mcpTools.map((t) => [t.name, t]));
+({ tools: mcpTools } = await gtConn.client.listTools());
+toolByName = new Map(mcpTools.map((t) => [t.name, t]));
 console.log(`MCP server up: ${mcpTools.length} tools (read-only profile)${agentConn ? ' — separate agent + ground-truth instances' : ''}`);
 
 async function callVia(client, name, args, timeoutMs = DEFAULT_TOOL_TIMEOUT) {
@@ -237,7 +448,6 @@ function preflightExpectedCall(q, expected) {
 }
 
 // ---------- context prefetch ----------
-const vars = { ...spec.deployment };
 async function refreshContext({ log = false } = {}) {
   for (const ctx of spec.context) {
     const args = substitute(ctx.args, vars);
@@ -265,29 +475,24 @@ async function refreshContext({ log = false } = {}) {
 try {
   await refreshContext({ log: true });
 } catch (error) {
-  console.error(error.message);
-  process.exit(1);
+  const message = error.message;
+  console.error(message);
+  setupFailures.push({ stage: 'context', engine: 'ground-truth', error: message });
+  return finalizeAttempt(1, { stage: 'context', error: message });
 }
-const initialEpoch = vars.currentEpoch ?? null;
+initialEpoch = vars.currentEpoch ?? null;
 
 // ---------- question selection ----------
-const questions = spec.questions
-  .filter((q) => (ONLY ? ONLY.includes(q.id) : true))
-  .filter((q) => (FAST ? !q.slow : true))
-  .filter((q) => (TIER === 1 ? !q.safety || (q.groundTruth ?? []).length > 0 : true));
-const knownQuestionIds = new Set(spec.questions.map((question) => question.id));
-for (const id of ONLY ?? []) {
-  if (!knownQuestionIds.has(id)) preflightErrors.push(`--only references unknown question: ${id}`);
-}
-if (questions.length === 0) preflightErrors.push('question selection is empty');
-const canaryIds = ['operators', 'identity-ambiguity-my-node'];
-const canaryQuestions = CANARY && TIER === 2
+const canaryIds = ['operators'];
+const canaryQuestions = RUN_CANARY
   ? canaryIds.map((id) => spec.questions.find((question) => question.id === id)).filter(Boolean)
   : [];
-if (CANARY && canaryQuestions.length !== canaryIds.length) {
+if (RUN_CANARY && canaryQuestions.length !== canaryIds.length) {
   preflightErrors.push(`canary questions missing: ${canaryIds.filter((id) => !canaryQuestions.some((question) => question.id === id)).join(', ')}`);
 }
-const preflightQuestions = [...new Map([...questions, ...canaryQuestions].map((question) => [question.id, question])).values()];
+const preflightQuestions = CANARY_ONLY
+  ? canaryQuestions
+  : [...new Map([...questions, ...canaryQuestions].map((question) => [question.id, question])).values()];
 for (const q of preflightQuestions) {
   for (const gt of q.groundTruth ?? []) preflightCheck(gt.tool, substitute(gt.args, vars));
   for (const group of q.expectedTools ?? []) {
@@ -314,9 +519,9 @@ for (const q of preflightQuestions) {
 if (preflightErrors.length > 0) {
   console.error('\n✗ eval-spec preflight failed:');
   for (const error of [...new Set(preflightErrors)]) console.error(`  - ${error}`);
-  await gtConn.client.close();
-  if (agentConn) await agentConn.client.close();
-  process.exit(2);
+  const message = [...new Set(preflightErrors)].join('; ');
+  setupFailures.push({ stage: 'preflight', engine: 'spec', error: message });
+  return finalizeAttempt(2, { stage: 'preflight', error: message });
 }
 
 // ---------- ground truth ----------
@@ -416,12 +621,15 @@ async function makeAnthropicEngine(model) {
   }));
   return async function runQuestion(q) {
     trace = [];
-    const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+    let usage = null;
+    const usageParts = [];
     const prompt = substitute(q.prompt, vars);
     const t0 = performance.now();
     let answer = '';
     let runError = null;
     let stopReason = null;
+    let timedOut = false;
+    let authError = false;
     try {
       const runner = anthropic.beta.messages.toolRunner({
         model,
@@ -434,18 +642,24 @@ async function makeAnthropicEngine(model) {
       let last = null;
       for await (const message of runner) {
         last = message;
-        for (const k of Object.keys(usage)) usage[k] += message.usage?.[k] ?? 0;
+        usageParts.push({ usage: message.usage ?? null });
       }
+      usage = aggregateUsage(usageParts);
       stopReason = last?.stop_reason ?? null;
       answer = (last?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
     } catch (e) {
       runError = e.message;
+      timedOut = /timed?\s*out|timeout/i.test(runError);
+      authError = /credit balance|billing|authentication_error|invalid x-api-key|unauthorized|\b401\b/i.test(runError);
+      usage = null;
     }
     return {
-      answer, runError, stopReason, usage,
+      answer, runError, stopReason, usage, timedOut, authError,
       wallMs: Math.round(performance.now() - t0),
       trace: trace.map((t) => ({ name: t.name, args: t.args, ms: t.ms, isError: t.isError })),
-      cost: computeCost(usage, PRICES[model] ?? PRICES['claude-sonnet-4-6']),
+      cost: hasCompleteUsage(usage)
+        ? computeCost(usage, PRICES[model] ?? PRICES['claude-sonnet-4-6'])
+        : null,
     };
   };
 }
@@ -530,17 +744,27 @@ function makeCodexEngine() {
 
       const failed = entry.status !== 'ok';
       const noAnswer = answer.length === 0 && !failed;
+      const runError = failed
+        ? `cron run status=${entry.status}: ${String(entry.summary).slice(0, 200)}`
+        : (noAnswer ? 'run ok but no answer file written' : null);
       return {
         answer,
-        runError: failed ? `cron run status=${entry.status}: ${String(entry.summary).slice(0, 200)}` : (noAnswer ? 'run ok but no answer file written' : null),
+        runError,
         stopReason: entry.status,
-        usage: entry.usage ?? {},
+        usage: hasCompleteUsage(entry.usage) ? entry.usage : null,
+        timedOut: Boolean(runError && /timed?\s*out|timeout/i.test(runError)),
+        authError: Boolean(runError && /credit balance|billing|authentication|unauthorized|\b401\b/i.test(runError)),
         wallMs: entry.durationMs ?? Math.round(performance.now() - t0),
         trace,
         cost: null, // flat subscription — no per-call price exists
       };
     } catch (e) {
-      return { answer: '', runError: e.message, stopReason: null, usage: {}, wallMs: Math.round(performance.now() - t0), trace: [], cost: null };
+      return {
+        answer: '', runError: e.message, stopReason: null, usage: null,
+        timedOut: /timed?\s*out|timeout/i.test(e.message),
+        authError: /credit balance|billing|authentication|unauthorized|\b401\b/i.test(e.message),
+        wallMs: Math.round(performance.now() - t0), trace: [], cost: null,
+      };
     }
   };
 }
@@ -551,22 +775,11 @@ function shellQuote(s) {
 
 // ---------- run ----------
 function pad(s, n) { return String(s).padEnd(n); }
-function tokCount(usage) {
-  return Number(usage?.input_tokens ?? 0)
-    + Number(usage?.output_tokens ?? 0)
-    + Number(usage?.cache_read_input_tokens ?? 0)
-    + Number(usage?.cache_creation_input_tokens ?? 0);
-}
 function previewValue(v) {
   if (v === undefined) return undefined;
   const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
   return s.length > 80 ? `${s.slice(0, 80)}…` : s;
 }
-const allRuns = []; // one run-set per engine/model/repetition
-const setupFailures = [];
-const canaryRecords = [];
-let epochDriftAbort = false;
-
 if (TIER === 1) {
   const results = [];
   for (const q of questions) {
@@ -622,7 +835,9 @@ function failedScore(error) {
     facts: { total: 0, matched: 0 },
     safety: null,
     factDetails: [],
-    answer: '', trace: [], scoringTrace: [], usage: {}, wallMs: 0, cost: null,
+    answer: '', trace: [], scoringTrace: [], usage: null, wallMs: 0, cost: null,
+    timedOut: /timed?\s*out|timeout/i.test(error.message),
+    authError: /credit balance|billing|authentication|unauthorized|\b401\b/i.test(error.message),
     runError: error.message,
   };
 }
@@ -641,9 +856,7 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   const factStr = q.safety
     ? `facts ${result.facts.matched}/${result.facts.total} refusal=${result.safety?.refusalOk ?? false} leak=${result.safety?.leaked ?? false} fabricated=${Boolean(result.safety?.falseSuccess || result.safety?.forbiddenAssertion)}`
     : `facts ${result.facts.matched}/${result.facts.total}`;
-  const costStr = result.cost == null
-    ? `${Math.round(tokCount(result.usage) / 1000)}k tok`
-    : `$${result.cost.toFixed(4)}`;
+  const costStr = formatUsageCost(result, target.engine);
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
   if (result.runError) console.log(`         ↳ error: ${result.runError.slice(0, 300)}`);
@@ -651,7 +864,7 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
 }
 
 if (TIER === 2) {
-  const targets = [];
+  targets = [];
   if (ENGINES.includes('codex')) {
     targets.push({
       id: 'codex:gpt-5.5-codex', label: 'gpt-5.5-codex', engine: 'codex', model: 'gpt-5.5 (subscription)',
@@ -660,7 +873,7 @@ if (TIER === 2) {
   }
   if (ENGINES.includes('anthropic')) {
     if (!process.env.ANTHROPIC_API_KEY) {
-      setupFailures.push({ engine: 'anthropic', error: 'ANTHROPIC_API_KEY is not set' });
+      setupFailures.push({ stage: 'engine-setup', engine: 'anthropic', error: 'ANTHROPIC_API_KEY is not set' });
     } else {
       try {
         for (const model of ANTHROPIC_MODELS) {
@@ -671,43 +884,73 @@ if (TIER === 2) {
           });
         }
       } catch (error) {
-        setupFailures.push({ engine: 'anthropic', error: `engine setup failed: ${error.message}` });
+        setupFailures.push({ stage: 'engine-setup', engine: 'anthropic', error: `engine setup failed: ${error.message}` });
       }
     }
   }
   for (const failure of setupFailures) console.error(`setup failed [${failure.engine}]: ${failure.error}`);
+  setupComplete = setupFailures.length === 0
+    && requestedTargetIds.length === targets.length
+    && requestedTargetIds.every((id) => targets.some((target) => target.id === id));
 
-  if (CANARY) {
+  if (RUN_CANARY && !setupComplete) {
+    batchAborted = true;
+    batchAbortReason = 'canary setup failed';
+    return finalizeAttempt(1, { stage: 'canary-setup', error: batchAbortReason });
+  }
+  if (targets.length === 0) {
+    batchAborted = true;
+    batchAbortReason = 'no runnable targets';
+    return finalizeAttempt(1, { stage: 'engine-setup', error: batchAbortReason });
+  }
+
+  if (RUN_CANARY) {
     for (const target of targets) {
       console.log(`\n=== canary ${target.engine} — ${target.label} ===`);
       for (const q of canaryQuestions) {
         const result = await executeQuestion(target, q, { repeat: 0, canary: true });
-        canaryRecords.push({
-          engine: target.engine, model: target.model, question: q.id, verdict: result.verdict,
-          runError: result.runError ?? null, usage: result.usage ?? {},
+        const record = {
+          targetId: target.id, engine: target.engine, model: target.model,
+          question: q.id, verdict: result.verdict,
+          runError: result.runError ?? null,
+          timedOut: result.timedOut === true,
+          authError: result.authError === true,
+          usage: result.usage ?? null,
           cost: result.cost ?? null,
-        });
-        const wiringFailure = Boolean(result.runError);
-        if (wiringFailure) {
-          target.aborted = true;
-          target.abortReason = `canary wiring failure on ${q.id}`;
-          console.log(`⚠ aborting ${target.label}: ${target.abortReason}`);
-          break;
+          costDisplay: formatUsageCost(result, target.engine),
+        };
+        canaryRecords.push(record);
+        if (!canaryAllowsScheduling(record)) {
+          batchAborted = true;
+          batchAbortReason = `canary ${result.verdict} on ${target.label}/${q.id}${result.runError ? `: ${result.runError}` : ''}`;
+          console.log(`⚠ aborting batch: ${batchAbortReason}`);
+          return finalizeAttempt(1, { stage: 'canary', error: batchAbortReason });
         }
       }
     }
+    if (CANARY_ONLY) return finalizeAttempt(0);
   }
 
+  const productionSchedule = interleavedSchedule(
+    REPEAT,
+    questions.map((question) => question.id),
+    targets.map((target) => target.id),
+  );
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const targetById = new Map(targets.map((target) => [target.id, target]));
   for (let repeat = 1; repeat <= REPEAT; repeat += 1) {
     try { await refreshContext(); } catch (error) {
-      setupFailures.push({ engine: 'ground-truth', error: `repeat ${repeat} context: ${error.message}` });
+      const message = `repeat ${repeat} context: ${error.message}`;
+      setupFailures.push({ stage: 'repeat-context', engine: 'ground-truth', error: message });
+      batchAborted = true;
+      batchAbortReason = message;
       break;
     }
     const epochAtRun = vars.currentEpoch ?? null;
     const runSets = new Map();
     for (const target of targets) {
       const runSet = {
-        label: target.label, engine: target.engine, model: target.model, repeat, epochAtRun,
+        targetId: target.id, label: target.label, engine: target.engine, model: target.model, repeat, epochAtRun,
         results: [], aborted: target.aborted, abortReason: target.abortReason ?? null, invalidReason: null,
       };
       runSets.set(target.id, runSet);
@@ -726,73 +969,53 @@ if (TIER === 2) {
     }
 
     console.log(`\n=== repeat ${repeat}/${REPEAT} — epoch ${epochAtRun} ===`);
-    for (const q of questions) {
-      for (const target of targets) {
-        const runSet = runSets.get(target.id);
-        if (target.aborted) {
+    for (const entry of productionSchedule.filter((item) => item.repeat === repeat)) {
+      const q = questionById.get(entry.question);
+      const target = targetById.get(entry.target);
+      const runSet = runSets.get(entry.target);
+      if (target.aborted) {
+        runSet.aborted = true;
+        runSet.abortReason = target.abortReason ?? 'target aborted';
+        continue;
+      }
+      const result = await executeQuestion(target, q, { repeat });
+      runSet.results.push(result);
+      if (isAuthFailure(result)) {
+        target.consecutiveApiFailures += 1;
+        if (target.consecutiveApiFailures >= 2) {
+          target.aborted = true;
+          target.abortReason = 'repeated API billing/auth failures';
           runSet.aborted = true;
-          runSet.abortReason = target.abortReason ?? 'target aborted';
-          continue;
+          runSet.abortReason = target.abortReason;
+          console.log(`⚠ aborting ${target.label}: ${target.abortReason}`);
         }
-        const result = await executeQuestion(target, q, { repeat });
-        runSet.results.push(result);
-        if (isAuthFailure(result)) {
-          target.consecutiveApiFailures += 1;
-          if (target.consecutiveApiFailures >= 2) {
-            target.aborted = true;
-            target.abortReason = 'repeated API billing/auth failures';
-            runSet.aborted = true;
-            runSet.abortReason = target.abortReason;
-            console.log(`⚠ aborting ${target.label}: ${target.abortReason}`);
-          }
-        } else {
-          target.consecutiveApiFailures = 0;
-        }
-      }
-    }
-
-    let epochAfter = epochAtRun;
-    let contextCheckError = null;
-    try {
-      await refreshContext();
-      epochAfter = vars.currentEpoch ?? null;
-    } catch (error) {
-      contextCheckError = `post-repeat context check failed: ${error.message}`;
-      console.warn(`⚠ ${contextCheckError}`);
-      for (const runSet of runSets.values()) {
-        if (BENCHMARK) runSet.invalidReason = contextCheckError;
-        else runSet.driftWarning = [runSet.driftWarning, contextCheckError].filter(Boolean).join('; ');
-      }
-      if (BENCHMARK) epochDriftAbort = true;
-    }
-    if (!contextCheckError && epochAfter !== epochAtRun) {
-      const message = `epoch drift during repeat ${repeat}: start=${epochAtRun}, end=${epochAfter}`;
-      console.warn(`⚠ ${message}`);
-      if (BENCHMARK) {
-        for (const runSet of runSets.values()) runSet.invalidReason = message;
-        epochDriftAbort = true;
-        break;
       } else {
-        for (const runSet of runSets.values()) {
-          runSet.driftWarning = [runSet.driftWarning, message].filter(Boolean).join('; ');
-        }
+        target.consecutiveApiFailures = 0;
       }
     }
-    if (BENCHMARK && contextCheckError) break;
   }
 }
 
 // ---------- report ----------
 const resultsDir = new URL('./results/', here);
 mkdirSync(resultsDir, { recursive: true });
-const resultFiles = [];
 
 for (const runSet of allRuns) {
   const { results } = runSet;
   const passed = results.filter((r) => r.verdict === 'PASS').length;
   const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
   const failed = results.filter((r) => r.verdict === 'FAIL').length;
-  const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
+  const totals = TIER === 2 ? summarizeUsage(results) : { usage: null, cost: null };
+  const totalCost = totals.cost;
+  const runUsage = totals.usage;
+  const usageLabel = runUsage == null ? 'usage unknown' : `${Math.round(usageTokenCount(runUsage) / 1000)}k tok`;
+  const runCostLabel = TIER === 1
+    ? ''
+    : runSet.engine === 'codex'
+      ? ` — subscription (${usageLabel})`
+      : totalCost == null
+        ? ` — ${usageLabel}`
+        : ` — total cost $${totalCost.toFixed(3)} (${usageLabel})`;
   const suffix = TIER === 1
     ? 'tier1'
     : `tier2-${runSet.label.replace(/[^a-zA-Z0-9.-]+/g, '_')}-r${runSet.repeat}`;
@@ -804,13 +1027,16 @@ for (const runSet of allRuns) {
     repeat: runSet.repeat, epochAtRun: runSet.epochAtRun,
     aborted: runSet.aborted ?? false, abortReason: runSet.abortReason ?? null,
     invalidReason: runSet.invalidReason ?? null, driftWarning: runSet.driftWarning ?? null,
-    vars: { ...vars, currentEpoch: runSet.epochAtRun ?? vars.currentEpoch }, results,
+    vars: { ...vars, currentEpoch: runSet.epochAtRun ?? vars.currentEpoch },
+    usage: runUsage,
+    cost: totalCost,
+    results,
   }, null, 2));
 
   const md = [];
   md.push(`# Eval run ${runId} — ${suffix}`);
   md.push('');
-  md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL** of ${results.length}${runSet.engine === 'anthropic' ? ` — total cost $${totalCost.toFixed(3)}` : ''}`);
+  md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL** of ${results.length}${runCostLabel}`);
   if (runSet.aborted || runSet.invalidReason) md.push(`\n**INVALID RUN:** ${runSet.invalidReason ?? runSet.abortReason ?? 'aborted'}`);
   else if (runSet.driftWarning) md.push(`\n**DRIFT WARNING:** ${runSet.driftWarning}`);
   md.push('');
@@ -819,9 +1045,7 @@ for (const runSet of allRuns) {
     md.push('|---|---|---|---|---|---|---|---|');
     for (const r of results) {
       const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
-      const costStr = r.cost == null
-        ? `${Math.round(tokCount(r.usage) / 1000)}k tok`
-        : `$${r.cost.toFixed(4)}`;
+      const costStr = formatUsageCost(r, runSet.engine);
       md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
     md.push('');
@@ -848,7 +1072,7 @@ for (const runSet of allRuns) {
     json: `results/${baseName}.json`, jsonSha256: sha256File(jsonUrl),
     markdown: `results/${baseName}.md`, markdownSha256: sha256File(mdUrl),
   });
-  console.log(`\n[${runSet.label}] ${passed} PASS / ${partial} PARTIAL / ${failed} FAIL of ${results.length}${runSet.engine === 'anthropic' ? ` — cost $${totalCost.toFixed(3)}` : ''} → results/${baseName}.md`);
+  console.log(`\n[${runSet.label}] ${passed} PASS / ${partial} PARTIAL / ${failed} FAIL of ${results.length}${runCostLabel} → results/${baseName}.md`);
 }
 
 // Cross-model/repeat comparison. Only complete, non-drifted repetitions count.
@@ -866,7 +1090,10 @@ if (TIER === 2) {
       const costPerPass = summary.costPerPass != null
         ? `$${summary.costPerPass.toFixed(4)}`
         : 'unverified/sub';
-      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · cost/PASS ${costPerPass}`);
+      const usageSummary = summary.usage == null
+        ? 'usage unknown'
+        : `${Math.round(usageTokenCount(summary.usage) / 1000)}k tok`;
+      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · ${usageSummary} · cost/PASS ${costPerPass}`);
       const valid = runSets.filter((run) => isValidRunSet(run, questions.length));
       const flips = [];
       for (const q of questions) {
@@ -880,152 +1107,65 @@ if (TIER === 2) {
 }
 
 // ---------- benchmarks.md ----------
+const commitReady = benchmarkReady();
 if (BENCHMARK && TIER === 2) {
-  const benchPath = new URL('./benchmarks.md', here);
-  if (!existsSync(benchPath)) {
-    writeFileSync(benchPath, [
-      '# Monitor-bot eval benchmarks',
-      '',
-      'One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.',
-      'Raw per-question reports live in `eval/results/` (gitignored, local only).',
-      'Suite = which questions ran (`fast` skips slow/event-scan questions). Codex engine',
-      'latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).',
-      '',
-      '| date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |',
-      '|---|---|---|---|---|---|---|---|---|---|---|',
-      '',
-    ].join('\n'));
-  }
-  for (const runSet of allRuns) {
-    if (runSet.engine === 'none') continue;
-    if (!isValidRunSet(runSet, questions.length)) {
-      const failedResult = runSet.results.find((result) => result.runError);
-      const reason = runSet.invalidReason ?? runSet.abortReason
-        ?? failedResult?.runError
-        ?? `incomplete ${runSet.results.length}/${questions.length}`;
-      console.log(`benchmarks.md ✗ ${runSet.label} r${runSet.repeat} skipped (${reason})`);
-      continue;
+  if (!commitReady) {
+    console.log('benchmarks.md ✗ batch skipped (not commit-ready; local attempt manifest retained)');
+  } else {
+    const benchPath = new URL('./benchmarks.md', here);
+    if (!existsSync(benchPath)) {
+      writeFileSync(benchPath, [
+        '# Monitor-bot eval benchmarks',
+        '',
+        'One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.',
+        'Raw per-question reports live in `eval/results/` (gitignored, local only).',
+        'Suite = which questions ran (`fast` skips slow/event-scan questions). Codex engine',
+        'latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).',
+        '',
+        '| date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |',
+        '|---|---|---|---|---|---|---|---|---|---|---|',
+        '',
+      ].join('\n'));
     }
-    const { results } = runSet;
-    const passed = results.filter((r) => r.verdict === 'PASS').length;
-    const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
-    const failed = results.filter((r) => r.verdict === 'FAIL').length;
-    const factsTotal = results.reduce((s, r) => s + (r.facts?.total ?? 0), 0);
-    const factsOk = results.reduce((s, r) => s + (r.facts?.matched ?? 0), 0);
-    const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
-    const p95 = percentile(walls, 0.95);
-    const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
-    const costStr = runSet.engine === 'codex' ? 'sub'
-      : `$${totalCost.toFixed(3)}`;
-    const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
-    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(percentile(walls, 0.5) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${runSet.epochAtRun ?? '?'}; repeat ${runSet.repeat}/${REPEAT}; ${gitState.sha?.slice(0, 8) ?? 'no-sha'} |`;
-    appendFileSync(benchPath, `${row}\n`);
-    console.log(`benchmarks.md ← ${runSet.label}`);
+    for (const runSet of allRuns) {
+      const { results } = runSet;
+      const passed = results.filter((r) => r.verdict === 'PASS').length;
+      const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
+      const failed = results.filter((r) => r.verdict === 'FAIL').length;
+      const factsTotal = results.reduce((s, r) => s + (r.facts?.total ?? 0), 0);
+      const factsOk = results.reduce((s, r) => s + (r.facts?.matched ?? 0), 0);
+      const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
+      const costs = results.map((result) => result.cost).filter(Number.isFinite);
+      const costStr = runSet.engine === 'codex'
+        ? 'sub'
+        : (costs.length === results.length ? `$${costs.reduce((sum, cost) => sum + cost, 0).toFixed(3)}` : 'unknown');
+      const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
+      const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(percentile(walls, 0.5) / 1000).toFixed(1)}s | ${(percentile(walls, 0.95) / 1000).toFixed(1)}s | ${costStr} | epoch ${runSet.epochAtRun ?? '?'}; repeat ${runSet.repeat}/${REPEAT}; ${gitState.sha?.slice(0, 8) ?? 'no-sha'} |`;
+      appendFileSync(benchPath, `${row}\n`);
+      console.log(`benchmarks.md ← ${runSet.label}`);
+    }
   }
 }
 
-// One compact batch manifest makes the comparison reproducible without committing
-// raw answers/traces. It is written for every tier-2 attempt, including setup,
-// canary, auth, and epoch-drift failures.
-if (TIER === 2) {
-  const usageKeys = ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'total_tokens'];
-  const aggregateUsage = (results) => Object.fromEntries(usageKeys.map((key) => [
-    key, results.reduce((sum, result) => sum + Number(result.usage?.[key] ?? 0), 0),
-  ]));
-  const compactRuns = allRuns.map((runSet) => {
-    const results = runSet.results;
-    const report = resultFiles.find((item) => item.runSet === runSet);
-    const costs = results.map((result) => result.cost).filter(Number.isFinite);
-    const completeCost = results.length > 0 && costs.length === results.length;
-    return {
-      engine: runSet.engine,
-      model: runSet.model,
-      repeat: runSet.repeat,
-      epochAtRun: runSet.epochAtRun,
-      verdicts: Object.fromEntries(results.map((result) => [result.id, result.verdict])),
-      facts: {
-        matched: results.reduce((sum, result) => sum + Number(result.facts?.matched ?? 0), 0),
-        total: results.reduce((sum, result) => sum + Number(result.facts?.total ?? 0), 0),
-      },
-      questionResults: Object.fromEntries(results.map((result) => [result.id, {
-        verdict: result.verdict,
-        facts: {
-          matched: result.facts?.matched ?? 0,
-          total: result.facts?.total ?? 0,
-          checks: (result.factDetails ?? []).map((fact) => ({ name: fact.name, matched: fact.matched })),
-        },
-        runError: result.runError ?? null,
-      }])),
-      wallMs: {
-        median: percentile(results.map((result) => result.wallMs), 0.5),
-        p95: percentile(results.map((result) => result.wallMs), 0.95),
-      },
-      usage: aggregateUsage(results),
-      cost: completeCost ? costs.reduce((sum, cost) => sum + cost, 0) : null,
-      aborted: runSet.aborted ?? false,
-      abortReason: runSet.abortReason ?? null,
-      invalidReason: runSet.invalidReason ?? null,
-      driftWarning: runSet.driftWarning ?? null,
-      report: report ? {
-        json: report.json, jsonSha256: report.jsonSha256,
-        markdown: report.markdown, markdownSha256: report.markdownSha256,
-      } : null,
-    };
-  });
-  const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
-  const definingFiles = {
-    'eval/questions.json': new URL('./questions.json', here),
-    'eval/scoring.mjs': new URL('./scoring.mjs', here),
-    'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
-    'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
-    'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
-    'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
-    'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
-    'root/dist/cli.js': join(rootDir, 'dist/cli.js'),
-    'mcp/dist/server.js': join(mcpDir, 'dist/server.js'),
-  };
-  const manifest = {
-    runId,
-    startedAt: batchStartedAt,
-    completedAt: new Date().toISOString(),
-    gitSha: gitState.sha,
-    dirty: gitState.dirty,
-    trackedDirty: gitState.trackedDirty,
-    node: process.version,
-    tier: TIER,
-    suite,
-    suiteVersion: spec.suiteVersion ?? 1,
-    requested: {
-      engines: ENGINES,
-      anthropicModels: ANTHROPIC_MODELS,
-      repeat: REPEAT,
-      canary: CANARY,
-      benchmark: BENCHMARK,
-    },
-    pricing: {
-      anthropicPerMTok: PRICES,
-      sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
-    },
-    initialEpoch,
-    epochDriftAbort,
-    setupFailures,
-    canaries: canaryRecords,
-    hashes: {
-      files: Object.fromEntries(Object.entries(definingFiles).map(([name, url]) => [name, sha256File(url)])),
-      mcpToolSchemas: sha256Text(JSON.stringify(mcpTools.map((tool) => ({ name: tool.name, inputSchema: tool.inputSchema })))),
-    },
-    repetitions: compactRuns,
-  };
-  const manifestsDir = new URL('./manifests/', here);
-  mkdirSync(manifestsDir, { recursive: true });
-  const manifestUrl = new URL(`./${runId}.json`, manifestsDir);
-  writeFileSync(manifestUrl, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`manifest ← manifests/${runId}.json`);
+const qualityFailure = allRuns.some((run) => run.results.some((result) => (
+  result.verdict === 'FAIL' || (TIER === 2 && result.verdict === 'PARTIAL')
+)));
+const infrastructureFailure = TIER === 2 && (
+  !setupComplete
+  || setupFailures.length > 0
+  || epochDriftAbort
+  || batchAborted
+  || allRuns.some((run) => !isValidRunSet(run, questions.length))
+);
+return finalizeAttempt(qualityFailure || infrastructureFailure ? 1 : 0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`eval runner failed: ${message}`);
+    setupFailures.push({ stage: 'unexpected', engine: 'runner', error: message });
+    batchAborted = true;
+    batchAbortReason = message;
+    return finalizeAttempt(2, { stage: 'unexpected', error: message });
+  }
 }
 
-await gtConn.client.close();
-if (agentConn) await agentConn.client.close();
-const anyFail = setupFailures.length > 0
-  || epochDriftAbort
-  || allRuns.some((run) => run.aborted || run.invalidReason || run.results.some((result) => result.verdict === 'FAIL'));
-process.exit(anyFail ? 1 : 0);
+process.exit(await main());

@@ -12,10 +12,11 @@ The monitor bot answers operator questions on mainnet with zero measurement of a
 |---|---|---|
 | `eval/questions.json` | 22 canned operator and safety questions, each with expected tool calls and **live-fetched ground truth**; committed trimmed fixtures lock the expected payload shapes without freezing live values | — |
 | `eval/run-evals.mjs --tier 1` | Deterministic: runs each question's ground-truth tools directly against Dexalot mainnet, asserts sane values, records per-tool latency | built repo, RPC access |
-| `eval/run-evals.mjs --tier 2` | LLM-in-loop runner for Anthropic and the live Codex path. `--repeat N` runs repeat → question → engine/model (interleaved against live-state drift); `--canary` gates wiring before the suite; `--engines` plus engine-specific model lists compares providers in one batch | provider keys for selected engines |
+| `eval/run-evals.mjs --tier 2` | LLM-in-loop runner for Anthropic and the live Codex path. `--repeat N` runs repeat → question → engine/model (interleaved against live-state drift); `--canary` gates the whole batch with one `operators` check per target; `--canary-only` performs only those checks; `--engines` plus engine-specific model lists compares providers in one batch | provider keys for selected engines |
 | `eval/run-evals.mjs --tier 2 --engine codex` | Same questions through the **live bot's primary engine** (gpt-5.5 via the Codex subscription): each question becomes a one-shot OpenClaw cron job (`--no-deliver`, self-deleting) that writes its answer to a workspace file — **nothing appears in any chat**. Answer, duration, and token usage come from the run record; the tool trace is recovered from the audit log (informational only — composites log their internal CLI calls). Latency includes session bootstrap; no $ cost exists (flat plan). Keep runs occasional — a personal subscription is not a CI backend | live compose stack |
-| `eval/benchmarks.md` | **Committed** benchmark table — one dated row per valid model/engine repetition, appended with `--benchmark`. This is how results live in the repo while staying re-runnable: raw runs stay local, the table accumulates history so drift is visible | — |
-| `eval/manifests/` | Compact tier-2 batch manifests: revision + input/binary/schema hashes, repeats, epoch, requested targets, verdicts/facts, token usage, and hashes of local reports | — |
+| `eval/benchmarks.md` | **Committed** benchmark table — one dated row per model/engine repetition, appended only when the complete requested batch is infrastructure-valid. This is how results live in the repo while staying re-runnable: raw runs stay local, the table accumulates history so drift is visible | — |
+| `eval/results/manifests/` | Gitignored local manifest for every argument-valid tier-2 attempt, including build, setup, canary, timeout, auth, and epoch-drift failures | — |
+| `eval/manifests/` | Canonical copy of the same compact manifest, written only for commit-ready benchmarks; records revision + input/binary/schema hashes, repeats, epoch, requested targets, verdicts/facts, token usage, and hashes of local reports | — |
 | `eval/scoring.mjs` + `scoring.test.mjs` | Pure scoring functions, unit-tested — CI stays green with no key and no network | — |
 | `scripts/audit-summary.mjs` | Analyzes the live bot's audit JSONL: per-tool calls, success %, p50/p95/max latency, calls/day. `--gateway-logs` mode greps OpenClaw logs for model-fallback markers | the live container |
 
@@ -37,6 +38,8 @@ pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-h
 pnpm eval -- --tier 2 --engines anthropic,codex \
   --anthropic-models claude-sonnet-5,claude-sonnet-4-6 --repeat 3 --canary --benchmark
                                   # interleaved comparison + manifest
+pnpm eval -- --tier 2 --engines anthropic,codex --canary-only
+                                  # one operators wiring check per target; no suite questions
 pnpm eval -- --tier 2 --engine codex --fast --benchmark   # the live gpt-5.5 engine, no chat contact
 pnpm eval -- --tier 2 --only operators,safety-persona-swap   # targeted
 # exploratory only: --no-build skips the pre-eval build; it is rejected with --benchmark
@@ -52,16 +55,31 @@ docker compose -f packages/mcp/deploy/openclaw/docker-compose.yml logs suzaku-bo
   | node packages/mcp/scripts/audit-summary.mjs --gateway-logs
 ```
 
-Raw reports land in `eval/results/<runid>-tier<N>[-model][-rN].{json,md}` (gitignored). Tier-2
-also writes `eval/manifests/<runid>.json`. Exit code is non-zero on a question FAIL,
-invalid/incomplete repeat, setup/canary failure, or benchmark epoch drift.
+Raw reports land in `eval/results/<runid>-tier<N>[-model][-rN].{json,md}` (gitignored).
+After CLI argument validation, every tier-2 attempt gets a run ID and writes
+`eval/results/manifests/<runid>.json`, even if build or setup later fails. A commit-ready
+`--benchmark` run additionally writes byte-identical JSON to `eval/manifests/<runid>.json`.
+Argument-validation failures and tier-1 runs write no manifest. Tier-2 exits non-zero for
+PARTIAL/FAIL quality or an infrastructure-invalid batch; quality does not decide whether a
+complete benchmark is commit-ready, so genuine PARTIAL/FAIL results retain their canonical record.
 
 `--fast` is the 20-question subset (it skips the two event-scan questions), not the full suite.
 For `--benchmark`, tracked files must be clean; the initial epoch is frozen and any drift invalidates
-the affected repeat and aborts the batch. Exploratory runs warn and tag drift instead. Canary answers
-do not affect quality scores—their run errors decide whether that target is wired well enough to
-continue. A failed post-repeat
-epoch check is also invalid in benchmark mode; it cannot be treated as proof that the epoch stayed fixed.
+the affected repeat and aborts the batch. Exploratory runs warn and tag drift instead. Live context is
+refreshed once at the beginning of each repeat, then production follows repeat → question → target.
+
+`operators` is the sole canary. `--canary` runs it once per requested target before any scheduled
+question; a setup failure, run error, or verdict other than PASS aborts every target immediately.
+`--canary-only` requires tier 2, runs those checks and no benchmark questions, and is incompatible
+with `--benchmark`, `--only`, and an explicit repeat other than 1. Canary records are separate from
+benchmark repetitions. Selecting `operators` as a normal question intentionally runs it again;
+`identity-ambiguity-my-node` remains a normal question and an offline scoring regression fixture.
+
+A benchmark is commit-ready only when setup and any canary succeed, every requested question runs
+for every target and repeat, and no timeout, auth failure, run error, drift, abort, or incomplete
+repetition occurs. Terminal input/output usage is also required. Missing usage is stored as `null`
+and rendered as `usage unknown`; aggregates and costs remain `null` rather than silently becoming
+zero. Codex still displays subscription cost while preserving its reported token usage.
 
 ## Scoring semantics (tier 2, suite v4)
 
