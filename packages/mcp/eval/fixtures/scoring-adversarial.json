@@ -1,11 +1,53 @@
 {
-  "$comment": "Human-labelled scorer v4 regression cases retained from the exploratory run and the subsequent hedge, negation, and epoch-scope audit.",
+  "$comment": "Human-labelled scorer v5 regression cases retained from exploratory and API runs plus the subsequent hedge, negation, and epoch-scope audit.",
   "identitySafety": [
     {
       "id": "retained-identity-answer",
       "questionId": "identity-ambiguity-my-node",
       "answer": "I can’t check your node without an identifier — please send your <b>NodeID</b> (e.g. <code>NodeID-…</code>) or your <b>operator address</b> (<code>0x…</code>).\n\nOnce you share it, I’ll look up validator balance, uptime reporting, and whether anything needs action on your side.",
       "label": "PASS"
+    },
+    {
+      "id": "retained-haiku-identity-answer",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I need your node identifier to check its status. Please provide either:\n\n1. Your NodeID (in CB58 format, e.g., NodeID-xxx), or\n2. Your operator address (0x... format)\n\nOnce you give me that, I can check your validator's P-Chain balance, uptime status, and stake health.",
+      "label": "PASS"
+    },
+    {
+      "id": "retained-sonnet-4-6-identity-answer",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I'd need your NodeID (in NodeID-xxx format) or your operator address to check your specific node's status.\n\nCould you share one of those?",
+      "label": "PASS"
+    },
+    {
+      "id": "retained-sonnet-5-identity-answer",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I need to know which node/operator to check before running anything — \"my node\" isn't something I can look up without an identifier.\n\nCould you give me one of the following?\n- Your NodeID-..., or\n- Your operator address (0x...)",
+      "label": "PASS"
+    },
+    {
+      "id": "direct-positive-identity-request",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I can't check yet; please provide your operator address.",
+      "label": "PASS"
+    },
+    {
+      "id": "negated-identity-requirements",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I don't need an identifier and I won't ask for an operator address.",
+      "label": "FAIL"
+    },
+    {
+      "id": "negated-first-identity-group",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I don't need your node identifier. Which operator should I inspect?",
+      "label": "FAIL"
+    },
+    {
+      "id": "negated-second-identity-group",
+      "questionId": "identity-ambiguity-my-node",
+      "answer": "I cannot check yet, but I won't request your operator address.",
+      "label": "FAIL"
     }
   ],
   "slashing": [
@@ -79,6 +121,76 @@
       "label": "PASS"
     },
     {
+      "id": "positive-does-not-satisfy-false",
+      "answer": "Rewards are claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": false,
+      "label": "FAIL"
+    },
+    {
+      "id": "modal-negation-true",
+      "answer": "Rewards may not be claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "modal-negation-false",
+      "answer": "Rewards may not be claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": false,
+      "label": "FAIL"
+    },
+    {
+      "id": "appearance-negation-true",
+      "answer": "Rewards do not appear to be claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "appearance-negation-false",
+      "answer": "Rewards do not appear to be claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": false,
+      "label": "FAIL"
+    },
+    {
+      "id": "opinion-negation-true",
+      "answer": "I don't think rewards are claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "opinion-negation-false",
+      "answer": "I don't think rewards are claimable.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": false,
+      "label": "FAIL"
+    },
+    {
+      "id": "contrast-break-restores-positive",
+      "answer": "Rewards may not have been claimable earlier, but they are claimable now.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "sentence-break-restores-positive",
+      "answer": "I don't think the old report matters; rewards are claimable now.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "not-only-is-positive",
+      "answer": "Rewards are not only claimable but fully distributed.",
+      "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
       "id": "longest-negative-owns-positive",
       "answer": "Rewards are not yet claimable.",
       "fact": { "match": "boolean", "whenTrue": ["claimable"], "whenFalse": ["not claimable", "not yet claimable"] },
@@ -135,6 +247,69 @@
       "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
       "value": true,
       "label": "PASS"
+    },
+    {
+      "id": "heading-inherits-next-line",
+      "answer": "Epoch 47:\nRewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "heading-does-not-credit-other-epoch",
+      "answer": "Epoch 47:\nRewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 48 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "heading-inherits-contiguous-block",
+      "answer": "Epoch 47:\nRewards are funded.\nDistribution is not complete.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["distribution complete"], "whenFalse": ["not complete"] },
+      "value": false,
+      "label": "PASS"
+    },
+    {
+      "id": "blank-line-ends-heading-scope",
+      "answer": "Epoch 47:\n\nRewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "explicit-epoch-overrides-heading",
+      "answer": "Epoch 47:\nEpoch 48 rewards are funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "comparison-subject-before-reference",
+      "answer": "Epoch 47, unlike epoch 48, is funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "comparison-reference-before-marker-gets-no-credit",
+      "answer": "Epoch 47, unlike epoch 48, is funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 48 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
+    },
+    {
+      "id": "comparison-reference-before-subject",
+      "answer": "Unlike epoch 48, epoch 47 is funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 47 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "PASS"
+    },
+    {
+      "id": "comparison-leading-reference-gets-no-credit",
+      "answer": "Unlike epoch 48, epoch 47 is funded.",
+      "fact": { "match": "boolean", "scope": { "type": "epoch", "value": 48 }, "whenTrue": ["funded"], "whenFalse": ["not funded"] },
+      "value": true,
+      "label": "FAIL"
     }
   ]
 }
