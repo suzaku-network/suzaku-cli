@@ -28,6 +28,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
@@ -386,9 +387,12 @@ function makeMcpConnection(dedupMs) {
     SUZAKU_MCP_DEDUP_WINDOW_MS: String(dedupMs),
   };
   if (process.env.SNOWSCAN_API_KEY) env.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
+  const launch = bridgedStdioCommand(process.execPath, [
+    new URL('../dist/server.js', here).pathname,
+    '--read-only',
+  ]);
   const transport = new StdioClientTransport({
-    command: 'node',
-    args: [new URL('../dist/server.js', here).pathname, '--read-only'],
+    ...launch,
     env,
   });
   return { transport, client: new Client({ name: 'suzaku-eval', version: '0.0.1' }) };

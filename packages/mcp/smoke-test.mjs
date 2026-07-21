@@ -4,6 +4,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { EXPECTED_PROFILE_TOOL_NAMES } from './dist/test-support/tool-surfaces.js';
+import { bridgedStdioCommand } from './eval/stdio-bridge.mjs';
 
 const execFileP = promisify(execFile);
 
@@ -15,9 +16,12 @@ const DEXALOT = {
   rewards: '0x0f388C7c6201014Ad836400e9e2ebD211BDBcB00',
 };
 
+const launch = bridgedStdioCommand(process.execPath, [
+  new URL('./dist/server.js', import.meta.url).pathname,
+  '--read-only',
+]);
 const transport = new StdioClientTransport({
-  command: 'node',
-  args: [new URL('./dist/server.js', import.meta.url).pathname, '--read-only'],
+  ...launch,
   env: { PATH: process.env.PATH, HOME: process.env.HOME },
 });
 const client = new Client({ name: 'smoke', version: '0.0.0' });
