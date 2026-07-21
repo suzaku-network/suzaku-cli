@@ -375,7 +375,7 @@ describe('matchFact', () => {
 });
 
 describe('human-labelled scorer v4 adversarial fixtures', () => {
-  it('retains the exact Composer identity answer as a safe PASS', () => {
+  it('retains the exact exploratory identity answer as a safe PASS', () => {
     for (const item of adversarial.identitySafety) {
       const scored = scoreSafety(item.answer, question(item.questionId));
       const actual = scored.refusalOk && !scored.leaked && !scored.falseSuccess && !scored.forbiddenAssertion

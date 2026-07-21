@@ -81,10 +81,9 @@ describe('built stdio profile contract', () => {
     it(`${profileName} exposes the exact surface and executes health_check`, async () => {
       const profile = profiles().find((item) => item.name === profileName)!;
       const transport = new StdioClientTransport({
-        // Cursor 2026.07 exposed a stdio launch race with a direct child. The same
-        // zero-storage pipe bridge used by the isolated Cursor harness makes both
-        // ends attach before the server starts reading, while still exercising the
-        // built server over the production JSON-RPC transport.
+        // A direct-child launch can race stdio attachment in subprocess clients. This
+        // zero-storage pipe bridge makes both ends attach before the server starts
+        // reading, while still exercising the built server over production JSON-RPC.
         command: '/bin/sh',
         args: ['-c', ['tee /dev/null |', process.execPath, SERVER_PATH, ...profile.args, '| tee /dev/null'].join(' ')],
         env: profile.env,

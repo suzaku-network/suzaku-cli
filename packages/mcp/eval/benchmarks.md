@@ -3,18 +3,15 @@
 One row per valid model repetition, appended by `pnpm eval -- --tier 2 --benchmark …`.
 Raw per-question reports live in `eval/results/` (gitignored, local only).
 Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading version.
-**`@v1` rows used lax grading. `@v2` rows are directional/legacy only:** a second review reproduced
-negation, contradiction, hedge, marker-boundary, coercion, and case-sensitivity false passes, plus
-several questions that graded only a shallow proxy for the requested answer. **Only `@v3` rows use
-the hardened scorer and fixture-backed intent rubric; do not compare exact PASS counts across versions.**
+**`@v1` and `@v2` rows are legacy. `@v3` was pre-benchmark/exploratory:** scorer defects were
+subsequently reproduced in punctuation handling, hedge governance, marker negation, and cross-epoch
+boolean matching. **`@v4` is the first suite with the corrected semantics.** Historical rows are
+preserved as recorded; do not compare exact PASS counts across grading versions.
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
-Cursor engine (`cursor-agent`/Composer) runs an exact-parity, isolated read-only MCP server. Its raw
-tool stream is classified fail-closed: any shell/read/search/write/unknown call forces FAIL, while
-MCP tool identity, arguments, budgets, forbidden tools, and the explicitly parameterized model variant
-gate row eligibility. Stream-json exposes the model display name but not its service tier, so standard
-is requested with `fast=false` and recorded as request evidence—not mislabeled as observed. Published-card
-estimates remain `unverified` until matching-variant token buckets are reconciled with the dashboard under
-the committed calibration rule. Raw Cursor NDJSON stays local under the gitignored results directory.
+
+**July 2026 retirement note:** the custom Cursor/Composer NDJSON route was retired after `1c886cd`.
+It added a fragile separate agent integration without producing enough comparable evidence. The
+exploratory runs do not establish that Claude or Codex conclusively outperformed Composer.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|

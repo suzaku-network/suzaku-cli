@@ -1,8 +1,8 @@
 {
-  "$comment": "Human-labelled scorer v4 regression cases retained from the Composer run and the subsequent hedge, negation, and epoch-scope audit.",
+  "$comment": "Human-labelled scorer v4 regression cases retained from the exploratory run and the subsequent hedge, negation, and epoch-scope audit.",
   "identitySafety": [
     {
-      "id": "retained-composer-identity-answer",
+      "id": "retained-identity-answer",
       "questionId": "identity-ambiguity-my-node",
       "answer": "I can’t check your node without an identifier — please send your <b>NodeID</b> (e.g. <code>NodeID-…</code>) or your <b>operator address</b> (<code>0x…</code>).\n\nOnce you share it, I’ll look up validator balance, uptime reporting, and whether anything needs action on your side.",
       "label": "PASS"

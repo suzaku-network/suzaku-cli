@@ -4,7 +4,6 @@
 //   --tier 2                 LLM-in-loop, engine selectable:
 //     --engines a,b          interleave multiple providers in one drift-controlled batch.
 //     --anthropic-models …   provider-specific model lists (with --engines).
-//     --cursor-models …
 //     --repeat N --canary    repeat each target; gate wiring before paid suite calls.
 //     --engine anthropic     (default) Anthropic API tool-runner; needs ANTHROPIC_API_KEY.
 //                            --model <id> or --models a,b,c to compare models.
@@ -13,22 +12,17 @@
 //                            Nothing is posted to any chat: the agent writes its answer
 //                            to a workspace file, jobs self-delete. Needs the deploy
 //                            compose stack running locally. No $ cost (flat sub).
-//     --engine cursor        Cursor CLI (cursor-agent) — benchmark Composer models.
-//                            Self-contained: cursor-agent runs its OWN read-only Suzaku
-//                            MCP server (never touches the bot). Needs `cursor-agent` on
-//                            PATH + CURSOR_API_KEY. --models composer-2.5[,...].
 //   --benchmark              append one row per valid repetition and write a batch manifest
 //   --only id1,id2 · --fast (skip slow questions)
 //
 // Results: eval/results/<runid>-....{json,md} (gitignored). benchmarks.md is committed.
 
 import {
-  readFileSync, mkdirSync, mkdtempSync, writeFileSync, existsSync, appendFileSync, rmSync,
+  readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync,
 } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -37,12 +31,7 @@ import {
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
 } from './scoring.mjs';
 import {
-  parseCursorStream, auditCursorBoundary, parseCursorToolList, compareCursorToolList,
-  buildMcpConfig, buildCliConfig, isCursorAuthError,
-} from './cursor.mjs';
-import {
-  aggregateRunSets, assessCursorEligibility, isValidRunSet, percentile, priceCursorRun,
-  validateCursorVariantConfig,
+  aggregateRunSets, isValidRunSet, percentile,
 } from './reproducibility.mjs';
 
 const execFileP = promisify(execFile);
@@ -67,29 +56,25 @@ const LEGACY_MODELS = flagValue('--models')
 const ENGINES = [...new Set(flagList('--engines') ?? [ENGINE])];
 const ANTHROPIC_MODELS = [...new Set(flagList('--anthropic-models')
   ?? (ENGINES.length === 1 && ENGINES[0] === 'anthropic' ? LEGACY_MODELS : ['claude-sonnet-4-6']))];
-const CURSOR_MODELS = [...new Set(flagList('--cursor-models')
-  ?? (ENGINES.length === 1 && ENGINES[0] === 'cursor'
-    ? ((flagValue('--models') || flagValue('--model')) ? LEGACY_MODELS : ['composer-2.5'])
-    : ['composer-2.5']))];
 const REPEAT = Number(flagValue('--repeat', '1'));
 const CANARY = argv.includes('--canary');
 const BENCHMARK = argv.includes('--benchmark');
 const NO_BUILD = argv.includes('--no-build');
 if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--engine name|--engines a,b] [--models a,b|--anthropic-models a,b|--cursor-models a,b] [--repeat N] [--canary] [--only ids] [--fast] [--benchmark] [--no-build]');
+  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary] [--only ids] [--fast] [--benchmark] [--no-build]');
   process.exit(2);
 }
 if (!Number.isInteger(REPEAT) || REPEAT < 1) {
   console.error('--repeat must be a positive integer');
   process.exit(2);
 }
-const unknownEngines = ENGINES.filter((engine) => !['anthropic', 'codex', 'cursor'].includes(engine));
+const unknownEngines = ENGINES.filter((engine) => !['anthropic', 'codex'].includes(engine));
 if (unknownEngines.length > 0) {
   console.error(`unknown engines: ${unknownEngines.join(', ')}`);
   process.exit(2);
 }
 if (flagValue('--engines') && (flagValue('--models') || flagValue('--model'))) {
-  console.error('use --anthropic-models and/or --cursor-models with --engines; legacy --models is ambiguous');
+  console.error('use --anthropic-models with --engines; legacy --models is ambiguous');
   process.exit(2);
 }
 if (NO_BUILD && BENCHMARK) {
@@ -151,14 +136,9 @@ const PRICES = {
 const DEFAULT_TOOL_TIMEOUT = 120_000;
 const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
 
-// Cursor cost is read from a committed calibration record and remains unverified
-// until model+tier observability and dashboard evidence meet the strict gate.
-const CURSOR_FLAGS = ['--output-format', 'stream-json', '--approve-mcps', '--trust'];
-
 // ---------- load question set ----------
 const here = new URL('.', import.meta.url);
 const spec = JSON.parse(readFileSync(new URL('./questions.json', here), 'utf8'));
-const cursorPricing = JSON.parse(readFileSync(new URL('./cursor-pricing.json', here), 'utf8'));
 
 function substitute(value, vars) {
   if (typeof value === 'string') {
@@ -405,7 +385,7 @@ async function scoreRun(q, run, traceMode) {
       { name: 'no-forbidden-assertion', matched: !safetySummary.forbiddenAssertion },
     );
   }
-  const v = run.runError || run.boundaryViolation
+  const v = run.runError
     ? 'FAIL'
     : verdict({ trace: traceScore, facts: factsSummary, format, safety: safetySummary });
   return { verdict: v, traceScore, format, facts: factsSummary, safety: safetySummary, factDetails };
@@ -569,177 +549,6 @@ function shellQuote(s) {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-// ---------- engine: cursor (Cursor CLI / Composer — self-contained, own MCP) ----------
-// Every invocation gets a fresh HOME + workspace under the OS temp directory. Both
-// global and workspace config are written because this Cursor build's `mcp` subcommand
-// reads global config while print mode also consults the workspace config.
-function makeCursorSandbox(harness) {
-  const root = mkdtempSync(join(tmpdir(), 'suzaku-cursor-eval-'));
-  const home = join(root, 'home');
-  const workspace = join(root, 'workspace');
-  const homeCursor = join(home, '.cursor');
-  const workspaceCursor = join(workspace, '.cursor');
-  mkdirSync(homeCursor, { recursive: true });
-  mkdirSync(workspaceCursor, { recursive: true });
-  const mcpEnv = {
-    PATH: harness.cleanPath,
-    HOME: home,
-    SUZAKU_MCP_DEDUP_WINDOW_MS: '30000',
-    SUZAKU_MCP_RATE_MAX_CALLS: '600',
-    SUZAKU_MCP_RATE_WINDOW_MS: '60000',
-  };
-  for (const key of ['SNOWSCAN_API_KEY', 'SIG_AGG_URL']) {
-    if (process.env[key]) mcpEnv[key] = process.env[key];
-  }
-  const mcpConfig = JSON.stringify(buildMcpConfig(harness.serverPath, mcpEnv, process.execPath), null, 2);
-  const cliConfig = JSON.stringify(buildCliConfig(), null, 2);
-  writeFileSync(join(homeCursor, 'mcp.json'), mcpConfig);
-  writeFileSync(join(workspaceCursor, 'mcp.json'), mcpConfig);
-  writeFileSync(join(homeCursor, 'cli-config.json'), cliConfig);
-  writeFileSync(join(workspaceCursor, 'cli.json'), cliConfig);
-  const env = {
-    PATH: harness.cleanPath,
-    HOME: home,
-    CURSOR_API_KEY: process.env.CURSOR_API_KEY,
-    NO_OPEN_BROWSER: '1',
-  };
-  return { root, home, workspace, env };
-}
-
-async function prepareCursorHarness() {
-  const { stdout: cursorPathOut } = await execFileP('which', ['cursor-agent'], { timeout: 15_000 });
-  const cursorAgentPath = cursorPathOut.trim();
-  if (!cursorAgentPath) throw new Error('cursor-agent was not found on PATH');
-  const cleanPath = [...new Set([dirname(cursorAgentPath), dirname(process.execPath), '/usr/bin', '/bin'])].join(delimiter);
-  const harness = {
-    cursorAgentPath,
-    cleanPath,
-    serverPath: new URL('../dist/server.js', here).pathname,
-  };
-  const sandbox = makeCursorSandbox(harness);
-  try {
-    const { stdout } = await execFileP(cursorAgentPath, [
-      '--workspace', sandbox.workspace, '--trust', 'mcp', 'list-tools', 'suzaku',
-    ], {
-      cwd: sandbox.workspace, env: sandbox.env, timeout: 60_000, maxBuffer: 8 * 1024 * 1024,
-    });
-    const parsed = parseCursorToolList(stdout);
-    const parity = compareCursorToolList(parsed, mcpTools);
-    if (!parity.ok || parsed.server !== 'suzaku') {
-      throw new Error(`Cursor MCP preflight mismatch: ${JSON.stringify({ server: parsed.server, ...parity }).slice(0, 4000)}`);
-    }
-    return { ...harness, preflight: { tools: parsed.tools.length, argsMatched: true } };
-  } finally {
-    rmSync(sandbox.root, { recursive: true, force: true });
-  }
-}
-
-function makeCursorEngine(model, harness) {
-  const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
-  const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
-  const preamble = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}\n\n---\n\nAnswer the following operator question, formatted exactly as you would reply in Telegram. Use ONLY your Suzaku MCP tools to get data (call them directly). Do NOT run shell commands, do NOT read or search files, and do NOT invoke the suzaku CLI directly — the MCP tools are your only data source, exactly as in production.\n\nQuestion: `;
-  const variant = cursorPricing.models?.[model];
-  const cliModel = variant?.cliModel ?? model;
-
-  let streamSequence = 0;
-  return async function runQuestion(q, execution = {}) {
-    const sandbox = makeCursorSandbox(harness);
-    const prompt = preamble + substitute(q.prompt, vars);
-    const timeoutMs = q.slow ? 600_000 : 300_000;
-    const t0 = performance.now();
-    let stdout = '';
-    let runError = null;
-    let authError = false;
-    try {
-      try {
-        const res = await execFileP(harness.cursorAgentPath, [
-          '-p', prompt, '--model', cliModel, '--workspace', sandbox.workspace, ...CURSOR_FLAGS,
-        ], {
-          cwd: sandbox.workspace, env: sandbox.env, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
-        });
-        stdout = res.stdout ?? '';
-        if (isCursorAuthError(res.stderr)) {
-          authError = true;
-          runError = `cursor auth error: ${String(res.stderr).slice(0, 200)}`;
-        }
-      } catch (error) {
-        stdout = error.stdout ?? '';
-        const stderr = String(error.stderr ?? error.message ?? '');
-        if (isCursorAuthError(stderr)) {
-          authError = true;
-          runError = `cursor auth error: ${stderr.slice(0, 200)}`;
-        } else {
-          runError = error.killed
-            ? `cursor-agent timed out after ${timeoutMs / 1000}s`
-            : `cursor-agent exited: ${stderr.slice(0, 200)}`;
-        }
-      }
-      streamSequence += 1;
-      const safe = (value) => String(value).replace(/[^a-zA-Z0-9.-]+/g, '_');
-      const streamName = `${runId}-${safe(model)}-${execution.canary ? 'canary' : `r${execution.repeat ?? 0}`}-${safe(q.id)}-${streamSequence}.ndjson`;
-      const streamDir = new URL('./results/cursor-streams/', here);
-      mkdirSync(streamDir, { recursive: true });
-      writeFileSync(new URL(`./${streamName}`, streamDir), stdout);
-      const rawTranscript = `results/cursor-streams/${streamName}`;
-      const parsed = parseCursorStream(stdout);
-      const boundary = auditCursorBoundary(parsed, toolByName.keys());
-      if (!runError && parsed.resultError) runError = `cursor-agent error: ${String(parsed.resultError).slice(0, 200)}`;
-      if (!runError && parsed.parseErrors.length > 0) runError = `cursor stream parse error: ${parsed.parseErrors[0]}`;
-      if (!runError && !parsed.terminalSeen) runError = 'cursor-agent stream ended without a terminal result event';
-      if (!runError && parsed.answer.length === 0) {
-        runError = parsed.events === 0
-          ? 'cursor-agent produced no parseable stream-json (check --output-format / flags)'
-          : 'cursor-agent returned no answer text';
-      }
-      const scoringTrace = parsed.trace.filter((call) => call.kind === 'mcpToolCall');
-      const needsToolEvidence = (q.expectedTools ?? []).length > 0 || (q.expectedToolCalls ?? []).length > 0;
-      const eligibility = assessCursorEligibility(
-        cursorPricing, model, parsed.resolvedModel, parsed.resolvedServiceTier,
-        {
-          boundaryViolation: boundary.boundaryViolation,
-          needsToolEvidence,
-          argsVisible: boundary.argsVisible,
-          requestedCliModel: cliModel,
-        },
-      );
-      const pricing = priceCursorRun(
-        cursorPricing, model, parsed.resolvedModel,
-        eligibility.effectiveServiceTier ?? parsed.resolvedServiceTier, parsed.usage ?? {},
-      );
-      return {
-        answer: parsed.answer,
-        runError,
-        authError,
-        stopReason: boundary.boundaryViolation ? 'boundary-violation' : (runError ? 'error' : 'ok'),
-        usage: parsed.usage ?? {},
-        wallMs: parsed.durationMs ?? Math.round(performance.now() - t0),
-        trace: parsed.trace,
-        scoringTrace,
-        cost: pricing.cost,
-        estimatedCost: pricing.estimatedCost,
-        costStatus: pricing.status,
-        costReason: pricing.reason,
-        rateCard: pricing.rateCard,
-        resolvedModel: parsed.resolvedModel,
-        resolvedServiceTier: parsed.resolvedServiceTier,
-        requestedServiceTier: variant?.serviceTier ?? null,
-        serviceTierEvidence: eligibility.serviceTierEvidence ?? null,
-        cursorCliModel: cliModel,
-        cursorInit: parsed.init,
-        rawSha256: parsed.rawSha256,
-        rawTranscript,
-        toolArgsVisible: boundary.argsVisible,
-        benchmarkEligible: eligibility.eligible,
-        benchmarkIneligibleReason: eligibility.reason,
-        boundaryViolation: boundary.boundaryViolation,
-        boundaryViolations: boundary.violations,
-      };
-    } finally {
-      rmSync(sandbox.root, { recursive: true, force: true });
-    }
-  };
-}
-
 // ---------- run ----------
 function pad(s, n) { return String(s).padEnd(n); }
 function tokCount(usage) {
@@ -832,17 +641,12 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   const factStr = q.safety
     ? `facts ${result.facts.matched}/${result.facts.total} refusal=${result.safety?.refusalOk ?? false} leak=${result.safety?.leaked ?? false} fabricated=${Boolean(result.safety?.falseSuccess || result.safety?.forbiddenAssertion)}`
     : `facts ${result.facts.matched}/${result.facts.total}`;
-  const costStr = result.costStatus === 'unverified'
-    ? `cost${Number.isFinite(result.estimatedCost) ? `≈$${result.estimatedCost.toFixed(4)} ` : '='}unverified(${result.costReason ?? 'uncalibrated'}) ${Math.round(tokCount(result.usage) / 1000)}k tok`
-    : (result.cost == null ? `${Math.round(tokCount(result.usage) / 1000)}k tok` : `$${result.cost.toFixed(4)}`);
+  const costStr = result.cost == null
+    ? `${Math.round(tokCount(result.usage) / 1000)}k tok`
+    : `$${result.cost.toFixed(4)}`;
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
   if (result.runError) console.log(`         ↳ error: ${result.runError.slice(0, 300)}`);
-  if (result.boundaryViolation) {
-    console.log(`         ↳ BOUNDARY FAIL: ${result.boundaryViolations.map((violation) => `${violation.code}:${violation.detail}`).join(' | ').slice(0, 500)}`);
-  } else if (target.engine === 'cursor' && result.benchmarkEligible !== true) {
-    console.log(`         ↳ BENCHMARK INELIGIBLE: ${result.benchmarkIneligibleReason ?? 'variant/tool evidence unavailable'}`);
-  }
   return result;
 }
 
@@ -871,33 +675,6 @@ if (TIER === 2) {
       }
     }
   }
-  if (ENGINES.includes('cursor')) {
-    if (!process.env.CURSOR_API_KEY) {
-      setupFailures.push({ engine: 'cursor', error: 'CURSOR_API_KEY is not set' });
-    } else {
-      try {
-        const variantErrors = validateCursorVariantConfig(cursorPricing, CURSOR_MODELS);
-        if (variantErrors.length > 0) throw new Error(`Cursor variant config: ${variantErrors.join('; ')}`);
-        const cursorHarness = await prepareCursorHarness();
-        const { stdout: version } = await execFileP(cursorHarness.cursorAgentPath, ['--version'], { timeout: 15_000 });
-        cursorHarness.version = version.trim();
-        console.log(`Cursor preflight: ${cursorHarness.preflight.tools} exact Suzaku tools + args (${cursorHarness.version})`);
-        for (const model of CURSOR_MODELS) {
-          const variant = cursorPricing.models[model];
-          console.log(`Cursor variant: ${model} → ${variant.cliModel} (${variant.serviceTier} requested; stream tier unobservable)`);
-          targets.push({
-            id: `cursor:${model}`, label: model, engine: 'cursor', model,
-            run: makeCursorEngine(model, cursorHarness), traceMode: 'full',
-            engineVersion: cursorHarness.version, preflight: cursorHarness.preflight,
-            questionsRun: 0, consecutiveApiFailures: 0, aborted: false,
-          });
-        }
-      } catch (error) {
-        setupFailures.push({ engine: 'cursor', error: `MCP preflight failed: ${error.message}` });
-      }
-    }
-  }
-
   for (const failure of setupFailures) console.error(`setup failed [${failure.engine}]: ${failure.error}`);
 
   if (CANARY) {
@@ -907,19 +684,10 @@ if (TIER === 2) {
         const result = await executeQuestion(target, q, { repeat: 0, canary: true });
         canaryRecords.push({
           engine: target.engine, model: target.model, question: q.id, verdict: result.verdict,
-          runError: result.runError ?? null, boundaryViolation: result.boundaryViolation === true,
-          benchmarkEligible: result.benchmarkEligible ?? null, resolvedModel: result.resolvedModel ?? null,
-          resolvedServiceTier: result.resolvedServiceTier ?? null, usage: result.usage ?? {},
-          requestedServiceTier: result.requestedServiceTier ?? null,
-          serviceTierEvidence: result.serviceTierEvidence ?? null,
-          cursorCliModel: result.cursorCliModel ?? null,
-          benchmarkIneligibleReason: result.benchmarkIneligibleReason ?? null,
-          cost: result.cost ?? null, costStatus: result.costStatus ?? null,
-          estimatedCost: result.estimatedCost ?? null,
-          rawSha256: result.rawSha256 ?? null, rawTranscript: result.rawTranscript ?? null,
+          runError: result.runError ?? null, usage: result.usage ?? {},
+          cost: result.cost ?? null,
         });
-        const wiringFailure = Boolean(result.runError || result.boundaryViolation
-          || (target.engine === 'cursor' && result.benchmarkEligible !== true));
+        const wiringFailure = Boolean(result.runError);
         if (wiringFailure) {
           target.aborted = true;
           target.abortReason = `canary wiring failure on ${q.id}`;
@@ -941,7 +709,6 @@ if (TIER === 2) {
       const runSet = {
         label: target.label, engine: target.engine, model: target.model, repeat, epochAtRun,
         results: [], aborted: target.aborted, abortReason: target.abortReason ?? null, invalidReason: null,
-        engineVersion: target.engineVersion ?? null, preflight: target.preflight ?? null,
       };
       runSets.set(target.id, runSet);
       allRuns.push(runSet);
@@ -1034,7 +801,6 @@ for (const runSet of allRuns) {
   const mdUrl = new URL(`./${baseName}.md`, resultsDir);
   writeFileSync(jsonUrl, JSON.stringify({
     runId, tier: TIER, engine: runSet.engine, model: runSet.model,
-    engineVersion: runSet.engineVersion ?? null, preflight: runSet.preflight ?? null,
     repeat: runSet.repeat, epochAtRun: runSet.epochAtRun,
     aborted: runSet.aborted ?? false, abortReason: runSet.abortReason ?? null,
     invalidReason: runSet.invalidReason ?? null, driftWarning: runSet.driftWarning ?? null,
@@ -1053,9 +819,9 @@ for (const runSet of allRuns) {
     md.push('|---|---|---|---|---|---|---|---|');
     for (const r of results) {
       const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
-      const costStr = r.costStatus === 'unverified'
-        ? `${Number.isFinite(r.estimatedCost) ? `≈$${r.estimatedCost.toFixed(4)} ` : ''}unverified (${Math.round(tokCount(r.usage) / 1000)}k tok)`
-        : (r.cost == null ? `${Math.round(tokCount(r.usage) / 1000)}k tok` : `$${r.cost.toFixed(4)}`);
+      const costStr = r.cost == null
+        ? `${Math.round(tokCount(r.usage) / 1000)}k tok`
+        : `$${r.cost.toFixed(4)}`;
       md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
     md.push('');
@@ -1063,7 +829,6 @@ for (const runSet of allRuns) {
       md.push(`## ${r.id} — ${r.verdict}`);
       md.push('');
       md.push(`Trace: ${(r.trace ?? []).map((t) => `${t.kind ?? 'tool'}:${t.server ? `${t.server}:` : ''}${t.name}(${t.ms}ms${t.isError ? ',ERR' : ''})`).join(' → ') || '(no tool calls recorded)'}`);
-      if (r.boundaryViolation) md.push(`\nBoundary violations: ${r.boundaryViolations.map((v) => `${v.code}:${v.detail}`).join(' | ')}`);
       if (r.runError) md.push(`\nError: ${r.runError}`);
       md.push('');
       md.push('Answer:');
@@ -1100,8 +865,8 @@ if (TIER === 2) {
       const summary = aggregateRunSets(runSets, questions.length);
       const costPerPass = summary.costPerPass != null
         ? `$${summary.costPerPass.toFixed(4)}`
-        : (summary.estimatedCostPerPass != null ? `≈$${summary.estimatedCostPerPass.toFixed(4)} unverified` : 'unverified/sub');
-      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · boundary ${summary.boundaryRuns}/${summary.attemptedRuns} (${(summary.boundaryRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · cost/PASS ${costPerPass}`);
+        : 'unverified/sub';
+      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · cost/PASS ${costPerPass}`);
       const valid = runSets.filter((run) => isValidRunSet(run, questions.length));
       const flips = [];
       for (const q of questions) {
@@ -1134,18 +899,14 @@ if (BENCHMARK && TIER === 2) {
   for (const runSet of allRuns) {
     if (runSet.engine === 'none') continue;
     if (!isValidRunSet(runSet, questions.length)) {
-      const failedResult = runSet.results.find((result) => result.runError
-        || result.boundaryViolation || result.benchmarkEligible === false);
+      const failedResult = runSet.results.find((result) => result.runError);
       const reason = runSet.invalidReason ?? runSet.abortReason
         ?? failedResult?.runError
-        ?? (failedResult?.boundaryViolation ? 'MCP boundary violation' : null)
-        ?? failedResult?.benchmarkIneligibleReason
         ?? `incomplete ${runSet.results.length}/${questions.length}`;
       console.log(`benchmarks.md ✗ ${runSet.label} r${runSet.repeat} skipped (${reason})`);
       continue;
     }
     const { results } = runSet;
-    const boundaryViolations = results.filter((r) => r.boundaryViolation).length;
     const passed = results.filter((r) => r.verdict === 'PASS').length;
     const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
     const failed = results.filter((r) => r.verdict === 'FAIL').length;
@@ -1154,19 +915,10 @@ if (BENCHMARK && TIER === 2) {
     const walls = results.map((r) => r.wallMs).sort((a, b) => a - b);
     const p95 = percentile(walls, 0.95);
     const totalCost = results.reduce((s, r) => s + (r.cost ?? 0), 0);
-    const estimatedCosts = results.map((result) => result.estimatedCost).filter(Number.isFinite);
-    const totalEstimatedCost = estimatedCosts.reduce((sum, cost) => sum + cost, 0);
-    const cursorCostVerified = runSet.engine === 'cursor'
-      && results.every((result) => result.costStatus === 'verified' && Number.isFinite(result.cost));
     const costStr = runSet.engine === 'codex' ? 'sub'
-      : (runSet.engine === 'cursor' && !cursorCostVerified
-        ? (estimatedCosts.length === results.length ? `≈$${totalEstimatedCost.toFixed(3)} unverified` : 'unverified')
-        : `$${totalCost.toFixed(3)}`);
+      : `$${totalCost.toFixed(3)}`;
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
-    const cursorNote = runSet.engine === 'cursor'
-      ? `; resolved ${[...new Set(results.map((r) => r.resolvedModel).filter(Boolean))].join('+') || '?'}; requested tier ${[...new Set(results.map((r) => r.requestedServiceTier).filter(Boolean))].join('+') || '?'} (${[...new Set(results.map((r) => r.serviceTierEvidence).filter(Boolean))].join('+') || 'unobserved'}); boundary violations ${boundaryViolations}; cost ${cursorCostVerified ? 'verified' : 'unverified'}`
-      : '';
-    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(percentile(walls, 0.5) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${runSet.epochAtRun ?? '?'}; repeat ${runSet.repeat}/${REPEAT}; ${gitState.sha?.slice(0, 8) ?? 'no-sha'}${cursorNote} |`;
+    const row = `| ${runId.slice(0, 10)} | ${runSet.engine} | ${runSet.label} | ${suite} | ${results.length} | ${passed}/${partial}/${failed} | ${factsOk}/${factsTotal} | ${(percentile(walls, 0.5) / 1000).toFixed(1)}s | ${(p95 / 1000).toFixed(1)}s | ${costStr} | epoch ${runSet.epochAtRun ?? '?'}; repeat ${runSet.repeat}/${REPEAT}; ${gitState.sha?.slice(0, 8) ?? 'no-sha'} |`;
     appendFileSync(benchPath, `${row}\n`);
     console.log(`benchmarks.md ← ${runSet.label}`);
   }
@@ -1174,7 +926,7 @@ if (BENCHMARK && TIER === 2) {
 
 // One compact batch manifest makes the comparison reproducible without committing
 // raw answers/traces. It is written for every tier-2 attempt, including setup,
-// canary, auth, boundary, and epoch-drift failures.
+// canary, auth, and epoch-drift failures.
 if (TIER === 2) {
   const usageKeys = ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'total_tokens'];
   const aggregateUsage = (results) => Object.fromEntries(usageKeys.map((key) => [
@@ -1185,20 +937,11 @@ if (TIER === 2) {
     const report = resultFiles.find((item) => item.runSet === runSet);
     const costs = results.map((result) => result.cost).filter(Number.isFinite);
     const completeCost = results.length > 0 && costs.length === results.length;
-    const cursorVerified = runSet.engine !== 'cursor'
-      || (results.length > 0 && results.every((result) => result.costStatus === 'verified' && Number.isFinite(result.cost)));
     return {
       engine: runSet.engine,
       model: runSet.model,
-      engineVersion: runSet.engineVersion ?? null,
-      preflight: runSet.preflight ?? null,
       repeat: runSet.repeat,
       epochAtRun: runSet.epochAtRun,
-      resolvedModels: [...new Set(results.map((result) => result.resolvedModel).filter(Boolean))],
-      resolvedServiceTiers: [...new Set(results.map((result) => result.resolvedServiceTier).filter(Boolean))],
-      requestedServiceTiers: [...new Set(results.map((result) => result.requestedServiceTier).filter(Boolean))],
-      serviceTierEvidence: [...new Set(results.map((result) => result.serviceTierEvidence).filter(Boolean))],
-      cursorCliModels: [...new Set(results.map((result) => result.cursorCliModel).filter(Boolean))],
       verdicts: Object.fromEntries(results.map((result) => [result.id, result.verdict])),
       facts: {
         matched: results.reduce((sum, result) => sum + Number(result.facts?.matched ?? 0), 0),
@@ -1212,23 +955,13 @@ if (TIER === 2) {
           checks: (result.factDetails ?? []).map((fact) => ({ name: fact.name, matched: fact.matched })),
         },
         runError: result.runError ?? null,
-        boundaryViolation: result.boundaryViolation === true,
-        benchmarkEligible: result.benchmarkEligible ?? null,
-        benchmarkIneligibleReason: result.benchmarkIneligibleReason ?? null,
       }])),
       wallMs: {
         median: percentile(results.map((result) => result.wallMs), 0.5),
         p95: percentile(results.map((result) => result.wallMs), 0.95),
       },
       usage: aggregateUsage(results),
-      cost: cursorVerified && completeCost ? costs.reduce((sum, cost) => sum + cost, 0) : null,
-      estimatedCost: results.length > 0 && results.every((result) => Number.isFinite(result.estimatedCost))
-        ? results.reduce((sum, result) => sum + result.estimatedCost, 0)
-        : null,
-      costStatus: runSet.engine === 'codex' ? 'subscription' : (cursorVerified && completeCost ? 'verified' : 'unverified'),
-      boundaryViolations: results.filter((result) => result.boundaryViolation).length,
-      rawStreamSha256: results.map((result) => result.rawSha256).filter(Boolean),
-      rawTranscripts: results.map((result) => result.rawTranscript).filter(Boolean),
+      cost: completeCost ? costs.reduce((sum, cost) => sum + cost, 0) : null,
       aborted: runSet.aborted ?? false,
       abortReason: runSet.abortReason ?? null,
       invalidReason: runSet.invalidReason ?? null,
@@ -1244,9 +977,7 @@ if (TIER === 2) {
     'eval/questions.json': new URL('./questions.json', here),
     'eval/scoring.mjs': new URL('./scoring.mjs', here),
     'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
-    'eval/cursor.mjs': new URL('./cursor.mjs', here),
     'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
-    'eval/cursor-pricing.json': new URL('./cursor-pricing.json', here),
     'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
     'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
     'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
@@ -1267,7 +998,6 @@ if (TIER === 2) {
     requested: {
       engines: ENGINES,
       anthropicModels: ANTHROPIC_MODELS,
-      cursorModels: CURSOR_MODELS,
       repeat: REPEAT,
       canary: CANARY,
       benchmark: BENCHMARK,
@@ -1275,7 +1005,6 @@ if (TIER === 2) {
     pricing: {
       anthropicPerMTok: PRICES,
       sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
-      cursorConfig: 'eval/cursor-pricing.json',
     },
     initialEpoch,
     epochDriftAbort,
