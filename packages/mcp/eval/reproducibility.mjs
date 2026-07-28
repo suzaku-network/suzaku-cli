@@ -66,6 +66,8 @@ export function validateCanaryPolicy({
   if (canaryOnly && repeatExplicit && repeat !== 1) {
     errors.push('--canary-only requires --repeat 1');
   }
+  if (benchmark && tier !== 2) errors.push('--benchmark requires --tier 2');
+  if (benchmark && !canary) errors.push('--benchmark requires --canary');
   return errors;
 }
 
@@ -156,16 +158,15 @@ export function isCommitReadyBenchmark({
 } = {}) {
   if (!benchmarkRequested || !setupComplete || setupFailures.length > 0
     || epochDriftAbort || batchAborted || questionIds.length === 0
-    || targetIds.length === 0 || !Number.isInteger(repeats) || repeats < 1) return false;
+    || targetIds.length === 0 || !Number.isInteger(repeats) || repeats < 1
+    || !canaryRequested) return false;
 
-  if (canaryRequested) {
-    if (canaries.length !== targetIds.length) return false;
-    const seenTargets = new Set();
-    for (const result of canaries) {
-      if (!targetIds.includes(result.targetId) || seenTargets.has(result.targetId)
-        || !canaryAllowsScheduling(result) || !hasCompleteUsage(result.usage)) return false;
-      seenTargets.add(result.targetId);
-    }
+  if (canaries.length !== targetIds.length) return false;
+  const seenTargets = new Set();
+  for (const result of canaries) {
+    if (!targetIds.includes(result.targetId) || seenTargets.has(result.targetId)
+      || !canaryAllowsScheduling(result) || !hasCompleteUsage(result.usage)) return false;
+    seenTargets.add(result.targetId);
   }
 
   const expectedKeys = new Set();

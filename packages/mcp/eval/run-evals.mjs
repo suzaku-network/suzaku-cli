@@ -20,7 +20,7 @@
 // eval/results/. Commit-ready benchmark manifests are also copied to eval/manifests/.
 
 import {
-  readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync,
+  readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync, writeSync,
 } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -28,7 +28,9 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { EvalArgumentError, parseEvalArgs } from './args.mjs';
 import { bridgedStdioCommand } from './stdio-bridge.mjs';
+import { createSpendGuard } from './spend-guard.mjs';
 import {
   parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
@@ -45,51 +47,35 @@ const here = new URL('.', import.meta.url);
 const spec = JSON.parse(readFileSync(new URL('./questions.json', here), 'utf8'));
 
 // ---------- flags ----------
-const argv = process.argv.slice(2);
-function flagValue(name, dflt = null) {
-  const i = argv.indexOf(name);
-  return i !== -1 && argv[i + 1] ? argv[i + 1] : dflt;
-}
-function flagList(name) {
-  const value = flagValue(name);
-  return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : null;
-}
-const TIER = Number(flagValue('--tier', '1'));
-const ONLY = flagValue('--only') ? flagValue('--only').split(',').map((s) => s.trim()) : null;
-const FAST = argv.includes('--fast');
-const ENGINE = flagValue('--engine', 'anthropic');
-const LEGACY_MODELS = flagValue('--models')
-  ? flagValue('--models').split(',').map((s) => s.trim())
-  : [flagValue('--model', 'claude-sonnet-4-6')];
-const ENGINES = [...new Set(flagList('--engines') ?? [ENGINE])];
-const ANTHROPIC_MODELS = [...new Set(flagList('--anthropic-models')
-  ?? (ENGINES.length === 1 && ENGINES[0] === 'anthropic' ? LEGACY_MODELS : ['claude-sonnet-4-6']))];
-const REPEAT = Number(flagValue('--repeat', '1'));
-const CANARY = argv.includes('--canary');
-const CANARY_ONLY = argv.includes('--canary-only');
-const RUN_CANARY = CANARY || CANARY_ONLY;
-const BENCHMARK = argv.includes('--benchmark');
-const NO_BUILD = argv.includes('--no-build');
-if (TIER !== 1 && TIER !== 2) {
-  console.error('usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--no-build]');
+const USAGE = 'usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--confirm-paid --max-cost-usd N] [--dry-run] [--no-build]';
+let cli;
+try {
+  cli = parseEvalArgs(process.argv.slice(2), {
+    questionIds: spec.questions.map((question) => question.id),
+  });
+} catch (error) {
+  writeSync(2, `${error instanceof EvalArgumentError ? error.message : String(error)}\n${USAGE}\n`);
   process.exit(2);
 }
-if (!Number.isInteger(REPEAT) || REPEAT < 1) {
-  console.error('--repeat must be a positive integer');
-  process.exit(2);
-}
-const unknownEngines = ENGINES.filter((engine) => !['anthropic', 'codex'].includes(engine));
-if (unknownEngines.length > 0) {
-  console.error(`unknown engines: ${unknownEngines.join(', ')}`);
-  process.exit(2);
-}
-if (flagValue('--engines') && (flagValue('--models') || flagValue('--model'))) {
-  console.error('use --anthropic-models with --engines; legacy --models is ambiguous');
-  process.exit(2);
-}
-if (NO_BUILD && BENCHMARK) {
-  console.error('--no-build is not allowed with --benchmark; benchmark runs must rebuild both the root CLI and MCP server');
-  process.exit(2);
+const {
+  tier: TIER,
+  only: ONLY,
+  fast: FAST,
+  engines: ENGINES,
+  anthropicModels: ANTHROPIC_MODELS,
+  repeat: REPEAT,
+  repeatExplicit: REPEAT_EXPLICIT,
+  canary: CANARY,
+  canaryOnly: CANARY_ONLY,
+  runCanary: RUN_CANARY,
+  benchmark: BENCHMARK,
+  noBuild: NO_BUILD,
+  dryRun: DRY_RUN,
+  maxCostUsd: MAX_COST_USD,
+} = cli;
+if (cli.help) {
+  writeSync(1, `${USAGE}\n`);
+  process.exit(0);
 }
 
 const canaryPolicyErrors = validateCanaryPolicy({
@@ -99,19 +85,13 @@ const canaryPolicyErrors = validateCanaryPolicy({
   benchmark: BENCHMARK,
   only: ONLY,
   repeat: REPEAT,
-  repeatExplicit: argv.includes('--repeat'),
+  repeatExplicit: REPEAT_EXPLICIT,
 });
 if (canaryPolicyErrors.length > 0) {
   for (const error of canaryPolicyErrors) console.error(error);
   process.exit(2);
 }
 
-const knownQuestionIds = new Set(spec.questions.map((question) => question.id));
-const unknownQuestionIds = (ONLY ?? []).filter((id) => !knownQuestionIds.has(id));
-if (unknownQuestionIds.length > 0) {
-  console.error(`--only references unknown question: ${unknownQuestionIds.join(', ')}`);
-  process.exit(2);
-}
 const questions = spec.questions
   .filter((q) => (ONLY ? ONLY.includes(q.id) : true))
   .filter((q) => (FAST ? !q.slow : true))
@@ -146,8 +126,46 @@ const PRICES = {
 };
 const DEFAULT_TOOL_TIMEOUT = 120_000;
 const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
+const CANARY_IDS = ['operators'];
+
+function dryRunSummary() {
+  const perTargetCalls = (RUN_CANARY ? CANARY_IDS.length : 0)
+    + (CANARY_ONLY ? 0 : questions.length * REPEAT);
+  const modelCalls = TIER === 2 ? requestedTargetIds.length * perTargetCalls : 0;
+  const meteredCalls = TIER === 2 && ENGINES.includes('anthropic')
+    ? ANTHROPIC_MODELS.length * perTargetCalls
+    : 0;
+  return {
+    dryRun: true,
+    tier: TIER,
+    engines: ENGINES,
+    targets: requestedTargetIds,
+    anthropicModels: ANTHROPIC_MODELS,
+    questions: questions.map((question) => question.id),
+    repeat: REPEAT,
+    canary: CANARY,
+    canaryOnly: CANARY_ONLY,
+    benchmark: BENCHMARK,
+    calls: {
+      perTarget: perTargetCalls,
+      totalModelCalls: modelCalls,
+      meteredAnthropicCalls: meteredCalls,
+    },
+    anthropicPricingPerMTok: Object.fromEntries(
+      ANTHROPIC_MODELS.map((model) => [model, PRICES[model] ?? null]),
+    ),
+    spendCeilingUsd: MAX_COST_USD,
+    spendEnforcement: meteredCalls > 0
+      ? 'required for execution; enforced between calls (one in-flight call can cross the ceiling)'
+      : 'not applicable',
+  };
+}
 
 async function main() {
+  if (DRY_RUN) {
+    writeSync(1, `${JSON.stringify(dryRunSummary(), null, 2)}\n`);
+    return 0;
+  }
   const rootDir = new URL('../../../', import.meta.url).pathname;
   const mcpDir = new URL('../', import.meta.url).pathname;
   const runId = new Date().toISOString().replace(/[:.]/g, '-');
@@ -170,6 +188,7 @@ async function main() {
   let batchAbortReason = null;
   let attemptFailure = null;
   let finalized = false;
+  const spendGuard = createSpendGuard(MAX_COST_USD);
 
   async function readGitState() {
     try {
@@ -252,9 +271,11 @@ async function main() {
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
     const definingFiles = {
       'eval/questions.json': new URL('./questions.json', here),
+      'eval/args.mjs': new URL('./args.mjs', here),
       'eval/scoring.mjs': new URL('./scoring.mjs', here),
       'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
       'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
+      'eval/spend-guard.mjs': new URL('./spend-guard.mjs', here),
       'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
       'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
       'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
@@ -281,6 +302,7 @@ async function main() {
         canary: CANARY,
         canaryOnly: CANARY_ONLY,
         benchmark: BENCHMARK,
+        maxCostUsd: MAX_COST_USD,
       },
       outcome: {
         exitCode,
@@ -293,6 +315,8 @@ async function main() {
       pricing: {
         anthropicPerMTok: PRICES,
         sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
+        meteredSpendUsd: spendGuard.spentUsd,
+        maxCostUsd: MAX_COST_USD,
       },
       initialEpoch,
       epochDriftAbort,
@@ -489,12 +513,11 @@ try {
 initialEpoch = vars.currentEpoch ?? null;
 
 // ---------- question selection ----------
-const canaryIds = ['operators'];
 const canaryQuestions = RUN_CANARY
-  ? canaryIds.map((id) => spec.questions.find((question) => question.id === id)).filter(Boolean)
+  ? CANARY_IDS.map((id) => spec.questions.find((question) => question.id === id)).filter(Boolean)
   : [];
-if (RUN_CANARY && canaryQuestions.length !== canaryIds.length) {
-  preflightErrors.push(`canary questions missing: ${canaryIds.filter((id) => !canaryQuestions.some((question) => question.id === id)).join(', ')}`);
+if (RUN_CANARY && canaryQuestions.length !== CANARY_IDS.length) {
+  preflightErrors.push(`canary questions missing: ${CANARY_IDS.filter((id) => !canaryQuestions.some((question) => question.id === id)).join(', ')}`);
 }
 const preflightQuestions = CANARY_ONLY
   ? canaryQuestions
@@ -881,8 +904,27 @@ function failedScore(error) {
   };
 }
 
+function budgetFailureBeforeCall(target) {
+  return spendGuard.beforeCall(target.engine);
+}
+
+function recordMeteredCost(target, result) {
+  return spendGuard.record(target.engine, result.cost);
+}
+
 async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   await waitForCodex(target);
+  const preCallBudgetFailure = budgetFailureBeforeCall(target);
+  if (preCallBudgetFailure) {
+    return {
+      id: q.id,
+      repeat,
+      canary,
+      ...failedScore(new Error(preCallBudgetFailure)),
+      infrastructureError: preCallBudgetFailure,
+      budgetError: preCallBudgetFailure,
+    };
+  }
   let result;
   try {
     const run = await target.run(q, { repeat, canary });
@@ -890,6 +932,12 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
     result = { id: q.id, repeat, canary, ...score, ...run, trace: run.trace, answer: run.answer };
   } catch (error) {
     result = { id: q.id, repeat, canary, ...failedScore(error) };
+  }
+  const budgetError = recordMeteredCost(target, result);
+  if (budgetError) {
+    result.budgetError = budgetError;
+    result.infrastructureError = result.infrastructureError ?? budgetError;
+    result.verdict = 'FAIL';
   }
   target.questionsRun += 1;
   const factStr = q.safety
@@ -965,7 +1013,9 @@ if (TIER === 2) {
         if (!canaryAllowsScheduling(record)) {
           if (result.infrastructureError) {
             setupFailures.push({
-              stage: 'ground-truth', engine: 'ground-truth', question: q.id,
+              stage: result.budgetError ? 'budget' : 'ground-truth',
+              engine: result.budgetError ? target.engine : 'ground-truth',
+              question: q.id,
               error: result.infrastructureError,
             });
           }
@@ -1032,7 +1082,9 @@ if (TIER === 2) {
       if (result.infrastructureError) {
         const message = `${q.id}: ${result.infrastructureError}`;
         setupFailures.push({
-          stage: 'ground-truth', engine: 'ground-truth', question: q.id,
+          stage: result.budgetError ? 'budget' : 'ground-truth',
+          engine: result.budgetError ? target.engine : 'ground-truth',
+          question: q.id,
           error: result.infrastructureError,
         });
         batchAborted = true;
@@ -1266,4 +1318,4 @@ return finalizeAttempt(qualityFailure || infrastructureFailure ? 1 : 0);
   }
 }
 
-process.exit(await main());
+process.exitCode = await main();

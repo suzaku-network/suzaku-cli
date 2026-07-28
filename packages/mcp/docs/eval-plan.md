@@ -31,17 +31,26 @@ pnpm eval -- --tier 1 --fast      # ~1–2 min, $0 — skips the slow heartbeat/
 pnpm eval -- --tier 1             # ~3–6 min, $0 — full deterministic pass + latency baseline
 
 export ANTHROPIC_API_KEY=sk-ant-…  # never commit; use the bot's dedicated key once it exists
-pnpm eval -- --tier 2 --fast      # ~3–5 min, ≈$0.20–0.50
-pnpm eval -- --tier 2             # ~10–15 min, ≈$1–2 — full suite
-pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-haiku-4-5 --benchmark
+pnpm eval -- --tier 2 --fast --dry-run
+                                  # keyless/no-side-effect call plan + active price cards
+pnpm eval -- --tier 2 --fast --confirm-paid --max-cost-usd 1
+                                  # ~3–5 min; ceiling is enforced between calls
+pnpm eval -- --tier 2 --confirm-paid --max-cost-usd 3
+                                  # full suite; choose the ceiling from dry-run + prior evidence
+pnpm eval -- --tier 2 --fast --models claude-sonnet-5,claude-sonnet-4-6,claude-haiku-4-5 \
+  --canary --benchmark --confirm-paid --max-cost-usd 8
                                   # backwards-compatible Anthropic-only comparison
 pnpm eval -- --tier 2 --engines anthropic,codex \
-  --anthropic-models claude-sonnet-5,claude-sonnet-4-6 --repeat 3 --canary --benchmark
+  --anthropic-models claude-sonnet-5,claude-sonnet-4-6 --repeat 3 --canary --benchmark \
+  --confirm-paid --max-cost-usd 12
                                   # interleaved comparison + manifest
-pnpm eval -- --tier 2 --engines anthropic,codex --canary-only
+pnpm eval -- --tier 2 --engines anthropic,codex --canary-only \
+  --confirm-paid --max-cost-usd 1
                                   # one operators wiring check per target; no suite questions
-pnpm eval -- --tier 2 --engine codex --fast --benchmark   # the live gpt-5.5 engine, no chat contact
-pnpm eval -- --tier 2 --only operators,safety-persona-swap   # targeted
+pnpm eval -- --tier 2 --engine codex --fast --canary --benchmark
+                                  # live gpt-5.5 engine, no metered API flag
+pnpm eval -- --tier 2 --only operators,safety-persona-swap \
+  --confirm-paid --max-cost-usd 1 # targeted Anthropic run
 # exploratory only: --no-build skips the pre-eval build; it is rejected with --benchmark
 
 # transport/integration smoke
@@ -62,6 +71,13 @@ After CLI argument validation, every tier-2 attempt gets a run ID and writes
 Argument-validation failures and tier-1 runs write no manifest. Tier-2 exits non-zero for
 PARTIAL/FAIL quality or an infrastructure-invalid batch; quality does not decide whether a
 complete benchmark is commit-ready, so genuine PARTIAL/FAIL results retain their canonical record.
+
+Argument parsing is strict and happens before build/MCP/provider initialization: unknown flags,
+missing values, duplicate/conflicting flags, and a flag consumed as another flag's value exit 2
+without a manifest. Every metered Anthropic execution requires `--confirm-paid` and a positive
+`--max-cost-usd`; the ceiling is checked between calls, so one already in-flight call can cross it.
+`--dry-run` needs no key or confirmation and makes no external calls. Canonical `--benchmark`
+runs require `--canary`.
 
 `--fast` is the 20-question subset (it skips the two event-scan questions), not the full suite.
 For `--benchmark`, tracked files must be clean; the initial epoch is frozen and any drift invalidates

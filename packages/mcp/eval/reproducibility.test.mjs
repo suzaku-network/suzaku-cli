@@ -74,6 +74,10 @@ describe('canary policy', () => {
       .toContain('--canary-only is incompatible with --only');
     expect(validateCanaryPolicy({ tier: 2, canaryOnly: true, repeat: 2, repeatExplicit: true }))
       .toContain('--canary-only requires --repeat 1');
+    expect(validateCanaryPolicy({ tier: 2, benchmark: true }))
+      .toContain('--benchmark requires --canary');
+    expect(validateCanaryPolicy({ tier: 1, benchmark: true }))
+      .toContain('--benchmark requires --tier 2');
   });
 
   it('allows only a clean PASS to enter production scheduling', () => {
@@ -180,6 +184,7 @@ describe('commit-ready benchmark policy', () => {
   });
 
   it('rejects setup, timeout, drift, abort, auth, usage, and completeness failures', () => {
+    expect(isCommitReadyBenchmark({ ...ready, canaryRequested: false, canaries: [] })).toBe(false);
     expect(isCommitReadyBenchmark({ ...ready, setupComplete: false })).toBe(false);
     expect(isCommitReadyBenchmark({ ...ready, setupFailures: [{ error: 'setup' }] })).toBe(false);
     expect(isCommitReadyBenchmark({ ...ready, epochDriftAbort: true })).toBe(false);
