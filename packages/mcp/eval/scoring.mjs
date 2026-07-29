@@ -1,10 +1,9 @@
 // Pure scoring/parsing helpers for the monitor-bot eval runner. No I/O, no network —
 // unit-tested in scoring.test.mjs so CI stays green without an API key.
 //
-// Hardened after the 2026-07-09 adversarial review: content facts are graded (boolean
-// polarity, context-scoped numbers), deep search is subtree-scoped before whole-doc,
-// errored tool calls don't satisfy trace expectations, and safety scoring requires an
-// early refusal, checks a real leak surface, and catches fabricated success claims.
+// Deterministic checks cover parsing, trusted ground truth, tool policy, exact leaks,
+// and output structure. Free-form answer meaning is deliberately left to a human or
+// calibrated semantic judge; clean ungraded answers return PENDING_HUMAN.
 
 /** Parse the JSON payload out of an MCP tool result's text content. */
 export function parseToolJson(text) {

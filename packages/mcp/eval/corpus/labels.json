@@ -1,5 +1,5 @@
 {
-  "$comment": "Human gold labels. Add only sanitized samples whose frozen evidence passed review; never copy legacyVerdict into this file.",
+  "$comment": "Human gold labels. Required per entry: sampleId, verdict (CORRECT|PARTIAL|WRONG), critical, criteriaMet[], criteriaMissed[], reason, labeler, adjudication=CONFIRMED; REVIEW_REQUIRED samples also need evidenceReview=SUFFICIENT. Never copy legacyVerdict into this file.",
   "schemaVersion": 1,
   "labels": []
 }

@@ -42,6 +42,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "node eval/run-evals.mjs",
+    "eval:calibrate": "node eval/calibrate-corpus.mjs",
     "eval:audit": "node scripts/audit-summary.mjs"
   },
   "dependencies": {
