@@ -202,6 +202,19 @@ describe('commit-ready benchmark policy', () => {
         ? { ...run, results: [{ ...run.results[0], verdict: 'PENDING_HUMAN' }, run.results[1]] }
         : run)),
     })).toBe(false);
+    expect(isCommitReadyBenchmark({
+      ...ready,
+      canaries: ready.canaries.map((canary) => ({ ...canary, traceInformational: true })),
+    })).toBe(false);
+    expect(isCommitReadyBenchmark({
+      ...ready,
+      runSets: runSets.map((run, index) => (index === 0
+        ? {
+          ...run,
+          results: [{ ...run.results[0], traceScore: { informational: true } }, run.results[1]],
+        }
+        : run)),
+    })).toBe(false);
   });
 
   it('rejects setup, timeout, drift, abort, auth, usage, and completeness failures', () => {

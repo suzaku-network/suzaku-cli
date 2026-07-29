@@ -31,15 +31,17 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { EvalArgumentError, parseEvalArgs } from './args.mjs';
 import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import { createSpendGuard } from './spend-guard.mjs';
+import { runEval } from './runner.mjs';
+import { writeAttemptManifest } from './manifest-store.mjs';
 import {
   collectAddresses, parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scorePolicy, computeCost, gateVerdict,
   verdict, validateFactSpec,
 } from './scoring.mjs';
 import {
-  aggregateRunSets, aggregateUsage, canaryAllowsScheduling, formatUsageCost,
-  epochTransitionFailure, groundTruthTrustFailure, hasCompleteUsage, hasExactTargetSetup,
-  interleavedSchedule, isCommitReadyBenchmark, isValidRunSet, manifestDestinations,
+  aggregateRunSets, aggregateUsage, formatUsageCost,
+  groundTruthTrustFailure, hasCompleteUsage,
+  isCommitReadyBenchmark, isValidRunSet,
   percentile, summarizeUsage, usageTokenCount, validateCanaryPolicy,
 } from './reproducibility.mjs';
 
@@ -282,8 +284,12 @@ async function main() {
       'eval/args.mjs': new URL('./args.mjs', here),
       'eval/scoring.mjs': new URL('./scoring.mjs', here),
       'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
+      'eval/runner.mjs': new URL('./runner.mjs', here),
+      'eval/manifest-store.mjs': new URL('./manifest-store.mjs', here),
       'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
       'eval/spend-guard.mjs': new URL('./spend-guard.mjs', here),
+      'eval/stdio-bridge.mjs': new URL('./stdio-bridge.mjs', here),
+      'eval/stdio-relay.mjs': new URL('./stdio-relay.mjs', here),
       'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
       'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
       'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
@@ -347,19 +353,18 @@ async function main() {
     try { if (gtConn) await gtConn.client.close(); } catch { /* best effort */ }
     try { if (agentConn) await agentConn.client.close(); } catch { /* best effort */ }
     const commitReady = benchmarkReady();
-    const destinations = manifestDestinations({ tier: TIER, argsValid: true, commitReady });
-    if (destinations.local) {
-      const serialized = `${JSON.stringify(createManifest(exitCode, commitReady), null, 2)}\n`;
-      const localDir = new URL('./results/manifests/', here);
-      mkdirSync(localDir, { recursive: true });
-      writeFileSync(new URL(`./${runId}.json`, localDir), serialized);
-      console.log(`manifest (local) ← results/manifests/${runId}.json`);
-      if (destinations.canonical) {
-        const canonicalDir = new URL('./manifests/', here);
-        mkdirSync(canonicalDir, { recursive: true });
-        writeFileSync(new URL(`./${runId}.json`, canonicalDir), serialized);
-        console.log(`manifest (canonical) ← manifests/${runId}.json`);
-      }
+    const serialized = `${JSON.stringify(createManifest(exitCode, commitReady), null, 2)}\n`;
+    const placement = writeAttemptManifest({
+      tier: TIER,
+      argsValid: true,
+      commitReady,
+      runId,
+      serialized,
+      localDir: new URL('./results/manifests/', here),
+      canonicalDir: new URL('./manifests/', here),
+    });
+    for (const item of placement.written) {
+      console.log(`manifest (${item.kind}) ← ${item.kind === 'local' ? 'results/manifests' : 'manifests'}/${runId}.json`);
     }
     finalized = true;
     return exitCode;
@@ -916,11 +921,6 @@ if (TIER === 1) {
   allRuns.push({ label: 'tier1', engine: 'none', model: null, repeat: 1, epochAtRun: vars.currentEpoch ?? null, results });
 }
 
-function isAuthFailure(run) {
-  return Boolean(run.runError
-    && (run.authError || /credit balance|billing|authentication_error|invalid x-api-key/i.test(run.runError)));
-}
-
 async function waitForCodex(target) {
   if (target.engine !== 'codex' || target.questionsRun === 0) return;
   await new Promise((resolve) => setTimeout(resolve, 8_000));
@@ -990,13 +990,16 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
     result.gateVerdict = 'FAIL';
   }
   target.questionsRun += 1;
+  return result;
+}
+
+function logQuestionResult(target, q, result, { repeat, canary }) {
   const factStr = `evidence ${result.facts.matched}/${result.facts.total} policy=${result.policy?.ok === true ? 'ok' : 'FAIL'} gate=${result.gateVerdict}`;
   const costStr = formatUsageCost(result, target.engine);
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
   if (result.runError) console.log(`         ↳ error: ${result.runError.slice(0, 300)}`);
   if (result.infrastructureError) console.log(`         ↳ infrastructure: ${result.infrastructureError}`);
-  return result;
 }
 
 if (TIER === 2) {
@@ -1004,7 +1007,7 @@ if (TIER === 2) {
   if (ENGINES.includes('codex')) {
     targets.push({
       id: 'codex:gpt-5.5-codex', label: 'gpt-5.5-codex', engine: 'codex', model: 'gpt-5.5 (subscription)',
-      run: makeCodexEngine(), traceMode: 'info', questionsRun: 0, consecutiveApiFailures: 0, aborted: false,
+      run: makeCodexEngine(), traceMode: 'info', questionsRun: 0,
     });
   }
   if (ENGINES.includes('anthropic')) {
@@ -1016,7 +1019,6 @@ if (TIER === 2) {
           targets.push({
             id: `anthropic:${model}`, label: model, engine: 'anthropic', model,
             run: await makeAnthropicEngine(model), traceMode: 'full', questionsRun: 0,
-            consecutiveApiFailures: 0, aborted: false,
           });
         }
       } catch (error) {
@@ -1024,174 +1026,48 @@ if (TIER === 2) {
       }
     }
   }
-  for (const failure of setupFailures) console.error(`setup failed [${failure.engine}]: ${failure.error}`);
-  setupComplete = setupFailures.length === 0
-    && hasExactTargetSetup(requestedTargetIds, targets.map((target) => target.id));
-
-  if (!setupComplete) {
-    const runnableIds = new Set(targets.map((target) => target.id));
-    const missing = requestedTargetIds.filter((targetId) => !runnableIds.has(targetId));
-    batchAborted = true;
-    batchAbortReason = `target setup incomplete${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`;
-    return finalizeAttempt(1, { stage: 'engine-setup', error: batchAbortReason });
-  }
-  if (targets.length === 0) {
-    batchAborted = true;
-    batchAbortReason = 'no runnable targets';
-    return finalizeAttempt(1, { stage: 'engine-setup', error: batchAbortReason });
-  }
-
-  if (RUN_CANARY) {
-    for (const target of targets) {
-      console.log(`\n=== canary ${target.engine} — ${target.label} ===`);
-      for (const q of canaryQuestions) {
-        const result = await executeQuestion(target, q, { repeat: 0, canary: true });
-        const record = {
-          targetId: target.id, engine: target.engine, model: target.model,
-          question: q.id, verdict: result.verdict,
-          gateVerdict: result.gateVerdict,
-          semanticVerdict: result.semanticVerdict,
-          runError: result.runError ?? null,
-          infrastructureError: result.infrastructureError ?? null,
-          timedOut: result.timedOut === true,
-          authError: result.authError === true,
-          usage: result.usage ?? null,
-          cost: result.cost ?? null,
-          costDisplay: formatUsageCost(result, target.engine),
-        };
-        canaryRecords.push(record);
-        if (!canaryAllowsScheduling(record)) {
-          if (result.infrastructureError) {
-            setupFailures.push({
-              stage: result.budgetError ? 'budget' : 'ground-truth',
-              engine: result.budgetError ? target.engine : 'ground-truth',
-              question: q.id,
-              error: result.infrastructureError,
-            });
-          }
-          batchAborted = true;
-          const reason = result.infrastructureError ?? result.runError;
-          batchAbortReason = `canary gate ${result.gateVerdict} on ${target.label}/${q.id}${reason ? `: ${reason}` : ''}`;
-          console.log(`⚠ aborting batch: ${batchAbortReason}`);
-          return finalizeAttempt(1, { stage: 'canary', error: batchAbortReason });
-        }
-      }
-    }
-    if (CANARY_ONLY) return finalizeAttempt(0);
-  }
-
-  const productionSchedule = interleavedSchedule(
-    REPEAT,
-    questions.map((question) => question.id),
-    targets.map((target) => target.id),
-  );
-  const questionById = new Map(questions.map((question) => [question.id, question]));
-  const targetById = new Map(targets.map((target) => [target.id, target]));
-  for (let repeat = 1; repeat <= REPEAT; repeat += 1) {
-    try { await refreshContext(); } catch (error) {
-      const message = `repeat ${repeat} context: ${error.message}`;
-      setupFailures.push({ stage: 'repeat-context', engine: 'ground-truth', error: message });
-      batchAborted = true;
-      batchAbortReason = message;
-      break;
-    }
-    const epochAtRun = vars.currentEpoch ?? null;
-    const runSets = new Map();
-    for (const target of targets) {
-      const runSet = {
-        targetId: target.id, label: target.label, engine: target.engine, model: target.model, repeat, epochAtRun,
-        results: [], aborted: target.aborted, abortReason: target.abortReason ?? null, invalidReason: null,
-      };
-      runSets.set(target.id, runSet);
-      allRuns.push(runSet);
-    }
-    if (epochAtRun !== initialEpoch) {
-      const message = `epoch drift before repeat ${repeat}: batch=${initialEpoch}, now=${epochAtRun}`;
-      console.warn(`⚠ ${message}`);
-      if (BENCHMARK) {
-        for (const runSet of runSets.values()) { runSet.aborted = true; runSet.invalidReason = message; }
-        epochDriftAbort = true;
-        break;
-      } else {
-        for (const runSet of runSets.values()) runSet.driftWarning = message;
-      }
-    }
-
-    console.log(`\n=== repeat ${repeat}/${REPEAT} — epoch ${epochAtRun} ===`);
-    for (const entry of productionSchedule.filter((item) => item.repeat === repeat)) {
-      const q = questionById.get(entry.question);
-      const target = targetById.get(entry.target);
-      const runSet = runSets.get(entry.target);
-      if (target.aborted) {
-        runSet.aborted = true;
-        runSet.abortReason = target.abortReason ?? 'target aborted';
-        continue;
-      }
-      const result = await executeQuestion(target, q, { repeat });
-      runSet.results.push(result);
-      if (result.infrastructureError) {
-        const message = `${q.id}: ${result.infrastructureError}`;
-        setupFailures.push({
-          stage: result.budgetError ? 'budget' : 'ground-truth',
-          engine: result.budgetError ? target.engine : 'ground-truth',
-          question: q.id,
-          error: result.infrastructureError,
-        });
-        batchAborted = true;
-        batchAbortReason = message;
-        for (const item of runSets.values()) {
-          item.aborted = true;
-          item.abortReason = message;
-          item.invalidReason = message;
-        }
-        console.log(`⚠ aborting batch: ${message}`);
-        break;
-      }
-      if (isAuthFailure(result)) {
-        target.consecutiveApiFailures += 1;
-        if (target.consecutiveApiFailures >= 2) {
-          target.aborted = true;
-          target.abortReason = 'repeated API billing/auth failures';
-          runSet.aborted = true;
-          runSet.abortReason = target.abortReason;
-          console.log(`⚠ aborting ${target.label}: ${target.abortReason}`);
-        }
-      } else {
-        target.consecutiveApiFailures = 0;
-      }
-    }
-    if (batchAborted) break;
-
-    try {
+  const outcome = await runEval({
+    requestedTargetIds,
+    targets,
+    questions,
+    canaryQuestions,
+    repeats: REPEAT,
+    runCanary: RUN_CANARY,
+    canaryOnly: CANARY_ONLY,
+    benchmark: BENCHMARK,
+    initialEpoch,
+    setupFailures,
+  }, {
+    executeQuestion,
+    refreshEpoch: async () => {
       await refreshContext();
-    } catch (error) {
-      const message = `post-repeat ${repeat} context: ${error.message}`;
-      setupFailures.push({ stage: 'post-repeat-context', engine: 'ground-truth', error: message });
-      batchAborted = true;
-      batchAbortReason = message;
-      for (const runSet of runSets.values()) {
-        runSet.aborted = true;
-        runSet.abortReason = message;
-        runSet.invalidReason = message;
+      return vars.currentEpoch ?? null;
+    },
+    formatUsageCost,
+    onResult: logQuestionResult,
+    onEvent: (event) => {
+      if (event.type === 'setup-failure') {
+        console.error(`setup failed [${event.failure.engine}]: ${event.failure.error}`);
+      } else if (event.type === 'canary-start') {
+        console.log(`\n=== canary ${event.target.engine} — ${event.target.label} ===`);
+      } else if (event.type === 'repeat-start') {
+        console.log(`\n=== repeat ${event.repeat}/${event.repeats} — epoch ${event.epoch} ===`);
+      } else if (event.type === 'drift') {
+        console.warn(`⚠ ${event.message}`);
+      } else if (event.type === 'abort') {
+        console.log(`⚠ aborting batch: ${event.message}`);
       }
-      break;
-    }
-    const epochAfterRun = vars.currentEpoch ?? null;
-    const epochTransitionError = epochTransitionFailure(repeat, epochAtRun, epochAfterRun);
-    if (epochTransitionError) {
-      const message = epochTransitionError;
-      console.warn(`⚠ ${message}`);
-      if (BENCHMARK) {
-        for (const runSet of runSets.values()) {
-          runSet.aborted = true;
-          runSet.abortReason = message;
-          runSet.invalidReason = message;
-        }
-        epochDriftAbort = true;
-        break;
-      }
-      for (const runSet of runSets.values()) runSet.driftWarning = message;
-    }
+    },
+  });
+  setupFailures.splice(0, setupFailures.length, ...outcome.setupFailures);
+  canaryRecords.push(...outcome.canaries);
+  allRuns.push(...outcome.runSets);
+  setupComplete = outcome.setupComplete;
+  batchAborted = outcome.batchAborted;
+  batchAbortReason = outcome.batchAbortReason;
+  epochDriftAbort = outcome.epochDriftAbort;
+  if (outcome.stopBeforeReports) {
+    return finalizeAttempt(outcome.exitCode, outcome.failure);
   }
 }
 

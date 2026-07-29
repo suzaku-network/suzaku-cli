@@ -168,6 +168,7 @@ export function isCommitReadyBenchmark({
   for (const result of canaries) {
     if (!targetIds.includes(result.targetId) || seenTargets.has(result.targetId)
       || !canaryAllowsScheduling(result) || result.verdict !== 'PASS'
+      || result.traceInformational === true
       || !hasCompleteUsage(result.usage)) return false;
     seenTargets.add(result.targetId);
   }
@@ -186,7 +187,9 @@ export function isCommitReadyBenchmark({
     const resultIds = run.results.map((result) => result.id);
     if (resultIds.length !== new Set(resultIds).size
       || questionIds.some((id) => !resultIds.includes(id))
-      || run.results.some((result) => result.verdict === 'PENDING_HUMAN')) return false;
+      || run.results.some((result) => (
+        result.verdict === 'PENDING_HUMAN' || result.traceScore?.informational === true
+      ))) return false;
   }
   return seenRunSets.size === expectedKeys.size;
 }
