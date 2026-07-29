@@ -288,6 +288,8 @@ async function main() {
       'eval/manifest-store.mjs': new URL('./manifest-store.mjs', here),
       'eval/reproducibility.mjs': new URL('./reproducibility.mjs', here),
       'eval/spend-guard.mjs': new URL('./spend-guard.mjs', here),
+      'eval/review-workflow.mjs': new URL('./review-workflow.mjs', here),
+      'eval/calibration.mjs': new URL('./calibration.mjs', here),
       'eval/stdio-bridge.mjs': new URL('./stdio-bridge.mjs', here),
       'eval/stdio-relay.mjs': new URL('./stdio-relay.mjs', here),
       'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
@@ -594,6 +596,7 @@ async function fetchGroundTruth(q) {
     }
     out.push({
       tool: gt.tool,
+      args,
       ok: res.ok,
       parsed: data !== null,
       ms: res.ms,
@@ -603,6 +606,21 @@ async function fetchGroundTruth(q) {
     });
   }
   return out;
+}
+
+function groundTruthForReview(groups) {
+  return groups.map((group) => ({
+    tool: group.tool,
+    args: group.args,
+    ok: group.ok,
+    parsed: group.parsed,
+    facts: (group.facts ?? []).map((fact) => ({
+      name: fact.spec?.name ?? 'unnamed-fact',
+      value: fact.value,
+      via: fact.via ?? null,
+      sane: fact.sane === true,
+    })),
+  }));
 }
 
 // ---------- shared tier-2 scoring ----------
@@ -649,6 +667,7 @@ async function scoreRun(q, run, traceMode) {
       format,
       facts: { total: failedFacts.length, matched: 0, evidenceOnly: true },
       policy,
+      groundTruthEvidence: groundTruthForReview(gts),
       factDetails: failedFacts.map((fact) => ({
         name: fact.spec?.name ?? 'unnamed-fact',
         value: previewValue(fact.value),
@@ -702,6 +721,7 @@ async function scoreRun(q, run, traceMode) {
     format,
     facts: factsSummary,
     policy,
+    groundTruthEvidence: groundTruthForReview(gts),
     factDetails, infrastructureError: null,
   };
 }
@@ -945,7 +965,7 @@ function failedScore(error) {
     format: { ok: false, violations: ['run-error'] },
     facts: { total: 0, matched: 0, evidenceOnly: true },
     policy: { ok: false, leaked: false, explicitLeaks: [], newAddresses: [] },
-    factDetails: [],
+    factDetails: [], groundTruthEvidence: [],
     answer: '', trace: [], scoringTrace: [], usage: null, wallMs: 0, cost: null,
     timedOut: /timed?\s*out|timeout/i.test(error.message),
     authError: /credit balance|billing|authentication|unauthorized|\b401\b/i.test(error.message),
@@ -1099,7 +1119,20 @@ for (const runSet of allRuns) {
   const jsonUrl = new URL(`./${baseName}.json`, resultsDir);
   const mdUrl = new URL(`./${baseName}.md`, resultsDir);
   writeFileSync(jsonUrl, JSON.stringify({
-    runId, tier: TIER, engine: runSet.engine, model: runSet.model,
+    schemaVersion: 2,
+    runId,
+    tier: TIER,
+    suiteVersion: spec.suiteVersion ?? 1,
+    suiteStatus: spec.suiteStatus ?? null,
+    gitSha: gitState.sha,
+    trackedDirty: gitState.trackedDirty,
+    hashes: {
+      questions: sha256File(new URL('./questions.json', here)),
+      questionContracts: sha256File(new URL('./question-contracts.json', here)),
+      scoring: sha256File(new URL('./scoring.mjs', here)),
+      reviewWorkflow: sha256File(new URL('./review-workflow.mjs', here)),
+    },
+    engine: runSet.engine, model: runSet.model,
     repeat: runSet.repeat, epochAtRun: runSet.epochAtRun,
     aborted: runSet.aborted ?? false, abortReason: runSet.abortReason ?? null,
     invalidReason: runSet.invalidReason ?? null, driftWarning: runSet.driftWarning ?? null,

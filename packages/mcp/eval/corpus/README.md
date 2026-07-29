@@ -45,3 +45,25 @@ node eval/calibrate-corpus.mjs
 The command reports confusion matrices, coverage, disagreements, and the core
 zero-critical-false-pass/zero-correct-hard-fail gate. It exits 1 with `BLOCKED`
 while gold labels or predictions are absent.
+
+For fresh current-suite runs, generate the human page with:
+
+```sh
+pnpm eval:review -- --input eval/results/RESULT.json
+```
+
+The generated page and data stay under ignored `eval/results/reviews/`. The page
+shows the frozen evidence and answer but hides the model and evaluator verdict.
+Every decision starts blank. After a human fills the adjacent decisions JSON,
+validate it with:
+
+```sh
+pnpm eval:review:finalize -- \
+  --packet eval/results/reviews/review-ID.json \
+  --decisions eval/results/reviews/review-ID-decisions.json
+```
+
+Add `--write` only after the review is confirmed. That records sanitized sample
+provenance in `review-samples.json`, human decisions in `labels.json`, and the
+versioned evaluator result in `predictions.json`. It never parses the Markdown or
+infers a label from answer wording.

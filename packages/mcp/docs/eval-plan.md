@@ -171,6 +171,12 @@ The calibration gate permits low automation coverage but permits zero critical
 false passes and zero correct-answer hard failures. With no labels or predictions,
 it returns `BLOCKED`; it never imports a historical evaluator verdict as gold.
 
+Fresh, current-suite answers use the tracked procedure in
+`docs/eval-continuation.md`. `eval/make-review-page.mjs` creates an anonymous,
+evidence-filled Markdown page plus blank decisions; it never assigns a label.
+`eval/finalize-review.mjs` accepts only explicit completed human decisions and
+stores sanitized provenance. Raw answers stay ignored.
+
 An optional LLM judge can be considered only after a useful human corpus exists.
 It must be evaluated once on a held-out split with at least 90% exact agreement,
 per-class metrics, and zero critical false passes. Judge calls are paid and require
@@ -201,12 +207,15 @@ with checksums and remain excluded from comparisons.
 A failure returns to the responsible layer. It does not trigger another round of
 answer-specific regexes or unlimited prompt editing.
 
+The exact continuation commands, proposed pilot questions, model-choice boundary,
+and review/freeze sequence are preserved in `docs/eval-continuation.md`.
+
 ## Current offline verification
 
 On 2026-07-29:
 
 - all evaluator commits through the orchestration work have valid GPG signatures;
-- the root and MCP builds completed and the full MCP suite passed 342/342;
+- the root and MCP builds completed and the full MCP suite passed 349/349;
 - free Tier 1 passed 16/16 at epoch 52;
 - the Tier-2 dry run selected 20 questions/20 calls and made no provider call;
 - the calibration command correctly reported `BLOCKED` with zero labels and zero
