@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": {
+    "resultFileCount": 62,
+    "resultTreeSha256": "c9a81785d05ac8aa360ba870141b5321a80aba4bf42bd20910534cc933681c84"
+  },
+  "summary": {
+    "samples": 173,
+    "exclusions": 62,
+    "byEligibility": {
+      "UNSCORABLE": 172,
+      "REVIEW_REQUIRED": 1
+    }
+  },
+  "byQuestion": {
+    "can-set-rewards": {
+      "samples": 13,
+      "byEligibility": {
+        "UNSCORABLE": 13
+      }
+    },
+    "linked-addresses": {
+      "samples": 11,
+      "byEligibility": {
+        "UNSCORABLE": 11
+      }
+    },
+    "weekly-todo": {
+      "samples": 13,
+      "byEligibility": {
+        "UNSCORABLE": 13
+      }
+    },
+    "wrapper-info": {
+      "samples": 10,
+      "byEligibility": {
+        "UNSCORABLE": 10
+      }
+    },
+    "operators": {
+      "samples": 16,
+      "byEligibility": {
+        "UNSCORABLE": 15,
+        "REVIEW_REQUIRED": 1
+      }
+    },
+    "stake-matrix": {
+      "samples": 12,
+      "byEligibility": {
+        "UNSCORABLE": 12
+      }
+    },
+    "safety-scam-relay": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "validator-health": {
+      "samples": 12,
+      "byEligibility": {
+        "UNSCORABLE": 12
+      }
+    },
+    "safety-persona-swap": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "network-scope-fuji-no-mainnet-leak": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "claimable": {
+      "samples": 12,
+      "byEligibility": {
+        "UNSCORABLE": 12
+      }
+    },
+    "future-epoch-not-started": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "uptime-check": {
+      "samples": 11,
+      "byEligibility": {
+        "UNSCORABLE": 11
+      }
+    },
+    "safety-write": {
+      "samples": 5,
+      "byEligibility": {
+        "UNSCORABLE": 5
+      }
+    },
+    "safety-injection": {
+      "samples": 6,
+      "byEligibility": {
+        "UNSCORABLE": 6
+      }
+    },
+    "epoch-status": {
+      "samples": 13,
+      "byEligibility": {
+        "UNSCORABLE": 13
+      }
+    },
+    "min-uptime-history": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "identity-ambiguity-my-node": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "slashing-cannot-confirm": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "safety-group-quoted-override": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "deployment-state": {
+      "samples": 1,
+      "byEligibility": {
+        "UNSCORABLE": 1
+      }
+    },
+    "safety-credential-exfil-authority": {
+      "samples": 4,
+      "byEligibility": {
+        "UNSCORABLE": 4
+      }
+    },
+    "set-amount-check": {
+      "samples": 1,
+      "byEligibility": {
+        "UNSCORABLE": 1
+      }
+    },
+    "set-amount-check-historical": {
+      "samples": 1,
+      "byEligibility": {
+        "UNSCORABLE": 1
+      }
+    }
+  },
+  "ineligibleReasons": {
+    "no manifest links this report to a git/question snapshot": 172,
+    "only the old scorer fact summary survives; a human must decide whether it is sufficient": 1,
+    "missing answer text": 62
+  },
+  "reviewCandidates": [
+    {
+      "sampleId": "sample-117685530ca5",
+      "questionId": "operators",
+      "suiteVersion": 3,
+      "promptSha256": "7d292cf200296a70d49e85b6179989bb37864ddae7b72ab79b14a25a4b9c6633",
+      "answerSha256": "5bb3a665f1f7ad4036ecfe12b769d251ae5660ad9a16eb9ea71cb766221eca85",
+      "providerKeyHash": "95bb1a84dd369b414dc031845e8fd4b04bcf8b0a64bcd1dd8959f03462096b53",
+      "frozenEvidenceStatus": "fact-summary-only",
+      "source": {
+        "resultSha256": "cbe0396585674f1985fb356ffbbead8cfb8e883f1675f62a2ca7946d1d91f8bc",
+        "questionIndex": 0,
+        "gitSha": "1c886cd7beee36928e2ccf8491bad9d17307c74d",
+        "questionsSha256": "7b530a79ad67d296dcc4fe9338d19f694c4248aa9856028b5c576e52a739a93a"
+      },
+      "eligibility": {
+        "status": "REVIEW_REQUIRED",
+        "reason": "only the old scorer fact summary survives; a human must decide whether it is sufficient"
+      }
+    }
+  ]
+}
