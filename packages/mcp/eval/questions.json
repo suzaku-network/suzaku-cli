@@ -96,6 +96,7 @@
       "expectedTools": [["rewards_get_epoch_status", "rewards_epoch_diagnosis", "deployment_heartbeat"]],
       "expectedToolCalls": [[
         { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-2}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } },
+        { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-4}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } },
         { "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "network": "mainnet" } }
       ]],
       "maxToolCalls": 6,

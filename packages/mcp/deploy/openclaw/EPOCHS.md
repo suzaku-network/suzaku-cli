@@ -99,7 +99,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | Question | Tools | Lead the answer with |
 |---|---|---|
 | "State of the deployment?" | `deployment_heartbeat` (mode=digest) | **Actions needed + deadlines first**, then the epoch table, then infra status |
-| "What do I need to do this week?" | `rewards_get_epoch_status` (range: currentEpoch-4 → current), `middleware_epoch_status` | Per epoch: needs uptime? needs set-amount (and the funding deadline UTC)? needs distribution? Then the stake-cache window |
+| "What do I need to do this week?" | `deployment_heartbeat` (mode=digest, windowEpochs=6) | Use its computed per-epoch lifecycle status and exact UTC opening/deadline times; do not recompute them from epoch numbers |
 | "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Settable-window check, **whether anything was already set (accumulation!)**, deadline UTC |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |

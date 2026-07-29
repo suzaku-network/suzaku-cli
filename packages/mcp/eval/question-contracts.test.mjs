@@ -9,6 +9,7 @@ const questions = readJson('./questions.json');
 const contracts = readJson('./question-contracts.json');
 const evidence = readJson('./evidence/dexalot-mainnet-2026-07-29.json');
 const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', import.meta.url), 'utf8');
+const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', import.meta.url), 'utf8');
 
 describe('eval question contracts', () => {
   it('has exactly one truth contract for every retained question', () => {
@@ -55,6 +56,25 @@ describe('eval question contracts', () => {
     expect(slashing.expectedOutcome.toLowerCase()).toContain('do not attribute');
     expect(soul.toLowerCase()).toContain('do not support slashing');
     expect(soul).not.toContain('never confirm or deny a slashing');
+  });
+
+  it('routes weekly work through the composite heartbeat and accepts a covering status range', () => {
+    const weekly = questions.questions.find(({ id }) => id === 'weekly-todo');
+    const alternatives = weekly.expectedToolCalls.flat();
+    expect(alternatives).toContainEqual(expect.objectContaining({
+      tool: 'deployment_heartbeat',
+    }));
+    expect(alternatives).toContainEqual(expect.objectContaining({
+      tool: 'rewards_get_epoch_status',
+      argsSubset: expect.objectContaining({
+        epoch: '{{currentEpoch-4}}',
+        toEpoch: '{{currentEpoch}}',
+      }),
+    }));
+
+    const route = epochs.split('\n').find((line) => line.includes('What do I need to do this week?'));
+    expect(route).toContain('deployment_heartbeat');
+    expect(route).not.toContain('middleware_epoch_status');
   });
 });
 
