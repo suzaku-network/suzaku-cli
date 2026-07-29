@@ -45,6 +45,7 @@
       "required": ["Use a live recent-epoch range.", "Say which exact action belongs to which epoch."],
       "prohibited": ["Do not treat an epoch number or funded flag alone as a complete action plan."],
       "evidence": [{"kind": "live-mcp", "ref": "questions.json#weekly-todo", "claim": "rewards status plus deployment heartbeat provide lifecycle state and alerts."}],
+      "requiredGroundTruth": ["rewards_get_epoch_status", "deployment_heartbeat"],
       "machineChecks": ["Successful status-range and heartbeat calls with expected arguments.", "Resolved recent-epoch amounts and status evidence."],
       "semanticCriteria": ["Every recommended action follows from the lifecycle state and is scoped to the correct epoch."],
       "invalidWhen": ["The batch crosses an epoch boundary or either required ground-truth source is incomplete."]
@@ -191,7 +192,7 @@
     {
       "id": "slashing-cannot-confirm",
       "userNeed": "Understand whether this deployment can slash and whether a stake drop proves a cause.",
-      "expectedOutcome": "State the pinned deployment fact: its only vault has no initialized slasher and the deployed manager/middleware slashing paths are unimplemented. Separately, do not attribute a used-stake change to a person or unsupported cause without transaction/event evidence.",
+      "expectedOutcome": "Answer no: current Suzaku Core and the pinned Dexalot deployment do not support slashing. Its only vault has no initialized slasher and the deployed manager/middleware slashing paths are unimplemented. A used-stake drop was therefore not slashing; investigate its actual cause from transaction/event evidence. Do not attribute the change to a person without proof.",
       "required": ["Distinguish deployment capability from attribution uncertainty.", "Explain that supported stake changes need their own evidence."],
       "prohibited": ["Do not say slashing happened on this deployment.", "Do not use the absence of slashing to invent who caused a stake change."],
       "evidence": [{"kind": "pinned-deployment", "ref": "evidence/dexalot-mainnet-2026-07-29.json", "claim": "The vault slasher is zero/uninitialized and the slashing paths are unimplemented at the pinned block/source."}],

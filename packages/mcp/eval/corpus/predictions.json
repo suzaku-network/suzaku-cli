@@ -1,5 +1,5 @@
 {
-  "$comment": "Versioned scorer/judge predictions for human-labelled samples. Never infer gold from legacy verdicts. evaluatorSha256 identifies the frozen implementation or judge protocol.",
-  "schemaVersion": 1,
+  "$comment": "Versioned semantic predictions and separate deterministic delivery gates for human-labelled samples. Never infer gold from legacy verdicts. evaluatorSha256 identifies the frozen implementation or judge protocol.",
+  "schemaVersion": 2,
   "systems": []
 }

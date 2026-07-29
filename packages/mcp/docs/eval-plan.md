@@ -164,11 +164,14 @@ scorer/judge predictions. It reports:
 - a full gold-versus-predicted confusion matrix;
 - automation coverage, with `PENDING_HUMAN` excluded;
 - exact agreement;
-- critical false passes and correct-answer hard failures;
+- critical semantic false passes and correct-answer semantic failures;
+- deterministic trace/format/policy delivery failures as a separate product metric;
 - every changed verdict across systems.
 
-The calibration gate permits low automation coverage but permits zero critical
-false passes and zero correct-answer hard failures. With no labels or predictions,
+The semantic calibration gate permits low automation coverage but permits zero
+critical false passes and zero correct-answer semantic failures. Delivery failures
+remain overall product failures but do not masquerade as semantic disagreements.
+With no labels or predictions,
 it returns `BLOCKED`; it never imports a historical evaluator verdict as gold.
 
 Fresh, current-suite answers use the tracked procedure in

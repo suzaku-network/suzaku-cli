@@ -1,5 +1,6 @@
 const GOLD_VERDICTS = new Set(['CORRECT', 'PARTIAL', 'WRONG']);
-const PREDICTED_VERDICTS = new Set(['PASS', 'PARTIAL', 'FAIL', 'PENDING_HUMAN']);
+const SEMANTIC_VERDICTS = new Set(['PASS', 'PARTIAL', 'FAIL', 'PENDING_HUMAN']);
+const DELIVERY_VERDICTS = new Set(['PASS', 'FAIL']);
 const GOLD_TO_PREDICTED = {
   CORRECT: 'PASS',
   PARTIAL: 'PARTIAL',
@@ -38,8 +39,8 @@ export function validateCalibrationInputs({
   if (labelDocument?.schemaVersion !== 1 || !Array.isArray(labelDocument.labels)) {
     throw new TypeError('labels must use schemaVersion 1 and contain a labels array');
   }
-  if (predictionDocument?.schemaVersion !== 1 || !Array.isArray(predictionDocument.systems)) {
-    throw new TypeError('predictions must use schemaVersion 1 and contain a systems array');
+  if (predictionDocument?.schemaVersion !== 2 || !Array.isArray(predictionDocument.systems)) {
+    throw new TypeError('predictions must use schemaVersion 2 and contain a systems array');
   }
 
   const candidates = new Map(inventory.reviewCandidates.map((sample) => [sample.sampleId, sample]));
@@ -92,10 +93,13 @@ export function validateCalibrationInputs({
           `${predictionPath}.sampleId is not a review candidate: ${prediction.sampleId}`,
         );
       }
-      if (!PREDICTED_VERDICTS.has(prediction.verdict)) {
+      if (!SEMANTIC_VERDICTS.has(prediction.semanticVerdict)) {
         throw new TypeError(
-          `${predictionPath}.verdict must be PASS, PARTIAL, FAIL, or PENDING_HUMAN`,
+          `${predictionPath}.semanticVerdict must be PASS, PARTIAL, FAIL, or PENDING_HUMAN`,
         );
+      }
+      if (!DELIVERY_VERDICTS.has(prediction.deliveryVerdict)) {
+        throw new TypeError(`${predictionPath}.deliveryVerdict must be PASS or FAIL`);
       }
     }
   }
@@ -104,13 +108,13 @@ export function validateCalibrationInputs({
 function emptyMatrix() {
   return Object.fromEntries([...GOLD_VERDICTS].map((gold) => [
     gold,
-    Object.fromEntries([...PREDICTED_VERDICTS].map((predicted) => [predicted, 0])),
+    Object.fromEntries([...SEMANTIC_VERDICTS].map((predicted) => [predicted, 0])),
   ]));
 }
 
 function systemReport(system, labels) {
   const predictionById = new Map(
-    system.predictions.map((prediction) => [prediction.sampleId, prediction.verdict]),
+    system.predictions.map((prediction) => [prediction.sampleId, prediction]),
   );
   const matrix = emptyMatrix();
   const missing = [];
@@ -119,14 +123,17 @@ function systemReport(system, labels) {
   let automated = 0;
   let falsePasses = 0;
   let criticalFalsePasses = 0;
-  let correctHardFails = 0;
+  let correctSemanticFails = 0;
+  let deliveryFailures = 0;
+  let correctContentDeliveryFailures = 0;
 
   for (const label of labels) {
-    const predicted = predictionById.get(label.sampleId);
-    if (!predicted) {
+    const prediction = predictionById.get(label.sampleId);
+    if (!prediction) {
       missing.push(label.sampleId);
       continue;
     }
+    const predicted = prediction.semanticVerdict;
     matrix[label.verdict][predicted] += 1;
     if (predicted !== 'PENDING_HUMAN') automated += 1;
     const expected = GOLD_TO_PREDICTED[label.verdict];
@@ -143,7 +150,11 @@ function systemReport(system, labels) {
     if (label.critical && label.verdict !== 'CORRECT' && predicted === 'PASS') {
       criticalFalsePasses += 1;
     }
-    if (label.verdict === 'CORRECT' && predicted === 'FAIL') correctHardFails += 1;
+    if (label.verdict === 'CORRECT' && predicted === 'FAIL') correctSemanticFails += 1;
+    if (prediction.deliveryVerdict === 'FAIL') {
+      deliveryFailures += 1;
+      if (label.verdict === 'CORRECT') correctContentDeliveryFailures += 1;
+    }
   }
 
   const complete = missing.length === 0;
@@ -163,10 +174,13 @@ function systemReport(system, labels) {
     falsePasses,
     falsePassRate: nonCorrect === 0 ? null : falsePasses / nonCorrect,
     criticalFalsePasses,
-    correctHardFails,
-    correctHardFailRate: correct === 0 ? null : correctHardFails / correct,
+    correctSemanticFails,
+    correctSemanticFailRate: correct === 0 ? null : correctSemanticFails / correct,
+    deliveryFailures,
+    deliveryFailureRate: denominator === 0 ? null : deliveryFailures / denominator,
+    correctContentDeliveryFailures,
     disagreements,
-    gate: complete && criticalFalsePasses === 0 && correctHardFails === 0 ? 'PASS' : 'FAIL',
+    gate: complete && criticalFalsePasses === 0 && correctSemanticFails === 0 ? 'PASS' : 'FAIL',
   };
 }
 
@@ -176,7 +190,7 @@ function changedVerdicts(systems, labels) {
     id: system.id,
     values: new Map(system.predictions.map((prediction) => [
       prediction.sampleId,
-      prediction.verdict,
+      prediction.semanticVerdict,
     ])),
   }));
   const changes = [];
@@ -223,7 +237,7 @@ export function buildCalibrationReport({
     ? 'BLOCKED'
     : reports.every((report) => report.gate === 'PASS') ? 'PASS' : 'FAIL';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status,
     blockers,
     labelledSamples: labels.length,
@@ -232,8 +246,9 @@ export function buildCalibrationReport({
     changedVerdicts: changedVerdicts(systems, labels),
     policy: {
       criticalFalsePassesAllowed: 0,
-      correctHardFailsAllowed: 0,
+      correctSemanticFailsAllowed: 0,
       pendingHumanCountsAsAutomated: false,
+      deliveryFailuresReportedSeparately: true,
     },
   };
 }

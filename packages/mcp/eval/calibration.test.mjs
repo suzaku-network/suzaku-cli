@@ -16,14 +16,26 @@ const label = {
   labeler: 'human-reviewer',
   adjudication: 'CONFIRMED',
 };
+const correctLabel = {
+  ...label,
+  verdict: 'CORRECT',
+  critical: false,
+  criteriaMet: ['answer matches frozen ground truth'],
+  criteriaMissed: [],
+  reason: 'The answer matches the frozen evidence.',
+};
 const evaluatorSha256 = 'a'.repeat(64);
+
+function prediction(semanticVerdict, deliveryVerdict = 'PASS') {
+  return { sampleId: 'sample-a', semanticVerdict, deliveryVerdict };
+}
 
 describe('offline calibration report', () => {
   it('blocks instead of inventing evidence when labels and predictions are absent', () => {
     const report = buildCalibrationReport({
       inventory,
       labelDocument: { schemaVersion: 1, labels: [] },
-      predictionDocument: { schemaVersion: 1, systems: [] },
+      predictionDocument: { schemaVersion: 2, systems: [] },
     });
     expect(report).toMatchObject({
       status: 'BLOCKED',
@@ -40,11 +52,11 @@ describe('offline calibration report', () => {
       inventory,
       labelDocument: { schemaVersion: 1, labels: [label] },
       predictionDocument: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         systems: [{
           id: 'unsafe-scorer',
           evaluatorSha256,
-          predictions: [{ sampleId: 'sample-a', verdict: 'PASS' }],
+          predictions: [prediction('PASS')],
         }],
       },
     });
@@ -54,7 +66,7 @@ describe('offline calibration report', () => {
       falsePasses: 1,
       falsePassRate: 1,
       criticalFalsePasses: 1,
-      correctHardFails: 0,
+      correctSemanticFails: 0,
       automationCoverage: 1,
       pendingHumanCoverage: 0,
     });
@@ -66,11 +78,11 @@ describe('offline calibration report', () => {
       inventory,
       labelDocument: { schemaVersion: 1, labels: [label] },
       predictionDocument: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         systems: [{
           id: 'conservative-scorer',
           evaluatorSha256,
-          predictions: [{ sampleId: 'sample-a', verdict: 'PENDING_HUMAN' }],
+          predictions: [prediction('PENDING_HUMAN')],
         }],
       },
     });
@@ -84,6 +96,29 @@ describe('offline calibration report', () => {
     });
   });
 
+  it('reports a delivery failure without calling correct content a semantic rejection', () => {
+    const report = buildCalibrationReport({
+      inventory,
+      labelDocument: { schemaVersion: 1, labels: [correctLabel] },
+      predictionDocument: {
+        schemaVersion: 2,
+        systems: [{
+          id: 'pending-semantic-with-format-gate',
+          evaluatorSha256,
+          predictions: [prediction('PENDING_HUMAN', 'FAIL')],
+        }],
+      },
+    });
+    expect(report.status).toBe('PASS');
+    expect(report.systems[0]).toMatchObject({
+      gate: 'PASS',
+      correctSemanticFails: 0,
+      deliveryFailures: 1,
+      correctContentDeliveryFailures: 1,
+      automationCoverage: 0,
+    });
+  });
+
   it('requires evidence review before using a fact-summary-only sample', () => {
     expect(() => buildCalibrationReport({
       inventory: {
@@ -93,7 +128,7 @@ describe('offline calibration report', () => {
         }],
       },
       labelDocument: { schemaVersion: 1, labels: [label] },
-      predictionDocument: { schemaVersion: 1, systems: [] },
+      predictionDocument: { schemaVersion: 2, systems: [] },
     })).toThrow('evidenceReview must be SUFFICIENT');
   });
 
@@ -102,17 +137,17 @@ describe('offline calibration report', () => {
       inventory,
       labelDocument: { schemaVersion: 1, labels: [label] },
       predictionDocument: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         systems: [
           {
             id: 'baseline',
             evaluatorSha256,
-            predictions: [{ sampleId: 'sample-a', verdict: 'PASS' }],
+            predictions: [prediction('PASS')],
           },
           {
             id: 'candidate',
             evaluatorSha256: 'b'.repeat(64),
-            predictions: [{ sampleId: 'sample-a', verdict: 'PENDING_HUMAN' }],
+            predictions: [prediction('PENDING_HUMAN')],
           },
         ],
       },

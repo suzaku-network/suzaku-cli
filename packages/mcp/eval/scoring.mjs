@@ -380,6 +380,40 @@ export function matchFact(answerText, fact, value) {
 }
 
 /**
+ * Apply JSON-Schema defaults to tool input before execution and trace scoring.
+ *
+ * Model tool calls contain only arguments the model wrote. MCP validation then
+ * fills schema defaults (for example network="mainnet"). Scoring the raw model
+ * object would therefore reject a call that the MCP server accepted and executed
+ * with the expected effective arguments.
+ */
+export function applySchemaDefaults(value, schema) {
+  if (value === undefined) {
+    if (schema && Object.prototype.hasOwnProperty.call(schema, 'default')) {
+      return structuredClone(schema.default);
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return schema?.items
+      ? value.map((item) => applySchemaDefaults(item, schema.items))
+      : structuredClone(value);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out = structuredClone(value);
+    for (const [key, propertySchema] of Object.entries(schema?.properties ?? {})) {
+      const resolved = applySchemaDefaults(
+        Object.prototype.hasOwnProperty.call(out, key) ? out[key] : undefined,
+        propertySchema,
+      );
+      if (resolved !== undefined) out[key] = resolved;
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
  * Score the tool-call trace against expectations. Errored calls do NOT satisfy
  * expected-tool groups — "called the right tool" means it returned successfully.
  */

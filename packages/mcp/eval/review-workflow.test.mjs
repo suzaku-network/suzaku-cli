@@ -28,6 +28,7 @@ const contractSpec = {
     prohibited: ['Do not claim the current epoch is complete.'],
     semanticCriteria: ['Associate readiness with the correct epoch.'],
     evidence: [{ kind: 'live-mcp', ref: 'q1' }],
+    requiredGroundTruth: ['epoch_status'],
   }],
 };
 const baseResult = {
@@ -35,6 +36,7 @@ const baseResult = {
   answer: 'Epoch 51 is ready.',
   verdict: 'PENDING_HUMAN',
   gateVerdict: 'PASS',
+  semanticVerdict: 'PENDING_HUMAN',
   usage: { input_tokens: 100, output_tokens: 10 },
   trace: [{
     name: 'epoch_status',
@@ -153,6 +155,10 @@ describe('human review packet', () => {
     })).toThrow('review ground truth is missing');
     expect(() => packetFor({
       ...report,
+      results: [{ ...baseResult, groundTruthEvidence: [] }],
+    })).toThrow('required review ground truth missing: epoch_status');
+    expect(() => packetFor({
+      ...report,
       results: [{
         ...baseResult,
         groundTruthEvidence: [{
@@ -195,8 +201,41 @@ describe('explicit human decisions', () => {
       critical: true,
       criteriaMissed: ['Associate readiness with the correct epoch.'],
     });
-    expect(correct.predictionSystem.predictions[0].verdict).toBe('PENDING_HUMAN');
-    expect(wrong.predictionSystem.predictions[0].verdict).toBe('PENDING_HUMAN');
+    expect(correct.predictionSystem.predictions[0]).toMatchObject({
+      semanticVerdict: 'PENDING_HUMAN',
+      deliveryVerdict: 'PASS',
+    });
+    expect(wrong.predictionSystem.predictions[0]).toMatchObject({
+      semanticVerdict: 'PENDING_HUMAN',
+      deliveryVerdict: 'PASS',
+    });
+  });
+
+  it('keeps correct semantic content separate from a failed delivery gate', () => {
+    const failedDelivery = packetFor({
+      ...report,
+      results: [{
+        ...baseResult,
+        verdict: 'FAIL',
+        gateVerdict: 'FAIL',
+        semanticVerdict: 'PENDING_HUMAN',
+        format: { ok: false, violations: ['markdown-bold'] },
+      }],
+    });
+    const finalized = finalizeHumanReview(
+      failedDelivery,
+      completedDecisions(failedDelivery),
+    );
+    expect(finalized.labels[0].verdict).toBe('CORRECT');
+    expect(finalized.predictionSystem.predictions[0]).toMatchObject({
+      semanticVerdict: 'PENDING_HUMAN',
+      deliveryVerdict: 'FAIL',
+      deliveryChecks: {
+        traceOk: true,
+        formatOk: false,
+        policyOk: true,
+      },
+    });
   });
 
   it('rejects an overall verdict that contradicts the criterion decisions', () => {
@@ -220,7 +259,7 @@ describe('explicit human decisions', () => {
     const empty = {
       reviewSampleDocument: { schemaVersion: 1, samples: [] },
       labelDocument: { schemaVersion: 1, labels: [] },
-      predictionDocument: { schemaVersion: 1, systems: [] },
+      predictionDocument: { schemaVersion: 2, systems: [] },
       finalized,
     };
     const merged = mergeReviewCorpus(empty);
@@ -231,7 +270,8 @@ describe('explicit human decisions', () => {
       evaluatorSha256: hashes.scoring,
       predictions: [{
         sampleId: packet.samples[0].sampleId,
-        verdict: 'PENDING_HUMAN',
+        semanticVerdict: 'PENDING_HUMAN',
+        deliveryVerdict: 'PASS',
       }],
     });
     expect(mergeReviewCorpus({

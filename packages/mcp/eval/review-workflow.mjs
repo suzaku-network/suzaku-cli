@@ -133,6 +133,15 @@ function traceFor(result) {
   }));
 }
 
+function assertRequiredGroundTruth(result, contract) {
+  const required = contract.requiredGroundTruth ?? [];
+  const present = new Set((result.groundTruthEvidence ?? []).map((group) => group.tool));
+  const missing = required.filter((tool) => !present.has(tool));
+  if (missing.length > 0) {
+    throw new TypeError(`${result.id}: required review ground truth missing: ${missing.join(', ')}`);
+  }
+}
+
 /**
  * Convert one current, infrastructure-valid result file into an anonymous review
  * packet. This function copies evidence; it does not inspect answer wording or
@@ -158,6 +167,7 @@ export function buildReviewPacket({
     if (!question || !contract) throw new TypeError(`missing current question contract: ${result.id}`);
     const answer = String(result.answer ?? '');
     if (answer.length === 0) throw new TypeError(`${result.id}: answer is empty`);
+    assertRequiredGroundTruth(result, contract);
     return {
       sampleId: `sample-${sha256(`${resultSha256}:${index}:${result.id}`).slice(0, 12)}`,
       questionId: result.id,
@@ -170,6 +180,7 @@ export function buildReviewPacket({
       hardChecks: {
         verdict: result.verdict,
         gateVerdict: result.gateVerdict,
+        semanticVerdict: result.semanticVerdict,
         traceInformational: result.traceScore?.informational === true,
         traceOk: result.traceScore?.ok === true,
         formatOk: result.format?.ok === true,
@@ -392,7 +403,15 @@ export function finalizeHumanReview(packet, decisions) {
     });
     predictions.push({
       sampleId: sample.sampleId,
-      verdict: sample.hardChecks.verdict,
+      // Suite-v5 packets created before this field was added are known to have
+      // used PENDING_HUMAN for every unreviewed semantic answer.
+      semanticVerdict: sample.hardChecks.semanticVerdict ?? 'PENDING_HUMAN',
+      deliveryVerdict: sample.hardChecks.gateVerdict,
+      deliveryChecks: {
+        traceOk: sample.hardChecks.traceOk,
+        formatOk: sample.hardChecks.formatOk,
+        policyOk: sample.hardChecks.policyOk,
+      },
     });
   }
 
@@ -432,8 +451,8 @@ export function mergeReviewCorpus({
   if (labelDocument?.schemaVersion !== 1 || !Array.isArray(labelDocument.labels)) {
     throw new TypeError('labels must use schemaVersion 1');
   }
-  if (predictionDocument?.schemaVersion !== 1 || !Array.isArray(predictionDocument.systems)) {
-    throw new TypeError('predictions must use schemaVersion 1');
+  if (predictionDocument?.schemaVersion !== 2 || !Array.isArray(predictionDocument.systems)) {
+    throw new TypeError('predictions must use schemaVersion 2');
   }
 
   const systems = [...predictionDocument.systems];

@@ -1,6 +1,7 @@
 {
   "mode": "alerts",
   "epoch": 48,
+  "windowStartEpoch": 42,
   "rewards": {
     "claimability": [
       { "epoch": 46, "funded": true, "distributionComplete": true, "status": "claimable" },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  collectAddresses, computeCost, deepFind, deriveValue, extractNumbers,
+  applySchemaDefaults, collectAddresses, computeCost, deepFind, deriveValue, extractNumbers,
   gateVerdict, getPath, matchFact, normalizeAnswer, parseToolJson, resolveFact,
   saneValue, scoreFormat, scorePolicy, scoreTrace, validateFactSpec, verdict,
 } from './scoring.mjs';
@@ -209,6 +209,41 @@ describe('deterministic output policy', () => {
 
 describe('trace, format, and cost hard gates', () => {
   const trace = [{ name: 'middleware_epoch_status', args: { epoch: 47 } }];
+
+  it('scores effective MCP arguments after schema defaults are applied', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        epoch: { type: 'string' },
+        network: { type: 'string', default: 'mainnet' },
+        options: {
+          type: 'object',
+          properties: { mode: { type: 'string', default: 'alerts' } },
+        },
+      },
+    };
+    const args = applySchemaDefaults({ epoch: '51', options: {} }, schema);
+    expect(args).toEqual({
+      epoch: '51',
+      network: 'mainnet',
+      options: { mode: 'alerts' },
+    });
+    expect(scoreTrace([{ name: 'epoch_status', args }], {
+      expectedToolCalls: [[{
+        tool: 'epoch_status',
+        argsSubset: { epoch: '51', network: 'mainnet' },
+      }]],
+    }).ok).toBe(true);
+    expect(scoreTrace([{
+      name: 'epoch_status',
+      args: applySchemaDefaults({ epoch: '51', network: 'fuji' }, schema),
+    }], {
+      expectedToolCalls: [[{
+        tool: 'epoch_status',
+        argsSubset: { epoch: '51', network: 'mainnet' },
+      }]],
+    }).ok).toBe(false);
+  });
 
   it('requires successful expected calls, argument subsets, budgets, and no forbidden tools', () => {
     expect(scoreTrace(trace, {

@@ -34,7 +34,8 @@ flag, criteria met/missed, a reason, labeler provenance, and confirmed
 adjudication. A `REVIEW_REQUIRED` sample also needs an explicit
 `evidenceReview: "SUFFICIENT"` decision.
 
-`predictions.json` stores only versioned scorer/judge predictions. Each system
+`predictions.json` stores versioned semantic scorer/judge predictions separately
+from the deterministic delivery gate (trace, formatting, and policy). Each system
 must include a SHA-256 identifier for its frozen implementation or judge protocol.
 Run:
 
@@ -42,9 +43,12 @@ Run:
 node eval/calibrate-corpus.mjs
 ```
 
-The command reports confusion matrices, coverage, disagreements, and the core
-zero-critical-false-pass/zero-correct-hard-fail gate. It exits 1 with `BLOCKED`
-while gold labels or predictions are absent.
+The command reports semantic confusion matrices, coverage, disagreements, and
+delivery failures separately. Its calibration gate allows zero critical semantic
+false passes and zero correct-answer semantic failures. A delivery failure still
+invalidates the product response; it is simply not misreported as a semantic
+scoring error. The command exits 1 with `BLOCKED` while gold labels or predictions
+are absent.
 
 For fresh current-suite runs, generate the human page with:
 

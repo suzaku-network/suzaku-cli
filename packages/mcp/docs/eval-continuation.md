@@ -124,15 +124,17 @@ pnpm eval:calibrate
 
 Interpretation:
 
-- human `WRONG` + evaluator `PASS` = false pass;
-- human `CORRECT` + evaluator `FAIL` = false rejection;
-- evaluator `PENDING_HUMAN` = safe but manual;
+- human `WRONG` + semantic predictor `PASS` = false pass;
+- human `CORRECT` + semantic predictor `FAIL` = semantic false rejection;
+- semantic predictor `PENDING_HUMAN` = safe but manual;
+- trace/format/policy delivery failures are reported separately and still make
+  the product answer ineligible, without being mislabelled as semantic errors;
 - human labels themselves measure model answer quality.
 
 Gate:
 
 - zero critical false passes;
-- zero correct-answer hard failures caused by wording;
+- zero correct-answer semantic failures;
 - no infrastructure-invalid sample;
 - every label has frozen evidence and explicit human provenance.
 

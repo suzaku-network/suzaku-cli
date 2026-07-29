@@ -34,7 +34,7 @@ import { createSpendGuard } from './spend-guard.mjs';
 import { runEval } from './runner.mjs';
 import { writeAttemptManifest } from './manifest-store.mjs';
 import {
-  collectAddresses, parseToolJson, getPath, deepFind, resolveFact, saneValue,
+  applySchemaDefaults, collectAddresses, parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scorePolicy, computeCost, gateVerdict,
   verdict, validateFactSpec,
 } from './scoring.mjs';
@@ -744,8 +744,11 @@ async function makeAnthropicEngine(model) {
     description: (t.description ?? '').slice(0, 1024),
     inputSchema: t.inputSchema,
     run: async (input) => {
-      const res = await callAgent(t.name, input ?? {}, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
-      trace.push({ name: t.name, args: input ?? {}, ms: res.ms, isError: !res.ok });
+      const effectiveInput = applySchemaDefaults(input ?? {}, t.inputSchema);
+      const res = await callAgent(t.name, effectiveInput, SLOW_TOOLS.includes(t.name) ? 300_000 : DEFAULT_TOOL_TIMEOUT);
+      trace.push({
+        name: t.name, args: effectiveInput, ms: res.ms, isError: !res.ok,
+      });
       return res.text.slice(0, 30_000);
     },
   }));

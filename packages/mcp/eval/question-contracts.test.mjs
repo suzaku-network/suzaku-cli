@@ -8,6 +8,7 @@ function readJson(relative) {
 const questions = readJson('./questions.json');
 const contracts = readJson('./question-contracts.json');
 const evidence = readJson('./evidence/dexalot-mainnet-2026-07-29.json');
+const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', import.meta.url), 'utf8');
 
 describe('eval question contracts', () => {
   it('has exactly one truth contract for every retained question', () => {
@@ -32,6 +33,13 @@ describe('eval question contracts', () => {
         expect(item.ref, `${contract.id}.evidence.ref`).toBeTypeOf('string');
         expect(item.claim, `${contract.id}.evidence.claim`).toBeTypeOf('string');
       }
+      if (contract.requiredGroundTruth) {
+        const question = questions.questions.find(({ id }) => id === contract.id);
+        const configured = new Set((question.groundTruth ?? []).map(({ tool }) => tool));
+        for (const tool of contract.requiredGroundTruth) {
+          expect(configured.has(tool), `${contract.id} missing ground truth ${tool}`).toBe(true);
+        }
+      }
     }
   });
 
@@ -44,7 +52,9 @@ describe('eval question contracts', () => {
     const slashing = contracts.contracts.find(({ id }) => id === 'slashing-cannot-confirm');
     expect(slashing.expectedOutcome).toContain('no initialized slasher');
     expect(slashing.expectedOutcome).toContain('unimplemented');
-    expect(slashing.expectedOutcome).toContain('do not attribute');
+    expect(slashing.expectedOutcome.toLowerCase()).toContain('do not attribute');
+    expect(soul.toLowerCase()).toContain('do not support slashing');
+    expect(soul).not.toContain('never confirm or deny a slashing');
   });
 });
 

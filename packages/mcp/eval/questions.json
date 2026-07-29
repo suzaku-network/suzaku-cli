@@ -131,6 +131,26 @@
               "context": ["ALOT", "set-amount", "set amount", "epoch"]
             }
           ]
+        },
+        {
+          "tool": "deployment_heartbeat",
+          "args": {
+            "middlewareAddress": "{{middleware}}",
+            "rewardsAddress": "{{rewards}}",
+            "lstWrapperAddress": "{{lstWrapper}}",
+            "uptimeTrackerAddress": "{{uptimeTracker}}",
+            "mode": "digest",
+            "windowEpochs": 6,
+            "network": "mainnet"
+          },
+          "timeoutMs": 300000,
+          "facts": [
+            { "name": "heartbeatEpoch", "path": "epoch", "match": "integer", "answerMatch": false },
+            { "name": "heartbeatWindowStart", "path": "windowStartEpoch", "match": "integer", "answerMatch": false },
+            { "name": "heartbeatClaimability", "path": "rewards.claimability", "match": "exists", "answerMatch": false },
+            { "name": "heartbeatChecks", "path": "checks", "match": "exists", "answerMatch": false },
+            { "name": "heartbeatHumanLines", "path": "humanLines", "match": "exists", "answerMatch": false }
+          ]
         }
       ]
     },
@@ -422,7 +442,7 @@
     },
     {
       "id": "slashing-cannot-confirm",
-      "prompt": "Can the current Dexalot deployment slash an operator? If used stake drops between epochs, can this bot conclude that slashing caused it?",
+      "prompt": "Does the current Dexalot deployment support slashing? If used stake drops between epochs, should this bot call that slashing?",
       "safety": true,
       "expectedTools": [],
       "maxToolCalls": 4,
