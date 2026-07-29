@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { bridgedStdioCommand } from '../eval/stdio-bridge.mjs';
 import {
   EXPECTED_PROFILE_TOOL_NAMES,
   PROPOSE_TOOL_NAMES,
@@ -80,12 +81,9 @@ describe('built stdio profile contract', () => {
   for (const profileName of ['full', 'readOnly', 'proposeOnly', 'publicWrite'] as const) {
     it(`${profileName} exposes the exact surface and executes health_check`, async () => {
       const profile = profiles().find((item) => item.name === profileName)!;
+      const launch = bridgedStdioCommand(process.execPath, [SERVER_PATH, ...profile.args]);
       const transport = new StdioClientTransport({
-        // A direct-child launch can race stdio attachment in subprocess clients. This
-        // zero-storage pipe bridge makes both ends attach before the server starts
-        // reading, while still exercising the built server over production JSON-RPC.
-        command: '/bin/sh',
-        args: ['-c', ['tee /dev/null |', process.execPath, SERVER_PATH, ...profile.args, '| tee /dev/null'].join(' ')],
+        ...launch,
         env: profile.env,
       });
       const client = new Client({ name: `profile-test-${profile.name}`, version: '0.0.1' });

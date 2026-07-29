@@ -4,6 +4,7 @@
 // The script rejects an unpinned/wrong-height fork before sending any transactions.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { bridgedStdioCommand } from './eval/stdio-bridge.mjs';
 
 const DEXALOT = {
   middleware: '0x9411307279456450ABF9B5181aA7a02271f0DC34',
@@ -30,9 +31,11 @@ try {
   process.exit(1);
 }
 
+const launch = bridgedStdioCommand(process.execPath, [
+  new URL('./dist/server.js', import.meta.url).pathname,
+]);
 const transport = new StdioClientTransport({
-  command: 'node',
-  args: [new URL('./dist/server.js', import.meta.url).pathname],
+  ...launch,
   env: { PATH: process.env.PATH, HOME: process.env.HOME, SUZAKU_PK: TEST_PK },
 });
 const client = new Client({ name: 'write-smoke', version: '0.0.0' });
