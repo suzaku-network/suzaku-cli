@@ -162,7 +162,8 @@ describe('docs-vs-tools census', () => {
   const NON_TOOL_TOKENS = new Set([
     'stake_cache', 'stuck_two_phase', 'uptime_missing', 'set_amount_accumulation',
     'funding_deadline', 'distribution_stalled', 'pchain_balance_low', 'pchain_validators',
-    'lst_paused', 'rewards_data_unavailable', 'waiting_uptime', 'not_set',
+    'lst_paused', 'rewards_data_unavailable', 'waiting_uptime', 'waiting_distribution_window',
+    'distribution_window_open', 'not_set',
   ]);
   const TOOL_PREFIXES = /^(discover|middleware|rewards|vault|lst|staking|kite|balancer|poa|opt|check|uptime|operator|l1|deployment|health)_/;
 

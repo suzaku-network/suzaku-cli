@@ -5,7 +5,7 @@
   "rewards": {
     "claimability": [
       { "epoch": 46, "funded": true, "distributionComplete": true, "status": "claimable" },
-      { "epoch": 47, "funded": true, "distributionComplete": false, "status": "waiting_uptime" },
+      { "epoch": 47, "funded": true, "distributionComplete": false, "status": "waiting_distribution_window" },
       { "epoch": 48, "funded": false, "distributionComplete": false, "status": "current_epoch" }
     ]
   },

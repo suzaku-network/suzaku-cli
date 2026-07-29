@@ -37,6 +37,10 @@ whenever an unset epoch is near the window edge.
       epochs after N (currently 2), once uptime is in. Runs in operator batches:
       `rewards_get_distribution_batch` → `lastProcessedOperator` / `isComplete`.
       A funded epoch sitting with `isComplete=false` is **work waiting to happen**.
+      `waiting_distribution_window` means the time gate is still closed; report the
+      returned opening epoch and UTC time, and do not claim uptime is missing.
+      `distribution_window_open` means the time gate is open but does not prove
+      uptime is present or absent; verify uptime before recommending distribution.
    d. **Claim** — once `distributionComplete=true`, stakers/operators/curators claim
       (64-epoch batches; check progress via `rewards_get_last_claimed`).
    e. **Reclaim window** — undistributed remainders become admin-reclaimable after the

@@ -71,6 +71,8 @@ export interface ClaimabilityRow extends EpochStatusRow {
   setTxCount: number | null;
   status: string;
   statusHuman: string;
+  distributionOpenEpoch?: number;
+  distributionOpenTs?: number;
 }
 
 // ── Humanizers (pure, exported for tests) ──
@@ -170,7 +172,12 @@ export function deriveClaimabilityStatus(
   operatorsTotal: number,
   setTxCount: number | null,
   now: number,
-): { status: string; human: string } {
+): {
+  status: string;
+  human: string;
+  distributionOpenEpoch?: number;
+  distributionOpenTs?: number;
+} {
   const isSet = row.epochRewards !== '0';
   const fundingDeadlineTs = epochStartOf(timing, row.epoch) + constants.fundingDeadlineOffset * timing.epochDuration;
 
@@ -187,7 +194,14 @@ export function deriveClaimabilityStatus(
   const distributable = row.epoch <= timing.currentEpoch - constants.distributionEarliestOffset;
   if (!distributable) {
     if (!isSet) return { status: 'not_set', human: `not set yet · fund by ${tsToUtc(fundingDeadlineTs)}` };
-    return { status: 'waiting_uptime', human: 'waiting uptime' };
+    const distributionOpenEpoch = row.epoch + constants.distributionEarliestOffset;
+    const distributionOpenTs = epochStartOf(timing, distributionOpenEpoch);
+    return {
+      status: 'waiting_distribution_window',
+      human: `funded · distribution opens epoch ${distributionOpenEpoch} · ${tsToUtc(distributionOpenTs)}`,
+      distributionOpenEpoch,
+      distributionOpenTs,
+    };
   }
 
   if (!row.funded) {
@@ -207,7 +221,10 @@ export function deriveClaimabilityStatus(
       const label = distribution.processed < 0 ? '?' : String(distribution.processed);
       return { status: 'distributing', human: `distributing ${label}/${operatorsTotal} ops` };
     }
-    return { status: 'waiting_uptime', human: 'funded · waiting uptime to distribute' };
+    return {
+      status: 'distribution_window_open',
+      human: 'funded · distribution window open; verify uptime, then distribute',
+    };
   }
 
   // Approximation of the contract's EpochStillClaimable boundary — no view exposes it.
@@ -658,10 +675,10 @@ export function registerHeartbeatTools(server: McpServer) {
         const setTxCount = windowCount === null
           ? null
           : windowCount > 0 ? windowCount : (row.epoch >= currentEpoch - 1 ? 0 : null);
-        const derived = deriveClaimabilityStatus(
+        const { human: statusHuman, ...derived } = deriveClaimabilityStatus(
           row, timing, constants, distributionByEpoch[row.epoch] ?? null, operators.length, setTxCount, now,
         );
-        return { ...row, setAlot: weiToToken(row.epochRewards), setTxCount, status: derived.status, statusHuman: derived.human };
+        return { ...row, setAlot: weiToToken(row.epochRewards), setTxCount, ...derived, statusHuman };
       });
 
       const stuckTwoPhase = detectStuckTwoPhase(nodeLogs);

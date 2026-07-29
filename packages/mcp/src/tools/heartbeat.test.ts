@@ -94,8 +94,12 @@ describe('deriveClaimabilityStatus', () => {
     expect(res.status).toBe('current_epoch');
   });
 
-  it('N-1 set but not yet distributable waits for uptime', () => {
-    expect(derive(row(37, '35120550000000000000000', true, false)).status).toBe('waiting_uptime');
+  it('N-1 reports the distribution opening instead of claiming uptime is missing', () => {
+    const res = derive(row(37, '35120550000000000000000', true, false));
+    expect(res.status).toBe('waiting_distribution_window');
+    expect(res.distributionOpenEpoch).toBe(39);
+    expect(res.distributionOpenTs).toBe(epochStartOf(TIMING, 39));
+    expect(res.human).toContain(`epoch 39 · ${tsToUtc(epochStartOf(TIMING, 39))}`);
   });
 
   it('N-1 unset shows funding deadline', () => {
@@ -104,8 +108,10 @@ describe('deriveClaimabilityStatus', () => {
     expect(res.human).toContain('fund by');
   });
 
-  it('N-2 IS distributable (boundary): funded but not started waits for uptime', () => {
-    expect(derive(row(36, '100', true, false)).status).toBe('waiting_uptime');
+  it('N-2 open boundary requires an uptime check without claiming uptime is missing', () => {
+    const res = derive(row(36, '100', true, false));
+    expect(res.status).toBe('distribution_window_open');
+    expect(res.human).toContain('verify uptime, then distribute');
   });
 
   it('distributable epoch mid-distribution reports progress k/n', () => {
@@ -347,13 +353,19 @@ describe('buildHumanLines', () => {
 
   it('digest mode renders header, quiet CHANGED section and REWARDS table', () => {
     const claimability: ClaimabilityRow[] = [
-      { ...row(37, '35120550000000000000000', true, false), setAlot: '35,120.55', setTxCount: 1, status: 'waiting_uptime', statusHuman: 'waiting uptime' },
+      {
+        ...row(37, '35120550000000000000000', true, false),
+        setAlot: '35,120.55',
+        setTxCount: 1,
+        status: 'waiting_distribution_window',
+        statusHuman: 'funded · distribution opens epoch 39',
+      },
     ];
     const lines = buildHumanLines({ mode: 'digest', timing: TIMING, cacheOk: true, changedLines: [], validatorSummary: 'validators 10', tvlLine: null, activityLine: 'no rewards activity', claimability, checks: [okCheck] });
     expect(lines[0]).toContain('epoch 38 started');
     expect(lines).toContain('  no node/stake/validator changes');
     expect(lines.some((l) => l.includes('35,120.55'))).toBe(true);
-    expect(lines.some((l) => l.includes('waiting uptime'))).toBe(true);
+    expect(lines.some((l) => l.includes('distribution opens epoch 39'))).toBe(true);
   });
 });
 
@@ -420,7 +432,10 @@ describe('deployment_heartbeat handler', () => {
     expect(data.epoch).toBe(38);
     expect(data.rewards.claimability).toHaveLength(3);
     // epoch 37 is funded but not yet distributable (offset 2); epoch 36 is mid-distribution
-    expect(data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 37).status).toBe('waiting_uptime');
+    const epoch37 = data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 37);
+    expect(epoch37.status).toBe('waiting_distribution_window');
+    expect(epoch37.distributionOpenEpoch).toBe(39);
+    expect(epoch37.distributionOpenTs).toBe(data.epochStartTs + 302_400);
     expect(data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 36).status).toBe('distributing');
     expect(data.humanLines).toEqual([]);
     expect(data.changed).toBeUndefined();
