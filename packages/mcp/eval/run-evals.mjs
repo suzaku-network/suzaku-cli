@@ -32,8 +32,9 @@ import { EvalArgumentError, parseEvalArgs } from './args.mjs';
 import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import { createSpendGuard } from './spend-guard.mjs';
 import {
-  parseToolJson, getPath, deepFind, resolveFact, saneValue,
-  matchFact, scoreTrace, scoreFormat, scoreSafety, computeCost, verdict, validateFactSpec,
+  collectAddresses, parseToolJson, getPath, deepFind, resolveFact, saneValue,
+  matchFact, scoreTrace, scoreFormat, scorePolicy, computeCost, gateVerdict,
+  verdict, validateFactSpec,
 } from './scoring.mjs';
 import {
   aggregateRunSets, aggregateUsage, canaryAllowsScheduling, formatUsageCost,
@@ -45,6 +46,8 @@ import {
 const execFileP = promisify(execFile);
 const here = new URL('.', import.meta.url);
 const spec = JSON.parse(readFileSync(new URL('./questions.json', here), 'utf8'));
+const contractSpec = JSON.parse(readFileSync(new URL('./question-contracts.json', here), 'utf8'));
+const contractById = new Map(contractSpec.contracts.map((contract) => [contract.id, contract]));
 
 // ---------- flags ----------
 const USAGE = 'usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--confirm-paid --max-cost-usd N] [--dry-run] [--no-build]';
@@ -236,11 +239,14 @@ async function main() {
       },
       questionResults: Object.fromEntries(results.map((result) => [result.id, {
         verdict: result.verdict,
+        gateVerdict: result.gateVerdict ?? null,
+        semanticVerdict: result.semanticVerdict ?? null,
         facts: {
           matched: result.facts?.matched ?? 0,
           total: result.facts?.total ?? 0,
           checks: (result.factDetails ?? []).map((fact) => ({ name: fact.name, matched: fact.matched })),
         },
+        policy: result.policy ?? null,
         runError: result.runError ?? null,
         infrastructureError: result.infrastructureError ?? null,
         timedOut: result.timedOut === true,
@@ -271,6 +277,8 @@ async function main() {
     const suite = `${FAST ? 'fast' : 'full'}@v${spec.suiteVersion ?? 1}${ONLY ? `(only:${ONLY.join('+')})` : ''}`;
     const definingFiles = {
       'eval/questions.json': new URL('./questions.json', here),
+      'eval/question-contracts.json': new URL('./question-contracts.json', here),
+      'eval/evidence/dexalot-mainnet-2026-07-29.json': new URL('./evidence/dexalot-mainnet-2026-07-29.json', here),
       'eval/args.mjs': new URL('./args.mjs', here),
       'eval/scoring.mjs': new URL('./scoring.mjs', here),
       'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
@@ -293,6 +301,7 @@ async function main() {
       tier: TIER,
       suite,
       suiteVersion: spec.suiteVersion ?? 1,
+      suiteStatus: spec.suiteStatus ?? null,
       requested: {
         engines: ENGINES,
         targets: requestedTargetIds,
@@ -445,6 +454,17 @@ const callAgent = (name, args, timeoutMs) => callVia((agentConn ?? gtConn).clien
 
 // ---------- preflight ----------
 const preflightErrors = [];
+if (contractSpec.suiteVersion !== spec.suiteVersion) {
+  preflightErrors.push(`question-contract suite version ${contractSpec.suiteVersion} does not match questions ${spec.suiteVersion}`);
+}
+const specQuestionIds = new Set(spec.questions.map((question) => question.id));
+const contractIds = new Set(contractSpec.contracts.map((contract) => contract.id));
+for (const id of specQuestionIds) {
+  if (!contractIds.has(id)) preflightErrors.push(`question contract missing: ${id}`);
+}
+for (const id of contractIds) {
+  if (!specQuestionIds.has(id)) preflightErrors.push(`orphan question contract: ${id}`);
+}
 function preflightCheck(toolName, args) {
   const tool = toolByName.get(toolName);
   if (!tool) {
@@ -523,6 +543,10 @@ const preflightQuestions = CANARY_ONLY
   ? canaryQuestions
   : [...new Map([...questions, ...canaryQuestions].map((question) => [question.id, question])).values()];
 for (const q of preflightQuestions) {
+  if (!contractById.has(q.id)) preflightErrors.push(`question contract missing: ${q.id}`);
+  if (![undefined, null, 'no-new'].includes(q.addressPolicy)) {
+    preflightErrors.push(`unsupported addressPolicy '${q.addressPolicy}' (question ${q.id})`);
+  }
   for (const gt of q.groundTruth ?? []) preflightCheck(gt.tool, substitute(gt.args, vars));
   for (const group of q.expectedTools ?? []) {
     for (const name of Array.isArray(group) ? group : [group]) {
@@ -534,11 +558,6 @@ for (const q of preflightQuestions) {
   }
   for (const gt of q.groundTruth ?? []) {
     for (const fact of gt.facts ?? []) {
-      if (fact.match === 'boolean'
-        && (!Array.isArray(fact.whenTrue) || fact.whenTrue.length === 0
-          || !Array.isArray(fact.whenFalse) || fact.whenFalse.length === 0)) {
-        preflightErrors.push(`boolean fact ${q.id}/${fact.name} must define non-empty whenTrue and whenFalse lists`);
-      }
       for (const error of validateFactSpec(substitute(fact, vars))) {
         preflightErrors.push(`fact ${q.id}/${fact.name}: ${error}`);
       }
@@ -574,6 +593,7 @@ async function fetchGroundTruth(q) {
       parsed: data !== null,
       ms: res.ms,
       error: res.ok ? null : res.text.slice(0, 400),
+      addresses: [...collectAddresses(data)],
       facts,
     });
   }
@@ -598,20 +618,38 @@ async function scoreRun(q, run, traceMode) {
   const format = scoreFormat(run.answer);
   const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
   const infrastructureError = groundTruthTrustFailure(gts);
+  const allowedAddresses = new Set([
+    ...collectAddresses(substitute(q.prompt, vars)),
+    ...collectAddresses(spec.deployment),
+    ...collectAddresses(q.allowedAddresses ?? []),
+    ...gts.flatMap((group) => group.addresses ?? []),
+  ]);
+  const policy = scorePolicy(run.answer, {
+    mustNotContain: q.mustNotContain ?? [],
+    addressPolicy: q.addressPolicy ?? null,
+    allowedAddresses: [...allowedAddresses],
+  });
+  const semanticVerdict = 'PENDING_HUMAN';
   if (infrastructureError) {
     const failedFacts = gts.flatMap((group) => group.facts ?? [])
       .filter((fact) => fact.spec?.answerMatch !== false);
+    const hardGate = gateVerdict({
+      trace: traceScore, format, policy, runError: run.runError, infrastructureError,
+    });
     return {
       verdict: 'FAIL',
+      gateVerdict: hardGate,
+      semanticVerdict,
       traceScore,
       format,
-      facts: { total: failedFacts.length, matched: 0 },
-      safety: null,
+      facts: { total: failedFacts.length, matched: 0, evidenceOnly: true },
+      policy,
       factDetails: failedFacts.map((fact) => ({
         name: fact.spec?.name ?? 'unnamed-fact',
         value: previewValue(fact.value),
         via: fact.via,
-        matched: false,
+        matched: null,
+        machineCheckable: false,
       })),
       infrastructureError,
     };
@@ -619,37 +657,46 @@ async function scoreRun(q, run, traceMode) {
   let total = 0;
   let matched = 0;
   const factDetails = [];
-  const resolvedAddresses = [];
+  const objectiveMatchTypes = new Set([
+    'integer', 'count', 'number', 'address', 'address-set', 'number-set',
+  ]);
   for (const g of gts) {
     for (const f of g.facts) {
-      if (f.spec.match === 'address' && typeof f.value === 'string') resolvedAddresses.push(f.value);
-      if (f.spec.match === 'address-set' && Array.isArray(f.value)) resolvedAddresses.push(...f.value);
       if (f.spec.answerMatch === false) continue;
       total += 1;
-      const ok = f.sane && f.value !== undefined && matchFact(run.answer, f.spec, f.value);
-      if (ok) matched += 1;
-      factDetails.push({ name: f.spec.name, value: previewValue(f.value), via: f.via, matched: ok });
+      const machineCheckable = objectiveMatchTypes.has(f.spec.match);
+      const observed = machineCheckable && f.sane && f.value !== undefined
+        ? matchFact(run.answer, f.spec, f.value)
+        : null;
+      if (observed === true) matched += 1;
+      factDetails.push({
+        name: f.spec.name,
+        value: previewValue(f.value),
+        via: f.via,
+        matched: observed,
+        machineCheckable,
+      });
     }
   }
-  const factsSummary = { total, matched };
-  let safetySummary = null;
-  if (q.safety) {
-    safetySummary = scoreSafety(run.answer, {
-      ...q,
-      allowedAddresses: [...new Set([...(q.allowedAddresses ?? []), ...resolvedAddresses])],
-    });
-    factDetails.push(
-      { name: q.requiresRefusal === false ? 'refusal-not-required' : 'semantic-refusal', matched: safetySummary.refusalOk },
-      { name: 'no-leak', matched: !safetySummary.leaked },
-      { name: 'no-false-success', matched: !safetySummary.falseSuccess },
-      { name: 'no-forbidden-assertion', matched: !safetySummary.forbiddenAssertion },
-    );
-  }
-  const v = run.runError
-    ? 'FAIL'
-    : verdict({ trace: traceScore, facts: factsSummary, format, safety: safetySummary });
+  const factsSummary = { total, matched, evidenceOnly: true };
+  const hardGate = gateVerdict({
+    trace: traceScore, format, policy, runError: run.runError, infrastructureError: null,
+  });
+  const v = verdict({
+    trace: traceScore,
+    format,
+    policy,
+    runError: run.runError,
+    semanticVerdict,
+  });
   return {
-    verdict: v, traceScore, format, facts: factsSummary, safety: safetySummary,
+    verdict: v,
+    gateVerdict: hardGate,
+    semanticVerdict,
+    traceScore,
+    format,
+    facts: factsSummary,
+    policy,
     factDetails, infrastructureError: null,
   };
 }
@@ -892,10 +939,12 @@ async function waitForCodex(target) {
 function failedScore(error) {
   return {
     verdict: 'FAIL',
+    gateVerdict: 'FAIL',
+    semanticVerdict: 'PENDING_HUMAN',
     traceScore: { ok: false, groupsSatisfied: 0, groupsTotal: 0, calls: 0, erroredCalls: 0, withinBudget: true, forbiddenCalled: [] },
     format: { ok: false, violations: ['run-error'] },
-    facts: { total: 0, matched: 0 },
-    safety: null,
+    facts: { total: 0, matched: 0, evidenceOnly: true },
+    policy: { ok: false, leaked: false, explicitLeaks: [], newAddresses: [] },
     factDetails: [],
     answer: '', trace: [], scoringTrace: [], usage: null, wallMs: 0, cost: null,
     timedOut: /timed?\s*out|timeout/i.test(error.message),
@@ -938,11 +987,10 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
     result.budgetError = budgetError;
     result.infrastructureError = result.infrastructureError ?? budgetError;
     result.verdict = 'FAIL';
+    result.gateVerdict = 'FAIL';
   }
   target.questionsRun += 1;
-  const factStr = q.safety
-    ? `facts ${result.facts.matched}/${result.facts.total} refusal=${result.safety?.refusalOk ?? false} leak=${result.safety?.leaked ?? false} fabricated=${Boolean(result.safety?.falseSuccess || result.safety?.forbiddenAssertion)}`
-    : `facts ${result.facts.matched}/${result.facts.total}`;
+  const factStr = `evidence ${result.facts.matched}/${result.facts.total} policy=${result.policy?.ok === true ? 'ok' : 'FAIL'} gate=${result.gateVerdict}`;
   const costStr = formatUsageCost(result, target.engine);
   const errStr = result.traceScore.erroredCalls > 0 ? ` errTools=${result.traceScore.erroredCalls}` : '';
   console.log(`${pad(result.verdict, 8)} ${pad(`${target.label}${canary ? ':canary' : `:r${repeat}`}`, 29)} ${pad(q.id, 26)} tools ${result.traceScore.groupsSatisfied}/${result.traceScore.groupsTotal}${result.traceScore.informational ? '*' : ''} calls=${result.traceScore.calls}${errStr} ${factStr} fmt=${result.format.ok ? 'ok' : result.format.violations.join('+')} ${(result.wallMs / 1000).toFixed(1)}s ${costStr}`);
@@ -1001,6 +1049,8 @@ if (TIER === 2) {
         const record = {
           targetId: target.id, engine: target.engine, model: target.model,
           question: q.id, verdict: result.verdict,
+          gateVerdict: result.gateVerdict,
+          semanticVerdict: result.semanticVerdict,
           runError: result.runError ?? null,
           infrastructureError: result.infrastructureError ?? null,
           timedOut: result.timedOut === true,
@@ -1021,7 +1071,7 @@ if (TIER === 2) {
           }
           batchAborted = true;
           const reason = result.infrastructureError ?? result.runError;
-          batchAbortReason = `canary ${result.verdict} on ${target.label}/${q.id}${reason ? `: ${reason}` : ''}`;
+          batchAbortReason = `canary gate ${result.gateVerdict} on ${target.label}/${q.id}${reason ? `: ${reason}` : ''}`;
           console.log(`⚠ aborting batch: ${batchAbortReason}`);
           return finalizeAttempt(1, { stage: 'canary', error: batchAbortReason });
         }
@@ -1154,6 +1204,7 @@ for (const runSet of allRuns) {
   const passed = results.filter((r) => r.verdict === 'PASS').length;
   const partial = results.filter((r) => r.verdict === 'PARTIAL').length;
   const failed = results.filter((r) => r.verdict === 'FAIL').length;
+  const pending = results.filter((r) => r.verdict === 'PENDING_HUMAN').length;
   const totals = TIER === 2 ? summarizeUsage(results) : { usage: null, cost: null };
   const totalCost = totals.cost;
   const runUsage = totals.usage;
@@ -1185,17 +1236,19 @@ for (const runSet of allRuns) {
   const md = [];
   md.push(`# Eval run ${runId} — ${suffix}`);
   md.push('');
-  md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL** of ${results.length}${runCostLabel}`);
+  md.push(`**${passed} PASS / ${partial} PARTIAL / ${failed} FAIL / ${pending} PENDING_HUMAN** of ${results.length}${runCostLabel}`);
   if (runSet.aborted || runSet.invalidReason) md.push(`\n**INVALID RUN:** ${runSet.invalidReason ?? runSet.abortReason ?? 'aborted'}`);
   else if (runSet.driftWarning) md.push(`\n**DRIFT WARNING:** ${runSet.driftWarning}`);
   md.push('');
   if (TIER === 2) {
-    md.push('| question | verdict | tool groups | calls | facts | format | wall | cost |');
-    md.push('|---|---|---|---|---|---|---|---|');
+    md.push('| question | verdict | hard gate | tool groups | calls | objective evidence | format | wall | cost |');
+    md.push('|---|---|---|---|---|---|---|---|---|');
     for (const r of results) {
-      const factStr = r.factDetails ? r.factDetails.map((f) => `${f.name}:${f.matched ? '✓' : '✗'}`).join(' ') : '';
+      const factStr = r.factDetails
+        ? r.factDetails.map((f) => `${f.name}:${f.matched === null ? '—' : (f.matched ? '✓' : 'not-seen')}`).join(' ')
+        : '';
       const costStr = formatUsageCost(r, runSet.engine);
-      md.push(`| ${r.id} | ${r.verdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
+      md.push(`| ${r.id} | ${r.verdict} | ${r.gateVerdict} | ${r.traceScore.groupsSatisfied}/${r.traceScore.groupsTotal}${r.traceScore.informational ? '*' : ''} | ${r.traceScore.calls} | ${factStr} | ${r.format.ok ? 'ok' : r.format.violations.join(', ')} | ${(r.wallMs / 1000).toFixed(1)}s | ${costStr} |`);
     }
     md.push('');
     for (const r of results) {
@@ -1222,7 +1275,7 @@ for (const runSet of allRuns) {
     json: `results/${baseName}.json`, jsonSha256: sha256File(jsonUrl),
     markdown: `results/${baseName}.md`, markdownSha256: sha256File(mdUrl),
   });
-  console.log(`\n[${runSet.label}] ${passed} PASS / ${partial} PARTIAL / ${failed} FAIL of ${results.length}${runCostLabel} → results/${baseName}.md`);
+  console.log(`\n[${runSet.label}] ${passed} PASS / ${partial} PARTIAL / ${failed} FAIL / ${pending} PENDING_HUMAN of ${results.length}${runCostLabel} → results/${baseName}.md`);
 }
 
 // Cross-model/repeat comparison. Only complete, non-drifted repetitions count.
@@ -1243,7 +1296,7 @@ if (TIER === 2) {
       const usageSummary = summary.usage == null
         ? 'usage unknown'
         : `${Math.round(usageTokenCount(summary.usage) / 1000)}k tok`;
-      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · ${usageSummary} · cost/PASS ${costPerPass}`);
+      console.log(`${pad(runSets[0].label, 26)} valid ${summary.validRuns}/${summary.attemptedRuns} (${(summary.validRunRate * 100).toFixed(0)}%) · PASS ${summary.passed}/${summary.questions} · PENDING_HUMAN ${summary.pending} · median ${summary.medianWallMs == null ? '—' : `${(summary.medianWallMs / 1000).toFixed(1)}s`} · p95 ${summary.p95WallMs == null ? '—' : `${(summary.p95WallMs / 1000).toFixed(1)}s`} · ${usageSummary} · cost/PASS ${costPerPass}`);
       const valid = runSets.filter((run) => isValidRunSet(run, questions.length));
       const flips = [];
       for (const q of questions) {
@@ -1298,7 +1351,8 @@ if (BENCHMARK && TIER === 2) {
 }
 
 const qualityFailure = allRuns.some((run) => run.results.some((result) => (
-  result.verdict === 'FAIL' || (TIER === 2 && result.verdict === 'PARTIAL')
+  result.verdict === 'FAIL'
+  || (TIER === 2 && ['PARTIAL', 'PENDING_HUMAN'].includes(result.verdict))
 )));
 const infrastructureFailure = TIER === 2 && (
   !setupComplete

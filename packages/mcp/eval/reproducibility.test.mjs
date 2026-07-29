@@ -49,6 +49,9 @@ describe('infrastructure trust policy', () => {
       .toBe('ground-truth fact insane (epoch_status/epoch)');
     expect(groundTruthTrustFailure([{ ...trusted[0], facts: [{ ...trustedFact, via: 'deep-global' }] }]))
       .toBe('ground-truth fact used deep-global (epoch_status/epoch)');
+    expect(groundTruthTrustFailure([{
+      ...trusted[0], facts: [{ ...trustedFact, via: 'deep-global+derive:count' }],
+    }])).toBe('ground-truth fact used deep-global (epoch_status/epoch)');
   });
 
   it('detects drift after the final repeat instead of relying on a later refresh', () => {
@@ -80,14 +83,17 @@ describe('canary policy', () => {
       .toContain('--benchmark requires --tier 2');
   });
 
-  it('allows only a clean PASS to enter production scheduling', () => {
-    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null })).toBe(true);
-    expect(canaryAllowsScheduling({ verdict: 'PARTIAL', runError: null })).toBe(false);
-    expect(canaryAllowsScheduling({ verdict: 'FAIL', runError: null })).toBe(false);
-    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: 'timeout' })).toBe(false);
-    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, infrastructureError: 'oracle failed' })).toBe(false);
-    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, timedOut: true })).toBe(false);
-    expect(canaryAllowsScheduling({ verdict: 'PASS', runError: null, authError: true })).toBe(false);
+  it('uses the hard gate for scheduling without converting semantic uncertainty to PASS', () => {
+    expect(canaryAllowsScheduling({
+      gateVerdict: 'PASS', verdict: 'PENDING_HUMAN', runError: null,
+    })).toBe(true);
+    expect(canaryAllowsScheduling({ gateVerdict: 'FAIL', verdict: 'PENDING_HUMAN' })).toBe(false);
+    expect(canaryAllowsScheduling({ gateVerdict: 'PASS', runError: 'timeout' })).toBe(false);
+    expect(canaryAllowsScheduling({
+      gateVerdict: 'PASS', runError: null, infrastructureError: 'oracle failed',
+    })).toBe(false);
+    expect(canaryAllowsScheduling({ gateVerdict: 'PASS', runError: null, timedOut: true })).toBe(false);
+    expect(canaryAllowsScheduling({ gateVerdict: 'PASS', runError: null, authError: true })).toBe(false);
   });
 });
 
@@ -163,7 +169,9 @@ describe('commit-ready benchmark policy', () => {
     setupComplete: true,
     setupFailures: [],
     canaryRequested: true,
-    canaries: targetIds.map((targetId) => ({ targetId, verdict: 'PASS', runError: null, usage: USAGE })),
+    canaries: targetIds.map((targetId) => ({
+      targetId, gateVerdict: 'PASS', verdict: 'PASS', runError: null, usage: USAGE,
+    })),
     epochDriftAbort: false,
     batchAborted: false,
     runSets,
@@ -181,6 +189,19 @@ describe('commit-ready benchmark policy', () => {
         results: run.results.map((entry) => ({ ...entry, verdict: 'PARTIAL' })),
       })),
     })).toBe(true);
+  });
+
+  it('rejects unresolved semantic verdicts from canonical manifests', () => {
+    expect(isCommitReadyBenchmark({
+      ...ready,
+      canaries: ready.canaries.map((canary) => ({ ...canary, verdict: 'PENDING_HUMAN' })),
+    })).toBe(false);
+    expect(isCommitReadyBenchmark({
+      ...ready,
+      runSets: runSets.map((run, index) => (index === 0
+        ? { ...run, results: [{ ...run.results[0], verdict: 'PENDING_HUMAN' }, run.results[1]] }
+        : run)),
+    })).toBe(false);
   });
 
   it('rejects setup, timeout, drift, abort, auth, usage, and completeness failures', () => {

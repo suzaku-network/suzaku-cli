@@ -42,7 +42,9 @@ export function groundTruthTrustFailure(groups) {
       const name = fact?.spec?.name ?? 'unnamed-fact';
       if (fact?.value === undefined) return `ground-truth fact unresolved (${tool}/${name})`;
       if (fact?.sane !== true) return `ground-truth fact insane (${tool}/${name})`;
-      if (fact?.via === 'deep-global') return `ground-truth fact used deep-global (${tool}/${name})`;
+      if (String(fact?.via ?? '').startsWith('deep-global')) {
+        return `ground-truth fact used deep-global (${tool}/${name})`;
+      }
     }
   }
   return null;
@@ -72,7 +74,7 @@ export function validateCanaryPolicy({
 }
 
 export function canaryAllowsScheduling(result) {
-  return result?.verdict === 'PASS'
+  return result?.gateVerdict === 'PASS'
     && !result.runError
     && !result.infrastructureError
     && result.timedOut !== true
@@ -165,7 +167,8 @@ export function isCommitReadyBenchmark({
   const seenTargets = new Set();
   for (const result of canaries) {
     if (!targetIds.includes(result.targetId) || seenTargets.has(result.targetId)
-      || !canaryAllowsScheduling(result) || !hasCompleteUsage(result.usage)) return false;
+      || !canaryAllowsScheduling(result) || result.verdict !== 'PASS'
+      || !hasCompleteUsage(result.usage)) return false;
     seenTargets.add(result.targetId);
   }
 
@@ -182,7 +185,8 @@ export function isCommitReadyBenchmark({
     seenRunSets.add(key);
     const resultIds = run.results.map((result) => result.id);
     if (resultIds.length !== new Set(resultIds).size
-      || questionIds.some((id) => !resultIds.includes(id))) return false;
+      || questionIds.some((id) => !resultIds.includes(id))
+      || run.results.some((result) => result.verdict === 'PENDING_HUMAN')) return false;
   }
   return seenRunSets.size === expectedKeys.size;
 }
@@ -196,6 +200,7 @@ export function aggregateRunSets(runSets, expectedQuestions) {
   const valid = runSets.filter((run) => isValidRunSet(run, expectedQuestions));
   const results = valid.flatMap((run) => run.results);
   const passed = results.filter((result) => result.verdict === 'PASS').length;
+  const pending = results.filter((result) => result.verdict === 'PENDING_HUMAN').length;
   const walls = results.map((result) => result.wallMs).filter(Number.isFinite);
   const costs = results.map((result) => result.cost).filter(Number.isFinite);
   const completeCost = results.length > 0 && costs.length === results.length;
@@ -205,6 +210,7 @@ export function aggregateRunSets(runSets, expectedQuestions) {
     validRuns: valid.length,
     validRunRate: runSets.length === 0 ? 0 : valid.length / runSets.length,
     passed,
+    pending,
     questions: results.length,
     medianWallMs: percentile(walls, 0.5),
     p95WallMs: percentile(walls, 0.95),
