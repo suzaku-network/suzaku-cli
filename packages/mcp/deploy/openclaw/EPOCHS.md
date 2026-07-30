@@ -67,8 +67,8 @@ Inputs that trip people up:
 - `l1RpcUrl` is the **Dexalot L1's own RPC**, NOT the C-Chain RPC.
 - `blockchainId` is the L1's blockchain ID (CB58). No tool returns it — ask the
   operator once, then reuse it for the whole conversation.
-- Signature aggregation uses the `SIG_AGG_URL` endpoint (defaults to Glacier). A
-  warp-collection timeout means that endpoint is unreachable or validators are
+- Signature aggregation uses the server-configured service (defaults to Glacier). A
+  warp-collection timeout means that service is unreachable or validators are
   offline — report the raw error; never retry blindly.
 - The `uptimeTrackerAddress` comes from the SOUL.md Known-deployment pin. It is NOT in
   `middleware_get_linked_addresses` — the on-chain source of truth is the Rewards

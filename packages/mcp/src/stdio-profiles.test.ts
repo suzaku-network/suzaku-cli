@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -15,6 +15,8 @@ import { resolveProfileConfig } from './profile-config.js';
 const SERVER_PATH = new URL('../dist/server.js', import.meta.url).pathname;
 const DUMMY_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const MIDDLEWARE = '0x9411307279456450ABF9B5181aA7a02271f0DC34';
+const INTERNAL_CONFIG_NAME =
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/i;
 
 type ProfileName = keyof typeof EXPECTED_PROFILE_TOOL_NAMES;
 interface Profile {
@@ -114,8 +116,6 @@ describe('built stdio profile contract', () => {
     // The read-only profile is the public monitor bot: nothing it shows the model
     // may name server env vars. The full profile intentionally documents signer
     // requirements in its private write-tool descriptions and is not swept here.
-    const INTERNAL_NAME =
-      /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/;
     const profile = profiles().find((item) => item.name === 'readOnly')!;
     const launch = bridgedStdioCommand(process.execPath, [SERVER_PATH, ...profile.args]);
     const transport = new StdioClientTransport({ ...launch, env: profile.env });
@@ -141,12 +141,25 @@ describe('built stdio profile contract', () => {
         surfaces.push(JSON.stringify(rendered.messages));
       }
       for (const surface of surfaces) {
-        expect(surface.match(INTERNAL_NAME)?.[0] ?? null).toBeNull();
+        expect(surface.match(INTERNAL_CONFIG_NAME)?.[0] ?? null).toBeNull();
       }
     } finally {
       await client.close();
     }
   }, 30_000);
+
+  it('OpenClaw model instructions contain no internal configuration names', () => {
+    const instructionFiles = [
+      '../deploy/openclaw/SOUL.md',
+      '../deploy/openclaw/SOUL-propose.md',
+      '../deploy/openclaw/SOUL-cache.md',
+      '../deploy/openclaw/EPOCHS.md',
+    ];
+    for (const path of instructionFiles) {
+      const content = readFileSync(new URL(path, import.meta.url), 'utf8');
+      expect(content.match(INTERNAL_CONFIG_NAME)?.[0] ?? null, path).toBeNull();
+    }
+  });
 
   it('fails closed at startup when constrained-profile bounds are absent', () => {
     const cases = [

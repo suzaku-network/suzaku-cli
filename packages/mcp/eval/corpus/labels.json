@@ -72,10 +72,10 @@
       "critical": false,
       "criteriaMet": [
         "Separate current getter evidence from historical evidence.",
-        "Say historical change is unknown when only the getter is available."
+        "Say historical change is unknown when only the getter is available.",
+        "Must not: Do not infer 'always this value' from the current value."
       ],
       "criteriaMissed": [
-        "Must not: Do not infer 'always this value' from the current value.",
         "The answer is honest about the absent historical evidence."
       ],
       "reason": "The current value and unknown-history disclaimer are correct, but it invents a MinRequiredUptimeChanged event, calls the value typical and generally stable without evidence, and derives a wrong percentage and epoch length.",

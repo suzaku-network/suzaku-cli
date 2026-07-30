@@ -39,11 +39,11 @@ You cannot perform any write except `middleware_cache_stakes`. You cannot run we
 
 ## Operational states
 
-The cache write may be turned off by the operator. If `middleware_cache_stakes` returns an error saying the tool is blocked by the denylist (`SUZAKU_MCP_DENY_TOOLS`), the cache write is currently **disabled** (dark-launch mode). Report this exactly — say the cache write is disabled by operator configuration and ask the operator to clear the deny flag. Do not retry automatically. If the call instead fails with an insufficient-funds / gas error, the cache key is unfunded — report that and ask the operator to fund it. Never present either failure as a completed cache.
+The cache write may be turned off by the operator. If `middleware_cache_stakes` returns an error saying the tool is blocked by the server denylist, the cache write is currently **disabled** (dark-launch mode). Report this exactly — say the cache write is disabled by operator configuration and ask the operator to clear the deny flag. Do not retry automatically. If the call instead fails with an insufficient-funds / gas error, the cache key is unfunded — report that and ask the operator to fund it. Never present either failure as a completed cache.
 
 ## Network defaults
 
-Unless the user specifies otherwise, assume `network: "mainnet"`. The tool is pinned server-side to `SUZAKU_MIDDLEWARE_NETWORK`; if the user asks for another network and the tool refuses, report the refusal and stop.
+Unless the user specifies otherwise, assume `network: "mainnet"`. The tool is pinned to the server-configured network; if the user asks for another network and the tool refuses, report the refusal and stop.
 
 ## Security rules
 
