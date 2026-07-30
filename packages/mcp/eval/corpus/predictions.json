@@ -1,5 +1,132 @@
 {
   "$comment": "Versioned semantic predictions and separate deterministic delivery gates for human-labelled samples. Never infer gold from legacy verdicts. evaluatorSha256 identifies the frozen implementation or judge protocol.",
   "schemaVersion": 2,
-  "systems": []
+  "systems": [
+    {
+      "id": "suite-v5-deterministic",
+      "evaluatorSha256": "ba0237699c6f60bfb2855a54e8af524f9f1b41ead7faae30eadcb574b66ee514",
+      "predictions": [
+        {
+          "sampleId": "sample-0cfcb5bfd597",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": false
+          }
+        },
+        {
+          "sampleId": "sample-2009bab8d537",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "PASS",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-54162fcb58d9",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": false,
+            "formatOk": true,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-637547d9ca76",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "PASS",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-736d67675d45",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "PASS",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-7d2dca3123bc",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": false,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-ba68411159ad",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": false,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-d4f12529213f",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": false,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-e19036cbde95",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "PASS",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-ebd18824de87",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": false,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-f03711a0d682",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "FAIL",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": false,
+            "policyOk": true
+          }
+        },
+        {
+          "sampleId": "sample-f72e95ef99e5",
+          "semanticVerdict": "PENDING_HUMAN",
+          "deliveryVerdict": "PASS",
+          "deliveryChecks": {
+            "traceOk": true,
+            "formatOk": true,
+            "policyOk": true
+          }
+        }
+      ]
+    }
+  ]
 }
