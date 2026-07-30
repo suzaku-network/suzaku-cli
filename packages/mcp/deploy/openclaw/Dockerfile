@@ -13,6 +13,10 @@ COPY tsconfig.json ./
 # Copy MCP package
 COPY packages/mcp/package.json packages/mcp/tsconfig.json packages/mcp/
 COPY packages/mcp/src/ packages/mcp/src/
+# The TypeScript build currently includes stdio-profiles.test.ts, whose real
+# transport test imports this bridge. Keep the image build's source graph equal
+# to the local build instead of silently omitting that dependency.
+COPY packages/mcp/eval/stdio-bridge.mjs packages/mcp/eval/stdio-bridge.d.mts packages/mcp/eval/
 
 # Native deps for usb/node-hid (Ledger transport) — needed at compile time
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -60,6 +64,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # a root-owned dir loses them without a trace). Seeds ownership for FRESH volumes only —
     # a pre-existing volume keeps its ownership and needs a one-time chown.
     && mkdir -p /data/audit && chown node:node /data/audit
+COPY --chown=node:node packages/mcp/deploy/openclaw/plugins/suzaku-output-guard/ /home/node/.openclaw/extensions/suzaku-output-guard/
 COPY --chmod=755 packages/mcp/deploy/openclaw/entrypoint.sh /usr/local/bin/suzaku-entrypoint.sh
 USER node
 

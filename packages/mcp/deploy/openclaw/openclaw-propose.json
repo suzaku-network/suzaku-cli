@@ -6,6 +6,13 @@
       }
     }
   },
+  "plugins": {
+    "entries": {
+      "suzaku-output-guard": {
+        "enabled": true
+      }
+    }
+  },
   "channels": {
     "telegram": {
       "enabled": true,

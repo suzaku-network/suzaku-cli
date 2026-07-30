@@ -85,6 +85,22 @@ describe('docker-compose instruction mounts', () => {
   });
 });
 
+describe('outbound safety plugin', () => {
+  it('is built into the bot image and enabled for every Telegram profile', () => {
+    const dockerfile = read('Dockerfile');
+    expect(dockerfile).toContain(
+      'plugins/suzaku-output-guard/ /home/node/.openclaw/extensions/suzaku-output-guard/',
+    );
+    for (const config of ['openclaw.json', 'openclaw-propose.json', 'openclaw-cache.json']) {
+      const parsed = JSON.parse(read(config));
+      expect(
+        parsed.plugins?.entries?.['suzaku-output-guard']?.enabled,
+        `${config} must enable the outbound guard`,
+      ).toBe(true);
+    }
+  });
+});
+
 describe('EPOCHS.md shared reference', () => {
   const epochs = read('EPOCHS.md');
 

@@ -33,6 +33,7 @@ import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import { createSpendGuard } from './spend-guard.mjs';
 import { runEval } from './runner.mjs';
 import { writeAttemptManifest } from './manifest-store.mjs';
+import { guardOutboundText } from '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs';
 import {
   applySchemaDefaults, collectAddresses, parseToolJson, getPath, deepFind, resolveFact, saneValue,
   matchFact, scoreTrace, scoreFormat, scorePolicy, computeCost, gateVerdict,
@@ -292,6 +293,8 @@ async function main() {
       'eval/calibration.mjs': new URL('./calibration.mjs', here),
       'eval/stdio-bridge.mjs': new URL('./stdio-bridge.mjs', here),
       'eval/stdio-relay.mjs': new URL('./stdio-relay.mjs', here),
+      'deploy/openclaw/plugins/suzaku-output-guard/transform.mjs':
+        new URL('../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs', here),
       'deploy/openclaw/SOUL.md': new URL('../deploy/openclaw/SOUL.md', here),
       'deploy/openclaw/EPOCHS.md': new URL('../deploy/openclaw/EPOCHS.md', here),
       'root/bin/cli.js': join(rootDir, 'bin/cli.js'),
@@ -1000,8 +1003,24 @@ async function executeQuestion(target, q, { repeat, canary = false } = {}) {
   let result;
   try {
     const run = await target.run(q, { repeat, canary });
-    const score = await scoreRun(q, run, target.traceMode);
-    result = { id: q.id, repeat, canary, ...score, ...run, trace: run.trace, answer: run.answer };
+    const delivery = guardOutboundText(run.answer);
+    const deliveredRun = { ...run, answer: delivery.content };
+    const score = await scoreRun(q, deliveredRun, target.traceMode);
+    result = {
+      id: q.id,
+      repeat,
+      canary,
+      ...score,
+      ...run,
+      trace: run.trace,
+      rawAnswer: run.answer,
+      answer: delivery.content,
+      deliveryTransform: {
+        changed: delivery.changed,
+        redactions: delivery.redactions,
+        markdownConversions: delivery.markdownConversions,
+      },
+    };
   } catch (error) {
     result = { id: q.id, repeat, canary, ...failedScore(error) };
   }
@@ -1134,6 +1153,7 @@ for (const runSet of allRuns) {
       questionContracts: sha256File(new URL('./question-contracts.json', here)),
       scoring: sha256File(new URL('./scoring.mjs', here)),
       reviewWorkflow: sha256File(new URL('./review-workflow.mjs', here)),
+      outputGuard: sha256File(new URL('../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs', here)),
     },
     engine: runSet.engine, model: runSet.model,
     repeat: runSet.repeat, epochAtRun: runSet.epochAtRun,

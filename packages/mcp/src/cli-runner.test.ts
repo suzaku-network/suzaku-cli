@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   sanitizeOutput,
+  sanitizeOutputValue,
   sanitizeArgs,
   redactRpcUrl,
   formatResult,
@@ -86,8 +87,31 @@ describe('sanitizeOutput', () => {
     expect(sanitizeOutput('hello world')).toBe('hello world');
   });
 
+  it('replaces sensitive configuration names and internal paths with public descriptions', () => {
+    expect(sanitizeOutput(
+      'SNOWSCAN_API_KEY unavailable at /run/secrets/snowscan; SAFE_API_KEY_FILE invalid.',
+    )).toBe(
+      'event-history service unavailable at [internal path]; [internal configuration] invalid.',
+    );
+  });
+
   it('handles empty string', () => {
     expect(sanitizeOutput('')).toBe('');
+  });
+});
+
+describe('sanitizeOutputValue', () => {
+  it('sanitizes nested structured output before it reaches the model', () => {
+    const output = sanitizeOutputValue({
+      diagnosis: ['SNOWSCAN_API_KEY unavailable'],
+      nested: { path: '/home/node/.openclaw/config.json' },
+      count: 2,
+    });
+    expect(output).toEqual({
+      diagnosis: ['event-history service unavailable'],
+      nested: { path: '[internal path]' },
+      count: 2,
+    });
   });
 });
 
@@ -180,9 +204,33 @@ describe('formatResult', () => {
       delete process.env.SUZAKU_PK;
     }
   });
+
+  it('sanitizes successful structured data as well as its text rendering', () => {
+    const result: CliResult = {
+      success: true,
+      data: { warning: 'SNOWSCAN_API_KEY unavailable', path: '/data/audit/mcp-audit.log' },
+    };
+    const formatted = formatResult(result);
+    expect(formatted.content[0].text).not.toContain('SNOWSCAN_API_KEY');
+    expect(formatted.content[0].text).not.toContain('/data/audit');
+    expect(formatted.structuredContent).toEqual({
+      warning: 'event-history service unavailable',
+      path: '[internal path]',
+    });
+  });
 });
 
 describe('formatGuardError', () => {
+  it('redacts internal configuration names from locally generated guard errors', () => {
+    expect(formatGuardError('Set SUZAKU_MAX_REWARDS_AMOUNT before retrying')).toEqual({
+      content: [{
+        type: 'text',
+        text: 'Error: Set [internal configuration] before retrying',
+      }],
+      isError: true,
+    });
+  });
+
   it('wraps error string in MCP error response', () => {
     const result = formatGuardError('Tool blocked by deny list');
     expect(result.isError).toBe(true);

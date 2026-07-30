@@ -104,13 +104,28 @@ export function tryParseJsonBlock(text: string): Record<string, unknown> | null 
   }
 }
 
+const SENSITIVE_CONFIG_NAME =
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN|[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?)\b/gi;
+
+const INTERNAL_PATH =
+  /(?:^|(?<=[\s("'`]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
+
 /**
- * Strip private key material from output to prevent leakage.
- * Redacts the exact configured secrets and bare (un-prefixed) 64-char hex; 0x-prefixed
- * 64-char hex passes through — tx hashes, role hashes, and validation IDs are legitimate output.
+ * Strip secret material and private deployment configuration from model-visible
+ * output. Public identifiers such as contract addresses and transaction hashes
+ * remain intact.
  */
 export function sanitizeOutput(text: string): string {
-  let out = text;
+  let out = text
+    .replace(/\bSNOWSCAN_API_KEY\s+(?:is\s+)?unavailable\b/gi, 'event-history service unavailable')
+    .replace(/\bSNOWSCAN_API_KEY\s+(?:is\s+)?(?:missing|invalid)\b/gi, 'event-history service misconfigured')
+    .replace(/\bSNOWSCAN_API_KEY\b/gi, 'event-history service credential')
+    .replace(/--snowscan-api-key\b/gi, 'event-history credential option')
+    .replace(SENSITIVE_CONFIG_NAME, '[internal configuration]')
+    .replace(INTERNAL_PATH, (match) => {
+      const trailing = match.match(/[.,;:!?]+$/)?.[0] ?? '';
+      return `[internal path]${trailing}`;
+    });
   for (const secret of [process.env.SUZAKU_PK, process.env.SUZAKU_PCHAIN_PK]) {
     if (!secret || !/^(0x)?[0-9a-fA-F]{64}$/.test(secret)) continue;
     const bare = secret.replace(/^0x/, '');
@@ -120,6 +135,19 @@ export function sanitizeOutput(text: string): string {
   return out.replace(/(?<![0-9a-fA-Fx])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g, '[REDACTED]');
 }
 
+/** Recursively sanitize every model-visible string in structured CLI output. */
+export function sanitizeOutputValue<T>(value: T): T {
+  if (typeof value === 'string') return sanitizeOutput(value) as T;
+  if (Array.isArray(value)) return value.map((item) => sanitizeOutputValue(item)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, sanitizeOutputValue(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 /** Flags whose following value should be redacted in audit logs */
 const REDACT_FLAGS = new Set(['--snowscan-api-key', '--private-key', '-k']);
 
@@ -127,9 +155,12 @@ export function sanitizeArgs(args: string[]): string[] {
   const result: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (REDACT_FLAGS.has(a) && i + 1 < args.length) {
-      result.push(a, '[REDACTED]');
-      i++; // skip the value
+    if (REDACT_FLAGS.has(a)) {
+      result.push(a);
+      if (i + 1 < args.length) {
+        result.push('[REDACTED]');
+        i++; // skip the value
+      }
     } else {
       result.push(sanitizeOutput(a));
     }
@@ -624,19 +655,23 @@ export function formatResult(result: CliResult) {
       isError: true,
     };
   }
-  if (result.data != null && typeof result.data === 'object' && !Array.isArray(result.data)) {
+  const safeData = sanitizeOutputValue(result.data);
+  if (safeData != null && typeof safeData === 'object' && !Array.isArray(safeData)) {
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
-      structuredContent: result.data as Record<string, unknown>,
+      content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
+      structuredContent: safeData as Record<string, unknown>,
     };
   }
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
   };
 }
 
 export function formatGuardError(err: string) {
-  return { content: [{ type: 'text' as const, text: `Error: ${err}` }], isError: true as const };
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${sanitizeOutput(err)}` }],
+    isError: true as const,
+  };
 }
 
 export function requireSigner(): ReturnType<typeof formatResult> | null {

@@ -48,6 +48,7 @@ try {
   const contractsText = readText(resolve(here, 'question-contracts.json'));
   const scoringText = readText(resolve(here, 'scoring.mjs'));
   const reviewWorkflowText = readText(resolve(here, 'review-workflow.mjs'));
+  const outputGuardText = readText(resolve(here, '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs'));
   const packet = buildReviewPacket({
     report: JSON.parse(reportText),
     reportText,
@@ -58,6 +59,7 @@ try {
       questionContracts: sha256(contractsText),
       scoring: sha256(scoringText),
       reviewWorkflow: sha256(reviewWorkflowText),
+      outputGuard: sha256(outputGuardText),
     },
   });
   const decisions = buildDecisionTemplate(packet);

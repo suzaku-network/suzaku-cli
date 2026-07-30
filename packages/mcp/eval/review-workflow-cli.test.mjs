@@ -33,6 +33,7 @@ describe('review workflow CLI', () => {
     const contractsText = readFileSync(join(evalDir, 'question-contracts.json'), 'utf8');
     const scoringText = readFileSync(join(evalDir, 'scoring.mjs'), 'utf8');
     const reviewWorkflowText = readFileSync(join(evalDir, 'review-workflow.mjs'), 'utf8');
+    const outputGuardText = readFileSync(join(evalDir, '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs'), 'utf8');
     const spec = JSON.parse(questionsText);
     const report = {
       schemaVersion: 2,
@@ -47,6 +48,7 @@ describe('review workflow CLI', () => {
         questionContracts: sha256(contractsText),
         scoring: sha256(scoringText),
         reviewWorkflow: sha256(reviewWorkflowText),
+        outputGuard: sha256(outputGuardText),
       },
       engine: 'anthropic',
       model: 'must-not-appear',
@@ -122,6 +124,7 @@ describe('review workflow CLI', () => {
     ]);
     expect(finalized.status).toBe(0);
     expect(finalized.stderr).toBe('');
+    expect(finalized.stdout, `finalize-review produced no JSON: ${JSON.stringify(finalized)}`).not.toBe('');
     expect(JSON.parse(finalized.stdout)).toMatchObject({
       valid: true,
       write: false,

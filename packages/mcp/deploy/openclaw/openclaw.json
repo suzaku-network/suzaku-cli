@@ -11,6 +11,9 @@
     "entries": {
       "codex": {
         "enabled": true
+      },
+      "suzaku-output-guard": {
+        "enabled": true
       }
     }
   },
