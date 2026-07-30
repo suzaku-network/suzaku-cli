@@ -229,7 +229,7 @@ server.prompt(
               : `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
             `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
             `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
-            `  • A warp signature collection timeout means SIG_AGG_URL is unreachable or validators are offline — report the raw error, do not retry silently.`,
+            `  • A warp signature collection timeout means the signature-aggregation service is unreachable or validators are offline — report the raw error, do not retry silently.`,
             '',
             `Step 2 — Compute operator uptime:`,
             ...cliOnlyNote('uptime_compute_operator_uptime'),

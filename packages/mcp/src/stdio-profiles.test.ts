@@ -110,6 +110,44 @@ describe('built stdio profile contract', () => {
     }, 30_000);
   }
 
+  it('read-only model-visible surfaces contain no internal configuration names', async () => {
+    // The read-only profile is the public monitor bot: nothing it shows the model
+    // may name server env vars. The full profile intentionally documents signer
+    // requirements in its private write-tool descriptions and is not swept here.
+    const INTERNAL_NAME =
+      /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/;
+    const profile = profiles().find((item) => item.name === 'readOnly')!;
+    const launch = bridgedStdioCommand(process.execPath, [SERVER_PATH, ...profile.args]);
+    const transport = new StdioClientTransport({ ...launch, env: profile.env });
+    const client = new Client({ name: 'leak-sweep-test', version: '0.0.1' });
+    await client.connect(transport);
+    try {
+      const surfaces: string[] = [];
+      const { tools } = await client.listTools();
+      for (const tool of tools) surfaces.push(JSON.stringify(tool));
+      surfaces.push(client.getInstructions() ?? '');
+      const { prompts } = await client.listPrompts();
+      for (const prompt of prompts) {
+        const args: Record<string, string> = {};
+        for (const arg of prompt.arguments ?? []) {
+          args[arg.name] =
+            arg.name.endsWith('Address') ? MIDDLEWARE :
+            arg.name === 'operation' ? 'register' :
+            arg.name === 'manager' ? 'kite' :
+            arg.name === 'network' ? 'fuji' :
+            arg.name === 'epoch' ? '1' : 'placeholder';
+        }
+        const rendered = await client.getPrompt({ name: prompt.name, arguments: args });
+        surfaces.push(JSON.stringify(rendered.messages));
+      }
+      for (const surface of surfaces) {
+        expect(surface.match(INTERNAL_NAME)?.[0] ?? null).toBeNull();
+      }
+    } finally {
+      await client.close();
+    }
+  }, 30_000);
+
   it('fails closed at startup when constrained-profile bounds are absent', () => {
     const cases = [
       { args: ['--propose-only'], env: baseEnv(), marker: 'requires SUZAKU_MAX_REWARDS_AMOUNT' },
