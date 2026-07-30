@@ -104,8 +104,14 @@ export function tryParseJsonBlock(text: string): Record<string, unknown> | null 
   }
 }
 
-const SENSITIVE_CONFIG_NAME =
-  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN|[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?)\b/gi;
+// Kept behaviorally in sync with deploy/openclaw/plugins/suzaku-output-guard/transform.mjs
+// via eval/fixtures/redaction-parity.json — update both layers and the fixture together.
+const KNOWN_CONFIG_NAME =
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
+
+// Uppercase-only so ordinary text such as "MyPassword" is never rewritten.
+const GENERIC_SECRET_NAME =
+  /\b[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?\b/g;
 
 const INTERNAL_PATH =
   /(?:^|(?<=[\s("'`]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
@@ -121,7 +127,8 @@ export function sanitizeOutput(text: string): string {
     .replace(/\bSNOWSCAN_API_KEY\s+(?:is\s+)?(?:missing|invalid)\b/gi, 'event-history service misconfigured')
     .replace(/\bSNOWSCAN_API_KEY\b/gi, 'event-history service credential')
     .replace(/--snowscan-api-key\b/gi, 'event-history credential option')
-    .replace(SENSITIVE_CONFIG_NAME, '[internal configuration]')
+    .replace(KNOWN_CONFIG_NAME, '[internal configuration]')
+    .replace(GENERIC_SECRET_NAME, '[internal configuration]')
     .replace(INTERNAL_PATH, (match) => {
       const trailing = match.match(/[.,;:!?]+$/)?.[0] ?? '';
       return `[internal path]${trailing}`;

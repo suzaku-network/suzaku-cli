@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -450,4 +450,18 @@ describe('runPublicCacheCli', () => {
     expect(result.success).toBe(false);
     expect(result.error).not.toContain('public cache execution only permits');
   }, 35_000);
+});
+
+describe('redaction parity corpus (shared with the delivery guard)', () => {
+  const { cases } = JSON.parse(
+    readFileSync(new URL('../eval/fixtures/redaction-parity.json', import.meta.url), 'utf8'),
+  ) as { cases: Array<{ name: string; input: string; mustNotContain?: string[]; mustContain?: string[] }> };
+
+  for (const testCase of cases) {
+    it(`sanitizer layer: ${testCase.name}`, () => {
+      const output = sanitizeOutput(testCase.input);
+      for (const banned of testCase.mustNotContain ?? []) expect(output).not.toContain(banned);
+      for (const kept of testCase.mustContain ?? []) expect(output).toContain(kept);
+    });
+  }
 });
