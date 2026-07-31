@@ -209,7 +209,10 @@ export function buildReviewPacket({
     },
     hashes: { ...expectedHashes },
     evaluator: {
-      id: `suite-v${report.suiteVersion}-deterministic`,
+      // The scoring-hash suffix versions the deterministic evaluator: a scorer
+      // revision becomes a new prediction system instead of colliding with the
+      // frozen hash recorded for the previous revision.
+      id: `suite-v${report.suiteVersion}-deterministic@${expectedHashes.scoring.slice(0, 12)}`,
       sha256: expectedHashes.scoring,
     },
     samples,

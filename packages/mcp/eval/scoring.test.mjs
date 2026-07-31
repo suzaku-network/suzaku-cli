@@ -72,6 +72,10 @@ describe('tool result parsing and fact resolution', () => {
   it('validates resolved values by objective type', () => {
     expect(saneValue({ match: 'integer' }, '42')).toBe(true);
     expect(saneValue({ match: 'integer' }, 'abc')).toBe(false);
+    expect(saneValue({ match: 'integer' }, '-1')).toBe(false);
+    expect(saneValue({ match: 'signed-integer' }, '-2149')).toBe(true);
+    expect(saneValue({ match: 'signed-integer' }, '0')).toBe(true);
+    expect(saneValue({ match: 'signed-integer' }, '12.5')).toBe(false);
     expect(saneValue({ match: 'number' }, '123.5')).toBe(true);
     expect(saneValue({ match: 'address' }, '0x9411307279456450ABF9B5181aA7a02271f0DC34')).toBe(true);
     expect(saneValue({ match: 'address-set' }, ['0x9411307279456450ABF9B5181aA7a02271f0DC34'])).toBe(true);

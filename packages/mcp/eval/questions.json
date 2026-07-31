@@ -88,7 +88,7 @@
             },
             { "name": "validatorCount", "path": "validators.count", "match": "integer", "context": ["validator", "validators"] },
             { "name": "uptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false },
-            { "name": "updateWindowSecondsRemaining", "path": "timing.updateWindowSecondsRemaining", "match": "integer", "answerMatch": false }
+            { "name": "updateWindowSecondsRemaining", "path": "timing.updateWindowSecondsRemaining", "match": "signed-integer", "answerMatch": false }
           ]
         }
       ]
@@ -155,7 +155,7 @@
             { "name": "heartbeatChecks", "path": "checks", "match": "exists", "answerMatch": false },
             { "name": "heartbeatHumanLines", "path": "humanLines", "match": "exists", "answerMatch": false },
             { "name": "heartbeatUptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false },
-            { "name": "heartbeatUpdateWindowSecondsRemaining", "path": "timing.updateWindowSecondsRemaining", "match": "integer", "answerMatch": false }
+            { "name": "heartbeatUpdateWindowSecondsRemaining", "path": "timing.updateWindowSecondsRemaining", "match": "signed-integer", "answerMatch": false }
           ]
         }
       ]

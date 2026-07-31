@@ -221,6 +221,12 @@ export function saneValue(fact, value) {
       const n = Number(value);
       return Number.isInteger(n) && n >= 0;
     }
+    // Signed countdowns (e.g. update-window seconds remaining) are legitimately
+    // negative once the window has closed mid-epoch.
+    case 'signed-integer': {
+      const n = Number(value);
+      return Number.isInteger(n);
+    }
     case 'number': {
       const n = Number(value);
       return Number.isFinite(n) && n >= 0;
@@ -341,7 +347,8 @@ export function matchFact(answerText, fact, value) {
   const norm = normalizeAnswer(answerText);
   switch (fact.match) {
     case 'integer':
-    case 'count': {
+    case 'count':
+    case 'signed-integer': {
       const n = Number(value);
       if (!Number.isFinite(n)) return false;
       const re = new RegExp(`(?<![\\d.])${Math.trunc(n)}(?![\\d])`);

@@ -266,7 +266,7 @@ describe('explicit human decisions', () => {
     expect(merged.reviewSampleDocument.samples).toHaveLength(1);
     expect(merged.labelDocument.labels).toHaveLength(1);
     expect(merged.predictionDocument.systems[0]).toMatchObject({
-      id: 'suite-v5-deterministic',
+      id: `suite-v5-deterministic@${hashes.scoring.slice(0, 12)}`,
       evaluatorSha256: hashes.scoring,
       predictions: [{
         sampleId: packet.samples[0].sampleId,
