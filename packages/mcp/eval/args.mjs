@@ -21,6 +21,7 @@ const VALUE_FLAGS = new Set([
   '--anthropic-models',
   '--engine',
   '--engines',
+  '--kimi-models',
   '--max-cost-usd',
   '--model',
   '--models',
@@ -30,7 +31,8 @@ const VALUE_FLAGS = new Set([
 ]);
 
 const ALL_FLAGS = new Set([...BOOLEAN_FLAGS, ...VALUE_FLAGS]);
-const ENGINES = new Set(['anthropic', 'codex']);
+const ENGINES = new Set(['anthropic', 'codex', 'kimi']);
+const METERED_ENGINES = new Set(['anthropic', 'kimi']);
 
 function listValue(values, name) {
   const raw = values.get(name);
@@ -109,19 +111,31 @@ export function parseEvalArgs(rawArgv, { questionIds = [] } = {}) {
     throw new EvalArgumentError(`unknown engines: ${unknownEngines.join(', ')}`);
   }
 
-  const modelFlags = ['--model', '--models', '--anthropic-models'].filter(present);
-  if (modelFlags.length > 1) {
-    throw new EvalArgumentError(`${modelFlags.join(' and ')} are mutually exclusive`);
+  if (present('--model') && present('--models')) {
+    throw new EvalArgumentError('--model and --models are mutually exclusive');
   }
-  if ((present('--model') || present('--models'))
-    && (engines.length !== 1 || engines[0] !== 'anthropic')) {
-    throw new EvalArgumentError('--model/--models require the single anthropic engine');
+  const genericModelFlag = present('--model') || present('--models');
+  if (genericModelFlag
+    && (engines.length !== 1 || !METERED_ENGINES.has(engines[0]))) {
+    throw new EvalArgumentError('--model/--models require one metered API engine (anthropic or kimi)');
   }
-  const legacyModels = listValue(values, '--models')
+  if (genericModelFlag && (present('--anthropic-models') || present('--kimi-models'))) {
+    throw new EvalArgumentError('--model/--models cannot be combined with provider-specific model flags');
+  }
+  if (present('--anthropic-models') && !engines.includes('anthropic')) {
+    throw new EvalArgumentError('--anthropic-models requires the anthropic engine');
+  }
+  if (present('--kimi-models') && !engines.includes('kimi')) {
+    throw new EvalArgumentError('--kimi-models requires the kimi engine');
+  }
+  const genericModels = listValue(values, '--models')
     ?? (values.has('--model') ? [values.get('--model')] : null);
   const anthropicModels = listValue(values, '--anthropic-models')
-    ?? legacyModels
+    ?? (engines.length === 1 && engines[0] === 'anthropic' ? genericModels : null)
     ?? ['claude-sonnet-4-6'];
+  const kimiModels = listValue(values, '--kimi-models')
+    ?? (engines.length === 1 && engines[0] === 'kimi' ? genericModels : null)
+    ?? ['kimi-k3'];
 
   const only = listValue(values, '--only');
   const knownQuestions = new Set(questionIds);
@@ -162,19 +176,19 @@ export function parseEvalArgs(rawArgv, { questionIds = [] } = {}) {
     throw new EvalArgumentError('--no-build is not allowed with --benchmark');
   }
 
-  const metered = tier === 2 && engines.includes('anthropic');
+  const metered = tier === 2 && engines.some((item) => METERED_ENGINES.has(item));
   const confirmPaid = booleans.has('--confirm-paid');
   const maxCostUsd = values.has('--max-cost-usd')
     ? positiveNumber(values.get('--max-cost-usd'), '--max-cost-usd')
     : null;
   if (metered && !dryRun && !help && !confirmPaid) {
-    throw new EvalArgumentError('metered Anthropic runs require --confirm-paid');
+    throw new EvalArgumentError('metered API runs require --confirm-paid');
   }
   if (metered && !dryRun && !help && maxCostUsd == null) {
-    throw new EvalArgumentError('metered Anthropic runs require --max-cost-usd');
+    throw new EvalArgumentError('metered API runs require --max-cost-usd');
   }
   if (!metered && (confirmPaid || maxCostUsd != null)) {
-    throw new EvalArgumentError('--confirm-paid/--max-cost-usd require a metered Anthropic tier-2 target');
+    throw new EvalArgumentError('--confirm-paid/--max-cost-usd require a metered API tier-2 target');
   }
 
   return {
@@ -183,6 +197,7 @@ export function parseEvalArgs(rawArgv, { questionIds = [] } = {}) {
     fast: booleans.has('--fast'),
     engines: [...new Set(engines)],
     anthropicModels: [...new Set(anthropicModels)],
+    kimiModels: [...new Set(kimiModels)],
     repeat,
     repeatExplicit: present('--repeat'),
     canary,

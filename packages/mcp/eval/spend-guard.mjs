@@ -1,5 +1,6 @@
 export function createSpendGuard(maxCostUsd) {
   let spentUsd = 0;
+  const meteredEngines = new Set(['anthropic', 'kimi']);
 
   return {
     get spentUsd() {
@@ -7,7 +8,7 @@ export function createSpendGuard(maxCostUsd) {
     },
 
     beforeCall(engine) {
-      if (engine !== 'anthropic') return null;
+      if (!meteredEngines.has(engine)) return null;
       if (!Number.isFinite(maxCostUsd)) {
         return 'metered run has no valid --max-cost-usd ceiling';
       }
@@ -18,9 +19,9 @@ export function createSpendGuard(maxCostUsd) {
     },
 
     record(engine, cost) {
-      if (engine !== 'anthropic') return null;
+      if (!meteredEngines.has(engine)) return null;
       if (!Number.isFinite(cost)) {
-        return 'Anthropic usage/cost is unavailable; refusing further calls because the spend ceiling cannot be enforced';
+        return `${engine} usage/cost is unavailable; refusing further calls because the spend ceiling cannot be enforced`;
       }
       spentUsd += cost;
       if (spentUsd > maxCostUsd) {

@@ -4,10 +4,13 @@
 //   --tier 2                 LLM-in-loop, engine selectable:
 //     --engines a,b          interleave multiple providers in one drift-controlled batch.
 //     --anthropic-models …   provider-specific model lists (with --engines).
+//     --kimi-models …        Kimi model lists (with --engines).
 //     --repeat N --canary    repeat each target; gate wiring before paid suite calls.
 //     --canary-only          run the operators wiring check once per target, then stop.
 //     --engine anthropic     (default) Anthropic API tool-runner; needs ANTHROPIC_API_KEY.
 //                            --model <id> or --models a,b,c to compare models.
+//     --engine kimi          official Moonshot OpenAI-compatible tool runner;
+//                            needs MOONSHOT_API_KEY.
 //     --engine codex         drives the LIVE bot's primary engine (gpt-5.5 via the
 //                            Codex subscription) through one-shot OpenClaw cron jobs.
 //                            Nothing is posted to any chat: the agent writes its answer
@@ -29,6 +32,7 @@ import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { EvalArgumentError, parseEvalArgs } from './args.mjs';
+import { normalizeKimiToolSchema, runKimiToolConversation } from './kimi.mjs';
 import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import { createSpendGuard } from './spend-guard.mjs';
 import { runEval } from './runner.mjs';
@@ -53,7 +57,7 @@ const contractSpec = JSON.parse(readFileSync(new URL('./question-contracts.json'
 const contractById = new Map(contractSpec.contracts.map((contract) => [contract.id, contract]));
 
 // ---------- flags ----------
-const USAGE = 'usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|--engines anthropic,codex] [--models a,b|--anthropic-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--confirm-paid --max-cost-usd N] [--dry-run] [--no-build]';
+const USAGE = 'usage: run-evals.mjs --tier 1|2 [--engine anthropic|codex|kimi|--engines anthropic,codex,kimi] [--models a,b|--anthropic-models a,b|--kimi-models a,b] [--repeat N] [--canary|--canary-only] [--only ids] [--fast] [--benchmark] [--confirm-paid --max-cost-usd N] [--dry-run] [--no-build]';
 let cli;
 try {
   cli = parseEvalArgs(process.argv.slice(2), {
@@ -69,6 +73,7 @@ const {
   fast: FAST,
   engines: ENGINES,
   anthropicModels: ANTHROPIC_MODELS,
+  kimiModels: KIMI_MODELS,
   repeat: REPEAT,
   repeatExplicit: REPEAT_EXPLICIT,
   canary: CANARY,
@@ -110,6 +115,7 @@ if (questions.length === 0) {
 const requestedTargetIds = [
   ...(ENGINES.includes('codex') ? ['codex:gpt-5.5-codex'] : []),
   ...(ENGINES.includes('anthropic') ? ANTHROPIC_MODELS.map((model) => `anthropic:${model}`) : []),
+  ...(ENGINES.includes('kimi') ? KIMI_MODELS.map((model) => `kimi:${model}`) : []),
 ];
 
 function sha256Text(value) {
@@ -130,6 +136,11 @@ const PRICES = {
   'claude-haiku-4-5': [1, 5],
   'claude-opus-4-8': [5, 25],
 };
+// Official Kimi prices per MTok. prompt_tokens includes cached_tokens, which
+// the adapter splits out before applying the cache-hit multiplier.
+const KIMI_PRICES = {
+  'kimi-k3': { rates: [3, 15], cacheRead: 0.1, reasoningEffort: 'max' },
+};
 const DEFAULT_TOOL_TIMEOUT = 120_000;
 const SLOW_TOOLS = ['deployment_heartbeat', 'middleware_operator_dashboard', 'middleware_network_overview', 'discover_network', 'rewards_get_events', 'rewards_epoch_diagnosis', 'middleware_stake_matrix', 'middleware_epoch_status', 'middleware_get_validator_balances', 'middleware_uptime_report'];
 const CANARY_IDS = ['operators'];
@@ -138,15 +149,18 @@ function dryRunSummary() {
   const perTargetCalls = (RUN_CANARY ? CANARY_IDS.length : 0)
     + (CANARY_ONLY ? 0 : questions.length * REPEAT);
   const modelCalls = TIER === 2 ? requestedTargetIds.length * perTargetCalls : 0;
-  const meteredCalls = TIER === 2 && ENGINES.includes('anthropic')
-    ? ANTHROPIC_MODELS.length * perTargetCalls
-    : 0;
+  const meteredAnthropicCalls = TIER === 2 && ENGINES.includes('anthropic')
+    ? ANTHROPIC_MODELS.length * perTargetCalls : 0;
+  const meteredKimiCalls = TIER === 2 && ENGINES.includes('kimi')
+    ? KIMI_MODELS.length * perTargetCalls : 0;
+  const meteredCalls = meteredAnthropicCalls + meteredKimiCalls;
   return {
     dryRun: true,
     tier: TIER,
     engines: ENGINES,
     targets: requestedTargetIds,
     anthropicModels: ANTHROPIC_MODELS,
+    kimiModels: KIMI_MODELS,
     questions: questions.map((question) => question.id),
     repeat: REPEAT,
     canary: CANARY,
@@ -155,10 +169,15 @@ function dryRunSummary() {
     calls: {
       perTarget: perTargetCalls,
       totalModelCalls: modelCalls,
-      meteredAnthropicCalls: meteredCalls,
+      meteredAnthropicCalls,
+      meteredKimiCalls,
+      totalMeteredCalls: meteredCalls,
     },
     anthropicPricingPerMTok: Object.fromEntries(
       ANTHROPIC_MODELS.map((model) => [model, PRICES[model] ?? null]),
+    ),
+    kimiPricingPerMTok: Object.fromEntries(
+      KIMI_MODELS.map((model) => [model, KIMI_PRICES[model] ?? null]),
     ),
     spendCeilingUsd: MAX_COST_USD,
     spendEnforcement: meteredCalls > 0
@@ -283,6 +302,7 @@ async function main() {
       'eval/question-contracts.json': new URL('./question-contracts.json', here),
       'eval/evidence/dexalot-mainnet-2026-07-29.json': new URL('./evidence/dexalot-mainnet-2026-07-29.json', here),
       'eval/args.mjs': new URL('./args.mjs', here),
+      'eval/kimi.mjs': new URL('./kimi.mjs', here),
       'eval/scoring.mjs': new URL('./scoring.mjs', here),
       'eval/run-evals.mjs': new URL('./run-evals.mjs', here),
       'eval/runner.mjs': new URL('./runner.mjs', here),
@@ -317,6 +337,7 @@ async function main() {
         engines: ENGINES,
         targets: requestedTargetIds,
         anthropicModels: ANTHROPIC_MODELS,
+        kimiModels: KIMI_MODELS,
         questions: questions.map((question) => question.id),
         repeat: REPEAT,
         canary: CANARY,
@@ -334,6 +355,7 @@ async function main() {
       },
       pricing: {
         anthropicPerMTok: PRICES,
+        kimiPerMTok: KIMI_PRICES,
         sonnet5IntroEndsExclusive: SONNET_5_INTRO_END,
         meteredSpendUsd: spendGuard.spentUsd,
         maxCostUsd: MAX_COST_USD,
@@ -443,7 +465,9 @@ function makeMcpConnection(dedupMs) {
 
 gtConn = makeMcpConnection(1);
 await gtConn.client.connect(gtConn.transport);
-agentConn = TIER === 2 && ENGINES.includes('anthropic') ? makeMcpConnection(30000) : null;
+agentConn = TIER === 2 && ENGINES.some((engine) => ['anthropic', 'kimi'].includes(engine))
+  ? makeMcpConnection(30000)
+  : null;
 if (agentConn) await agentConn.client.connect(agentConn.transport);
 ({ tools: mcpTools } = await gtConn.client.listTools());
 toolByName = new Map(mcpTools.map((t) => [t.name, t]));
@@ -800,6 +824,97 @@ async function makeAnthropicEngine(model) {
   };
 }
 
+// ---------- engine: Kimi (official OpenAI-compatible Chat Completions API) ----------
+async function makeKimiEngine(model) {
+  const pricing = KIMI_PRICES[model];
+  if (!pricing) {
+    throw new Error(`no verified Kimi pricing configured for model ${model}`);
+  }
+  const soul = readFileSync(new URL('../deploy/openclaw/SOUL.md', here), 'utf8');
+  const epochs = readFileSync(new URL('../deploy/openclaw/EPOCHS.md', here), 'utf8');
+  const system = `${soul}\n\n---\n\nEPOCHS.md (your workspace reference — already read for you):\n\n${epochs}`;
+  const kimiTools = mcpTools.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: (tool.description ?? '').slice(0, 1024),
+      parameters: normalizeKimiToolSchema(tool.inputSchema),
+    },
+  }));
+  let trace = [];
+
+  return async function runQuestion(q) {
+    trace = [];
+    const prompt = substitute(q.prompt, vars);
+    const t0 = performance.now();
+    let answer = '';
+    let runError = null;
+    let stopReason = null;
+    let usage = null;
+    let timedOut = false;
+    let authError = false;
+    try {
+      const result = await runKimiToolConversation({
+        apiKey: process.env.MOONSHOT_API_KEY,
+        model,
+        system,
+        prompt,
+        tools: kimiTools,
+        reasoningEffort: pricing.reasoningEffort,
+        executeTool: async ({ name, args }) => {
+          const tool = toolByName.get(name);
+          if (!tool) {
+            trace.push({ name, args, ms: 0, isError: true });
+            throw new Error(`Kimi requested unknown MCP tool: ${name}`);
+          }
+          const effectiveInput = applySchemaDefaults(args ?? {}, tool.inputSchema);
+          const res = await callAgent(
+            name,
+            effectiveInput,
+            SLOW_TOOLS.includes(name) ? 300_000 : DEFAULT_TOOL_TIMEOUT,
+          );
+          trace.push({
+            name,
+            args: effectiveInput,
+            ms: res.ms,
+            isError: !res.ok,
+          });
+          return res.text.slice(0, 30_000);
+        },
+      });
+      answer = result.answer;
+      stopReason = result.stopReason;
+      usage = result.usage;
+    } catch (error) {
+      runError = error.message;
+      timedOut = /timed?\s*out|timeout|abort/i.test(runError);
+      authError = /credit balance|billing|authentication|invalid.*key|unauthorized|\b401\b/i.test(runError);
+      usage = null;
+    }
+    return {
+      answer,
+      runError,
+      stopReason,
+      usage,
+      timedOut,
+      authError,
+      wallMs: Math.round(performance.now() - t0),
+      trace: trace.map((item) => ({
+        name: item.name,
+        args: item.args,
+        ms: item.ms,
+        isError: item.isError,
+      })),
+      cost: hasCompleteUsage(usage)
+        ? computeCost(usage, pricing.rates, {
+          cacheWrite: 1,
+          cacheRead: pricing.cacheRead,
+        })
+        : null,
+    };
+  };
+}
+
 // ---------- engine: codex (the live bot's primary, via one-shot cron jobs) ----------
 const COMPOSE = new URL('../deploy/openclaw/docker-compose.yml', here).pathname;
 // The bot container is capped at 1 CPU; a heavy agent turn can stall it hard enough
@@ -1065,6 +1180,31 @@ if (TIER === 2) {
         }
       } catch (error) {
         setupFailures.push({ stage: 'engine-setup', engine: 'anthropic', error: `engine setup failed: ${error.message}` });
+      }
+    }
+  }
+  if (ENGINES.includes('kimi')) {
+    if (!process.env.MOONSHOT_API_KEY) {
+      setupFailures.push({ stage: 'engine-setup', engine: 'kimi', error: 'MOONSHOT_API_KEY is not set' });
+    } else {
+      try {
+        for (const model of KIMI_MODELS) {
+          targets.push({
+            id: `kimi:${model}`,
+            label: model,
+            engine: 'kimi',
+            model,
+            run: await makeKimiEngine(model),
+            traceMode: 'full',
+            questionsRun: 0,
+          });
+        }
+      } catch (error) {
+        setupFailures.push({
+          stage: 'engine-setup',
+          engine: 'kimi',
+          error: `engine setup failed: ${error.message}`,
+        });
       }
     }
   }

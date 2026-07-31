@@ -9,7 +9,7 @@ function run(args) {
     execFile(process.execPath, [runner, ...args], {
       encoding: 'utf8',
       cwd: packageRoot,
-      env: { ...process.env, ANTHROPIC_API_KEY: '' },
+      env: { ...process.env, ANTHROPIC_API_KEY: '', MOONSHOT_API_KEY: '' },
       maxBuffer: 1024 * 1024,
       timeout: 10_000,
     }, (error, stdout, stderr) => {
@@ -66,6 +66,40 @@ describe('run-evals CLI preflight', () => {
       spendCeilingUsd: null,
     });
     expect(result.stderr).toBe('');
+    expect(result.stdout).not.toContain('Building root CLI');
+    expect(result.stdout).not.toContain('MCP server up');
+    expect(result.stdout).not.toContain('manifest');
+  });
+
+  it('previews a full Kimi run and current pricing without a key or side effects', async () => {
+    const result = await run([
+      '--tier', '2',
+      '--engine', 'kimi',
+      '--model', 'kimi-k3',
+      '--repeat', '1',
+      '--canary',
+      '--dry-run',
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    const summary = JSON.parse(result.stdout);
+    expect(summary).toMatchObject({
+      engines: ['kimi'],
+      targets: ['kimi:kimi-k3'],
+      kimiModels: ['kimi-k3'],
+      calls: {
+        perTarget: 23,
+        totalModelCalls: 23,
+        meteredKimiCalls: 23,
+      },
+      kimiPricingPerMTok: {
+        'kimi-k3': {
+          rates: [3, 15],
+          cacheRead: 0.1,
+          reasoningEffort: 'max',
+        },
+      },
+    });
     expect(result.stdout).not.toContain('Building root CLI');
     expect(result.stdout).not.toContain('MCP server up');
     expect(result.stdout).not.toContain('manifest');

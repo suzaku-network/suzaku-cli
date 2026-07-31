@@ -14,6 +14,7 @@ describe('createSpendGuard', () => {
       .toContain('no valid --max-cost-usd');
     const guard = createSpendGuard(1);
     expect(guard.record('anthropic', null)).toContain('cannot be enforced');
+    expect(guard.record('kimi', null)).toContain('cannot be enforced');
     expect(guard.spentUsd).toBe(0);
   });
 
@@ -28,7 +29,7 @@ describe('createSpendGuard', () => {
 
   it('reports an unavoidable in-flight overshoot and keeps the actual spend', () => {
     const guard = createSpendGuard(0.5);
-    expect(guard.record('anthropic', 0.6)).toContain('ceiling exceeded after in-flight call');
+    expect(guard.record('kimi', 0.6)).toContain('ceiling exceeded after in-flight call');
     expect(guard.spentUsd).toBe(0.6);
   });
 });

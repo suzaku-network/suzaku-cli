@@ -30,13 +30,15 @@ describe('parseEvalArgs', () => {
 
   it('rejects duplicate or incompatible model and engine selections', () => {
     expect(() => parse(['--engine', 'codex', '--model', 'x']))
-      .toThrow('--model/--models require the single anthropic engine');
+      .toThrow('--model/--models require one metered API engine');
     expect(() => parse(['--engine', 'anthropic', '--engines', 'anthropic']))
       .toThrow('--engine and --engines are mutually exclusive');
     expect(() => parse(['--model', 'a', '--models', 'b']))
       .toThrow('--model and --models are mutually exclusive');
     expect(() => parse(['--engines', 'anthropic,anthropic']))
       .toThrow('--engines contains duplicate values');
+    expect(() => parse(['--engine', 'kimi', '--anthropic-models', 'x']))
+      .toThrow('--anthropic-models requires the anthropic engine');
   });
 
   it('requires canaries for benchmark runs', () => {
@@ -47,9 +49,9 @@ describe('parseEvalArgs', () => {
 
   it('requires confirmation and a positive ceiling for metered execution', () => {
     expect(() => parse(['--tier', '2', '--only', 'operators']))
-      .toThrow('metered Anthropic runs require --confirm-paid');
+      .toThrow('metered API runs require --confirm-paid');
     expect(() => parse(['--tier', '2', '--confirm-paid', '--only', 'operators']))
-      .toThrow('metered Anthropic runs require --max-cost-usd');
+      .toThrow('metered API runs require --max-cost-usd');
     expect(() => parse([
       '--tier', '2', '--confirm-paid', '--max-cost-usd', '0', '--only', 'operators',
     ])).toThrow('--max-cost-usd must be a positive number');
@@ -68,6 +70,17 @@ describe('parseEvalArgs', () => {
   it('allows subscription Codex execution without paid confirmation', () => {
     expect(parse(['--tier', '2', '--engine', 'codex', '--only', 'operators']))
       .toMatchObject({ engines: ['codex'], metered: false });
+  });
+
+  it('supports Kimi as a separately metered API engine', () => {
+    expect(parse([
+      '--tier', '2', '--engine', 'kimi', '--model', 'kimi-k3',
+      '--confirm-paid', '--max-cost-usd', '2', '--only', 'operators',
+    ])).toMatchObject({
+      engines: ['kimi'],
+      kimiModels: ['kimi-k3'],
+      metered: true,
+    });
   });
 
   it('reports unknown question IDs before side effects', () => {
