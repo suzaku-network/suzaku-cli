@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { scoreTrace } from './scoring.mjs';
 
 function readJson(relative) {
   return JSON.parse(readFileSync(new URL(relative, import.meta.url), 'utf8'));
@@ -74,7 +75,65 @@ describe('eval question contracts', () => {
 
     const route = epochs.split('\n').find((line) => line.includes('What do I need to do this week?'));
     expect(route).toContain('deployment_heartbeat');
+    expect(route).toContain('uptime.status');
+    expect(route).toContain('timing fields');
     expect(route).not.toContain('middleware_epoch_status');
+    expect(epochs).toContain('Never infer missing');
+    expect(soul).toContain('rather than calculating or guessing');
+  });
+
+  it('accepts equivalent read paths observed in the Kimi pilot without weakening scope checks', () => {
+    const byId = (id) => questions.questions.find((question) => question.id === id);
+    const scores = (id, trace) => scoreTrace(trace, {
+      expectedToolCalls: byId(id).expectedToolCalls,
+      maxToolCalls: byId(id).maxToolCalls,
+    }).ok;
+
+    expect(scores('deployment-state', [{
+      name: 'deployment_heartbeat',
+      args: {
+        middlewareAddress: '{{middleware}}',
+        rewardsAddress: '{{rewards}}',
+        mode: 'digest',
+        network: 'mainnet',
+      },
+    }])).toBe(true);
+
+    expect(scores('future-epoch-not-started', [{
+      name: 'rewards_epoch_diagnosis',
+      args: {
+        rewardsAddress: '{{rewards}}',
+        epoch: '{{currentEpoch+2}}',
+        network: 'mainnet',
+      },
+    }])).toBe(true);
+
+    expect(scores('network-scope-fuji-no-mainnet-leak', [{
+      name: 'l1_registry_get_all',
+      args: { network: 'fuji' },
+    }])).toBe(true);
+
+    expect(scores('deployment-state', [{
+      name: 'deployment_heartbeat',
+      args: {
+        middlewareAddress: '{{middleware}}',
+        rewardsAddress: '{{rewards}}',
+        mode: 'digest',
+        network: 'fuji',
+      },
+    }])).toBe(false);
+    expect(scores('future-epoch-not-started', [{
+      name: 'rewards_epoch_diagnosis',
+      args: {
+        rewardsAddress: '{{rewards}}',
+        epoch: '{{currentEpoch+1}}',
+        network: 'mainnet',
+      },
+    }])).toBe(false);
+    expect(scores('network-scope-fuji-no-mainnet-leak', [{
+      name: 'l1_registry_get_all',
+      args: { network: 'mainnet' },
+    }])).toBe(false);
   });
 });
 

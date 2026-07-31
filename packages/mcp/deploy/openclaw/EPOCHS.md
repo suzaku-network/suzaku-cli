@@ -41,6 +41,10 @@ whenever an unset epoch is near the window edge.
       returned opening epoch and UTC time, and do not claim uptime is missing.
       `distribution_window_open` means the time gate is open but does not prove
       uptime is present or absent; verify uptime before recommending distribution.
+      For `deployment_heartbeat`, `uptime.status` is the only uptime conclusion:
+      `complete` means no uptime action, `missing` means report/compute is needed,
+      and `unknown`/`not_checked` means say it was not verified. Never infer missing
+      uptime from an incomplete distribution or from the absence of an uptime alert.
    d. **Claim** — once `distributionComplete=true`, stakers/operators/curators claim
       (64-epoch batches; check progress via `rewards_get_last_claimed`).
    e. **Reclaim window** — undistributed remainders become admin-reclaimable after the
@@ -98,8 +102,8 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 
 | Question | Tools | Lead the answer with |
 |---|---|---|
-| "State of the deployment?" | `deployment_heartbeat` (mode=digest) | **Actions needed + deadlines first**, then the epoch table, then infra status |
-| "What do I need to do this week?" | `deployment_heartbeat` (mode=digest, windowEpochs=6) | Use its computed per-epoch lifecycle status and exact UTC opening/deadline times; do not recompute them from epoch numbers |
+| "State of the deployment?" | `deployment_heartbeat` (mode=digest) | **Actions needed + deadlines first**, quoting `timing.*Utc`, `timing.*TimeRemaining`, and `uptime.status`; then the epoch table and infra status |
+| "What do I need to do this week?" | `deployment_heartbeat` (mode=digest, windowEpochs=6) | Use its computed lifecycle, `uptime.status`, and timing fields; do not recompute relative time from epoch dates |
 | "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Quote `setAmountReadiness`: contract evidence, the bot's operational window, existing funding, accumulation risk, and bot-policy deadline UTC. Do not call the policy window a contract restriction or recompute it |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
@@ -182,7 +186,8 @@ For an alarmed or ambiguous "something is wrong" message:
   summary above it.
 
 - **Actionables first**: anything with a deadline (stake cache close, funding deadline,
-  distribution waiting on uptime) goes at the top with its UTC time and time-remaining.
+  distribution waiting on uptime) goes at the top with its UTC time and tool-calculated
+  time-remaining. If no relative-time field was returned, omit it rather than estimating.
 - Epoch statuses in one compact table: epoch · set amount · #set-txs · funded ·
   distributed · status/next action.
 - Flag `2+ set-amount txs` loudly every time — that is the accumulation incident, and

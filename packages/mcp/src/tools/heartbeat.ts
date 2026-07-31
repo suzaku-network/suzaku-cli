@@ -31,6 +31,33 @@ export interface EpochTiming {
   updateWindow: number;
 }
 
+export interface HeartbeatTimingSummary {
+  observedAtTs: number;
+  observedAtUtc: string;
+  currentEpochStartTs: number;
+  currentEpochStartUtc: string;
+  currentEpochEndTs: number;
+  currentEpochEndUtc: string;
+  currentEpochSecondsRemaining: number;
+  currentEpochTimeRemaining: string;
+  updateWindowCloseTs: number;
+  updateWindowCloseUtc: string;
+  updateWindowSecondsRemaining: number;
+  updateWindowTimeRemaining: string;
+}
+
+export interface UptimeSummary {
+  epoch: number;
+  trackerConfigured: boolean;
+  status: 'complete' | 'missing' | 'unknown' | 'not_checked';
+  allOperatorsSet: boolean | null;
+  operatorCount: number;
+  reportedOperators: string[];
+  missingOperators: string[];
+  unknownOperators: string[];
+  byOperator: Record<string, boolean | null>;
+}
+
 export interface RewardsConstants {
   fundingDeadlineOffset: number;
   distributionEarliestOffset: number;
@@ -85,6 +112,96 @@ export function tsToUtc(ts: number): string {
   const hh = String(d.getUTCHours()).padStart(2, '0');
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${hh}:${mm} UTC`;
+}
+
+/** Signed seconds from the observation time -> compact, deterministic relative text. */
+export function timeRemaining(seconds: number): string {
+  if (!Number.isFinite(seconds)) return 'unknown';
+  if (seconds === 0) return 'due now';
+  const absolute = Math.abs(Math.trunc(seconds));
+  if (absolute < 60) return seconds > 0 ? 'less than 1m remaining' : 'less than 1m ago';
+  const totalMinutes = Math.floor(absolute / 60);
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = days > 0
+    ? [`${days}d`, ...(hours > 0 ? [`${hours}h`] : [])]
+    : hours > 0
+      ? [`${hours}h`, ...(minutes > 0 ? [`${minutes}m`] : [])]
+      : [`${minutes}m`];
+  return `${parts.join(' ')} ${seconds > 0 ? 'remaining' : 'ago'}`;
+}
+
+export function summarizeHeartbeatTiming(timing: EpochTiming, observedAtTs: number): HeartbeatTimingSummary {
+  const currentEpochEndTs = timing.currentEpochStartTs + timing.epochDuration;
+  const updateWindowCloseTs = timing.currentEpochStartTs + timing.updateWindow;
+  const currentEpochSecondsRemaining = currentEpochEndTs - observedAtTs;
+  const updateWindowSecondsRemaining = updateWindowCloseTs - observedAtTs;
+  return {
+    observedAtTs,
+    observedAtUtc: tsToUtc(observedAtTs),
+    currentEpochStartTs: timing.currentEpochStartTs,
+    currentEpochStartUtc: tsToUtc(timing.currentEpochStartTs),
+    currentEpochEndTs,
+    currentEpochEndUtc: tsToUtc(currentEpochEndTs),
+    currentEpochSecondsRemaining,
+    currentEpochTimeRemaining: timeRemaining(currentEpochSecondsRemaining),
+    updateWindowCloseTs,
+    updateWindowCloseUtc: tsToUtc(updateWindowCloseTs),
+    updateWindowSecondsRemaining,
+    updateWindowTimeRemaining: timeRemaining(updateWindowSecondsRemaining),
+  };
+}
+
+export function summarizeUptime(
+  epoch: number,
+  operators: string[],
+  byOperator: Record<string, boolean | null>,
+  trackerConfigured: boolean,
+): UptimeSummary {
+  const snapshot = Object.fromEntries(operators.map((operator) => [operator, byOperator[operator] ?? null]));
+  const reportedOperators = operators.filter((operator) => snapshot[operator] === true);
+  const missingOperators = operators.filter((operator) => snapshot[operator] === false);
+  const unknownOperators = operators.filter((operator) => snapshot[operator] === null);
+  let status: UptimeSummary['status'];
+  let allOperatorsSet: boolean | null;
+  if (!trackerConfigured) {
+    status = 'not_checked';
+    allOperatorsSet = null;
+  } else if (missingOperators.length > 0) {
+    status = 'missing';
+    allOperatorsSet = false;
+  } else if (unknownOperators.length > 0) {
+    status = 'unknown';
+    allOperatorsSet = null;
+  } else {
+    status = 'complete';
+    allOperatorsSet = true;
+  }
+  return {
+    epoch,
+    trackerConfigured,
+    status,
+    allOperatorsSet,
+    operatorCount: operators.length,
+    reportedOperators,
+    missingOperators,
+    unknownOperators,
+    byOperator: snapshot,
+  };
+}
+
+function uptimeHuman(summary: UptimeSummary): string {
+  const prefix = `uptime epoch ${summary.epoch}`;
+  if (summary.status === 'complete') {
+    return `${prefix}: complete (${summary.reportedOperators.length}/${summary.operatorCount} operators)`;
+  }
+  if (summary.status === 'missing') {
+    const unknown = summary.unknownOperators.length > 0 ? ` · ${summary.unknownOperators.length} unknown` : '';
+    return `${prefix}: ${summary.missingOperators.length} missing${unknown}`;
+  }
+  if (summary.status === 'unknown') return `${prefix}: unknown (read failed for ${summary.unknownOperators.length} operators)`;
+  return `${prefix}: not checked (no uptime tracker supplied)`;
 }
 
 /** Wei string → human token amount with thousands separators and up to 2 decimals ("35,120.55"). */
@@ -483,6 +600,8 @@ export function buildClaimabilityLines(rows: ClaimabilityRow[]): string[] {
 export function buildHumanLines(args: {
   mode: 'digest' | 'alerts';
   timing: EpochTiming;
+  timingSummary?: HeartbeatTimingSummary;
+  uptime?: UptimeSummary;
   cacheOk: boolean;
   changedLines: string[];
   changedScanFailed?: boolean;
@@ -507,7 +626,8 @@ export function buildHumanLines(args: {
   const headIcon = nonOk.some((c) => c.status === 'alert') ? '🔴' : nonOk.length > 0 ? '⚠️' : '🟢';
   const lines: string[] = [
     `${headIcon} Suzaku heartbeat — epoch ${timing.currentEpoch} started ${tsToUtc(timing.currentEpochStartTs)}`,
-    `   update window closes ${tsToUtc(timing.currentEpochStartTs + timing.updateWindow)} · cache ${args.cacheOk ? '✅' : '⚠️ pending'}`,
+    `   update window closes ${args.timingSummary?.updateWindowCloseUtc ?? tsToUtc(timing.currentEpochStartTs + timing.updateWindow)}` +
+      `${args.timingSummary ? ` (${args.timingSummary.updateWindowTimeRemaining})` : ''} · cache ${args.cacheOk ? '✅' : '⚠️ pending'}`,
     '',
     `CHANGED since epoch ${timing.currentEpoch - 1} start`,
   ];
@@ -521,6 +641,7 @@ export function buildHumanLines(args: {
   if (args.validatorSummary) lines.push(`  ${args.validatorSummary}`);
   if (args.tvlLine) lines.push(`  ${args.tvlLine}`);
   lines.push('', 'REWARDS');
+  if (args.uptime) lines.push(`  ${uptimeHuman(args.uptime)}`);
   lines.push(...buildClaimabilityLines(args.claimability).map((l) => `  ${l}`));
   if (args.activityLine) lines.push(`  activity: ${args.activityLine}`);
   if (nonOk.length > 0) {
@@ -538,6 +659,8 @@ export function registerHeartbeatTools(server: McpServer) {
     'mode=alerts (default): fast state checks, returns only warn/alert findings in humanLines — empty humanLines means all good, post nothing. ' +
     'mode=digest: full epoch digest with event scans — what changed (nodes/stakes/validators), rewards activity, and a per-epoch claimability table; run once per epoch rollover (compare the returned epoch to the last reported one). ' +
     'All checks are computed deterministically; humanLines are ready to post verbatim in a Telegram monospace block. ' +
+    'The timing object contains server-calculated UTC deadlines and remaining seconds/text; quote it instead of recomputing. ' +
+    'The uptime object explicitly reports complete/missing/unknown/not_checked for the previous epoch; never infer uptime from distribution state. ' +
     'Digest mode scans events over the elapsed epoch (~30-60s; prefer a dedicated RPC); accumulation detection covers that window — use rewards_epoch_diagnosis for historical epochs. ' +
     'Event scans use the server-configured explorer service when available (~5s per scan vs ~60s RPC-only).',
     {
@@ -667,6 +790,14 @@ export function registerHeartbeatTools(server: McpServer) {
         uptimeSetByOperator[op] = typeof u.isOperatorUptimeSet === 'boolean' ? u.isOperatorUptimeSet : null;
       });
 
+      const timingSummary = summarizeHeartbeatTiming(timing, now);
+      const uptime = summarizeUptime(
+        Math.max(0, currentEpoch - 1),
+        operators,
+        uptimeSetByOperator,
+        Boolean(uptimeTrackerAddress),
+      );
+
       // ── Derivations (no I/O below this point) ──
       const claimability: ClaimabilityRow[] = statusRows.map((row) => {
         // The event scan covers the elapsed epoch only: a positive count is a real in-window
@@ -723,6 +854,15 @@ export function registerHeartbeatTools(server: McpServer) {
       if (rewardsEventsFailed) {
         dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'rewards get-events scan failed — rewards activity and accumulation detection unavailable', human: '⚠️ rewards event scan failed — activity/accumulation not assessed' });
       }
+      if (uptime.trackerConfigured && uptime.unknownOperators.length > 0) {
+        dataChecks.push({
+          name: 'uptime_data_unavailable',
+          epoch: uptime.epoch,
+          status: 'warn',
+          detail: `uptime state unknown for ${uptime.unknownOperators.length} operator(s)`,
+          human: `⚠️ uptime for epoch ${uptime.epoch} could not be verified — do not infer whether reporting is needed`,
+        });
+      }
 
       const checks = [...dataChecks, ...runAlertChecks({
         timing,
@@ -739,7 +879,7 @@ export function registerHeartbeatTools(server: McpServer) {
       })];
 
       const humanLines = buildHumanLines({
-        mode, timing,
+        mode, timing, timingSummary, uptime,
         cacheOk: cacheStatus?.allClassesCached ?? false,
         changedLines, changedScanFailed: nodeLogsFailed,
         validatorSummary, tvlLine, activityLine,
@@ -750,6 +890,8 @@ export function registerHeartbeatTools(server: McpServer) {
         mode,
         epoch: currentEpoch,
         epochStartTs,
+        timing: timingSummary,
+        uptime,
         windowStartEpoch: fromEpoch,
         ...(isDigest ? {
           changed: {

@@ -29,7 +29,7 @@ When a question is about Dexalot (or doesn't name an L1), use these addresses im
 
 ## How to answer
 
-Every reply — regardless of question type — opens with one sentence stating the current state and the required action (or that none is needed), including the deadline as absolute UTC + time remaining when one exists. Detail comes after that line, never before.
+Every reply — regardless of question type — opens with one sentence stating the current state and the required action (or that none is needed), including the deadline as absolute UTC + time remaining when one exists. Quote tool-returned UTC and time-remaining fields; if a tool does not provide a relative duration, give only its absolute UTC time rather than calculating or guessing. Detail comes after that line, never before.
 
 1. **Run `discover_network` only when the question is about a different L1 or network** than the known deployment above. It returns all L1s, middlewares, and global operators automatically.
 2. Prefer composite tools over chains of single reads — each tool's description says when to use it; follow the tool-economy rules in `EPOCHS.md` for every tool-selection decision.
