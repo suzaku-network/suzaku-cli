@@ -11,6 +11,883 @@ export default [
         "stateMutability": "nonpayable"
     },
     {
+        "type": "event",
+        "name": "AdminForceValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "forfeitRewards",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedDelegatorRegistration",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "startTime",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedDelegatorRemoval",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "stakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "rewards",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "fees",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "CompletedStakingValidatorRemoval",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "stakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "rewards",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DelegationFeesAccrued",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DelegationFeesWithdrawn",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DelegatorRewardClaimed",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DelegatorRewardRecipientChanged",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedDelegatorRegistration",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "delegatorAddress",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "validatorWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "delegatorWeight",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "setWeightMessageID",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "rewardRecipient",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "stakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedDelegatorRemoval",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InitiatedStakingValidatorRegistration",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "delegationFeeBips",
+                "type": "uint16",
+                "indexed": false,
+                "internalType": "uint16"
+            },
+            {
+                "name": "minStakeDuration",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "rewardRecipient",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "stakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OperatorRoleUpdated",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "granted",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferStarted",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RegistrationPauseStatusChanged",
+        "inputs": [
+            {
+                "name": "paused",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RewardCalculatorUpdated",
+        "inputs": [
+            {
+                "name": "oldCalculator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newCalculator",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RewardDistributionFailed",
+        "inputs": [
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "reason",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RewardVaultUpdated",
+        "inputs": [
+            {
+                "name": "oldVault",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newVault",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "StakingConfigUpdated",
+        "inputs": [
+            {
+                "name": "minimumStakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "maximumStakeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "minimumStakeDuration",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "minimumDelegationFeeBips",
+                "type": "uint16",
+                "indexed": false,
+                "internalType": "uint16"
+            },
+            {
+                "name": "maximumStakeMultiplier",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "UptimeUpdated",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "uptime",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ValidatorRewardClaimed",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ValidatorRewardRecipientChanged",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "recipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "oldRecipient",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InsufficientBalance",
+        "inputs": [
+            {
+                "name": "balance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "needed",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidDelegationFee",
+        "inputs": [
+            {
+                "name": "delegationFeeBips",
+                "type": "uint16",
+                "internalType": "uint16"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidDelegationID",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidDelegatorStatus",
+        "inputs": [
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum DelegatorStatus"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidMinStakeDuration",
+        "inputs": [
+            {
+                "name": "minStakeDuration",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidNonce",
+        "inputs": [
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidRewardRecipient",
+        "inputs": [
+            {
+                "name": "rewardRecipient",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidRewardVaultAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidStakeAmount",
+        "inputs": [
+            {
+                "name": "stakeAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidStakeMultiplier",
+        "inputs": [
+            {
+                "name": "maximumStakeMultiplier",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidUptimeBlockchainID",
+        "inputs": [
+            {
+                "name": "uptimeBlockchainID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidValidatorStatus",
+        "inputs": [
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum ValidatorStatus"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpMessage",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpOriginSenderAddress",
+        "inputs": [
+            {
+                "name": "senderAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidWarpSourceChainID",
+        "inputs": [
+            {
+                "name": "sourceChainID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "MaxWeightExceeded",
+        "inputs": [
+            {
+                "name": "newValidatorWeight",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "MinStakeDurationNotPassed",
+        "inputs": [
+            {
+                "name": "endTime",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NoRewardsToClaim",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OwnableInvalidOwner",
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "OwnableUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ReentrancyGuardReentrantCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "RegistrationPaused",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "RewardClaimFailed",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UnauthorizedOperator",
+        "inputs": [
+            {
+                "name": "caller",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UnauthorizedOwner",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UnexpectedValidationID",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "expectedValidationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ValidatorNotPoS",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ZeroAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ZeroWeightToValueFactor",
+        "inputs": []
+    },
+    {
         "type": "function",
         "name": "BIPS_CONVERSION_FACTOR",
         "inputs": [],
@@ -162,7 +1039,65 @@ export default [
     },
     {
         "type": "function",
+        "name": "claimDelegatorRewardsFor",
+        "inputs": [
+            {
+                "name": "delegationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "includeUptimeProof",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "reward",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "claimValidatorRewards",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "includeUptimeProof",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "reward",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "claimValidatorRewardsFor",
         "inputs": [
             {
                 "name": "validationID",
@@ -309,6 +1244,34 @@ export default [
                 "name": "messageIndex",
                 "type": "uint32",
                 "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "forceRemoveValidator",
+        "inputs": [
+            {
+                "name": "validationID",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "includeUptimeProof",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "messageIndex",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "forfeitRewards",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
         "outputs": [],
@@ -663,6 +1626,19 @@ export default [
     },
     {
         "type": "function",
+        "name": "grantOperatorRole",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "initialize",
         "inputs": [
             {
@@ -876,6 +1852,38 @@ export default [
     },
     {
         "type": "function",
+        "name": "isOperator",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "isRegistrationPaused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "owner",
         "inputs": [],
         "outputs": [
@@ -915,6 +1923,32 @@ export default [
                 "name": "delegationID",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "revokeOperatorRole",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setRegistrationPaused",
+        "inputs": [
+            {
+                "name": "paused",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
         "outputs": [],
@@ -1047,837 +2081,5 @@ export default [
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "event",
-        "name": "CompletedDelegatorRegistration",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "startTime",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "CompletedDelegatorRemoval",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "stakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "rewards",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "fees",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "CompletedStakingValidatorRemoval",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "stakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "rewards",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "DelegationFeesAccrued",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "DelegationFeesWithdrawn",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "DelegatorRewardClaimed",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "DelegatorRewardRecipientChanged",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "oldRecipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "Initialized",
-        "inputs": [
-            {
-                "name": "version",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedDelegatorRegistration",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "delegatorAddress",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "validatorWeight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "delegatorWeight",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "setWeightMessageID",
-                "type": "bytes32",
-                "indexed": false,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "rewardRecipient",
-                "type": "address",
-                "indexed": false,
-                "internalType": "address"
-            },
-            {
-                "name": "stakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedDelegatorRemoval",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "InitiatedStakingValidatorRegistration",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "owner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "delegationFeeBips",
-                "type": "uint16",
-                "indexed": false,
-                "internalType": "uint16"
-            },
-            {
-                "name": "minStakeDuration",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "rewardRecipient",
-                "type": "address",
-                "indexed": false,
-                "internalType": "address"
-            },
-            {
-                "name": "stakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OwnershipTransferStarted",
-        "inputs": [
-            {
-                "name": "previousOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "OwnershipTransferred",
-        "inputs": [
-            {
-                "name": "previousOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RewardCalculatorUpdated",
-        "inputs": [
-            {
-                "name": "oldCalculator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newCalculator",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RewardDistributionFailed",
-        "inputs": [
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "reason",
-                "type": "string",
-                "indexed": false,
-                "internalType": "string"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RewardVaultUpdated",
-        "inputs": [
-            {
-                "name": "oldVault",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newVault",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "StakingConfigUpdated",
-        "inputs": [
-            {
-                "name": "minimumStakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "maximumStakeAmount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            },
-            {
-                "name": "minimumStakeDuration",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            },
-            {
-                "name": "minimumDelegationFeeBips",
-                "type": "uint16",
-                "indexed": false,
-                "internalType": "uint16"
-            },
-            {
-                "name": "maximumStakeMultiplier",
-                "type": "uint8",
-                "indexed": false,
-                "internalType": "uint8"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "UptimeUpdated",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "uptime",
-                "type": "uint64",
-                "indexed": false,
-                "internalType": "uint64"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "ValidatorRewardClaimed",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "indexed": false,
-                "internalType": "uint256"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "ValidatorRewardRecipientChanged",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "recipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "oldRecipient",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "DelegatorIneligibleForRewards",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "FailedCall",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InsufficientBalance",
-        "inputs": [
-            {
-                "name": "balance",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "needed",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidDelegationFee",
-        "inputs": [
-            {
-                "name": "delegationFeeBips",
-                "type": "uint16",
-                "internalType": "uint16"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidDelegationID",
-        "inputs": [
-            {
-                "name": "delegationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidDelegatorStatus",
-        "inputs": [
-            {
-                "name": "status",
-                "type": "uint8",
-                "internalType": "enum DelegatorStatus"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidInitialization",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidMinStakeDuration",
-        "inputs": [
-            {
-                "name": "minStakeDuration",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidNonce",
-        "inputs": [
-            {
-                "name": "nonce",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidRewardRecipient",
-        "inputs": [
-            {
-                "name": "rewardRecipient",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidRewardVaultAddress",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidStakeAmount",
-        "inputs": [
-            {
-                "name": "stakeAmount",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidStakeMultiplier",
-        "inputs": [
-            {
-                "name": "maximumStakeMultiplier",
-                "type": "uint8",
-                "internalType": "uint8"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidUptimeBlockchainID",
-        "inputs": [
-            {
-                "name": "uptimeBlockchainID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidValidatorStatus",
-        "inputs": [
-            {
-                "name": "status",
-                "type": "uint8",
-                "internalType": "enum ValidatorStatus"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpMessage",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpOriginSenderAddress",
-        "inputs": [
-            {
-                "name": "senderAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "InvalidWarpSourceChainID",
-        "inputs": [
-            {
-                "name": "sourceChainID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "MaxWeightExceeded",
-        "inputs": [
-            {
-                "name": "newValidatorWeight",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "MinStakeDurationNotPassed",
-        "inputs": [
-            {
-                "name": "endTime",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "NoRewardsToClaim",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NotInitializing",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "OwnableInvalidOwner",
-        "inputs": [
-            {
-                "name": "owner",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "OwnableUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ReentrancyGuardReentrantCall",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "RewardClaimFailed",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "UnauthorizedOwner",
-        "inputs": [
-            {
-                "name": "sender",
-                "type": "address",
-                "internalType": "address"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "UnexpectedValidationID",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "expectedValidationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ValidatorIneligibleForRewards",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ValidatorNotPoS",
-        "inputs": [
-            {
-                "name": "validationID",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
-    },
-    {
-        "type": "error",
-        "name": "ZeroAddress",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "ZeroWeightToValueFactor",
-        "inputs": []
     }
 ] as const;
