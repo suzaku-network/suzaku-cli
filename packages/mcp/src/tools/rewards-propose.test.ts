@@ -205,6 +205,18 @@ describe('read-only rewards decisions', () => {
       });
       expect(readiness.human).toContain("inside the bot's operational window");
       expect(readiness.human).toContain('would add, not overwrite');
+      const data = res.structuredContent as Record<string, any>;
+      expect(data.uptimeAssessment).toEqual({
+        status: 'not_checked',
+        actionRequired: null,
+        instruction:
+          'Do not recommend uptime reporting or computation unless middleware_uptime_report or ' +
+          'deployment_heartbeat reports that uptime is missing.',
+      });
+      expect(data.diagnosis).toContain(
+        'Uptime was not checked by this tool. Do not recommend uptime reporting or computation unless ' +
+        'middleware_uptime_report or deployment_heartbeat reports that uptime is missing.',
+      );
     },
   );
 

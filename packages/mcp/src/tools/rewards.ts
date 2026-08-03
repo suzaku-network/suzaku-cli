@@ -331,7 +331,9 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
     'Separate contract set-amount evidence from the bot policy window for an epoch, report whether it is ' +
     'already funded, whether another successful call would accumulate, and what action is safe. Also ' +
     'diagnoses incomplete distribution and set-amount event history. Historical public-RPC scans may take several minutes. Use its computed setAmountReadiness ' +
-    'fields and bot-policy deadline; do not recompute the lifecycle from epoch numbers.',
+    'fields and bot-policy deadline; do not recompute the lifecycle from epoch numbers. This tool does ' +
+    'not check uptime: never recommend uptime reporting or computation from this result alone; call ' +
+    'middleware_uptime_report or deployment_heartbeat first.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
       middlewareAddress: Address.describe('L1Middleware contract address (required to look up set-amount event history)'),
@@ -542,6 +544,10 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
           'and no existing funding was found; set the intended amount before the bot-policy deadline.';
       }
       diagnosis.unshift(setAmountSummary);
+      diagnosis.push(
+        'Uptime was not checked by this tool. Do not recommend uptime reporting or computation unless ' +
+        'middleware_uptime_report or deployment_heartbeat reports that uptime is missing.',
+      );
 
       if (_warnings.length > 0) {
         diagnosis.push(`Diagnosis incomplete — ${_warnings.length} read(s) failed (${_warnings.join('; ')}). Do not treat this as a clean bill of health.`);
@@ -578,6 +584,13 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
           lastProcessedIndex: lastProcessedIndex ?? null,
           totalOperators: totalOperators ?? null,
           raw: distribution,
+        },
+        uptimeAssessment: {
+          status: 'not_checked',
+          actionRequired: null,
+          instruction:
+            'Do not recommend uptime reporting or computation unless middleware_uptime_report or ' +
+            'deployment_heartbeat reports that uptime is missing.',
         },
         setAmountEvents: setAmountEvents ?? null,
         diagnosis,
