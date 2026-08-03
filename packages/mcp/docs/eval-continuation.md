@@ -19,6 +19,11 @@ human/model evidence gates.
 - One exploratory paid Kimi K3 run exists (22 questions plus canary, about $1.06
   total). Nineteen answers require human review and three hit mechanical gates;
   the run predates follow-up fixes and is not a canonical benchmark.
+- The bounded Kimi release acceptance is complete for candidate `09e7dd7`: the
+  final six-question run passed every deterministic gate and manual semantic
+  review, and the pinned OpenClaw Telegram smoke passed. The sanitized costs,
+  decisions, and local-artifact hashes are recorded in
+  `docs/kimi-release-evidence-2026-08-03.md`. VM acceptance remains outstanding.
 - Deterministic heartbeat instructions were corrected separately so dates,
   countdowns, and uptime status come from tool output. Further instruction edits
   still require bounded evidence.
