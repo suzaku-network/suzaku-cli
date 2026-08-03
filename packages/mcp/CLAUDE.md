@@ -137,7 +137,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 
 ### Child Process Env (allowlist)
 
-Only these variables propagate to the subprocess: `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. Signing secrets are injected per-call: `PK` (from `SUZAKU_PK` or `SUZAKU_PK_FILE`) for write calls, and `SAFE_API_KEY` (from `SAFE_API_KEY` or `SAFE_API_KEY_FILE`) only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`). The `_FILE` forms are read at spawn time so the raw secret never sits in the container env.
+The base subprocess allowlist is `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, and `LogLevel`. Only event-scan calls additionally receive `ETHERSCAN_API_KEY`; `SNOWSCAN_API_KEY` is accepted as a legacy parent variable but normalized before spawn. Signing secrets are injected per-call: `PK` (from `SUZAKU_PK` or `SUZAKU_PK_FILE`) for write calls, and `SAFE_API_KEY` (from `SAFE_API_KEY` or `SAFE_API_KEY_FILE`) only on Safe-wired write calls (`privateKey: true` + `SUZAKU_SAFE_ADDRESS`). The `_FILE` forms are read at spawn time so the raw secret never sits in the container env.
 
 ## Tool Catalog
 

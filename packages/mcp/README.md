@@ -75,7 +75,7 @@ The three profile flags are mutually exclusive. `--propose-only` requires `SUZAK
 | Mainnet suggest mode | Writes return the CLI command instead of executing (default) |
 | Public-cache execution path | `--public-write` suppresses the normal write surface and exposes only `middleware_cache_stakes`; the tool rejects unpinned middleware/network/rpcUrl and calls a CLI exact-args wrapper |
 | PK never on CLI args | Keys pass via child process env only; 64-char hex strings redacted from all output |
-| Restricted child env | Subprocess inherits only `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, `LogLevel`, `SNOWSCAN_API_KEY`. `PK` is injected for write operations; `SAFE_API_KEY` only for Safe-wired writes (when `SUZAKU_SAFE_ADDRESS` is set) — both read from the direct env or the `_FILE` form at spawn time |
+| Restricted child env | Ordinary subprocesses inherit only `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR`, `GNUPGHOME`, `SIG_AGG_URL`, and `LogLevel`; event scans additionally receive `ETHERSCAN_API_KEY` when configured. `PK` is injected for write operations; `SAFE_API_KEY` only for Safe-wired writes (when `SUZAKU_SAFE_ADDRESS` is set)—both read from the direct env or `_FILE` form at spawn time |
 | Audit log | Every call logged to `~/.suzaku-cli/mcp-audit.log` |
 
 ### Mainnet vs testnet behavior

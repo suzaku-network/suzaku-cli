@@ -7,18 +7,30 @@ mean, and which gates must pass before spending money on a model comparison.
 
 The suite is **v5-draft**, not a benchmark-ready release.
 
-- Free Tier 1 currently validates 16 questions against live Dexalot ground truth.
+- Free Tier 1 contains 16 live Dexalot checks. `--fast` runs the 14
+  production-default reads; the two omitted checks are intentionally wide
+  event-history scans.
 - Tier 2 contains 22 model questions; `--fast` selects 20.
 - Free-form answer meaning is not graded by phrase matching. A clean but unreviewed
   Tier-2 answer is `PENDING_HUMAN`, never `PASS`.
+- Twelve pilot answers have confirmed human labels (6 correct, 4 partial, 2
+  wrong). The deterministic evaluator abstains on all twelve, so calibration
+  passes its safety gate with zero automated semantic coverage; delivery failures
+  remain reported separately.
+- One exploratory Kimi K3 repetition exists (22 questions, plus canary). It cost
+  about $1.04 plus $0.02 for the canary and produced 19 `PENDING_HUMAN` answers
+  plus three mechanical gate failures. It predates follow-up fixes, has not been
+  human-labelled as a full set, and is not a benchmark row.
 - There are no canonical v5 benchmark rows.
 - Historical v1/v2 rows are preserved as legacy evidence. V3/v4 and Cursor/Composer
   artifacts are exploratory and are not valid model comparisons.
 - No current evidence establishes that Claude, Codex, or Composer conclusively
   outperforms another.
 
-The next blocking evidence is a human-labelled reference corpus. Until it exists,
-do not run the paid pilot or full comparison.
+The small labelled pilot proves the abstention workflow, not semantic automation
+or model superiority. Before a full paid comparison, review retained exploratory
+answers, freeze the post-fix inputs, and obtain approval for the exact repetitions
+and spend ceiling.
 
 ## What the evaluator can decide
 
@@ -66,9 +78,11 @@ evidence behind two previously incorrect expectations:
 - another valid rewards set-amount call accumulates into the epoch total rather
   than overwriting it, so “already funded” alone does not imply a revert.
 
-These are evaluator truth-contract corrections. Bot instruction files have not
-been changed. Any future instruction correction requires a separate, bounded,
-blind A/B evaluation.
+These are evaluator truth-contract corrections. Later deterministic heartbeat
+instructions were changed separately so the model relays tool-computed timing and
+uptime state rather than inventing them; those changes do not make the scorer a
+semantic judge. Any further semantic instruction correction requires a separate,
+bounded evaluation.
 
 ## Safe commands
 
@@ -145,13 +159,20 @@ This is a compatibility constraint, not a second evaluator protocol.
 ## Human reference corpus and calibration
 
 `eval/replay-corpus-cli.mjs` inventories ignored legacy reports without trusting
-their old verdicts. The tracked inventory currently contains:
+their old verdicts. The legacy inventory contains:
 
 - 173 answer samples;
 - 172 `UNSCORABLE` samples because the exact question snapshot or sufficient
   frozen ground truth is unavailable;
 - 1 `REVIEW_REQUIRED` sample with only an old fact summary;
-- 0 human-confirmed gold labels.
+- no trustworthy legacy labels imported from old verdicts.
+
+Separately, the current review workflow recorded 12 fresh, checksummed,
+human-confirmed pilot labels (6 `CORRECT`, 4 `PARTIAL`, 2 `WRONG`). Calibration
+reports `PASS` because the deterministic system correctly leaves all 12 at
+`PENDING_HUMAN`: zero critical false passes, zero correct-answer semantic
+rejections, and zero automated semantic coverage. Seven mechanical delivery
+failures are reported as product defects rather than semantic disagreements.
 
 Raw answers, provider identities, and source filenames are excluded from the
 tracked inventory. A local labelling packet can be generated with
@@ -171,8 +192,8 @@ scorer/judge predictions. It reports:
 The semantic calibration gate permits low automation coverage but permits zero
 critical false passes and zero correct-answer semantic failures. Delivery failures
 remain overall product failures but do not masquerade as semantic disagreements.
-With no labels or predictions,
-it returns `BLOCKED`; it never imports a historical evaluator verdict as gold.
+With no labels or predictions, it returns `BLOCKED`; it never imports a historical
+evaluator verdict as gold.
 
 Fresh, current-suite answers use the tracked procedure in
 `docs/eval-continuation.md`. `eval/make-review-page.mjs` creates an anonymous,
@@ -197,14 +218,16 @@ with checksums and remain excluded from comparisons.
 
 ## Required path to a paid comparison
 
-1. Review and sanitize eligible historical samples, then create human gold labels.
-2. Run the offline calibration report and adjudicate every disagreement.
-3. If a factual bot-instruction change is proposed, evaluate current versus
+1. Keep the 12 approved labels frozen and review additional retained answers only
+   through checksummed packets.
+2. Run the offline calibration report after every evaluator change and adjudicate
+   every new disagreement.
+3. If another factual bot-instruction change is proposed, evaluate current versus
    corrected wording in a small blind A/B with nearby regression questions.
 4. Freeze v5 inputs and hashes only after the semantic protocol passes review.
-5. With explicit user approval, run a small paid pilot: one model, 4–6 questions,
-   two repetitions, canary, and a fixed cap.
-6. Human-review the pilot. Proceed to a three-repeat comparison only if there are
+5. With explicit user approval, run only a bounded post-fix recheck or pilot with
+   a fixed cap; do not reuse the pre-fix Kimi run as proof.
+6. Human-review that run. Proceed to a three-repeat comparison only if there are
    no infrastructure-invalid runs or critical false passes.
 
 A failure returns to the responsible layer. It does not trigger another round of
@@ -215,7 +238,7 @@ and review/freeze sequence are preserved in `docs/eval-continuation.md`.
 
 ## Current offline verification
 
-On 2026-07-29:
+Historical checkpoint on 2026-07-29 (superseded by later release verification):
 
 - all evaluator commits through the orchestration work have valid GPG signatures;
 - the root and MCP builds completed and the full MCP suite passed 349/349;
@@ -228,6 +251,18 @@ On 2026-07-29:
 
 Run the full suite again after any evaluator change and report the measured count;
 do not copy old PR counts.
+
+On 2026-07-31, the no-explorer production path passed the 14/14 Tier-1 fast suite
+at epoch 52 over public RPC. The two slow forensic cases remain separate because a
+wide old-epoch log scan is not a scheduler health check and may require a dedicated
+RPC or paid Etherscan V2 access.
+
+The final Kimi release candidate must record new build/test/Tier-1/config/image
+results against its exact signed SHA. Do not carry forward the dirty-tree test
+counts or container claims as release evidence. The paid gate is the sequential
+six-question Kimi acceptance in `docs/eval-continuation.md`, followed by the live
+Telegram delivery smoke; evaluator prompts, questions, scoring, and thresholds
+remain frozen during that gate.
 
 ## Live-bot audit analytics
 

@@ -11,10 +11,18 @@ human/model evidence gates.
 - Free-form English is not scored with phrases or regular expressions.
 - Machine-checkable failures still fail closed.
 - A clean answer remains `PENDING_HUMAN` until a person records a decision.
-- Historical answer inventory: 173 samples; 172 unscorable, one requiring
-  evidence review, zero confirmed labels.
-- No bot prompt/instruction change has been made by this simplification work.
-- No paid v5 answer run or canonical v5 benchmark exists.
+- Historical answer inventory: 173 samples; 172 unscorable and one requiring
+  evidence review. Old verdicts were not imported as truth.
+- Twelve fresh pilot answers now have confirmed human labels: 6 correct, 4
+  partial, and 2 wrong. The deterministic system abstains on all 12 and passes
+  the calibration safety gate with zero semantic automation.
+- One exploratory paid Kimi K3 run exists (22 questions plus canary, about $1.06
+  total). Nineteen answers require human review and three hit mechanical gates;
+  the run predates follow-up fixes and is not a canonical benchmark.
+- Deterministic heartbeat instructions were corrected separately so dates,
+  countdowns, and uptime status come from tool output. Further instruction edits
+  still require bounded evidence.
+- No canonical v5 benchmark exists.
 
 The detailed design and stop conditions are in `docs/eval-plan.md`. The original
 planning note may exist locally, but this file and `docs/eval-plan.md` are the
@@ -40,13 +48,16 @@ checksums, and conflicting existing labels. With `--write`, it stores only
 sanitized hashes/provenance, labels, and the evaluator prediction; raw answers
 remain ignored.
 
-## Next phase: choose and run the small exploratory pilot
+## Next phase: review or bounded post-fix recheck
 
-The model route is **not decided**. Do not silently default to Sonnet, Codex, or
-any other model.
+Kimi K3 is the active production candidate for operational testing; that is not a
+claim that it won a benchmark. Do not silently turn one exploratory run into a
+cross-model conclusion.
 
 Available routes:
 
+- Moonshot API: isolated evaluator MCP process; use `--engine kimi --model
+  kimi-k3`, export `MOONSHOT_API_KEY`, and require explicit spend approval.
 - Anthropic API: isolated evaluator MCP process; requires
   `ANTHROPIC_API_KEY` exported in the executing shell and explicit spend approval.
 - Codex subscription: drives the live OpenClaw bot; no per-call API charge, but it
@@ -61,32 +72,27 @@ Before any call, show the user:
 - maximum approved spend;
 - whether production infrastructure is touched.
 
-A representative proposed pilot—not authorization—is:
+A release acceptance run—not authorization—uses exactly these six questions:
 
 - `operators`
+- `deployment-state`
 - `weekly-todo`
 - `can-set-rewards`
-- `min-uptime-history`
-- `identity-ambiguity-my-node`
-- `slashing-cannot-confirm`
-- two repetitions plus one canary = 13 model calls for one target
+- `future-epoch-not-started`
+- `network-scope-fuji-no-mainnet-leak`
 
-Preview an Anthropic choice without a key or provider call:
+Run one Kimi repetition, then human-review all six immediately:
 
 ```bash
-pnpm eval -- --tier 2 --engine anthropic --model MODEL_ID \
-  --only operators,weekly-todo,can-set-rewards,min-uptime-history,identity-ambiguity-my-node,slashing-cannot-confirm \
-  --repeat 2 --canary --dry-run
+pnpm eval -- --tier 2 --engine kimi --model kimi-k3 \
+  --only operators,deployment-state,weekly-todo,can-set-rewards,future-epoch-not-started,network-scope-fuji-no-mainnet-leak \
+  --repeat 1 --confirm-paid --max-cost-usd 1.00
 ```
 
-Only after the user selects the route/model and approves a ceiling may an
-Anthropic execution add:
-
-```text
---confirm-paid --max-cost-usd APPROVED_AMOUNT
-```
-
-Keep this first run exploratory: do not pass `--benchmark`.
+If any answer is genuinely wrong, stop. If all six pass human review, run the
+same command once more with `--max-cost-usd` set to `$1.00 minus repeat-1 actual
+cost`. Do not add `--benchmark` or rerun afterward unless executable code,
+prompts, model configuration, or MCP behavior changes.
 
 ## Review and calibration
 

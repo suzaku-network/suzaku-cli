@@ -759,7 +759,7 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Get all collateral class IDs from the middleware.
 - **get-active-collateral-classes `<middlewareAddress>`**
   Get active collateral classes (primary and secondary).
-- **node-logs `<middlewareAddress>` [--node-id `<nodeId>`] [--from-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--snowscan-api-key `<string>`]**
+- **node-logs `<middlewareAddress>` [--node-id `<nodeId>`] [--from-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--etherscan-api-key `<string>`]**
   Get middleware node logs (node lifecycle, stake updates, leftover-stake events) over an epoch- or block-scoped range.
 - **get-validator-balances `<middlewareAddress>`**
   Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only).

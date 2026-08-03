@@ -1,6 +1,6 @@
 # Suzaku Telegram Bot via OpenClaw
 
-Telegram bots for Suzaku deployment monitoring and tightly-scoped operations, powered by [OpenClaw](https://github.com/openclaw/openclaw) + the Suzaku MCP server. The default bot is read-only. Optional compose profiles add a DM-only Safe propose bot and a separate group cache bot.
+The production deployment is one read-only Suzaku monitor powered by [OpenClaw](https://github.com/openclaw/openclaw), Kimi K3 through Moonshot, and the typed Suzaku MCP server. Codex remains as a separate inactive option. Propose/cache definitions remain in the repository but are **not part of this release**: do not start those profiles or install their credentials until their separate hardening PR lands.
 
 ## Quick Start (Local Testing)
 
@@ -18,27 +18,25 @@ Telegram bots for Suzaku deployment monitoring and tightly-scoped operations, po
 ```bash
 cd packages/mcp/deploy/openclaw
 
-cat > .env <<'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-TELEGRAM_ADMIN_USER_ID=123456789
-TELEGRAM_GROUP_ID=-100123456789
-OPENCLAW_GATEWAY_TOKEN=<random secret — generate with: openssl rand -hex 24>
-EOF
+install -m 0600 env.example .env
+# Edit at minimum: MOONSHOT_API_KEY, TELEGRAM_BOT_TOKEN,
+# TELEGRAM_ADMIN_USER_ID, TELEGRAM_GROUP_ID, OPENCLAW_GATEWAY_TOKEN.
 ```
 
-`OPENCLAW_GATEWAY_TOKEN` is **required**: OpenClaw refuses to start its gateway inside a container without an auth credential (the container crash-loops with "Refusing to bind gateway to auto without auth"). Any random secret works — nothing else needs to know it; the gateway port is not published outside the compose network.
+Generate `OPENCLAW_GATEWAY_TOKEN` with `openssl rand -hex 24`. Production keeps `SUZAKU_ENABLE_ANTHROPIC_FALLBACK=false` and does not install an Anthropic key. With fallback disabled, a Moonshot outage can stop replies and heartbeats until an operator explicitly enables fallback and restarts.
 
 ### 3. Build and run
 
 ```bash
-docker compose up --build -d
-docker compose logs -f
+docker compose build suzaku-bot
+docker compose up -d --no-build --wait --wait-timeout 120 suzaku-bot
+docker compose ps
+docker compose logs -f --tail 100 suzaku-bot
 ```
 
 ### 4. Test it
 
-DM the bot from your Telegram account, or @-mention it in your group. Only your user ID can DM; in the group, anyone can interact by mentioning the bot.
+DM the bot from your Telegram account, or @-mention it in your group. Only your user ID can DM; in the group, anyone can interact by mentioning the bot. Send `/new` after a model/config change so the Telegram thread receives the new session configuration.
 
 ### 5. Stop
 
@@ -46,108 +44,56 @@ DM the bot from your Telegram account, or @-mention it in your group. Only your 
 docker compose down
 ```
 
-## VPS Deployment (Production)
+## VM deployment (production)
 
-For production, deploy on a dedicated VPS to minimize blast radius. A compromised container on your local PC could reach dev servers, wallets, and browser sessions. On a VPS, it can only reach two API keys.
+Use the tracked [AZURE-DEPLOY.md](./AZURE-DEPLOY.md) runbook. It covers a dedicated non-root service account, Docker's official apt repository, exact Git/image identity, secret permissions, persistent systemd startup, the idempotent `DOCKER-USER` SSRF backstop, backup/restore, rollback, cron registration, cost checks, and Telegram acceptance tests. Do not deploy from the abbreviated local quick start.
 
-### Recommended providers
+The production path starts only `suzaku-bot`. Plain `docker compose up` must select only that service. Propose/cache are deferred security domains, not optional production switches for this release.
 
-| Provider | Plan | Specs | Cost |
-|---|---|---|---|
-| Hetzner | CAX11 (ARM) | 2 vCPU, 4 GB RAM | ~$4/mo |
-| Hetzner | CX22 (x86) | 2 vCPU, 4 GB RAM | ~$5/mo |
+## Active model and optional Codex profile
 
-### VPS setup
+The default template, `openclaw.json`, runs **`moonshot/kimi-k3`** through OpenClaw's official Moonshot provider. The startup renderer removes Anthropic from the active config unless `SUZAKU_ENABLE_ANTHROPIC_FALLBACK=true` and a non-empty `ANTHROPIC_API_KEY` are both present. The provider plugin and OpenClaw host are pinned to 2026.7.1.
 
-```bash
-# 1. SSH in (key-only auth — disable password auth in /etc/ssh/sshd_config)
-ssh root@<vps-ip>
+Codex was not deleted. It is preserved in `openclaw-codex.json` as an explicit alternative, but Compose never selects it by default. To test that option later, stop the monitor, set `SUZAKU_MONITOR_CONFIG=./openclaw-codex.json` in `.env`, start it again, authenticate interactively with `docker compose exec suzaku-bot node openclaw.mjs models auth login --provider openai`, then send `/new` in Telegram. Restore `SUZAKU_MONITOR_CONFIG=./openclaw.json` to return to Kimi. Do not run both profiles against the same Telegram token simultaneously.
 
-# 2. Firewall: allow only SSH
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow ssh
-ufw enable
+### Kimi cost and accounting
 
-# 3. Install Docker
-curl -fsSL https://get.docker.com | sh
+Moonshot's Kimi K3 catalog price used by OpenClaw and the evaluator is **$3 per million input tokens, $15 per million output tokens, and $0.30 per million cache-read tokens** (cache writes currently $0). Check the [Moonshot provider documentation](https://docs.openclaw.ai/providers/moonshot) and provider dashboard before changing the model because prices can change.
 
-# 4. Clone and deploy
-git clone <your-repo-url> /opt/suzaku
-cd /opt/suzaku/packages/mcp/deploy/openclaw
+The retained paid evaluation gives a concrete upper-context reference: one 22-question Kimi repetition cost about **$1.04**, plus about **$0.02** for its canary. Individual evaluation turns had a median around **$0.030**, a mean around **$0.047**, and a measured range of roughly **$0.011–$0.117**. Production prompts will not have identical context, so these are planning observations, not a quote.
 
-# 5. Create .env (same as local testing — OPENCLAW_GATEWAY_TOKEN is required, see Quick Start)
-cat > .env <<'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-TELEGRAM_ADMIN_USER_ID=123456789
-TELEGRAM_GROUP_ID=-100123456789
-OPENCLAW_GATEWAY_TOKEN=<random secret — generate with: openssl rand -hex 24>
-EOF
-chmod 600 .env
+The production scheduler uses one Kimi turn every four hours (about 180/month), rather than the old two-job design (about 360/month), and the heartbeat agent sees only one MCP schema. Until a week of production data exists, budget conservatively using the full-tool evaluation mean: about **$8.50/month for scheduled turns**, plus interactive use (100 comparable turns would be about $4.70 at the observed mean). The restricted heartbeat context should be cheaper, but that saving is intentionally not claimed before measurement. Anthropic and Codex cost zero while inactive.
 
-# 6. Build and start
-docker compose up --build -d
-```
+The VM already exists, so VM procurement/pricing is outside this runbook. Telegram, Docker Engine, OpenClaw, and the public Avalanche RPC add no direct software fee. Explorer acceleration is optional and separately billed; leave `ETHERSCAN_API_KEY` empty unless public-RPC history scans prove insufficient.
 
-### iptables SSRF backstop
-
-After `docker compose up`, run the iptables rules on the Docker host to block container-to-private-network traffic (defense-in-depth against DNS rebinding):
+Inspect actual usage with `/usage cost` or `/usage full` in an authorized chat, and on the VM with:
 
 ```bash
-sudo bash iptables-setup.sh
+docker compose exec suzaku-bot node openclaw.mjs gateway usage-cost --days 7 --json
 ```
 
-This blocks outbound traffic from the `br-suzaku` bridge to RFC 1918, link-local, and loopback (`127.0.0.0/8`) ranges.
-
-### Set Anthropic spending limits
-
-Go to [console.anthropic.com](https://console.anthropic.com) and set a monthly billing cap — this applies whenever the Anthropic API key is in play (as primary model or as fallback). A runaway conversation loop could burn through credits.
-
-## Model auth: subscription (Codex) vs API key
-
-The committed config runs the agent on **`openai/gpt-5.5` through OpenClaw's Codex harness**, authenticated with a **ChatGPT/Codex subscription** (OAuth — flat monthly cost, no per-token billing), with **`anthropic/claude-sonnet-4-6` as fallback** via `ANTHROPIC_API_KEY`. The `codex` plugin is enabled in `openclaw.json`; the OAuth profile lives in the `openclaw-state` volume, so it survives container restarts and recreates.
-
-**One-time Codex login** (after the container is up):
-
-```bash
-docker compose exec suzaku-bot node openclaw.mjs models auth login --provider openai
-```
-
-Run this from a real terminal — it requires an interactive TTY. It prints an OpenAI URL: open it in your local browser, sign in with the ChatGPT account that holds the subscription. The browser then redirects to `http://localhost:1455/auth/callback?...` and shows **ERR_CONNECTION_REFUSED — this is expected** (the callback listener runs inside the container). Copy the **full redirect URL** from the browser's address bar and paste it into the waiting terminal prompt.
-
-Notes:
-- After changing the model, runtime, or `codexPlugins`, **existing chat threads keep their old session config** — send `/new` in the Telegram chat to start a session that picks up the changes.
-- Subscriptions are personal-use products with their own usage windows: fine for your own ops automation (this bot, the crons); use API billing for anything genuinely public-facing.
-- API-key-only operation: set `agents.defaults.model.primary` back to `anthropic/claude-sonnet-4-6` — no login step, metered billing.
-- The `claude-cli/*` provider (Claude Pro/Max subscription via Claude Code) also exists but the CLI is not in this image; it would need a Dockerfile addition.
+OpenClaw reports returned provider usage; the Moonshot billing dashboard remains authoritative. OpenClaw's concurrency limits contain bursts but are **not a dollar spending cap**. Start with limited/prepaid provider credit or provider-side alerts, review daily for the first week, and rotate/disable the key if cost departs from expectation.
 
 ## Architecture
 
 ```
 docker-compose.yml
   ├── suzaku-bot (read-only group bot)
-  │     ├── OpenClaw (Telegram bot framework)
-  │     │     ├── Codex runtime (gpt-5.5): native MCP registration in config.toml (entrypoint.sh)
-  │     │     └── Anthropic fallback: mcporter bridge
+  │     ├── OpenClaw 2026.7.1 + official Moonshot provider
+  │     │     └── Kimi K3 → typed mcp.servers.suzaku registration
   │     │           └── Suzaku MCP server --read-only (stdio subprocess)
-  │     │                 └── CLI subprocess (per tool call)
+  │     │                 └── restricted CLI subprocess (per tool call)
+  │     ├── public main agent: MCP reads + workspace read; no shell/writes
+  │     ├── isolated heartbeat agent: deployment_heartbeat + checkpoint/message only
   │     └── Security layers:
-  │           tmpfs (/tmp only)
+  │           read-only root filesystem; writable state/audit volumes and /tmp tmpfs
   │           cap_drop: ALL, no-new-privileges
-  │           pids_limit: 256, mem_limit: 2g
-  │           restart: unless-stopped
-  ├── suzaku-propose-bot (DM-only, compose profile "propose")
-        ├── OpenClaw → mcporter → Suzaku MCP server --propose-only
-        │     └── delegate key + Safe API key as file secrets (/run/secrets/…)
-        └── Same security layers, separate audit volume
-  └── suzaku-cache-bot (group, compose profile "cache")
-        ├── OpenClaw → mcporter → Suzaku MCP server --public-write
-        │     └── cache EOA key as file secret (/run/secrets/cache_pk)
-        └── Reads + exactly middleware_cache_stakes, separate audit volume
+  │           pids_limit: 256, mem_limit: 2g, log rotation, healthcheck
+  │           restart: unless-stopped; host SSRF firewall
+  └── dormant source-only profiles: propose/cache (not deployed or credentialed)
 ```
 
-The default MCP server runs in `--read-only` mode (no write tools registered). The optional propose and cache bots use separate containers, separate Telegram bot tokens, separate SOUL files, separate MCP profiles, and separate audit volumes. CLI subprocesses inherit only a restricted environment allowlist — `ANTHROPIC_API_KEY` and Telegram tokens do NOT propagate to CLI subprocesses.
+The default MCP server runs in `--read-only` mode (no write tools registered). Kimi calls it directly through OpenClaw; the monitor does not receive a shell or an mcporter bridge. CLI subprocesses inherit only a restricted environment allowlist—model and Telegram credentials do not propagate to them.
 
 ## Configuration Reference
 
@@ -155,14 +101,16 @@ The default MCP server runs in `--read-only` mode (no write tools registered). T
 
 | Field | Value | Purpose |
 |---|---|---|
-| `agents.defaults.model.primary` | `openai/gpt-5.5` | Codex-subscription model (see Model auth above) |
-| `agents.defaults.model.fallbacks` | `["anthropic/claude-sonnet-4-6"]` | Automatic fallback via `ANTHROPIC_API_KEY` when the primary is unavailable/rate-limited |
-| `plugins.entries.codex` | enabled | Codex app-server harness — required for `openai/*` agent turns on subscription auth |
+| `agents.defaults.model.primary` | `moonshot/kimi-k3` | Active production model via `MOONSHOT_API_KEY` |
+| `agents.defaults.model.fallbacks` | removed by default renderer | Added only when the explicit fallback flag and Anthropic key are both present |
+| `plugins.entries.moonshot` | enabled | Official provider plugin, pinned with the OpenClaw host |
+| `mcp.servers.suzaku` | `--read-only` | Direct typed MCP registration; no shell bridge |
+| `agents.list[main].tools` | MCP reads + workspace read | Public turns cannot execute shell/process or write files |
+| `agents.list[heartbeat].tools` | heartbeat + read/write/message | Isolated scheduler can update only its checkpoint and send output |
 | `channels.telegram.dmPolicy` | `allowlist` | Only allowlisted users can DM the bot |
 | `channels.telegram.allowFrom` | `["tg:<user_id>"]` | Telegram user IDs allowed to DM |
 | `channels.telegram.contextVisibility` | `allowlist` | Quoted/thread context from non-allowlisted senders never reaches the model (prompt-injection surface reduction; requires OpenClaw ≥ 2026.4.5) |
 | `cron.enabled` | `true` | Built-in scheduler — enables registering epoch-alert jobs (see below) |
-| `skills.entries.mcporter` | enabled | MCP tools via mcporter CLI bridge |
 
 ### Access control
 
@@ -173,6 +121,14 @@ The default MCP server runs in `--read-only` mode (no write tools registered). T
 ```
 
 **Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. Anyone in that group can ask — access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to. For the cache bot, group membership must be admin-controlled because group membership is the caller gate.
+
+Slash commands and directives (including `/model` and `/new`) are restricted to
+`TELEGRAM_ADMIN_USER_ID`. Group members can ask normal @mentioned monitoring
+questions but cannot change the session model, restart the gateway, or mutate
+configuration. OpenClaw 2026.7.1 does not yet support the newer explicit
+`modelPolicy.allow` setting, so administrator discipline—not a nonexistent config
+key—governs manual model overrides; the committed default and fallback remain Kimi
+K3 and Sonnet 4.6.
 
 ### Container hardening
 
@@ -188,16 +144,28 @@ The default MCP server runs in `--read-only` mode (no write tools registered). T
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Claude API key for the bot |
+| `MOONSHOT_API_KEY` | Yes | Kimi K3 API key for the active monitor |
+| `SUZAKU_ENABLE_ANTHROPIC_FALLBACK` | No | Defaults to `false`; explicit operator switch for the separately billed fallback |
+| `ANTHROPIC_API_KEY` | Only with fallback | Do not install while fallback is disabled |
 | `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
 | `TELEGRAM_ADMIN_USER_ID` | Yes | Your Telegram user ID for DM allowlist |
 | `TELEGRAM_GROUP_ID` | Yes | Telegram group ID (e.g. `-100123456789`) — the one group the bot responds in |
+| `TELEGRAM_TOPIC_ID` | No | Forum topic for scheduled posts; empty means General |
+| `OPENCLAW_GATEWAY_TOKEN` | Yes | Internal gateway credential; generate randomly |
+| `ETHERSCAN_API_KEY` | No | Paid Etherscan V2 acceleration for Avalanche event scans; leave empty for public RPC. Lite is currently $49/month minimum |
+| `SNOWSCAN_API_KEY` | No | Deprecated compatibility alias; do not set alongside `ETHERSCAN_API_KEY` |
+| `SUZAKU_MONITOR_CONFIG` | No | Defaults to `./openclaw.json` (Kimi); Codex is explicit opt-in |
+| `SUZAKU_BOT_IMAGE` | No | Immutable/local image tag selected by Compose |
 
 ### Using a different network
 
 Users can specify `network: "fuji"` in their queries — the MCP tools accept a network parameter. The default is mainnet.
 
 ## Propose Bot (Safe rewards proposals)
+
+> **Deferred:** this profile is retained as source/history only and is not approved
+> for the Kimi monitor release. Do not start it or install its credentials. Its
+> model integration, mcporter boundary, and permissions move to a follow-up PR.
 
 A second, **DM-only** bot from the same image that turns "prepare 10450 ALOT as rewards for epoch 46" into a **Safe proposal** — an off-chain entry in the Safe transaction queue that owners review (decoded calldata) and sign in the Safe UI. The bot holds a Safe **delegate** key: it can propose, it can never sign or execute. The public group bot above is unchanged and stays keyless.
 
@@ -277,6 +245,10 @@ If the delegate key is compromised: remove the delegate (`scripts/add-safe-deleg
 
 ## Cache Bot (public stake-cache writes)
 
+> **Deferred:** this profile is retained as source/history only and is not approved
+> for the Kimi monitor release. Do not start it or install its credentials. Its
+> model integration, mcporter boundary, and permissions move to a follow-up PR.
+
 A third, **group** bot from the same image that can execute exactly one write tool: `middleware_cache_stakes`. It is separate from the read-only monitor. It holds a fresh, role-less EOA funded with a deliberately small amount of C-Chain AVAX, and the MCP profile exposes all reads plus only the public cache tool.
 
 ```
@@ -333,40 +305,34 @@ EOF
 
 ## Upgrading OpenClaw
 
-The Dockerfile pins the OpenClaw image by version tag **and** digest (`2026.6.5`). Never revert to `:latest` — 2026 releases shipped several breaking config changes and the pin is also a security floor (versions before 2026.4.22 are vulnerable to the "Claw Chain" sandbox-escape advisories; 2026.6.5 includes the May/June advisory batch).
+The Dockerfile pins the OpenClaw image by version tag **and** multi-architecture digest (`2026.7.1`) and pins `@openclaw/moonshot-provider` to the matching release. Never use `:latest` and never bump only one side of that pair.
 
 Upgrade procedure:
 
 1. Read the release notes between the pinned and the target version (`github.com/openclaw/openclaw/releases`).
-2. Bump the tag + digest in the Dockerfile and rebuild **locally first** (`docker compose up --build`), not on the production VPS.
-3. Run `docker compose exec suzaku-bot node openclaw.mjs doctor` — it flags deprecated/unrecognized config keys (unrecognized keys have blocked gateway startup in past releases).
-4. Verify group access control still holds: send a message in the group **without** @-mentioning the bot from a non-admin account and confirm it does not respond (a past release had a bug where `requireMention` silently reverted on restart).
+2. Bump the host tag+digest and the Moonshot plugin version together. Build and validate locally; do not discover compatibility on the production VM.
+3. Run `docker compose exec suzaku-bot node openclaw.mjs config validate` and `docker compose exec suzaku-bot node openclaw.mjs doctor`.
+4. Repeat the full Telegram acceptance gate in `AZURE-DEPLOY.md`, including a real output-guard transformation and a direct MCP answer.
+5. Register the declaration again and verify `cron list`; then review 24-hour usage before considering the upgrade complete.
 
 ## Scheduled Epoch Alerts (cron)
 
-`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs are registered at runtime and persist in the `openclaw-state` volume — they survive rebuilds and recreates; re-register only if that volume is deleted or the OpenClaw schema migrates. **Verify with `cron list` after any upgrade or recreate** — an empty audit log for days means the crons are silently gone. The canonical recipe is the two `deployment_heartbeat` crons from `packages/mcp/docs/heartbeat-design.md` — substitute the contract addresses pinned in `SOUL.md`. Syntax below is for OpenClaw ≥ 2026.6.x (schedule and message are positional; there is no `--schedule`/`--prompt`; `--timeout-seconds` must exceed the heartbeat's runtime — the 30 s default kills the job):
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs persist in the `openclaw-state` volume across container rebuilds. The committed registration script uses a declaration key, so it is safe to repeat after an image/config upgrade and updates the same job rather than creating duplicates.
+
+The production design deliberately registers **one** four-hourly Kimi turn, not separate alert and digest turns. It always calls deterministic alert mode; only after detecting a new epoch does that same turn call digest mode. The isolated `heartbeat` agent sees only `deployment_heartbeat`, its workspace checkpoint, and Telegram send. The public chat agent cannot write that checkpoint.
 
 ```bash
-# 1. Alerts: post only when something needs attention
-docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "10 */4 * * *" \
-  "Call deployment_heartbeat with mode=alerts, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. If humanLines is empty, reply with exactly: OK. Do not post anything to any chat. If humanLines is NOT empty, send humanLines verbatim as one monospace block message to Telegram chat $TELEGRAM_GROUP_ID, then reply with exactly: posted." \
-  --name heartbeat-alerts --session isolated --no-deliver --timeout-seconds 600'
-
-# 2. Digest: post once per epoch rollover
-docker compose exec suzaku-bot sh -c 'node openclaw.mjs cron create "25 */4 * * *" \
-  "Call deployment_heartbeat with mode=digest, middlewareAddress=<L1MIDDLEWARE>, rewardsAddress=<REWARDS>, lstWrapperAddress=<LSTWRAPPER>, network=mainnet. Read memory/heartbeat-digest-state.json if it exists; if the returned epoch equals the epoch recorded there, reply with exactly: OK. Do not post anything. Otherwise send humanLines verbatim as one monospace block message to Telegram chat $TELEGRAM_GROUP_ID, update memory/heartbeat-digest-state.json with the new epoch, then reply with exactly: posted." \
-  --name heartbeat-digest --session isolated --no-deliver --timeout-seconds 600'
+docker compose exec suzaku-bot register-heartbeat-cron.sh
+docker compose exec suzaku-bot node openclaw.mjs cron list
 ```
 
-`$TELEGRAM_GROUP_ID` expands inside the container, so you don't need the raw id on your host shell.
+The script pins the middleware, rewards, wrapper, **and UptimeTracker** addresses from `SOUL.md`; omitting the UptimeTracker would make uptime status incomplete. Set `TELEGRAM_TOPIC_ID` in `.env` before starting the container when scheduled messages belong in a forum topic. Never hand-edit OpenClaw's `devices/paired.json` to make registration work: authorize the CLI from an already-approved OpenClaw device, then rerun the script. If supported approval is not available, stop and report the pairing error.
 
-**Forum groups (topics):** a Telegram message sent with only the chat id lands in the **General** topic. If the team talks to the bot in a dedicated topic, extend the prompt's send instruction with `in message thread <TOPIC_THREAD_ID> (always pass messageThreadId <TOPIC_THREAD_ID>)`. Find the id from a message link inside the topic (`t.me/c/<chat>/<topicId>/<msgId>`) or from the gateway state: `grep -rhoE '"threadId": [0-9]+' ~/.openclaw/state ~/.openclaw/agents | sort -u` (General is `1`). Also note: one-shot `--at` jobs require `--message "<text>"` — only positional-schedule jobs accept the message as a positional argument.
+**Forum groups (topics):** a Telegram message sent with only the chat id lands in **General**. Find the topic id from a message link (`t.me/c/<chat>/<topicId>/<msgId>`) and set `TELEGRAM_TOPIC_ID=<topicId>`; the registration script then requires `messageThreadId` on every scheduled send.
 
 **Use `--no-deliver`, and have the agent send the message itself** (as the prompts above do). The default delivery mode is announce, which fallback-forwards the agent's final text **and any job-failure notice** to a chat — that double-posts every digest (content + a "Posted digest…" meta line) and spams the group with "⚠️ Cron job failed" on transient errors. With `--no-deliver` the only group message is the one the agent deliberately sends; check job health with `cron list` (Last column) or `cron runs <id>` instead.
 
-If the cache bot is deployed, include `cacheKeyAddress=<SUZAKU_CACHE_KEY_ADDRESS>` or set `SUZAKU_CACHE_KEY_ADDRESS` in the container env so `deployment_heartbeat` alerts when the C-Chain gas balance drops below `SUZAKU_CACHE_KEY_MIN_AVAX`.
-
-Alerts stay quiet unless a check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, cache-key C-Chain balance low, …); the digest posts one claimability/changes report per 3.5-day epoch — missing an epoch boundary is the most common operational mistake this catches.
+Alerts stay quiet unless a deterministic check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, and similar checks). The digest posts once per 3.5-day epoch. Inspect `cron list` and recent `cron runs` after deployment and after every upgrade; scheduler success is an acceptance gate, not an assumption.
 
 ## Example Queries
 
@@ -387,17 +353,18 @@ Once the bot is running, try these in a DM:
 | Bot responds in wrong group | Verify `TELEGRAM_GROUP_ID` in `.env` matches your group; rebuild with `docker compose up --build` |
 | Bot answers non-mentioned group messages | Known upstream bug (config persistence on restart) — restart the container and re-verify; see Upgrading OpenClaw step 4 |
 | Container crash-loops | Check logs (`docker compose logs --tail 200`); examine recent image/config changes |
-| `docker inspect` shows the group bot's API keys | Expected — those are env vars, visible to host root; this is why VPS isolation matters. The propose bot's delegate key and Safe API key are file secrets (`/run/secrets/...`) and do **not** appear in `docker inspect` |
+| `docker inspect` shows the group bot's API keys | Expected for Compose env vars: they are visible to host root. Use a dedicated VM, dedicated least-privilege keys, `.env` mode 600, and never paste inspect/config output into tickets. The propose bot's delegate/Safe keys use file secrets and do not appear there |
 | Propose bot: `safeApiKeyWarning` in `health_check`, or "Safe queue check unavailable (HTTP 401)" | Set the Safe API key via the `SAFE_API_KEY_FILE` secret; both the `health_check` warning and the mainnet pending-queue check accept the file form |
 | Cache bot refuses `middleware_cache_stakes` with denylist/access-control text | Expected before enablement: `SUZAKU_CACHE_DENY_TOOLS` defaults to `middleware_cache_stakes`. Set it to an empty value only after the dark launch/staging checks pass |
 | Cache bot says middleware or network is not pinned | Set `SUZAKU_MIDDLEWARE_ADDRESS` and, if not mainnet, `SUZAKU_MIDDLEWARE_NETWORK`; the tool intentionally rejects arbitrary addresses, networks, and `rpcUrl` |
 | Cache bot tx fails for insufficient funds | Expected during the unfunded dark launch. After validation, fund the cache key with a small C-Chain AVAX balance and monitor it with `deployment_heartbeat` |
 | Slow responses | Composite tools (dashboard, overview) make many RPC calls — first query is slower. Also ensure `SOUL.md` pins your deployment's contract addresses (see below) so the bot doesn't rediscover them every conversation |
-| Bot says it has no Suzaku tools / "not exposed in this session" | Thread session config is computed once — send `/new` in the chat after any model/runtime/plugin change (a gateway restart alone does not refresh existing threads) |
-| CLI (`cron create`, `devices remove`, …) fails with "pairing required: device is asking for more scopes than currently approved" | On OpenClaw ≥ 2026.6.x the exec'd CLI TOFU-pairs on loopback with `operator.read` only; write commands need a scope upgrade, and **self-approval from the same host is racy by design** (every CLI connect replaces the pending requestId, so `devices approve <id>` reports "unknown requestId"). Sanctioned fix: approve from an already-authorized device. Same-host fix: `docker compose stop suzaku-bot`, patch `devices/paired.json` in the `openclaw-state` volume (set `scopes`, `approvedScopes`, and `tokens.*.scopes` to the requested set, empty `pending.json`), then `docker compose start suzaku-bot` |
-| Audit log empty at `/data/audit` despite bot activity | Two MCP instances write audit separately: the mcporter path uses `/data/audit`; the Codex path uses the `SUZAKU_MCP_AUDIT_DIR` set in `entrypoint.sh`'s config.toml block. Also check the volume mountpoint is owned by `node` (a root-owned dir silently swallows best-effort audit writes) |
-| Codex login: browser shows `ERR_CONNECTION_REFUSED` on `localhost:1455` | Expected — the callback listener is inside the container. Paste the full redirect URL from the address bar into the waiting terminal prompt |
-| `models auth login requires an interactive TTY` | Run the login from a real terminal, not piped/scripted |
-| High API costs | Set a billing cap at console.anthropic.com; consider switching crons to `claude-haiku-4-5`, or the subscription route (see Model auth) for interactive use |
+| Bot says it has no Suzaku tools / "not exposed in this session" | Confirm the image/config validation passed and the log reports the `suzaku` MCP server. Send `/new` after any model/runtime/plugin change because existing thread sessions retain their prior tool surface |
+| `cron create` fails with a pairing/scope error | Approve the request from an already-authorized OpenClaw device and rerun `register-heartbeat-cron.sh`. Do **not** patch `devices/paired.json`; stop and collect the exact error if supported approval is unavailable |
+| Audit log empty at `/data/audit` despite bot activity | Confirm direct `mcp.servers.suzaku` started, the `audit-data` volume is mounted, and `/data/audit` is writable by `node`; audit writes are best-effort, so a wrong volume owner can hide the failure |
+| Container says the Moonshot provider is missing | Rebuild the pinned bot image; the 2026.7.1 provider is seeded into the persistent state volume on every start. Do not install an unpinned plugin on the VM |
+| Event scan says Etherscan free access is unsupported for Avalanche | Leave both explorer variables empty and use public RPC, or upgrade the key to an Avalanche-enabled Etherscan Lite-or-higher plan. A valid free key must not be enabled because it makes the optional fast path fail closed |
+| Old-epoch diagnosis is very slow on public RPC | This is expected for a wide forensic log scan because the public endpoint limits log ranges. It does not block the one-epoch heartbeat. Use a dedicated RPC or paid Etherscan V2 for recurring historical forensics; do not reduce the scan range and call the result complete |
+| High API costs | Run `gateway usage-cost --days 7 --json`, compare with Moonshot billing, inspect unexpected cron/conversation volume, and disable/rotate the Moonshot key if needed. Concurrency limits are not a spend cap |
 
 **SOUL.md pins the monitored deployment.** The committed `SOUL.md` carries the Dexalot mainnet contract addresses in a "Known deployment" section so the bot answers without a discovery round-trip. Deploying for a different L1? Update those addresses (and the persona text) accordingly.
