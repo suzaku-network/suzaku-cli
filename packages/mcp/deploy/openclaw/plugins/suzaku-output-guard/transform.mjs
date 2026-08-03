@@ -1,7 +1,7 @@
 // Kept behaviorally in sync with sanitizeOutput() in src/cli-runner.ts via
 // eval/fixtures/redaction-parity.json — update both layers and the fixture together.
 const KNOWN_INTERNAL_NAME =
-  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|ETHERSCAN_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
 
 // Uppercase-only so ordinary prose or camelCase symbols such as "MyPassword"
 // are never rewritten.
@@ -9,7 +9,7 @@ const GENERIC_SECRET_NAME =
   /\b[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?\b/g;
 
 const INTERNAL_PATH =
-  /(?:^|(?<=[\s("'`]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
+  /(?:^|(?<=[\s("'`=]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
 
 // Telegram rejects nested entities inside <pre>/<code>, so bold conversion must
 // never touch monospace regions. Fenced ``` blocks are treated the same way.

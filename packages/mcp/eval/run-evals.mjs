@@ -451,7 +451,8 @@ function makeMcpConnection(dedupMs) {
     SUZAKU_MCP_RATE_WINDOW_MS: '60000',
     SUZAKU_MCP_DEDUP_WINDOW_MS: String(dedupMs),
   };
-  if (process.env.SNOWSCAN_API_KEY) env.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
+  if (process.env.ETHERSCAN_API_KEY) env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
+  else if (process.env.SNOWSCAN_API_KEY) env.SNOWSCAN_API_KEY = process.env.SNOWSCAN_API_KEY;
   const launch = bridgedStdioCommand(process.execPath, [
     new URL('../dist/server.js', here).pathname,
     '--read-only',

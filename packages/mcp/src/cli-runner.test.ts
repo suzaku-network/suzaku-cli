@@ -324,7 +324,7 @@ describe('rate limiter', () => {
 });
 
 describe('buildChildEnv', () => {
-  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_PK_FILE', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'SAFE_API_KEY_FILE', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK'];
+  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_PK_FILE', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'SAFE_API_KEY_FILE', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK', 'ETHERSCAN_API_KEY', 'SNOWSCAN_API_KEY'];
   const tmpFiles: string[] = [];
   beforeEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
   afterEach(() => {
@@ -338,11 +338,31 @@ describe('buildChildEnv', () => {
     return p;
   };
 
-  it('forwards only the 8 base vars for a read call', () => {
+  it('forwards only the restricted base vars for a read call', () => {
     const env = buildChildEnv({});
     expect(env.PATH).toBe(process.env.PATH);
     expect('PK' in env).toBe(false);
     expect('SAFE_API_KEY' in env).toBe(false);
+  });
+
+  it('forwards the explorer credential only to explicitly marked event scans', () => {
+    process.env.ETHERSCAN_API_KEY = 'explorer-key';
+    expect('ETHERSCAN_API_KEY' in buildChildEnv({})).toBe(false);
+    expect(buildChildEnv({ eventScan: true }).ETHERSCAN_API_KEY).toBe('explorer-key');
+  });
+
+  it('accepts the legacy SnowScan variable but normalizes it for the child', () => {
+    process.env.ETHERSCAN_API_KEY = '';
+    process.env.SNOWSCAN_API_KEY = 'legacy-key';
+    const env = buildChildEnv({ eventScan: true });
+    expect(env.ETHERSCAN_API_KEY).toBe('legacy-key');
+    expect('SNOWSCAN_API_KEY' in env).toBe(false);
+  });
+
+  it('prefers a non-empty canonical explorer credential over the legacy alias', () => {
+    process.env.ETHERSCAN_API_KEY = 'current-key';
+    process.env.SNOWSCAN_API_KEY = 'legacy-key';
+    expect(buildChildEnv({ eventScan: true }).ETHERSCAN_API_KEY).toBe('current-key');
   });
 
   it('forwards SAFE_API_KEY only on a Safe-wired write call', () => {

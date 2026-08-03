@@ -322,8 +322,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
       if (fromBlock) args.push('--from-block', fromBlock);
       if (toBlock) args.push('--to-block', toBlock);
       if (events) args.push('--events', events);
-      if (process.env.SNOWSCAN_API_KEY) args.push('--snowscan-api-key', process.env.SNOWSCAN_API_KEY);
-      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
+      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000, eventScan: true }));
     },
   );
 
@@ -331,7 +330,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
     'rewards_epoch_diagnosis',
     'Separate contract set-amount evidence from the bot policy window for an epoch, report whether it is ' +
     'already funded, whether another successful call would accumulate, and what action is safe. Also ' +
-    'diagnoses incomplete distribution and set-amount event history. Use its computed setAmountReadiness ' +
+    'diagnoses incomplete distribution and set-amount event history. Historical public-RPC scans may take several minutes. Use its computed setAmountReadiness ' +
     'fields and bot-policy deadline; do not recompute the lifecycle from epoch numbers.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
@@ -374,9 +373,8 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean, prop
       let setAmountEventsResult: CliResult | null = null;
       try {
         setAmountEventsResult = await runCli(
-          ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress,
-            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])],
-          opts,
+          ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress],
+          { ...opts, timeout: 300_000, eventScan: true },
         );
         if (!setAmountEventsResult.success) {
           _warnings.push('set-amount event history unavailable');
@@ -794,9 +792,8 @@ function registerProposeTools(server: McpServer) {
       // Best-effort: event history catches edge states epochRewards alone can miss.
       let setAmountEventCount: number | null = null;
       const eventsResult = await runCli(
-        ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress,
-          ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])],
-        { ...opts, timeout: 180_000 },
+        ['rewards', 'get-amount-set-events', rewardsAddress, epoch, '--middleware', middlewareAddress],
+        { ...opts, timeout: 180_000, eventScan: true },
       );
       if (eventsResult.success) {
         const ev = extractData(eventsResult).rewardsAmountSetEvents as Record<string, unknown> | undefined;

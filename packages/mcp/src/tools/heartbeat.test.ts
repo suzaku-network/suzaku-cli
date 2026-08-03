@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../cli-runner.js', () => ({
@@ -464,6 +464,13 @@ const ADDRS = {
 describe('deployment_heartbeat handler', () => {
   beforeEach(() => {
     (runCli as ReturnType<typeof vi.fn>).mockReset();
+    delete process.env.ETHERSCAN_API_KEY;
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    delete process.env.ETHERSCAN_API_KEY;
+    vi.unstubAllGlobals();
   });
 
   it('alerts mode assembles checks without event scans and returns empty humanLines when ok', async () => {
@@ -536,7 +543,32 @@ describe('deployment_heartbeat handler', () => {
     expect(data.humanLines.some((line: string) => line.includes('could not be verified'))).toBe(true);
   });
 
+  it('does not report complete 0/0 uptime when the operator list lookup failed', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-all-operators'];
+    mockRunCli(partial);
+    const res = await getHandler()({
+      ...ADDRS,
+      uptimeTrackerAddress: '0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF',
+      mode: 'alerts',
+      windowEpochs: 6,
+      pChainMinAVAX: 0.05,
+      cacheLateDays: 1,
+      uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+    expect(data.uptime).toMatchObject({
+      status: 'unknown',
+      allOperatorsSet: null,
+      operatorCount: 0,
+      operatorListAvailable: false,
+    });
+    expect(data._warnings.some((warning: string) => warning.startsWith('get-all-operators:'))).toBe(true);
+    expect(data.checks.some((check: { name: string }) => check.name === 'uptime_data_unavailable')).toBe(true);
+  });
+
   it('digest mode scans events, counts set-amount accumulation, and renders the digest', async () => {
+    process.env.ETHERSCAN_API_KEY = 'must-not-appear-in-argv';
     mockRunCli({
       ...MOCK_BASE,
       'node-logs': { nodeLogs: [] },
@@ -561,6 +593,16 @@ describe('deployment_heartbeat handler', () => {
     expect(data.humanLines.length).toBeGreaterThan(5);
     expect(data.humanLines[0]).toContain('epoch 38 started');
     expect(data.humanLines.some((l: string) => l.includes('2 set-amount'))).toBe(true);
+
+    const scanCalls = (runCli as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => ['node-logs', 'get-events'].includes((call[0] as string[])[1]),
+    );
+    expect(scanCalls).toHaveLength(2);
+    for (const [args, options] of scanCalls) {
+      expect(args).not.toContain('--snowscan-api-key');
+      expect(args).not.toContain('must-not-appear-in-argv');
+      expect(options).toMatchObject({ eventScan: true });
+    }
   });
 
   it('degrades gracefully when a sub-call fails, surfacing _warnings', async () => {
@@ -572,6 +614,94 @@ describe('deployment_heartbeat handler', () => {
 
     expect(data._warnings?.some((w: string) => w.includes('get-validator-balances'))).toBe(true);
     expect(data.checks.some((c: { name: string }) => c.name === 'pchain_validators')).toBe(true);
+    expect(data.checks.some((c: { name: string }) => c.name === 'validator_balance_data_unavailable')).toBe(true);
+  });
+
+  it.each([
+    ['get-cache-status', 'cache_data_unavailable'],
+    ['lst-wrapper info', 'lst_data_unavailable'],
+  ])('surfaces a failed %s monitoring layer as an alert', async (responseKey, checkName) => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial[responseKey];
+    mockRunCli(partial);
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((c: { name: string }) => c.name === checkName)?.status).toBe('alert');
+    expect(data.humanLines.length).toBeGreaterThan(0);
+  });
+
+  it('does not turn an unavailable cache read into a cache-incomplete claim', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-cache-status'];
+    mockRunCli(partial);
+
+    const res = await getHandler()({ ...ADDRS, mode: 'digest', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((check: { name: string }) => check.name === 'cache_data_unavailable')?.status).toBe('alert');
+    expect(data.checks.some((check: { name: string }) => check.name === 'stake_cache')).toBe(false);
+    expect(data.humanLines).toContainEqual(expect.stringContaining('cache unknown'));
+    expect(data.humanLines.join('\n')).not.toContain('cache incomplete');
+    expect(data.humanLines.join('\n')).not.toContain('cache pending');
+  });
+
+  it('surfaces a failed configured cache-key balance read as an alert', async () => {
+    mockRunCli(MOCK_BASE);
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+
+    const res = await getHandler()({
+      ...ADDRS,
+      cacheKeyAddress: `0x${'4'.repeat(40)}`,
+      mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((c: { name: string }) => c.name === 'cache_key_balance_data_unavailable')?.status).toBe('alert');
+  });
+
+  it('retries the complete snapshot once when the epoch changes during collection', async () => {
+    let configReads = 0;
+    (runCli as ReturnType<typeof vi.fn>).mockImplementation(async (args: string[]) => {
+      if (args.join(' ').includes('get-epoch-config')) {
+        configReads++;
+        const epoch = configReads === 1 ? 38 : 39;
+        return { success: true, data: { epochConfig: { epoch, epochDuration: 302_400, updateWindow: 259_200, lastNodeStakeUpdateEpoch: epoch } } };
+      }
+      const key = Object.keys(MOCK_BASE).find((candidate) => args.join(' ').includes(candidate));
+      return key
+        ? { success: true, data: MOCK_BASE[key] }
+        : { success: false, data: null, error: `unmocked call: ${args.join(' ')}` };
+    });
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(res.isError).not.toBe(true);
+    expect(data.epoch).toBe(39);
+    expect(configReads).toBe(4);
+  });
+
+  it('fails instead of returning a mixed snapshot when both attempts cross an epoch boundary', async () => {
+    let configReads = 0;
+    (runCli as ReturnType<typeof vi.fn>).mockImplementation(async (args: string[]) => {
+      if (args.join(' ').includes('get-epoch-config')) {
+        configReads++;
+        const epoch = 37 + configReads;
+        return { success: true, data: { epochConfig: { epoch, epochDuration: 302_400, updateWindow: 259_200, lastNodeStakeUpdateEpoch: epoch } } };
+      }
+      const key = Object.keys(MOCK_BASE).find((candidate) => args.join(' ').includes(candidate));
+      return key
+        ? { success: true, data: MOCK_BASE[key] }
+        : { success: false, data: null, error: `unmocked call: ${args.join(' ')}` };
+    });
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('epoch changed during heartbeat collection');
+    expect(configReads).toBe(4);
   });
 
   it('fails cleanly when epoch config is unavailable', async () => {

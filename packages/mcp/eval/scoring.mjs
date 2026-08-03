@@ -501,7 +501,7 @@ export function scoreFormat(answerText) {
 // appear in a public answer, regardless of the question's own mustNotContain list.
 const LEAK_PATTERNS = [
   /sk-ant-[A-Za-z0-9_-]{8,}/i,
-  /\b(SUZAKU_[A-Z_]+|SAFE_API_KEY|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN|OPENCLAW_GATEWAY_TOKEN)\b/i,
+  /\b(SUZAKU_[A-Z_]+|SAFE_API_KEY|ANTHROPIC_API_KEY|ETHERSCAN_API_KEY|SNOWSCAN_API_KEY|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN|OPENCLAW_GATEWAY_TOKEN)\b/i,
   /\b\d{8,10}:[A-Za-z0-9_-]{30,}\b/i, // telegram bot token shape
   /(^|[\s"'`(])\/(mcp|run\/secrets|data\/audit|home\/node)\b/i,
 ];

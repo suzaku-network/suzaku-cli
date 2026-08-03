@@ -12,6 +12,11 @@
       "mustNotContain": ["snowscan_api_key", "sig_agg_url"]
     },
     {
+      "name": "current explorer credential name",
+      "input": "ETHERSCAN_API_KEY unavailable during the event scan",
+      "mustNotContain": ["ETHERSCAN_API_KEY"]
+    },
+    {
       "name": "GNUPGHOME is a known internal name",
       "input": "GNUPGHOME points at the keystore directory",
       "mustNotContain": ["GNUPGHOME"]
@@ -35,6 +40,11 @@
       "name": "internal paths",
       "input": "wrote to /data/audit/mcp-audit.log and /run/secrets/delegate_pk and /home/node/.openclaw",
       "mustNotContain": ["/data/audit", "/run/secrets", "/home/node"]
+    },
+    {
+      "name": "internal secret path after assignment",
+      "input": "SUZAKU_PK_FILE=/run/secrets/delegate_pk",
+      "mustNotContain": ["SUZAKU_PK_FILE", "/run/secrets"]
     },
     {
       "name": "public identifiers are preserved",

@@ -49,6 +49,7 @@ export interface HeartbeatTimingSummary {
 export interface UptimeSummary {
   epoch: number;
   trackerConfigured: boolean;
+  operatorListAvailable: boolean;
   status: 'complete' | 'missing' | 'unknown' | 'not_checked';
   allOperatorsSet: boolean | null;
   operatorCount: number;
@@ -158,6 +159,7 @@ export function summarizeUptime(
   operators: string[],
   byOperator: Record<string, boolean | null>,
   trackerConfigured: boolean,
+  operatorListAvailable = true,
 ): UptimeSummary {
   const snapshot = Object.fromEntries(operators.map((operator) => [operator, byOperator[operator] ?? null]));
   const reportedOperators = operators.filter((operator) => snapshot[operator] === true);
@@ -167,6 +169,12 @@ export function summarizeUptime(
   let allOperatorsSet: boolean | null;
   if (!trackerConfigured) {
     status = 'not_checked';
+    allOperatorsSet = null;
+  } else if (!operatorListAvailable) {
+    // An empty, successfully-fetched deployment really can be complete (0/0).
+    // A failed operator lookup cannot: without the population we do not know who
+    // should have reported uptime, so fail closed as unknown.
+    status = 'unknown';
     allOperatorsSet = null;
   } else if (missingOperators.length > 0) {
     status = 'missing';
@@ -181,6 +189,7 @@ export function summarizeUptime(
   return {
     epoch,
     trackerConfigured,
+    operatorListAvailable,
     status,
     allOperatorsSet,
     operatorCount: operators.length,
@@ -452,7 +461,7 @@ export function summarizeRewardsActivity(countsByType: Record<string, number>): 
 export interface AlertCheckInput {
   timing: EpochTiming;
   constants: RewardsConstants;
-  allClassesCached: boolean;
+  allClassesCached: boolean | null;
   claimability: ClaimabilityRow[];
   uptimeSetByOperator: Record<string, boolean | null>;
   lstPaused: boolean | null;
@@ -469,7 +478,7 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
   const windowDeadlineTs = timing.currentEpochStartTs + timing.updateWindow;
 
   // 1. Stake cache late in (or past) the update window
-  if (!input.allClassesCached) {
+  if (input.allClassesCached === false) {
     const secondsLeft = windowDeadlineTs - now;
     if (secondsLeft < 0) {
       checks.push({ name: 'stake_cache', status: 'alert', detail: `update window closed ${tsToUtc(windowDeadlineTs)}, cache incomplete`, human: `🔴 stake cache incomplete and update window closed ${tsToUtc(windowDeadlineTs)}` });
@@ -478,7 +487,7 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
     } else {
       checks.push({ name: 'stake_cache', status: 'ok', detail: 'cache incomplete, window has time left', human: 'stake cache pending (window open)' });
     }
-  } else {
+  } else if (input.allClassesCached === true) {
     checks.push({ name: 'stake_cache', status: 'ok', detail: 'all classes cached', human: 'stake cache ✅' });
   }
 
@@ -602,7 +611,7 @@ export function buildHumanLines(args: {
   timing: EpochTiming;
   timingSummary?: HeartbeatTimingSummary;
   uptime?: UptimeSummary;
-  cacheOk: boolean;
+  cacheOk: boolean | null;
   changedLines: string[];
   changedScanFailed?: boolean;
   validatorSummary: string | null;
@@ -627,7 +636,7 @@ export function buildHumanLines(args: {
   const lines: string[] = [
     `${headIcon} Suzaku heartbeat — epoch ${timing.currentEpoch} started ${tsToUtc(timing.currentEpochStartTs)}`,
     `   update window closes ${args.timingSummary?.updateWindowCloseUtc ?? tsToUtc(timing.currentEpochStartTs + timing.updateWindow)}` +
-      `${args.timingSummary ? ` (${args.timingSummary.updateWindowTimeRemaining})` : ''} · cache ${args.cacheOk ? '✅' : '⚠️ pending'}`,
+      `${args.timingSummary ? ` (${args.timingSummary.updateWindowTimeRemaining})` : ''} · cache ${args.cacheOk === true ? '✅' : args.cacheOk === false ? '⚠️ pending' : 'unknown'}`,
     '',
     `CHANGED since epoch ${timing.currentEpoch - 1} start`,
   ];
@@ -680,10 +689,10 @@ export function registerHeartbeatTools(server: McpServer) {
     },
     { readOnlyHint: true, idempotentHint: true },
     async ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, mode, windowEpochs, pChainMinAVAX, cacheLateDays, uptimeMissingEpochFraction, cacheKeyAddress: cacheKeyAddressParam, cacheKeyMinAVAX: cacheKeyMinAVAXParam, network, rpcUrl }) => {
+      const collectAttempt = async (epochRetry: number): Promise<ReturnType<typeof formatResult>> => {
       const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
-      const scanOpts: RunCliOptions = { ...opts, timeout: 180_000 };
+      const scanOpts: RunCliOptions = { ...opts, timeout: 180_000, eventScan: true };
       const _warnings: string[] = [];
-      const now = Math.floor(Date.now() / 1000);
 
       // Phase 0: epoch config (includes current epoch) — skipDedup so the whole run anchors on a fresh epoch
       const epochConfigResult = await runCli(['middleware', 'get-epoch-config', middlewareAddress], { ...opts, skipDedup: true });
@@ -717,7 +726,10 @@ export function registerHeartbeatTools(server: McpServer) {
           : epochStartResult);
       }
       const cacheStatus = extractData(cacheStatusResult, 'get-cache-status', _warnings).cacheStatus as { allClassesCached?: boolean } | undefined;
-      const operators = (extractData(operatorsResult, 'get-all-operators', _warnings).operators ?? []) as string[];
+      const cacheStatusAvailable = typeof cacheStatus?.allClassesCached === 'boolean';
+      const operatorsValue = extractData(operatorsResult, 'get-all-operators', _warnings).operators;
+      const operatorListAvailable = Array.isArray(operatorsValue);
+      const operators = operatorListAvailable ? operatorsValue as string[] : [];
       const epochStatusTable = extractData(epochStatusResult, 'get-epoch-status', _warnings).epochStatusTable as {
         constants: RewardsConstants;
         epochs: EpochStatusRow[];
@@ -725,6 +737,7 @@ export function registerHeartbeatTools(server: McpServer) {
       const lstInfo = lstInfoResult
         ? extractData(lstInfoResult, 'lst-wrapper-info', _warnings).lstWrapperInfo as { totalAssets?: string; totalSupply?: string; paused?: boolean; symbol?: string } | undefined
         : undefined;
+      const lstInfoAvailable = !lstWrapperAddress || Boolean(lstInfo);
 
       const timing: EpochTiming = {
         currentEpoch,
@@ -742,15 +755,14 @@ export function registerHeartbeatTools(server: McpServer) {
       const phase2 = await Promise.all([
         runCli(['middleware', 'get-validator-balances', middlewareAddress], opts),
         ...(isDigest ? [
-          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1)),
-            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])], scanOpts),
-          runCli(['rewards', 'get-events', rewardsAddress, '--middleware', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1)),
-            ...(process.env.SNOWSCAN_API_KEY ? ['--snowscan-api-key', process.env.SNOWSCAN_API_KEY] : [])], scanOpts),
+          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
+          runCli(['rewards', 'get-events', rewardsAddress, '--middleware', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
         ] : []),
       ]);
       const validatorBalancesData = extractData(phase2[0], 'get-validator-balances', _warnings).validatorBalances as {
         validators: Array<{ nodeID: string; validationID?: string; operator?: string; balanceNAvax: string; balanceAVAX: string; weight: string }>;
       } | undefined;
+      const validatorBalancesAvailable = Array.isArray(validatorBalancesData?.validators);
       const nodeLogs = isDigest
         ? (extractData(phase2[1], 'node-logs', _warnings).nodeLogs ?? []) as HeartbeatEvent[]
         : [];
@@ -790,12 +802,63 @@ export function registerHeartbeatTools(server: McpServer) {
         uptimeSetByOperator[op] = typeof u.isOperatorUptimeSet === 'boolean' ? u.isOperatorUptimeSet : null;
       });
 
+      // The cache signer balance is part of the monitored snapshot, so complete
+      // this final external read before validating that the epoch stayed stable.
+      const cacheKeyAddress = cacheKeyAddressParam ?? process.env.SUZAKU_CACHE_KEY_ADDRESS;
+      const cacheKeyMinAVAX = cacheKeyMinAVAXParam ?? Number(process.env.SUZAKU_CACHE_KEY_MIN_AVAX ?? 0.05);
+      let cacheKeyBalance: { address: string; balanceAVAX: string; minAVAX: number } | null = null;
+      let cacheKeyBalanceAvailable = !cacheKeyAddress;
+      if (cacheKeyAddress) {
+        try {
+          const balanceAVAX = await getCChainBalanceAVAX(cacheKeyAddress, network, rpcUrl);
+          if (balanceAVAX == null) {
+            _warnings.push('cache-key-balance: no balance data');
+          } else if (Number.isFinite(cacheKeyMinAVAX)) {
+            cacheKeyBalance = { address: cacheKeyAddress, balanceAVAX, minAVAX: cacheKeyMinAVAX };
+            cacheKeyBalanceAvailable = true;
+          } else {
+            _warnings.push('cache-key-balance: invalid minimum balance threshold');
+          }
+        } catch (err) {
+          _warnings.push(`cache-key-balance: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+
+      // A heartbeat can straddle an epoch boundary because it performs several
+      // independent reads. Retry the complete collection once rather than mixing
+      // old-epoch deadlines with new-epoch state.
+      const finalEpochResult = await runCli(
+        ['middleware', 'get-epoch-config', middlewareAddress],
+        { ...opts, skipDedup: true },
+      );
+      const finalEpochConfig = extractData(finalEpochResult, 'get-epoch-config-final', _warnings).epochConfig as {
+        epoch?: number;
+      } | undefined;
+      if (!finalEpochConfig || !Number.isInteger(finalEpochConfig.epoch)) {
+        return formatResult(finalEpochResult.success
+          ? { success: false, data: null, error: 'final get-epoch-config returned no usable epoch' }
+          : finalEpochResult);
+      }
+      if (finalEpochConfig.epoch !== currentEpoch) {
+        if (epochRetry === 0) return collectAttempt(1);
+        return formatResult({
+          success: false,
+          data: null,
+          error: `epoch changed during heartbeat collection (${currentEpoch} → ${finalEpochConfig.epoch}) twice; retry later`,
+        });
+      }
+
+      // All external reads are now complete. Use the completed-snapshot time for
+      // deadlines and remaining-time text instead of the request-start time.
+      const now = Math.floor(Date.now() / 1000);
+
       const timingSummary = summarizeHeartbeatTiming(timing, now);
       const uptime = summarizeUptime(
         Math.max(0, currentEpoch - 1),
         operators,
         uptimeSetByOperator,
         Boolean(uptimeTrackerAddress),
+        operatorListAvailable,
       );
 
       // ── Derivations (no I/O below this point) ──
@@ -816,21 +879,6 @@ export function registerHeartbeatTools(server: McpServer) {
       const changedLines = summarizeChangedEvents(nodeLogs);
 
       const validators = validatorBalancesData?.validators ?? [];
-      const cacheKeyAddress = cacheKeyAddressParam ?? process.env.SUZAKU_CACHE_KEY_ADDRESS;
-      const cacheKeyMinAVAX = cacheKeyMinAVAXParam ?? Number(process.env.SUZAKU_CACHE_KEY_MIN_AVAX ?? 0.05);
-      let cacheKeyBalance: { address: string; balanceAVAX: string; minAVAX: number } | null = null;
-      if (cacheKeyAddress) {
-        try {
-          const balanceAVAX = await getCChainBalanceAVAX(cacheKeyAddress, network, rpcUrl);
-          if (balanceAVAX == null) {
-            _warnings.push('cache-key-balance: no balance data');
-          } else if (Number.isFinite(cacheKeyMinAVAX)) {
-            cacheKeyBalance = { address: cacheKeyAddress, balanceAVAX, minAVAX: cacheKeyMinAVAX };
-          }
-        } catch (err) {
-          _warnings.push(`cache-key-balance: ${err instanceof Error ? err.message : 'failed'}`);
-        }
-      }
       const minBalance = validators.length > 0
         ? validators.reduce((min, v) => Number(v.balanceAVAX) < Number(min.balanceAVAX) ? v : min)
         : null;
@@ -848,18 +896,36 @@ export function registerHeartbeatTools(server: McpServer) {
       if (!epochStatusTable) {
         dataChecks.push({ name: 'rewards_data_unavailable', status: 'alert', detail: 'rewards get-epoch-status sub-call failed — claimability table empty', human: '🔴 rewards monitoring unavailable — epoch status reads failed (check CLI version / RPC)' });
       }
+      if (!cacheStatusAvailable) {
+        dataChecks.push({ name: 'cache_data_unavailable', status: 'alert', detail: 'middleware cache status read failed', human: '🔴 stake-cache monitoring unavailable — cache status could not be read' });
+      }
+      if (!operatorListAvailable) {
+        dataChecks.push({ name: 'operator_data_unavailable', status: 'alert', detail: 'middleware operator list read failed', human: '🔴 operator monitoring unavailable — operator list could not be read' });
+      }
+      if (!validatorBalancesAvailable) {
+        dataChecks.push({ name: 'validator_balance_data_unavailable', status: 'alert', detail: 'validator P-Chain balance read failed', human: '🔴 validator balance monitoring unavailable — P-Chain balances could not be read' });
+      }
+      if (!lstInfoAvailable) {
+        dataChecks.push({ name: 'lst_data_unavailable', status: 'alert', detail: 'configured LST wrapper read failed', human: '🔴 LST wrapper monitoring unavailable — wrapper state could not be read' });
+      }
+      if (!cacheKeyBalanceAvailable) {
+        dataChecks.push({ name: 'cache_key_balance_data_unavailable', status: 'alert', detail: 'configured cache-key balance read failed', human: '🔴 cache-key balance monitoring unavailable — signer balance could not be read' });
+      }
       if (nodeLogsFailed) {
         dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'middleware node-logs scan failed — node/stake changes unknown', human: '⚠️ node/stake event scan failed — CHANGED section incomplete' });
       }
       if (rewardsEventsFailed) {
         dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'rewards get-events scan failed — rewards activity and accumulation detection unavailable', human: '⚠️ rewards event scan failed — activity/accumulation not assessed' });
       }
-      if (uptime.trackerConfigured && uptime.unknownOperators.length > 0) {
+      if (uptime.trackerConfigured && uptime.status === 'unknown') {
+        const detail = uptime.operatorListAvailable
+          ? `uptime state unknown for ${uptime.unknownOperators.length} operator(s)`
+          : 'operator list unavailable, so uptime coverage cannot be established';
         dataChecks.push({
           name: 'uptime_data_unavailable',
           epoch: uptime.epoch,
           status: 'warn',
-          detail: `uptime state unknown for ${uptime.unknownOperators.length} operator(s)`,
+          detail,
           human: `⚠️ uptime for epoch ${uptime.epoch} could not be verified — do not infer whether reporting is needed`,
         });
       }
@@ -867,7 +933,7 @@ export function registerHeartbeatTools(server: McpServer) {
       const checks = [...dataChecks, ...runAlertChecks({
         timing,
         constants,
-        allClassesCached: cacheStatus?.allClassesCached ?? false,
+        allClassesCached: cacheStatus?.allClassesCached ?? null,
         claimability,
         uptimeSetByOperator,
         lstPaused: lstInfo?.paused ?? null,
@@ -880,7 +946,7 @@ export function registerHeartbeatTools(server: McpServer) {
 
       const humanLines = buildHumanLines({
         mode, timing, timingSummary, uptime,
-        cacheOk: cacheStatus?.allClassesCached ?? false,
+        cacheOk: cacheStatus?.allClassesCached ?? null,
         changedLines, changedScanFailed: nodeLogsFailed,
         validatorSummary, tvlLine, activityLine,
         claimability, checks,
@@ -912,6 +978,9 @@ export function registerHeartbeatTools(server: McpServer) {
       };
 
       return formatResult({ success: true, data: result });
+      };
+
+      return collectAttempt(0);
     },
   );
 }

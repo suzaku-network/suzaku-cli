@@ -107,14 +107,14 @@ export function tryParseJsonBlock(text: string): Record<string, unknown> | null 
 // Kept behaviorally in sync with deploy/openclaw/plugins/suzaku-output-guard/transform.mjs
 // via eval/fixtures/redaction-parity.json — update both layers and the fixture together.
 const KNOWN_CONFIG_NAME =
-  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|ETHERSCAN_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
 
 // Uppercase-only so ordinary text such as "MyPassword" is never rewritten.
 const GENERIC_SECRET_NAME =
   /\b[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?\b/g;
 
 const INTERNAL_PATH =
-  /(?:^|(?<=[\s("'`]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
+  /(?:^|(?<=[\s("'`=]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
 
 /**
  * Strip secret material and private deployment configuration from model-visible
@@ -123,10 +123,10 @@ const INTERNAL_PATH =
  */
 export function sanitizeOutput(text: string): string {
   let out = text
-    .replace(/\bSNOWSCAN_API_KEY\s+(?:is\s+)?unavailable\b/gi, 'event-history service unavailable')
-    .replace(/\bSNOWSCAN_API_KEY\s+(?:is\s+)?(?:missing|invalid)\b/gi, 'event-history service misconfigured')
-    .replace(/\bSNOWSCAN_API_KEY\b/gi, 'event-history service credential')
-    .replace(/--snowscan-api-key\b/gi, 'event-history credential option')
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\s+(?:is\s+)?unavailable\b/gi, 'event-history service unavailable')
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\s+(?:is\s+)?(?:missing|invalid)\b/gi, 'event-history service misconfigured')
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\b/gi, 'event-history service credential')
+    .replace(/--(?:ether|snow)scan-api-key\b/gi, 'event-history credential option')
     .replace(KNOWN_CONFIG_NAME, '[internal configuration]')
     .replace(GENERIC_SECRET_NAME, '[internal configuration]')
     .replace(INTERNAL_PATH, (match) => {
@@ -156,7 +156,7 @@ export function sanitizeOutputValue<T>(value: T): T {
 }
 
 /** Flags whose following value should be redacted in audit logs */
-const REDACT_FLAGS = new Set(['--snowscan-api-key', '--private-key', '-k']);
+const REDACT_FLAGS = new Set(['--etherscan-api-key', '--snowscan-api-key', '--private-key', '-k']);
 
 export function sanitizeArgs(args: string[]): string[] {
   const result: string[] = [];
@@ -217,6 +217,10 @@ export interface RunCliOptions {
   skipLimiter?: boolean;
   /** Skip the dedup cache for calls whose result anchors follow-up reads (e.g. current epoch) */
   skipDedup?: boolean;
+  /** Forward the explorer credential to this event-scan subprocess only. */
+  eventScan?: boolean;
+  /** Internal/test override for the SIGTERM-to-SIGKILL grace period. */
+  killGraceMs?: number;
   /**
    * Skip the network-aware suggest/confirm matrix. HARDCODE true only in:
    * - Safe propose tools (off-chain Safe proposal; Safe UI signatures gate execution)
@@ -337,8 +341,13 @@ export function buildChildEnv(options: RunCliOptions): Record<string, string | u
     GNUPGHOME: process.env.GNUPGHOME,
     SIG_AGG_URL: process.env.SIG_AGG_URL,
     LogLevel: process.env.LogLevel,
-    SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
   };
+  const explorerApiKey = process.env.ETHERSCAN_API_KEY?.trim()
+    || process.env.SNOWSCAN_API_KEY?.trim();
+  if (options.eventScan && explorerApiKey) {
+    // Always normalize the legacy SnowScan variable to the current V2 name.
+    env.ETHERSCAN_API_KEY = explorerApiKey;
+  }
   const usingLedger = options.privateKey && process.env.SUZAKU_MCP_LEDGER === 'true';
   if (options.privateKey && !usingLedger && !process.env.SUZAKU_SECRET_NAME) {
     const pk = readSecret('SUZAKU_PK', 'SUZAKU_PK_FILE');
@@ -522,20 +531,33 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
     // Timeout handling with SIGKILL fallback
     let timedOut = false;
+    let killFallbackTimer: ReturnType<typeof setTimeout> | undefined;
     const killTimer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-      setTimeout(() => {
+      killFallbackTimer = setTimeout(() => {
         if (!exited) {
           child.kill('SIGKILL');
         }
-      }, SIGKILL_GRACE_MS);
+      }, options.killGraceMs ?? SIGKILL_GRACE_MS);
     }, timeout);
 
     child.on('close', (code) => {
       exited = true;
       activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
+
+      // Timeout is authoritative. A child may print plausible JSON and then hang;
+      // returning that payload would turn a killed/incomplete command into success.
+      if (timedOut) {
+        resolve({
+          success: false,
+          data: null,
+          error: `Command timed out after ${timeout}ms and was killed. ${sanitizeOutput(stderr.trim() || stdout.trim())}`.trim(),
+        });
+        return;
+      }
 
       // Try to parse JSON from stdout regardless of exit code —
       // some commands exit non-zero but still produce valid JSON with an error field
@@ -568,9 +590,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
         resolve({
           success: false,
           data: null,
-          error: timedOut
-            ? `Command timed out after ${timeout}ms and was killed. ${sanitizeOutput(stderr.trim() || stdout.trim())}`.trim()
-            : sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
+          error: sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
         });
         return;
       }
@@ -583,6 +603,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       exited = true;
       activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
       resolve({ success: false, data: null, error: err.message });
     });
   });

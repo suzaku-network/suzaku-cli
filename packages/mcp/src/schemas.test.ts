@@ -117,6 +117,16 @@ describe('isPrivateHost', () => {
     expect(isPrivateHost('169.254.0.1')).toBe(true);
   });
 
+  it('blocks CGNAT, benchmark, documentation, multicast, and reserved IPv4 ranges', () => {
+    for (const address of [
+      '100.64.0.1', '100.127.255.254',
+      '198.18.0.1', '198.19.255.254',
+      '192.0.2.1', '198.51.100.1', '203.0.113.1',
+      '224.0.0.1', '240.0.0.1',
+    ]) expect(isPrivateHost(address)).toBe(true);
+    expect(isPrivateHost('100.128.0.1')).toBe(false);
+  });
+
   it('blocks IPv6 loopback', () => {
     expect(isPrivateHost('::1')).toBe(true);
     expect(isPrivateHost('[::1]')).toBe(true);
@@ -129,6 +139,11 @@ describe('isPrivateHost', () => {
 
   it('blocks IPv6 link-local (fe80)', () => {
     expect(isPrivateHost('fe80::1')).toBe(true);
+  });
+
+  it('blocks IPv6 multicast and documentation ranges', () => {
+    expect(isPrivateHost('ff02::1')).toBe(true);
+    expect(isPrivateHost('2001:db8::1')).toBe(true);
   });
 
   it('blocks all-zero IPv6 (::)', () => {
@@ -147,6 +162,8 @@ describe('isPrivateHost', () => {
     expect(isPrivateHost('::ffff:192.168.1.1')).toBe(true);
     expect(isPrivateHost('::ffff:172.16.0.1')).toBe(true);
     expect(isPrivateHost('[::ffff:10.0.0.1]')).toBe(true);
+    expect(isPrivateHost('::ffff:100.64.0.1')).toBe(true);
+    expect(isPrivateHost('::ffff:198.18.0.1')).toBe(true);
   });
 
   it('blocks IPv4-mapped IPv6 hex-pair form (::ffff:7f00:1)', () => {
@@ -208,6 +225,13 @@ describe('RpcUrl schema', () => {
     expect(() => RpcUrl.parse('http://10.0.0.1/')).toThrow();
     expect(() => RpcUrl.parse('http://192.168.1.1/')).toThrow();
     expect(() => RpcUrl.parse('http://172.16.0.1/')).toThrow();
+  });
+
+  it('rejects CGNAT and reserved IPs (SSRF)', () => {
+    expect(() => RpcUrl.parse('http://100.64.0.1/')).toThrow();
+    expect(() => RpcUrl.parse('http://198.18.0.1/')).toThrow();
+    expect(() => RpcUrl.parse('http://224.0.0.1/')).toThrow();
+    expect(() => RpcUrl.parse('http://[::ffff:100.64.0.1]/')).toThrow();
   });
 
   it('rejects 0.0.0.0 (SSRF)', () => {

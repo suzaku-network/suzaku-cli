@@ -134,6 +134,7 @@ afterEach(() => {
   delete process.env.SUZAKU_REWARDS_ADDRESS;
   delete process.env.SUZAKU_MIDDLEWARE_ADDRESS;
   delete process.env.SUZAKU_MAX_REWARDS_AMOUNT;
+  delete process.env.ETHERSCAN_API_KEY;
   vi.unstubAllGlobals();
 });
 
@@ -260,6 +261,10 @@ describe('read-only rewards decisions', () => {
       additionalSetWouldAccumulate: null,
       recommendedAction: 'verify_event_history_before_setting',
     });
+    const historyCall = (runCli as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call: unknown[]) => (call[0] as string[])[1] === 'get-amount-set-events',
+    );
+    expect(historyCall?.[1]).toMatchObject({ timeout: 300_000, eventScan: true });
     expect(JSON.stringify(data)).not.toContain('SNOWSCAN_API_KEY');
   });
 
@@ -301,6 +306,7 @@ describe('read-only rewards decisions', () => {
 
 describe('rewards_set_amount_propose', () => {
   it('proposes with numberOfEpochs hardcoded to 1 and returns the verification echo', async () => {
+    process.env.ETHERSCAN_API_KEY = 'must-not-appear-in-argv';
     mockChain(HEALTHY);
     const { setAmount } = getHandlers();
     const res = await setAmount({ epoch: '46', rewardsAmount: '10450', network: 'mainnet' });
@@ -320,6 +326,14 @@ describe('rewards_set_amount_propose', () => {
     expect(Array.isArray(data.verifyBeforeSigning)).toBe(true);
     expect(JSON.stringify(data.verifyBeforeSigning)).toContain('rewards_epoch_diagnosis');
     expect((data.preCheck as Record<string, unknown>).at).toBeTruthy();
+
+    const historyCall = (runCli as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c: unknown[]) => (c[0] as string[])[1] === 'get-amount-set-events',
+    );
+    expect(historyCall).toBeDefined();
+    expect(historyCall![0]).not.toContain('--snowscan-api-key');
+    expect(historyCall![0]).not.toContain('must-not-appear-in-argv');
+    expect(historyCall![1]).toMatchObject({ eventScan: true });
   });
 
   it('REFUSES when the epoch already has rewards set (accumulation guard)', async () => {
