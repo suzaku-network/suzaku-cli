@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const deployDir = resolve(dirname(fileURLToPath(import.meta.url)), '../deploy/openclaw');
 const read = (name: string) => readFileSync(resolve(deployDir, name), 'utf8');
+const repoRoot = resolve(deployDir, '../../../..');
 
 describe('mcporter configs', () => {
   const readOnly = JSON.parse(read('mcporter.json'));
@@ -61,6 +62,82 @@ describe('mcporter configs', () => {
   });
 });
 
+describe('monitor model profiles and direct MCP boundary', () => {
+  const kimi = JSON.parse(read('openclaw.json'));
+  const codex = JSON.parse(read('openclaw-codex.json'));
+
+  it('ships the Kimi K3 template and keeps Codex out of it', () => {
+    expect(kimi.agents.defaults.model.primary).toBe('moonshot/kimi-k3');
+    expect(Object.keys(kimi.agents.defaults.models)).toEqual([
+      'moonshot/kimi-k3',
+      'anthropic/claude-sonnet-4-6',
+    ]);
+    expect(kimi.plugins.entries.moonshot.enabled).toBe(true);
+    expect(kimi.plugins.entries.codex).toBeUndefined();
+    expect(kimi.plugins.allow).toEqual(['moonshot', 'anthropic', 'telegram', 'suzaku-output-guard']);
+    expect(kimi.plugins.bundledDiscovery).toBe('allowlist');
+  });
+
+  it('keeps Codex as a separate, opt-in profile', () => {
+    expect(codex.agents.defaults.model.primary).toBe('openai/gpt-5.5');
+    expect(codex.plugins.entries.codex.enabled).toBe(true);
+    expect(codex.plugins.entries.moonshot).toBeUndefined();
+    expect(codex.plugins.allow).toEqual(['codex', 'anthropic', 'telegram', 'suzaku-output-guard']);
+  });
+
+  it.each([
+    ['openclaw.json', kimi],
+    ['openclaw-codex.json', codex],
+  ])('%s reserves slash commands and model overrides for the Telegram admin', (_name, config) => {
+    expect(config.commands.allowFrom.telegram).toEqual(['tg:${TELEGRAM_ADMIN_USER_ID}']);
+    expect(config.commands.ownerAllowFrom).toEqual(['tg:${TELEGRAM_ADMIN_USER_ID}']);
+    expect(config.commands.restart).toBe(false);
+    expect(config.commands.bash).toBe(false);
+    expect(config.commands.config).toBe(false);
+    expect(config.commands.mcp).toBe(false);
+    expect(config.commands.plugins).toBe(false);
+    expect(config.commands.debug).toBe(false);
+  });
+
+  it.each([
+    ['openclaw.json', kimi],
+    ['openclaw-codex.json', codex],
+  ])('%s exposes only the read-only Suzaku MCP server to the monitor', (_name, config) => {
+    const server = config.mcp.servers.suzaku;
+    expect(server.command).toBe('node');
+    expect(server.args).toEqual(['/mcp/packages/mcp/dist/server.js', '--read-only']);
+    expect(server.env.SUZAKU_MCP_PUBLIC_HEALTH).toBe('true');
+    expect(server.env.SUZAKU_MCP_AUDIT_DIR).toBe('/data/audit');
+    expect(Object.keys(server.env)).not.toEqual(expect.arrayContaining([
+      'MOONSHOT_API_KEY',
+      'ANTHROPIC_API_KEY',
+      'TELEGRAM_BOT_TOKEN',
+    ]));
+    expect(config.skills?.entries?.mcporter).toBeUndefined();
+  });
+
+  it.each([
+    ['openclaw.json', kimi],
+    ['openclaw-codex.json', codex],
+  ])('%s denies shell and filesystem writes to public chat turns', (_name, config) => {
+    const main = config.agents.list.find((agent: { id: string }) => agent.id === 'main');
+    const heartbeat = config.agents.list.find((agent: { id: string }) => agent.id === 'heartbeat');
+    expect(main.tools.allow).toEqual(['suzaku__*', 'read']);
+    expect(main.tools.deny).toEqual(expect.arrayContaining(['exec', 'process', 'write', 'edit', 'cron']));
+    expect(main.tools.exec.mode).toBe('deny');
+    expect(heartbeat.tools.allow).toEqual(['suzaku__deployment_heartbeat', 'read', 'write', 'message']);
+    expect(heartbeat.tools.deny).toEqual(expect.arrayContaining(['exec', 'process', 'edit', 'cron']));
+    expect(heartbeat.tools.message.actions.allow).toEqual(['send']);
+    expect(config.cron.maxConcurrentRuns).toBe(1);
+  });
+
+  it('leaves secrets as native OpenClaw env references in the committed config', () => {
+    expect(kimi.channels.telegram.botToken).toBe('${TELEGRAM_BOT_TOKEN}');
+    expect(kimi.mcp.servers.suzaku.env.ETHERSCAN_API_KEY).toBe('${ETHERSCAN_API_KEY}');
+    expect(kimi.mcp.servers.suzaku.env.SNOWSCAN_API_KEY).toBe('${SNOWSCAN_API_KEY}');
+  });
+});
+
 describe('docker-compose instruction mounts', () => {
   const compose = read('docker-compose.yml');
 
@@ -83,21 +160,102 @@ describe('docker-compose instruction mounts', () => {
     expect(compose).toContain('cache_pk:');
     expect(compose).toContain('SUZAKU_CACHE_DENY_TOOLS=${SUZAKU_CACHE_DENY_TOOLS-middleware_cache_stakes}');
   });
+
+  it('selects Kimi by default without mounting the monitor mcporter bridge', () => {
+    const monitor = compose.slice(compose.indexOf('  suzaku-bot:'), compose.indexOf('  suzaku-propose-bot:'));
+    expect(monitor).toContain('MOONSHOT_API_KEY=${MOONSHOT_API_KEY}');
+    expect(monitor).toContain('SUZAKU_ENABLE_ANTHROPIC_FALLBACK=${SUZAKU_ENABLE_ANTHROPIC_FALLBACK:-false}');
+    expect(monitor).toContain('${SUZAKU_MONITOR_CONFIG:-./openclaw.json}');
+    expect(monitor).not.toContain('./mcporter.json:');
+    expect(monitor).toContain('read_only: true');
+  });
+
+  it('keeps propose and cache behind explicit inactive profiles', () => {
+    expect(compose).toMatch(/suzaku-propose-bot:[\s\S]*?profiles: \["propose"\]/);
+    expect(compose).toMatch(/suzaku-cache-bot:[\s\S]*?profiles: \["cache"\]/);
+  });
+
+  it('bounds monitor logs, gives the monitor an init, and disables bridge IPv6', () => {
+    const monitor = compose.slice(compose.indexOf('  suzaku-bot:'), compose.indexOf('  suzaku-propose-bot:'));
+    expect(monitor).toContain('init: true');
+    expect(monitor).toContain('max-size: 10m');
+    expect(compose).toContain('enable_ipv6: false');
+  });
 });
 
 describe('outbound safety plugin', () => {
-  it('is built into the bot image and enabled for every Telegram profile', () => {
+  it('is built into the bot image and enabled for the monitor configurations', () => {
     const dockerfile = read('Dockerfile');
     expect(dockerfile).toContain(
-      'plugins/suzaku-output-guard/ /home/node/.openclaw/extensions/suzaku-output-guard/',
+      'plugins/suzaku-output-guard/ /opt/suzaku-openclaw-extensions/suzaku-output-guard/',
     );
-    for (const config of ['openclaw.json', 'openclaw-propose.json', 'openclaw-cache.json']) {
+    for (const config of ['openclaw.json', 'openclaw-codex.json']) {
       const parsed = JSON.parse(read(config));
       expect(
         parsed.plugins?.entries?.['suzaku-output-guard']?.enabled,
         `${config} must enable the outbound guard`,
       ).toBe(true);
+      expect(parsed.plugins.allow, `${config} must use an explicit plugin allowlist`).toContain('suzaku-output-guard');
+      expect(parsed.plugins.bundledDiscovery, `${config} must disable broad bundled discovery`).toBe('allowlist');
     }
+  });
+});
+
+describe('production image and host lifecycle', () => {
+  it('pins OpenClaw and the matching Moonshot provider and defines a healthcheck', () => {
+    const dockerfile = read('Dockerfile');
+    expect(dockerfile).toContain('corepack prepare pnpm@10.32.1 --activate');
+    expect(dockerfile).toContain('openclaw:2026.7.1@sha256:6a31d44b2944e7adcd2b582bf6fb463111264ebca97a0201795b799135bd102c');
+    expect(dockerfile).toContain('@openclaw/moonshot-provider@2026.7.1');
+    expect(dockerfile).toContain('register-heartbeat-cron.sh /usr/local/bin/register-heartbeat-cron.sh');
+    expect(dockerfile).toContain('verify-heartbeat-cron.mjs /usr/local/lib/suzaku/verify-heartbeat-cron.mjs');
+    expect(dockerfile).toContain('HEALTHCHECK --interval=30s');
+    expect(dockerfile).toContain("fetch('http://127.0.0.1:18789/readyz')");
+  });
+
+  it('does not render Telegram/model secrets or synthesize Codex config at startup', () => {
+    const entrypoint = read('entrypoint.sh');
+    expect(entrypoint).not.toContain('s|${TELEGRAM_BOT_TOKEN}|');
+    expect(entrypoint).not.toContain('[mcp_servers.suzaku]');
+    expect(entrypoint).toContain('render-config.mjs');
+    expect(entrypoint).toContain('openclaw.mjs config validate');
+  });
+
+  it('installs the complete firewall before starting and waiting for the monitor', () => {
+    const firewall = read('iptables-setup.sh');
+    const service = read('suzaku-monitor.service');
+    expect(firewall).toContain('CHAIN="SUZAKU-EGRESS"');
+    expect(firewall).toContain('100.64.0.0/10');
+    expect(firewall).toContain('iptables-restore --wait --noflush');
+    expect(service).toContain('docker compose create --no-build suzaku-bot');
+    expect(service).toContain('ExecStartPre=+/usr/bin/bash');
+    expect(service).toContain('docker compose up -d --no-build --wait --wait-timeout 120 suzaku-bot');
+  });
+
+  it('registers one idempotent, isolated heartbeat with the uptime tracker pinned', () => {
+    const cron = read('register-heartbeat-cron.sh');
+    expect(cron).toContain('--declaration-key suzaku-monitor-heartbeat-v1');
+    expect(cron).toContain('--agent heartbeat');
+    expect(cron).toContain('--tools "suzaku__deployment_heartbeat,read,write,message"');
+    expect(cron).toContain('uptimeTrackerAddress=0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF');
+    expect(cron.match(/openclaw\.mjs cron create/g)).toHaveLength(1);
+    expect(read('verify-heartbeat-cron.mjs')).toContain('expected exactly one cron job');
+  });
+
+  it('keeps deployment environments and secret directories out of Git and Docker contexts', () => {
+    const gitignore = readFileSync(resolve(repoRoot, '.gitignore'), 'utf8');
+    const dockerignore = readFileSync(resolve(repoRoot, '.dockerignore'), 'utf8');
+    expect(gitignore).toContain('**/secrets/');
+    expect(dockerignore).toContain('**/.env*');
+    expect(dockerignore).toContain('**/secrets/**');
+  });
+
+  it('keeps the production env example monitor-only', () => {
+    const example = read('env.example');
+    expect(example).toContain('SUZAKU_ENABLE_ANTHROPIC_FALLBACK=false');
+    expect(example).not.toContain('TELEGRAM_PROPOSE_BOT_TOKEN');
+    expect(example).not.toContain('TELEGRAM_CACHE_BOT_TOKEN');
+    expect(example).not.toContain('SUZAKU_DELEGATE_PK_FILE');
   });
 });
 

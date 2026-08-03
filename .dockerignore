@@ -1,4 +1,7 @@
-.env
+.env*
+**/.env*
+secrets/**
+**/secrets/**
 .git/
 node_modules/
 dist/
