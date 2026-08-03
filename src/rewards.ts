@@ -386,6 +386,7 @@ export async function getRewardsAmountSetEvents(
     middlewareAddress?: Hex;
     fromBlock?: bigint;
     toBlock?: bigint;
+    snowscanApiKey?: string;
   }
 ) {
   const client = config.client;
@@ -403,18 +404,28 @@ export async function getRewardsAmountSetEvents(
 
   const toBlock = options.toBlock ?? (await client.getBlockNumber());
 
-  const events = await collectEventsInRange(
-    fromBlock,
-    toBlock,
-    -1,
-    (opts) => client.getContractEvents({
-      address: rewards.address as Hex,
-      abi: rewards.abi,
-      eventName: 'RewardsAmountSet',
-      fromBlock: opts.fromBlock,
-      toBlock: opts.toBlock,
-    })
-  );
+  const events = options.snowscanApiKey
+    ? await GetContractEvents(
+        client,
+        rewards.address as Hex,
+        Number(fromBlock),
+        Number(toBlock),
+        rewards.abi,
+        ['RewardsAmountSet'],
+        options.snowscanApiKey,
+      )
+    : await collectEventsInRange(
+        fromBlock,
+        toBlock,
+        -1,
+        (opts) => client.getContractEvents({
+          address: rewards.address as Hex,
+          abi: rewards.abi,
+          eventName: 'RewardsAmountSet',
+          fromBlock: opts.fromBlock,
+          toBlock: opts.toBlock,
+        }),
+      );
 
   const matching = events.filter((e) => {
     const startEpoch = Number(e.args.startEpoch);
@@ -432,7 +443,8 @@ export async function getRewardsAmountSetEvents(
   };
 
   const formattedEvents = await Promise.all(matching.map(async (e) => {
-    const ts = await getBlockTimestamp(e.blockNumber);
+    const explorerTimestamp = 'timestamp' in e ? e.timestamp : undefined;
+    const ts = explorerTimestamp || await getBlockTimestamp(e.blockNumber);
     return {
       txHash: e.transactionHash,
       blockNumber: e.blockNumber.toString(),

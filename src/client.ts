@@ -3,7 +3,6 @@ import { createWalletClient, http, WalletClient, createPublicClient, PublicClien
 import { Account, privateKeyToAccount } from 'viem/accounts'
 import { createSafeClient, type SafeClient } from '@safe-global/sdk-starter-kit'
 import { getAddresses } from './lib/utils';
-import { getLedgerAccount, toSafeProvider } from './lib/ledgerUtils';
 import { chainList } from './lib/chainList';
 import { logger } from './lib/logger';
 import { configDotenv } from 'dotenv';
@@ -36,9 +35,14 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
 
     let account: ExtendedAccount | undefined;
     const isLedger = privateKey === 'ledger';
+    let ledgerUtils: typeof import('./lib/ledgerUtils') | undefined;
     if (isLedger) {
+        // Ledger's native HID/USB stack must not load for read-only or software-key
+        // commands. Besides reducing the read path's attack surface, this keeps a
+        // missing/incompatible host libusb from taking down every CLI invocation.
+        ledgerUtils = await import('./lib/ledgerUtils');
         const accountIndex = process.env.LEDGER_ACCOUNT_INDEX ? parseInt(process.env.LEDGER_ACCOUNT_INDEX) : 0;
-        account = await getLedgerAccount(network, accountIndex);
+        account = await ledgerUtils.getLedgerAccount(network, accountIndex);
         // logger.log(`Ledger account ${accountIndex}\nAddress: ${account.address}\nP-Chain Address: ${account.pChainAddress}`);
 
     } else if (privateKey) {
@@ -64,7 +68,7 @@ export async function generateClient(chain: Chains, privateKey?: Hex | 'ledger',
             network,
             ledger: isLedger,
             safe: safe ? await createSafeClient({
-                provider: isLedger ? await toSafeProvider(client, account) : chainList[chain].rpcUrls.default.http[0],
+                provider: isLedger ? await ledgerUtils!.toSafeProvider(client, account) : chainList[chain].rpcUrls.default.http[0],
                 signer: isLedger ? undefined : privateKey,
                 safeAddress: safe,
                 txServiceUrl: network === 'fuji' ? 'https://wallet-transaction-fuji.ash.center/api' : 'https://api.safe.global/tx-service/avax/api',
