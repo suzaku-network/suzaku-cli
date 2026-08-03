@@ -1,14 +1,20 @@
 # Monitor-bot eval benchmarks
 
-One row per model per run, appended by `pnpm eval -- --tier 2 --benchmark …`.
+One row per valid model repetition, appended by `pnpm eval -- --tier 2 --benchmark …`.
 Raw per-question reports live in `eval/results/` (gitignored, local only).
 Suite = which questions ran (`fast` skips slow/event-scan questions) `@` grading version.
-**`@v1` rows used lax grading** (content facts unchecked, errored tool calls counted, whole-answer
-number matching — see `docs/eval-plan.md` § Adversarial review) — do not compare them with `@v2`+ rows.
+**`@v1` and `@v2` rows are legacy. `@v3` and `@v4` were pre-benchmark/exploratory:** later audits
+reproduced scorer defects in punctuation, hedge governance, marker negation, and cross-epoch boolean
+matching, followed by runner-validity defects around ground truth, target setup, and final drift.
+**`@v5` remains draft, has no canonical rows, and is not ready for paid comparison.**
+Free-form answer meaning now stays `PENDING_HUMAN` until human labels or a calibrated semantic
+judge exist. Historical rows are preserved as recorded; do not compare exact PASS counts across
+grading versions.
 Codex engine latencies include OpenClaw session bootstrap; cost `sub` = flat subscription (no per-call price).
-Cursor engine (`cursor-agent`/Composer) runs its own read-only MCP server; tool trace is informational
-(`traceMode: info` — the tool-groups column isn't gated), and cost shows `cur.api` when cursor-agent
-doesn't report token usage.
+
+**July 2026 retirement note:** the custom Cursor/Composer NDJSON route was retired after `1c886cd`.
+It added a fragile separate agent integration without producing enough comparable evidence. The
+exploratory runs do not establish that Claude or Codex conclusively outperformed Composer.
 
 | date (UTC) | engine | model | suite | questions | PASS/PARTIAL/FAIL | facts | median wall | p95 wall | cost | notes |
 |---|---|---|---|---|---|---|---|---|---|---|

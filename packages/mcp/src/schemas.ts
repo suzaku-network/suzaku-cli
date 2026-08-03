@@ -12,6 +12,26 @@ export const NodeID = z.string().regex(/^NodeID-[123456789ABCDEFGHJKLMNPQRSTUVWX
 /** Target network */
 export const Network = z.enum(['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai', 'custom']).default('mainnet').describe('Network to use');
 
+function isRestrictedIpv4(value: string): boolean {
+  const octets = value.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  const [a, b, c] = octets;
+  return a === 0
+    || a === 10
+    || (a === 100 && b >= 64 && b <= 127)
+    || a === 127
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 0 && c === 0)
+    || (a === 192 && b === 0 && c === 2)
+    || (a === 192 && b === 88 && c === 99)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19))
+    || (a === 198 && b === 51 && c === 100)
+    || (a === 203 && b === 0 && c === 113)
+    || a >= 224;
+}
+
 /**
  * Check whether a hostname resolves to a private/loopback/link-local address.
  * Used to block SSRF via user-supplied RPC URLs.
@@ -19,28 +39,18 @@ export const Network = z.enum(['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kit
 export function isPrivateHost(hostname: string): boolean {
   const h = hostname.toLowerCase();
 
-  // Loopback
-  if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return true;
-  if (h.startsWith('127.')) return true;
+  // IPv4 private, loopback, link-local, CGNAT, benchmark and reserved ranges.
+  if (h === 'localhost' || isRestrictedIpv4(h) || h === '::1') return true;
 
   // IPv6 loopback compressed forms
   if (h === '[::1]') return true;
-
-  // 0.0.0.0
-  if (h === '0.0.0.0') return true;
-
-  // RFC 1918 private ranges
-  if (h.startsWith('10.')) return true;
-  if (h.startsWith('192.168.')) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-
-  // Link-local (169.254.x.x — AWS metadata, etc.)
-  if (h.startsWith('169.254.')) return true;
 
   // IPv6 ULA (fc00::/7) and link-local (fe80::/10)
   const bare = h.replace(/^\[/, '').replace(/\]$/, '');
   if (/^f[cd]/i.test(bare)) return true;
   if (/^fe[89ab]/i.test(bare)) return true;
+  if (/^ff/i.test(bare)) return true;
+  if (/^2001:db8(?::|$)/i.test(bare)) return true;
 
   // All-zero IPv6 (binds to all interfaces)
   if (bare === '::' || bare === '0:0:0:0:0:0:0:0') return true;
@@ -64,9 +74,6 @@ export function isPrivateHost(hostname: string): boolean {
       }
     }
   }
-
-  // Metadata IP used by cloud providers
-  if (h === '169.254.169.254') return true;
 
   return false;
 }

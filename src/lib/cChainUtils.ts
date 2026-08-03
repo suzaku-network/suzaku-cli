@@ -18,6 +18,81 @@ type CommonEvent = {
   args?: Record<string, any>;
 };
 
+const ETHERSCAN_V2_API = 'https://api.etherscan.io/v2/api';
+const EXPLORER_PAGE_SIZE = 1000;
+const EXPLORER_MAX_PAGES = 100;
+
+const AVALANCHE_EXPLORER_CHAIN_IDS = new Set([43114, 43113]);
+
+function sanitizeExplorerText(apiKey: string, value: unknown): string {
+  const text = String(value ?? '');
+  return (apiKey ? text.replaceAll(apiKey, '[REDACTED]') : text).slice(0, 200);
+}
+
+async function fetchExplorerLogs(
+  client: ExtendedClient,
+  address: Hex,
+  fromBlock: number,
+  toBlock: number,
+  apiKey: string,
+  chainId: number,
+): Promise<CommonEvent[]> {
+  const events: CommonEvent[] = [];
+
+  for (let page = 1; page <= EXPLORER_MAX_PAGES; page++) {
+    const url = new URL(ETHERSCAN_V2_API);
+    url.search = new URLSearchParams({
+      chainid: chainId.toString(),
+      module: 'logs',
+      action: 'getLogs',
+      address,
+      fromBlock: fromBlock.toString(),
+      toBlock: toBlock.toString(),
+      page: page.toString(),
+      offset: EXPLORER_PAGE_SIZE.toString(),
+      apikey: apiKey,
+    }).toString();
+
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      // Do not include the URL: its query string contains the credential.
+      throw new Error('Explorer API request failed');
+    }
+    if (!res.ok) throw new Error(`Explorer API HTTP ${res.status}`);
+
+    let data: { status?: string; message?: string; result?: unknown };
+    try {
+      data = await res.json() as typeof data;
+    } catch {
+      throw new Error('Explorer API returned invalid JSON');
+    }
+    if (!Array.isArray(data.result)) {
+      const detail = typeof data.result === 'string'
+        ? `: ${sanitizeExplorerText(apiKey, data.result)}`
+        : '';
+      throw new Error(`Explorer API ${sanitizeExplorerText(apiKey, data.message) || 'error'}${detail}`);
+    }
+    // Etherscan represents a valid empty scan as status=0/message="No records
+    // found". Other status=0 responses (including NOTOK + []) are failures.
+    const canonicalNoRecords = data.status === '0'
+      && data.result.length === 0
+      && /no (records|logs|transactions) found/i.test(String(data.message ?? ''));
+    if (data.status !== '1' && !canonicalNoRecords) {
+      const resultDetail = data.result.length > 0
+        ? `: ${sanitizeExplorerText(apiKey, data.result)}`
+        : '';
+      throw new Error(`Explorer API ${sanitizeExplorerText(apiKey, data.message) || 'error'}${resultDetail}`);
+    }
+
+    events.push(...data.result as CommonEvent[]);
+    if (data.result.length < EXPLORER_PAGE_SIZE) return events;
+  }
+
+  throw new Error(`Explorer API pagination exceeded ${EXPLORER_MAX_PAGES} pages`);
+}
+
 export type DecodedEvent = {
   blockNumber: bigint;
   transactionHash: Hex;
@@ -57,29 +132,23 @@ export async function GetContractEvents(
   bar?: SingleBar
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
+  let usedExplorer = false;
   try {
-    if (snowscanApiKey) {
-      // Fetch logs from Snowscan API (transactions are not decoded)
-      const url = `https://api${client.network === 'fuji' ? '-testnet' : ''}.snowscan.xyz/api`;
-      const urlParams = new URLSearchParams({
-        module: 'logs',
-        action: 'getLogs',
-        address,
-        fromBlock: fromBlock.toString(),
-        toBlock: toBlock.toString(),
-        apikey: snowscanApiKey
-      });
-
-      const res = await fetch(`${url}?${urlParams}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { status: string, message: string, result: any[] };
-      events = data.result
+    // Use the RPC-reported chain id rather than the coarse mainnet/fuji label:
+    // Kite and custom chains deliberately share those labels.
+    const runtimeChainId = snowscanApiKey ? await client.getChainId() : undefined;
+    if (snowscanApiKey && runtimeChainId !== undefined && AVALANCHE_EXPLORER_CHAIN_IDS.has(runtimeChainId)) {
+      usedExplorer = true;
+      // SnowScan V1 was retired in 2026. Keep the public parameter name for CLI
+      // compatibility, but use Etherscan V2 with the Avalanche chain id. Avalanche
+      // requires a paid Etherscan API tier; provider errors must fail the scan.
+      events = (await fetchExplorerLogs(client, address, fromBlock, toBlock, snowscanApiKey, runtimeChainId))
         .reduce((acc: CommonEvent[], log) => {
           try {
             return [Object.assign(log, decodeEventLog({
               abi,
-              data: log.data,
-              topics: log.topics,
+              data: log.data as Hex,
+              topics: log.topics as [Hex, ...Hex[]],
             })), ...acc];
           } catch {
             // log emitted by the contract but absent from the provided ABI (e.g. proxy events)
@@ -116,6 +185,7 @@ export async function GetContractEvents(
     if (error instanceof Error) {
       logger.error(error.message);
     }
+    throw error;
   }
 
   // Filter and format events
@@ -130,7 +200,7 @@ export async function GetContractEvents(
         timestamp: Number(log.timeStamp!)
       } as DecodedEvent
     });
-  return forceTimestamp ? snowscanApiKey ? result : PatchEventsTimestamp(client, result) : result;
+  return forceTimestamp ? usedExplorer ? result : PatchEventsTimestamp(client, result) : result;
 }
 
 export async function PatchEventsTimestamp(

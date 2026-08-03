@@ -30,55 +30,16 @@ import { registerLstWrapperTools } from './tools/lst-wrapper.js';
 import { registerVaultHelperTools } from './tools/vault-helper.js';
 import { registerUptimeTools } from './tools/uptime.js';
 import { registerHeartbeatTools } from './tools/heartbeat.js';
-import { readFileSync } from 'node:fs';
+import { resolveProfileConfig } from './profile-config.js';
 
-const readOnly = process.argv.includes('--read-only');
-// Propose-only profile: all reads + ONLY the Safe propose tools (rewards_*_propose).
-// The full write surface is never registered, so it cannot appear in tools/list.
-const proposeOnly = process.argv.includes('--propose-only');
-const publicWrite = process.argv.includes('--public-write');
-if ([readOnly, proposeOnly, publicWrite].filter(Boolean).length > 1) {
-  console.error('--read-only, --propose-only, and --public-write are mutually exclusive');
+let profile: ReturnType<typeof resolveProfileConfig>;
+try {
+  profile = resolveProfileConfig(process.argv, process.env);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-// In propose-only mode the amount cap is a required safety bound — fail at startup, not mid-proposal.
-if (proposeOnly) {
-  const cap = Number(process.env.SUZAKU_MAX_REWARDS_AMOUNT ?? '');
-  if (!Number.isFinite(cap) || cap <= 0) {
-    console.error('--propose-only requires SUZAKU_MAX_REWARDS_AMOUNT to be set to a positive number.');
-    process.exit(1);
-  }
-}
-if (publicWrite) {
-  if (!/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_MIDDLEWARE_ADDRESS?.trim() ?? '')) {
-    console.error('--public-write requires SUZAKU_MIDDLEWARE_ADDRESS to be set to the single allowed middleware address.');
-    process.exit(1);
-  }
-  const network = process.env.SUZAKU_MIDDLEWARE_NETWORK?.trim() || 'mainnet';
-  if (!['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai'].includes(network)) {
-    console.error('--public-write requires SUZAKU_MIDDLEWARE_NETWORK to be a supported non-custom network name.');
-    process.exit(1);
-  }
-  const signerFile = process.env.SUZAKU_PK_FILE?.trim();
-  if (signerFile) {
-    try {
-      if (!readFileSync(signerFile, 'utf8').trim()) {
-        console.error('--public-write SUZAKU_PK_FILE is empty.');
-        process.exit(1);
-      }
-    } catch {
-      console.error('--public-write requires SUZAKU_PK_FILE to be readable when set.');
-      process.exit(1);
-    }
-  } else if (
-    !process.env.SUZAKU_PK?.trim() &&
-    !process.env.SUZAKU_SECRET_NAME?.trim() &&
-    process.env.SUZAKU_MCP_LEDGER !== 'true'
-  ) {
-    console.error('--public-write requires a signing method: SUZAKU_PK_FILE, SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.');
-    process.exit(1);
-  }
-}
+const { readOnly, proposeOnly, publicWrite } = profile;
 
 const server = new McpServer({
   name: 'suzaku',
@@ -268,7 +229,7 @@ server.prompt(
               : `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
             `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
             `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
-            `  • A warp signature collection timeout means SIG_AGG_URL is unreachable or validators are offline — report the raw error, do not retry silently.`,
+            `  • A warp signature collection timeout means the signature-aggregation service is unreachable or validators are offline — report the raw error, do not retry silently.`,
             '',
             `Step 2 — Compute operator uptime:`,
             ...cliOnlyNote('uptime_compute_operator_uptime'),

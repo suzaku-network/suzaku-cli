@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../cli-runner.js', () => ({
@@ -11,7 +11,8 @@ vi.mock('../cli-runner.js', () => ({
 
 import { runCli } from '../cli-runner.js';
 import {
-  tsToUtc, weiToToken, exchangeRate, epochStartOf, shortHex, hexToNodeId,
+  tsToUtc, timeRemaining, summarizeHeartbeatTiming, summarizeUptime,
+  weiToToken, exchangeRate, epochStartOf, shortHex, hexToNodeId,
   deriveClaimabilityStatus, countSetAmountTxs, detectStuckTwoPhase,
   runAlertChecks, summarizeRewardsActivity, summarizeChangedEvents, buildHumanLines,
   registerHeartbeatTools,
@@ -39,6 +40,33 @@ function row(epoch: number, rewards: string, funded: boolean, complete: boolean)
 describe('humanizers', () => {
   it('tsToUtc formats unix seconds as "Mon D HH:MM UTC"', () => {
     expect(tsToUtc(1_781_013_600)).toMatch(/^[A-Z][a-z]{2} \d{1,2} \d{2}:\d{2} UTC$/);
+  });
+
+  it('formats server-calculated relative times without model arithmetic', () => {
+    expect(timeRemaining(5 * 3_600 + 48 * 60)).toBe('5h 48m remaining');
+    expect(timeRemaining(-(2 * 3_600 + 5 * 60))).toBe('2h 5m ago');
+    expect(timeRemaining(30)).toBe('less than 1m remaining');
+
+    const summary = summarizeHeartbeatTiming(TIMING, TIMING.currentEpochStartTs + 238_320);
+    expect(summary.updateWindowSecondsRemaining).toBe(20_880);
+    expect(summary.updateWindowTimeRemaining).toBe('5h 48m remaining');
+    expect(summary.currentEpochSecondsRemaining).toBe(64_080);
+  });
+
+  it('reports uptime as an explicit tri-state instead of relying on absent alerts', () => {
+    const operators = ['0xone', '0xtwo'];
+    expect(summarizeUptime(37, operators, { '0xone': true, '0xtwo': true }, true)).toMatchObject({
+      status: 'complete', allOperatorsSet: true, reportedOperators: operators,
+    });
+    expect(summarizeUptime(37, operators, { '0xone': true, '0xtwo': false }, true)).toMatchObject({
+      status: 'missing', allOperatorsSet: false, missingOperators: ['0xtwo'],
+    });
+    expect(summarizeUptime(37, operators, { '0xone': true, '0xtwo': null }, true)).toMatchObject({
+      status: 'unknown', allOperatorsSet: null, unknownOperators: ['0xtwo'],
+    });
+    expect(summarizeUptime(37, operators, {}, false)).toMatchObject({
+      status: 'not_checked', allOperatorsSet: null,
+    });
   });
 
   it('weiToToken adds thousands separators and trims decimals', () => {
@@ -94,8 +122,12 @@ describe('deriveClaimabilityStatus', () => {
     expect(res.status).toBe('current_epoch');
   });
 
-  it('N-1 set but not yet distributable waits for uptime', () => {
-    expect(derive(row(37, '35120550000000000000000', true, false)).status).toBe('waiting_uptime');
+  it('N-1 reports the distribution opening instead of claiming uptime is missing', () => {
+    const res = derive(row(37, '35120550000000000000000', true, false));
+    expect(res.status).toBe('waiting_distribution_window');
+    expect(res.distributionOpenEpoch).toBe(39);
+    expect(res.distributionOpenTs).toBe(epochStartOf(TIMING, 39));
+    expect(res.human).toContain(`epoch 39 · ${tsToUtc(epochStartOf(TIMING, 39))}`);
   });
 
   it('N-1 unset shows funding deadline', () => {
@@ -104,8 +136,10 @@ describe('deriveClaimabilityStatus', () => {
     expect(res.human).toContain('fund by');
   });
 
-  it('N-2 IS distributable (boundary): funded but not started waits for uptime', () => {
-    expect(derive(row(36, '100', true, false)).status).toBe('waiting_uptime');
+  it('N-2 open boundary requires an uptime check without claiming uptime is missing', () => {
+    const res = derive(row(36, '100', true, false));
+    expect(res.status).toBe('distribution_window_open');
+    expect(res.human).toContain('verify uptime, then distribute');
   });
 
   it('distributable epoch mid-distribution reports progress k/n', () => {
@@ -347,13 +381,33 @@ describe('buildHumanLines', () => {
 
   it('digest mode renders header, quiet CHANGED section and REWARDS table', () => {
     const claimability: ClaimabilityRow[] = [
-      { ...row(37, '35120550000000000000000', true, false), setAlot: '35,120.55', setTxCount: 1, status: 'waiting_uptime', statusHuman: 'waiting uptime' },
+      {
+        ...row(37, '35120550000000000000000', true, false),
+        setAlot: '35,120.55',
+        setTxCount: 1,
+        status: 'waiting_distribution_window',
+        statusHuman: 'funded · distribution opens epoch 39',
+      },
     ];
-    const lines = buildHumanLines({ mode: 'digest', timing: TIMING, cacheOk: true, changedLines: [], validatorSummary: 'validators 10', tvlLine: null, activityLine: 'no rewards activity', claimability, checks: [okCheck] });
+    const lines = buildHumanLines({
+      mode: 'digest',
+      timing: TIMING,
+      timingSummary: summarizeHeartbeatTiming(TIMING, TIMING.currentEpochStartTs + 238_320),
+      uptime: summarizeUptime(37, ['0xop'], { '0xop': true }, true),
+      cacheOk: true,
+      changedLines: [],
+      validatorSummary: 'validators 10',
+      tvlLine: null,
+      activityLine: 'no rewards activity',
+      claimability,
+      checks: [okCheck],
+    });
     expect(lines[0]).toContain('epoch 38 started');
+    expect(lines[1]).toContain('5h 48m remaining');
     expect(lines).toContain('  no node/stake/validator changes');
+    expect(lines).toContain('  uptime epoch 37: complete (1/1 operators)');
     expect(lines.some((l) => l.includes('35,120.55'))).toBe(true);
-    expect(lines.some((l) => l.includes('waiting uptime'))).toBe(true);
+    expect(lines.some((l) => l.includes('distribution opens epoch 39'))).toBe(true);
   });
 });
 
@@ -410,6 +464,13 @@ const ADDRS = {
 describe('deployment_heartbeat handler', () => {
   beforeEach(() => {
     (runCli as ReturnType<typeof vi.fn>).mockReset();
+    delete process.env.ETHERSCAN_API_KEY;
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    delete process.env.ETHERSCAN_API_KEY;
+    vi.unstubAllGlobals();
   });
 
   it('alerts mode assembles checks without event scans and returns empty humanLines when ok', async () => {
@@ -420,10 +481,17 @@ describe('deployment_heartbeat handler', () => {
     expect(data.epoch).toBe(38);
     expect(data.rewards.claimability).toHaveLength(3);
     // epoch 37 is funded but not yet distributable (offset 2); epoch 36 is mid-distribution
-    expect(data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 37).status).toBe('waiting_uptime');
+    const epoch37 = data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 37);
+    expect(epoch37.status).toBe('waiting_distribution_window');
+    expect(epoch37.distributionOpenEpoch).toBe(39);
+    expect(epoch37.distributionOpenTs).toBe(data.epochStartTs + 302_400);
     expect(data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 36).status).toBe('distributing');
     expect(data.humanLines).toEqual([]);
     expect(data.changed).toBeUndefined();
+    expect(data.timing.updateWindowSecondsRemaining).toBe(
+      data.timing.updateWindowCloseTs - data.timing.observedAtTs,
+    );
+    expect(data.uptime).toMatchObject({ status: 'not_checked', allOperatorsSet: null });
 
     // no event scans in alerts mode
     const calls = (runCli as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[0] as string[]).join(' '));
@@ -433,7 +501,74 @@ describe('deployment_heartbeat handler', () => {
     expect(calls.some((c) => c.includes('get-epoch-status') && c.includes('--to-epoch 38'))).toBe(true);
   });
 
+  it('returns an explicit complete uptime state when every operator read is true', async () => {
+    mockRunCli({
+      ...MOCK_BASE,
+      'check-operator-uptime-set': { isOperatorUptimeSet: true },
+    });
+    const res = await getHandler()({
+      ...ADDRS,
+      uptimeTrackerAddress: '0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF',
+      mode: 'alerts',
+      windowEpochs: 6,
+      pChainMinAVAX: 0.05,
+      cacheLateDays: 1,
+      uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+    expect(data.uptime).toMatchObject({
+      epoch: 37,
+      status: 'complete',
+      allOperatorsSet: true,
+      operatorCount: 1,
+      unknownOperators: [],
+    });
+    expect(data.checks.some((check: { name: string }) => check.name === 'uptime_data_unavailable')).toBe(false);
+  });
+
+  it('surfaces failed uptime reads as unknown instead of silently treating them as complete', async () => {
+    mockRunCli(MOCK_BASE); // uptime sub-call intentionally unmocked
+    const res = await getHandler()({
+      ...ADDRS,
+      uptimeTrackerAddress: '0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF',
+      mode: 'alerts',
+      windowEpochs: 6,
+      pChainMinAVAX: 0.05,
+      cacheLateDays: 1,
+      uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+    expect(data.uptime).toMatchObject({ status: 'unknown', allOperatorsSet: null });
+    expect(data.checks.some((check: { name: string }) => check.name === 'uptime_data_unavailable')).toBe(true);
+    expect(data.humanLines.some((line: string) => line.includes('could not be verified'))).toBe(true);
+  });
+
+  it('does not report complete 0/0 uptime when the operator list lookup failed', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-all-operators'];
+    mockRunCli(partial);
+    const res = await getHandler()({
+      ...ADDRS,
+      uptimeTrackerAddress: '0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF',
+      mode: 'alerts',
+      windowEpochs: 6,
+      pChainMinAVAX: 0.05,
+      cacheLateDays: 1,
+      uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+    expect(data.uptime).toMatchObject({
+      status: 'unknown',
+      allOperatorsSet: null,
+      operatorCount: 0,
+      operatorListAvailable: false,
+    });
+    expect(data._warnings.some((warning: string) => warning.startsWith('get-all-operators:'))).toBe(true);
+    expect(data.checks.some((check: { name: string }) => check.name === 'uptime_data_unavailable')).toBe(true);
+  });
+
   it('digest mode scans events, counts set-amount accumulation, and renders the digest', async () => {
+    process.env.ETHERSCAN_API_KEY = 'must-not-appear-in-argv';
     mockRunCli({
       ...MOCK_BASE,
       'node-logs': { nodeLogs: [] },
@@ -458,6 +593,16 @@ describe('deployment_heartbeat handler', () => {
     expect(data.humanLines.length).toBeGreaterThan(5);
     expect(data.humanLines[0]).toContain('epoch 38 started');
     expect(data.humanLines.some((l: string) => l.includes('2 set-amount'))).toBe(true);
+
+    const scanCalls = (runCli as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => ['node-logs', 'get-events'].includes((call[0] as string[])[1]),
+    );
+    expect(scanCalls).toHaveLength(2);
+    for (const [args, options] of scanCalls) {
+      expect(args).not.toContain('--snowscan-api-key');
+      expect(args).not.toContain('must-not-appear-in-argv');
+      expect(options).toMatchObject({ eventScan: true });
+    }
   });
 
   it('degrades gracefully when a sub-call fails, surfacing _warnings', async () => {
@@ -469,6 +614,94 @@ describe('deployment_heartbeat handler', () => {
 
     expect(data._warnings?.some((w: string) => w.includes('get-validator-balances'))).toBe(true);
     expect(data.checks.some((c: { name: string }) => c.name === 'pchain_validators')).toBe(true);
+    expect(data.checks.some((c: { name: string }) => c.name === 'validator_balance_data_unavailable')).toBe(true);
+  });
+
+  it.each([
+    ['get-cache-status', 'cache_data_unavailable'],
+    ['lst-wrapper info', 'lst_data_unavailable'],
+  ])('surfaces a failed %s monitoring layer as an alert', async (responseKey, checkName) => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial[responseKey];
+    mockRunCli(partial);
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((c: { name: string }) => c.name === checkName)?.status).toBe('alert');
+    expect(data.humanLines.length).toBeGreaterThan(0);
+  });
+
+  it('does not turn an unavailable cache read into a cache-incomplete claim', async () => {
+    const partial = { ...MOCK_BASE } as MockResponses;
+    delete partial['get-cache-status'];
+    mockRunCli(partial);
+
+    const res = await getHandler()({ ...ADDRS, mode: 'digest', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((check: { name: string }) => check.name === 'cache_data_unavailable')?.status).toBe('alert');
+    expect(data.checks.some((check: { name: string }) => check.name === 'stake_cache')).toBe(false);
+    expect(data.humanLines).toContainEqual(expect.stringContaining('cache unknown'));
+    expect(data.humanLines.join('\n')).not.toContain('cache incomplete');
+    expect(data.humanLines.join('\n')).not.toContain('cache pending');
+  });
+
+  it('surfaces a failed configured cache-key balance read as an alert', async () => {
+    mockRunCli(MOCK_BASE);
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+
+    const res = await getHandler()({
+      ...ADDRS,
+      cacheKeyAddress: `0x${'4'.repeat(40)}`,
+      mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5,
+    });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((c: { name: string }) => c.name === 'cache_key_balance_data_unavailable')?.status).toBe('alert');
+  });
+
+  it('retries the complete snapshot once when the epoch changes during collection', async () => {
+    let configReads = 0;
+    (runCli as ReturnType<typeof vi.fn>).mockImplementation(async (args: string[]) => {
+      if (args.join(' ').includes('get-epoch-config')) {
+        configReads++;
+        const epoch = configReads === 1 ? 38 : 39;
+        return { success: true, data: { epochConfig: { epoch, epochDuration: 302_400, updateWindow: 259_200, lastNodeStakeUpdateEpoch: epoch } } };
+      }
+      const key = Object.keys(MOCK_BASE).find((candidate) => args.join(' ').includes(candidate));
+      return key
+        ? { success: true, data: MOCK_BASE[key] }
+        : { success: false, data: null, error: `unmocked call: ${args.join(' ')}` };
+    });
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(res.isError).not.toBe(true);
+    expect(data.epoch).toBe(39);
+    expect(configReads).toBe(4);
+  });
+
+  it('fails instead of returning a mixed snapshot when both attempts cross an epoch boundary', async () => {
+    let configReads = 0;
+    (runCli as ReturnType<typeof vi.fn>).mockImplementation(async (args: string[]) => {
+      if (args.join(' ').includes('get-epoch-config')) {
+        configReads++;
+        const epoch = 37 + configReads;
+        return { success: true, data: { epochConfig: { epoch, epochDuration: 302_400, updateWindow: 259_200, lastNodeStakeUpdateEpoch: epoch } } };
+      }
+      const key = Object.keys(MOCK_BASE).find((candidate) => args.join(' ').includes(candidate));
+      return key
+        ? { success: true, data: MOCK_BASE[key] }
+        : { success: false, data: null, error: `unmocked call: ${args.join(' ')}` };
+    });
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('epoch changed during heartbeat collection');
+    expect(configReads).toBe(4);
   });
 
   it('fails cleanly when epoch config is unavailable', async () => {

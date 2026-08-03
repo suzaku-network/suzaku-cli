@@ -1,0 +1,182 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai/gpt-5.5",
+        "fallbacks": ["anthropic/claude-sonnet-4-6"]
+      },
+      "models": {
+        "openai/gpt-5.5": {
+          "alias": "Codex optional",
+          "agentRuntime": {
+            "id": "codex"
+          }
+        },
+        "anthropic/claude-sonnet-4-6": {
+          "alias": "Sonnet fallback"
+        }
+      },
+      "thinkingDefault": "high",
+      "timeoutSeconds": 600,
+      "maxConcurrent": 2
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "name": "Suzaku monitor (Codex option)",
+        "skills": [],
+        "tools": {
+          "allow": ["suzaku__*", "read"],
+          "deny": ["exec", "process", "write", "edit", "apply_patch", "browser", "web_search", "web_fetch", "gateway", "cron"],
+          "codeMode": false,
+          "elevated": {
+            "enabled": false
+          },
+          "exec": {
+            "mode": "deny"
+          },
+          "fs": {
+            "workspaceOnly": true
+          }
+        }
+      },
+      {
+        "id": "heartbeat",
+        "name": "Suzaku scheduled heartbeat (Codex option)",
+        "workspace": "/home/node/.openclaw/workspace",
+        "skills": [],
+        "tools": {
+          "allow": ["suzaku__deployment_heartbeat", "read", "write", "message"],
+          "deny": ["exec", "process", "edit", "apply_patch", "browser", "web_search", "web_fetch", "gateway", "cron"],
+          "codeMode": false,
+          "elevated": {
+            "enabled": false
+          },
+          "exec": {
+            "mode": "deny"
+          },
+          "fs": {
+            "workspaceOnly": true
+          },
+          "message": {
+            "allowCrossContextSend": true,
+            "crossContext": {
+              "allowWithinProvider": true,
+              "allowAcrossProviders": false
+            },
+            "actions": {
+              "allow": ["send"]
+            },
+            "broadcast": {
+              "enabled": false
+            }
+          }
+        }
+      }
+    ]
+  },
+  "plugins": {
+    "allow": ["codex", "anthropic", "telegram", "suzaku-output-guard"],
+    "bundledDiscovery": "allowlist",
+    "entries": {
+      "codex": {
+        "enabled": true
+      },
+      "suzaku-output-guard": {
+        "enabled": true
+      }
+    }
+  },
+  "mcp": {
+    "sessionIdleTtlMs": 600000,
+    "servers": {
+      "suzaku": {
+        "command": "node",
+        "args": ["/mcp/packages/mcp/dist/server.js", "--read-only"],
+        "env": {
+          "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "HOME": "/home/node",
+          "ETHERSCAN_API_KEY": "${ETHERSCAN_API_KEY}",
+          "SNOWSCAN_API_KEY": "${SNOWSCAN_API_KEY}",
+          "SUZAKU_MCP_PUBLIC_HEALTH": "true",
+          "SUZAKU_MCP_AUDIT_DIR": "/data/audit"
+        },
+        "connectionTimeoutMs": 30000,
+        "requestTimeoutMs": 360000,
+        "supportsParallelToolCalls": true,
+        "toolFilter": {
+          "include": ["*"]
+        },
+        "codex": {
+          "agents": ["main", "heartbeat"],
+          "defaultToolsApprovalMode": "approve"
+        }
+      }
+    }
+  },
+  "tools": {
+    "profile": "minimal",
+    "alsoAllow": ["bundle-mcp", "read", "write", "message"],
+    "web": {
+      "search": {
+        "enabled": false
+      },
+      "fetch": {
+        "enabled": false
+      }
+    },
+    "agentToAgent": {
+      "enabled": false,
+      "allow": []
+    },
+    "elevated": {
+      "enabled": false
+    },
+    "exec": {
+      "mode": "deny",
+      "applyPatch": {
+        "enabled": false,
+        "workspaceOnly": true
+      }
+    },
+    "fs": {
+      "workspaceOnly": true
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": false,
+    "text": true,
+    "bash": false,
+    "config": false,
+    "mcp": false,
+    "plugins": false,
+    "debug": false,
+    "restart": false,
+    "useAccessGroups": true,
+    "ownerAllowFrom": ["tg:${TELEGRAM_ADMIN_USER_ID}"],
+    "allowFrom": {
+      "telegram": ["tg:${TELEGRAM_ADMIN_USER_ID}"]
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["tg:${TELEGRAM_ADMIN_USER_ID}"],
+      "groupPolicy": "allowlist",
+      "contextVisibility": "allowlist",
+      "groups": {
+        "${TELEGRAM_GROUP_ID}": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "cron": {
+    "enabled": true,
+    "maxConcurrentRuns": 1
+  }
+}

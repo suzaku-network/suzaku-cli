@@ -24,7 +24,7 @@ export function registerUptimeTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'uptime_get_validation_uptime_message',
-    'Fetch the signed uptime proof for a validator from the L1 RPC without submitting it on-chain — useful to check what uptime a validator would report before calling uptime_report_validator. The l1RpcUrl is the L1\'s own RPC endpoint (not the C-Chain RPC). Requires SIG_AGG_URL env for signature aggregation (defaults to Glacier API).',
+    'Fetch the signed uptime proof for a validator from the L1 RPC without submitting it on-chain — useful to check what uptime a validator would report before calling uptime_report_validator. The l1RpcUrl is the L1\'s own RPC endpoint (not the C-Chain RPC). Uses the server-configured signature-aggregation service (defaults to the Glacier API).',
     {
       l1RpcUrl: z.string()
         .regex(/^https?:\/\/.+/)
@@ -51,8 +51,8 @@ export function registerUptimeTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'uptime_report_validator',
-    'Step 1 of the Dexalot weekly epoch workflow: fetch the signed uptime proof from the L1 RPC and submit it to the UptimeTracker contract on-chain. The l1RpcUrl positional is the L1\'s own RPC (not the C-Chain RPC). Requires SIG_AGG_URL env for signature aggregation (defaults to Glacier API). Takes up to 5 minutes due to warp signature collection. ' +
-    'Node IDs for the active set come from middleware_get_active_nodes. A warp-collection timeout usually means SIG_AGG_URL is unreachable or validators are offline — report the error, do not retry blindly.',
+    'Step 1 of the Dexalot weekly epoch workflow: fetch the signed uptime proof from the L1 RPC and submit it to the UptimeTracker contract on-chain. The l1RpcUrl positional is the L1\'s own RPC (not the C-Chain RPC). Uses the server-configured signature-aggregation service (defaults to the Glacier API). Takes up to 5 minutes due to warp signature collection. ' +
+    'Node IDs for the active set come from middleware_get_active_nodes. A warp-collection timeout usually means the signature-aggregation service is unreachable or validators are offline — report the error, do not retry blindly.',
     {
       l1RpcUrl: z.string()
         .regex(/^https?:\/\/.+/)

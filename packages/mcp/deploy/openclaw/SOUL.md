@@ -29,14 +29,14 @@ When a question is about Dexalot (or doesn't name an L1), use these addresses im
 
 ## How to answer
 
-Every reply — regardless of question type — opens with one sentence stating the current state and the required action (or that none is needed), including the deadline as absolute UTC + time remaining when one exists. Detail comes after that line, never before.
+Every reply — regardless of question type — opens with one sentence stating the current state and the required action (or that none is needed), including the deadline as absolute UTC + time remaining when one exists. Quote tool-returned UTC and time-remaining fields; if a tool does not provide a relative duration, give only its absolute UTC time rather than calculating or guessing. Detail comes after that line, never before.
 
 1. **Run `discover_network` only when the question is about a different L1 or network** than the known deployment above. It returns all L1s, middlewares, and global operators automatically.
 2. Prefer composite tools over chains of single reads — each tool's description says when to use it; follow the tool-economy rules in `EPOCHS.md` for every tool-selection decision.
 3. Present data clearly with summaries and context. Format large numbers in human-readable form (e.g., "1,250 AVAX" not "1250000000000000000000").
 4. If a tool call fails or times out, say so and name the tool — never present partial results as complete, and **never fill the gap from memory or from the examples in this file or EPOCHS.md** (their incident numbers are illustrations, not live data). On repeated tool errors, run `health_check` first.
 5. **Identity first**: when a question says "my node", "my operator", "my stake/deposit", or needs a per-address lookup and no address or NodeID was given, ask for the identifier before calling anything — do NOT run deployment-wide tools (heartbeat, validator balances, operator lists) and present their output as if it were about the asker.
-6. **You cannot attribute on-chain actions to people.** The read tools do not expose who sent a transaction; for "who set/changed this?" say it cannot be determined from here and point at the tx hash on the explorer. Likewise there is no slashing read path — never confirm or deny a slashing; state what the stake numbers show and that slashing cannot be verified with these tools.
+6. **You cannot attribute on-chain actions to people.** The read tools do not expose who sent a transaction; for "who set/changed this?" say it cannot be determined from here and point at the tx hash on the explorer. **The current Suzaku Core and pinned Dexalot deployment do not support slashing**: the middleware and vault-manager slash paths are unimplemented, and the Dexalot vault has no initialized slasher. Say plainly that a stake decrease was not slashing, then use transaction/event evidence to investigate its actual cause without attributing it to a person without proof.
 
 ## What you cannot do
 

@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   sanitizeOutput,
+  sanitizeOutputValue,
   sanitizeArgs,
   redactRpcUrl,
   formatResult,
@@ -86,8 +87,31 @@ describe('sanitizeOutput', () => {
     expect(sanitizeOutput('hello world')).toBe('hello world');
   });
 
+  it('replaces sensitive configuration names and internal paths with public descriptions', () => {
+    expect(sanitizeOutput(
+      'SNOWSCAN_API_KEY unavailable at /run/secrets/snowscan; SAFE_API_KEY_FILE invalid.',
+    )).toBe(
+      'event-history service unavailable at [internal path]; [internal configuration] invalid.',
+    );
+  });
+
   it('handles empty string', () => {
     expect(sanitizeOutput('')).toBe('');
+  });
+});
+
+describe('sanitizeOutputValue', () => {
+  it('sanitizes nested structured output before it reaches the model', () => {
+    const output = sanitizeOutputValue({
+      diagnosis: ['SNOWSCAN_API_KEY unavailable'],
+      nested: { path: '/home/node/.openclaw/config.json' },
+      count: 2,
+    });
+    expect(output).toEqual({
+      diagnosis: ['event-history service unavailable'],
+      nested: { path: '[internal path]' },
+      count: 2,
+    });
   });
 });
 
@@ -180,9 +204,33 @@ describe('formatResult', () => {
       delete process.env.SUZAKU_PK;
     }
   });
+
+  it('sanitizes successful structured data as well as its text rendering', () => {
+    const result: CliResult = {
+      success: true,
+      data: { warning: 'SNOWSCAN_API_KEY unavailable', path: '/data/audit/mcp-audit.log' },
+    };
+    const formatted = formatResult(result);
+    expect(formatted.content[0].text).not.toContain('SNOWSCAN_API_KEY');
+    expect(formatted.content[0].text).not.toContain('/data/audit');
+    expect(formatted.structuredContent).toEqual({
+      warning: 'event-history service unavailable',
+      path: '[internal path]',
+    });
+  });
 });
 
 describe('formatGuardError', () => {
+  it('redacts internal configuration names from locally generated guard errors', () => {
+    expect(formatGuardError('Set SUZAKU_MAX_REWARDS_AMOUNT before retrying')).toEqual({
+      content: [{
+        type: 'text',
+        text: 'Error: Set [internal configuration] before retrying',
+      }],
+      isError: true,
+    });
+  });
+
   it('wraps error string in MCP error response', () => {
     const result = formatGuardError('Tool blocked by deny list');
     expect(result.isError).toBe(true);
@@ -276,7 +324,7 @@ describe('rate limiter', () => {
 });
 
 describe('buildChildEnv', () => {
-  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_PK_FILE', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'SAFE_API_KEY_FILE', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK'];
+  const SAFE_ENV = ['SUZAKU_PK', 'SUZAKU_PK_FILE', 'SUZAKU_SAFE_ADDRESS', 'SAFE_API_KEY', 'SAFE_API_KEY_FILE', 'SUZAKU_SECRET_NAME', 'SUZAKU_MCP_LEDGER', 'SUZAKU_PCHAIN_PK', 'ETHERSCAN_API_KEY', 'SNOWSCAN_API_KEY'];
   const tmpFiles: string[] = [];
   beforeEach(() => { for (const k of SAFE_ENV) delete process.env[k]; });
   afterEach(() => {
@@ -290,11 +338,31 @@ describe('buildChildEnv', () => {
     return p;
   };
 
-  it('forwards only the 8 base vars for a read call', () => {
+  it('forwards only the restricted base vars for a read call', () => {
     const env = buildChildEnv({});
     expect(env.PATH).toBe(process.env.PATH);
     expect('PK' in env).toBe(false);
     expect('SAFE_API_KEY' in env).toBe(false);
+  });
+
+  it('forwards the explorer credential only to explicitly marked event scans', () => {
+    process.env.ETHERSCAN_API_KEY = 'explorer-key';
+    expect('ETHERSCAN_API_KEY' in buildChildEnv({})).toBe(false);
+    expect(buildChildEnv({ eventScan: true }).ETHERSCAN_API_KEY).toBe('explorer-key');
+  });
+
+  it('accepts the legacy SnowScan variable but normalizes it for the child', () => {
+    process.env.ETHERSCAN_API_KEY = '';
+    process.env.SNOWSCAN_API_KEY = 'legacy-key';
+    const env = buildChildEnv({ eventScan: true });
+    expect(env.ETHERSCAN_API_KEY).toBe('legacy-key');
+    expect('SNOWSCAN_API_KEY' in env).toBe(false);
+  });
+
+  it('prefers a non-empty canonical explorer credential over the legacy alias', () => {
+    process.env.ETHERSCAN_API_KEY = 'current-key';
+    process.env.SNOWSCAN_API_KEY = 'legacy-key';
+    expect(buildChildEnv({ eventScan: true }).ETHERSCAN_API_KEY).toBe('current-key');
   });
 
   it('forwards SAFE_API_KEY only on a Safe-wired write call', () => {
@@ -402,4 +470,18 @@ describe('runPublicCacheCli', () => {
     expect(result.success).toBe(false);
     expect(result.error).not.toContain('public cache execution only permits');
   }, 35_000);
+});
+
+describe('redaction parity corpus (shared with the delivery guard)', () => {
+  const { cases } = JSON.parse(
+    readFileSync(new URL('../eval/fixtures/redaction-parity.json', import.meta.url), 'utf8'),
+  ) as { cases: Array<{ name: string; input: string; mustNotContain?: string[]; mustContain?: string[] }> };
+
+  for (const testCase of cases) {
+    it(`sanitizer layer: ${testCase.name}`, () => {
+      const output = sanitizeOutput(testCase.input);
+      for (const banned of testCase.mustNotContain ?? []) expect(output).not.toContain(banned);
+      for (const kept of testCase.mustContain ?? []) expect(output).toContain(kept);
+    });
+  }
 });

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const cliSource = readFileSync(resolve(repoRoot, 'src/cli.ts'), 'utf8');
 const parserSource = readFileSync(resolve(repoRoot, 'src/lib/cliParser.ts'), 'utf8');
-const serverSource = readFileSync(resolve(repoRoot, 'packages/mcp/src/server.ts'), 'utf8');
+const profileConfigSource = readFileSync(resolve(repoRoot, 'packages/mcp/src/profile-config.ts'), 'utf8');
 
 describe('CLI --public-call guard shape', () => {
   it('does not authorize public-call from raw argv string matching', () => {
@@ -36,7 +36,7 @@ describe('CLI --public-call guard shape', () => {
 
 describe('MCP --public-write startup guard shape', () => {
   it('does not allow custom networks because the cache tool rejects rpcUrl', () => {
-    expect(serverSource).toContain("['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai'].includes(network)");
-    expect(serverSource).toContain('supported non-custom network name');
+    expect(profileConfigSource).toContain("['mainnet', 'fuji', 'anvil', 'kiteaitestnet', 'kiteai'].includes(network)");
+    expect(profileConfigSource).toContain('supported non-custom network name');
   });
 });

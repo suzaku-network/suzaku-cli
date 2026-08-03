@@ -244,7 +244,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'middleware_get_node_logs',
-    'Get correlated on-chain node/stake/validator events: NodeAdded, NodeRemoved, NodeStakeUpdated, AllNodeStakesUpdated, OperatorHasLeftoverStake from the middleware plus all BalancerValidatorManager lifecycle events. Defaults to scanning from contract START_TIME; pass fromEpoch or fromBlock for an epoch-scoped digest. Uses SNOWSCAN_API_KEY env var for API access.',
+    'Get correlated on-chain node/stake/validator events: NodeAdded, NodeRemoved, NodeStakeUpdated, AllNodeStakesUpdated, OperatorHasLeftoverStake from the middleware plus all BalancerValidatorManager lifecycle events. Defaults to scanning from contract START_TIME; pass fromEpoch or fromBlock for an epoch-scoped digest. Uses the server-configured explorer service when available.',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       nodeId: z.string().optional().describe('NodeID (CB58 format, e.g. NodeID-xxx) to filter logs for a specific node'),
@@ -261,8 +261,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       if (fromEpoch) args.push('--from-epoch', fromEpoch);
       if (fromBlock) args.push('--from-block', fromBlock);
       if (toBlock) args.push('--to-block', toBlock);
-      if (process.env.SNOWSCAN_API_KEY) args.push('--snowscan-api-key', process.env.SNOWSCAN_API_KEY);
-      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000 }));
+      return formatResult(await runCli(args, { network, rpcUrl, timeout: 180_000, eventScan: true }));
     },
   );
 

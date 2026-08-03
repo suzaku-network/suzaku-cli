@@ -37,6 +37,14 @@ whenever an unset epoch is near the window edge.
       epochs after N (currently 2), once uptime is in. Runs in operator batches:
       `rewards_get_distribution_batch` → `lastProcessedOperator` / `isComplete`.
       A funded epoch sitting with `isComplete=false` is **work waiting to happen**.
+      `waiting_distribution_window` means the time gate is still closed; report the
+      returned opening epoch and UTC time, and do not claim uptime is missing.
+      `distribution_window_open` means the time gate is open but does not prove
+      uptime is present or absent; verify uptime before recommending distribution.
+      For `deployment_heartbeat`, `uptime.status` is the only uptime conclusion:
+      `complete` means no uptime action, `missing` means report/compute is needed,
+      and `unknown`/`not_checked` means say it was not verified. Never infer missing
+      uptime from an incomplete distribution or from the absence of an uptime alert.
    d. **Claim** — once `distributionComplete=true`, stakers/operators/curators claim
       (64-epoch batches; check progress via `rewards_get_last_claimed`).
    e. **Reclaim window** — undistributed remainders become admin-reclaimable after the
@@ -63,8 +71,8 @@ Inputs that trip people up:
 - `l1RpcUrl` is the **Dexalot L1's own RPC**, NOT the C-Chain RPC.
 - `blockchainId` is the L1's blockchain ID (CB58). No tool returns it — ask the
   operator once, then reuse it for the whole conversation.
-- Signature aggregation uses the `SIG_AGG_URL` endpoint (defaults to Glacier). A
-  warp-collection timeout means that endpoint is unreachable or validators are
+- Signature aggregation uses the server-configured service (defaults to Glacier). A
+  warp-collection timeout means that service is unreachable or validators are
   offline — report the raw error; never retry blindly.
 - The `uptimeTrackerAddress` comes from the SOUL.md Known-deployment pin. It is NOT in
   `middleware_get_linked_addresses` — the on-chain source of truth is the Rewards
@@ -94,11 +102,12 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 
 | Question | Tools | Lead the answer with |
 |---|---|---|
-| "State of the deployment?" | `deployment_heartbeat` (mode=digest) | **Actions needed + deadlines first**, then the epoch table, then infra status |
-| "What do I need to do this week?" | `rewards_get_epoch_status` (range: currentEpoch-4 → current), `middleware_epoch_status` | Per epoch: needs uptime? needs set-amount (and the funding deadline UTC)? needs distribution? Then the stake-cache window |
-| "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Settable-window check, **whether anything was already set (accumulation!)**, deadline UTC |
+| "State of the deployment?" | `deployment_heartbeat` (mode=digest) | **Actions needed + deadlines first**, quoting `timing.*Utc`, `timing.*TimeRemaining`, and `uptime.status`; then the epoch table and infra status |
+| "What do I need to do this week?" | `deployment_heartbeat` (mode=digest, windowEpochs=6) | Use its computed lifecycle, `uptime.status`, and timing fields; do not recompute relative time from epoch dates |
+| "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Quote `setAmountReadiness`: contract evidence, the bot's operational window, existing funding, accumulation risk, and bot-policy deadline UTC. Do not call the policy window a contract restriction or recompute it |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
+| "What is minimum uptime / has it changed?" | `rewards_get_min_uptime` | State the current value. If `historyAvailable=false`, say historical changes are unknown; do not invent event names, call the value typical, or suggest the getter proves history |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
 | "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard`, `middleware_cache_stakes` | `allClassesCached` + window close UTC; if a class is false near close, ask the cache bot to cache that `(epoch, class)` |
@@ -177,7 +186,8 @@ For an alarmed or ambiguous "something is wrong" message:
   summary above it.
 
 - **Actionables first**: anything with a deadline (stake cache close, funding deadline,
-  distribution waiting on uptime) goes at the top with its UTC time and time-remaining.
+  distribution waiting on uptime) goes at the top with its UTC time and tool-calculated
+  time-remaining. If no relative-time field was returned, omit it rather than estimating.
 - Epoch statuses in one compact table: epoch · set amount · #set-txs · funded ·
   distributed · status/next action.
 - Flag `2+ set-amount txs` loudly every time — that is the accumulation incident, and

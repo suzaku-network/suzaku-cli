@@ -27,8 +27,9 @@ const SAFE_TX_HASH = '0x' + 'd'.repeat(64);
 interface ChainState {
   epochRewards: string;
   currentEpoch: number;
-  eventCount: number;
+  eventCount: number | null;
   isComplete: boolean | string;
+  deadlineTs: number;
 }
 
 /** Dispatching runCli mock that simulates the CLI reads + the propose call */
@@ -38,12 +39,49 @@ function mockChain(state: ChainState) {
     switch (cmd) {
       case 'rewards get-epoch-rewards':
         return { success: true, data: { epochRewards: state.epochRewards } };
+      case 'rewards get-fees-config':
+        return { success: true, data: { protocolFee: '500', operatorFee: '0', curatorFee: '0' } };
+      case 'rewards get-epoch-status':
+        return {
+          success: true,
+          data: {
+            epochStatusTable: {
+              constants: { distributionEarliestOffset: 2 },
+              epochs: [{
+                epoch: Number(args[3]),
+                epochRewards: state.epochRewards,
+                funded: state.epochRewards !== '0',
+                distributionComplete: state.isComplete,
+              }],
+            },
+          },
+        };
       case 'middleware get-current-epoch':
         return { success: true, data: { epoch: state.currentEpoch } };
+      case 'middleware get-epoch-start-ts':
+        return { success: true, data: { epochStartTs: state.deadlineTs } };
       case 'rewards get-amount-set-events':
-        return { success: true, data: { rewardsAmountSetEvents: { eventCount: state.eventCount } } };
+        return state.eventCount === null
+          ? { success: false, data: null, error: 'SNOWSCAN_API_KEY unavailable' }
+          : {
+            success: true,
+            data: { rewardsAmountSetEvents: { eventCount: state.eventCount, totalAmount: state.epochRewards } },
+          };
       case 'rewards get-distribution-batch':
-        return { success: true, data: { distributionBatch: { isComplete: state.isComplete, lastProcessedOperator: '3' } } };
+        {
+          const lastProcessedOperator =
+            state.isComplete === true || state.isComplete === 'true' ? '3' : '0';
+          return {
+            success: true,
+            data: {
+              isComplete: state.isComplete,
+              lastProcessedOperator,
+              distributionBatch: { isComplete: state.isComplete, lastProcessedOperator },
+            },
+          };
+        }
+      case 'rewards get-min-uptime':
+        return { success: true, data: { minRequiredUptime: '241200' } };
       case 'rewards set-amount':
       case 'rewards distribute':
         return { success: true, data: { safeTxHash: SAFE_TX_HASH, safeQueueUrl: `https://app.safe.global/transactions/queue?safe=avax:${SAFE}` } };
@@ -69,10 +107,18 @@ function getHandlers() {
     tools,
     setAmount: (params: Record<string, unknown>) => tools['rewards_set_amount_propose'].handler(params, {}),
     distribute: (params: Record<string, unknown>) => tools['rewards_distribute_propose'].handler(params, {}),
+    diagnosis: (params: Record<string, unknown>) => tools['rewards_epoch_diagnosis'].handler(params, {}),
+    minUptime: (params: Record<string, unknown>) => tools['rewards_get_min_uptime'].handler(params, {}),
   };
 }
 
-const HEALTHY: ChainState = { epochRewards: '0', currentEpoch: 47, eventCount: 0, isComplete: false };
+const HEALTHY: ChainState = {
+  epochRewards: '0',
+  currentEpoch: 47,
+  eventCount: 0,
+  isComplete: false,
+  deadlineTs: 1_900_000_000,
+};
 
 beforeEach(() => {
   (runCli as ReturnType<typeof vi.fn>).mockReset();
@@ -88,6 +134,7 @@ afterEach(() => {
   delete process.env.SUZAKU_REWARDS_ADDRESS;
   delete process.env.SUZAKU_MIDDLEWARE_ADDRESS;
   delete process.env.SUZAKU_MAX_REWARDS_AMOUNT;
+  delete process.env.ETHERSCAN_API_KEY;
   vi.unstubAllGlobals();
 });
 
@@ -125,8 +172,153 @@ describe('propose-only registration', () => {
   });
 });
 
+describe('read-only rewards decisions', () => {
+  it.each([
+    { targetEpoch: 20, currentEpoch: 21 },
+    { targetEpoch: 100, currentEpoch: 102 },
+  ])(
+    'computes settability dynamically for target $targetEpoch at current $currentEpoch',
+    async ({ targetEpoch, currentEpoch }) => {
+      mockChain({
+        ...HEALTHY,
+        currentEpoch,
+        epochRewards: '11429450000000000000000',
+        eventCount: 1,
+      });
+      const { diagnosis } = getHandlers();
+      const res = await diagnosis({
+        rewardsAddress: REWARDS,
+        middlewareAddress: MIDDLEWARE,
+        epoch: String(targetEpoch),
+        network: 'mainnet',
+      });
+      const readiness = (res.structuredContent as Record<string, any>).setAmountReadiness;
+      expect(readiness).toMatchObject({
+        targetEpoch,
+        currentEpoch,
+        withinBotOperationalWindow: true,
+        alreadyFunded: true,
+        additionalSetWouldAccumulate: true,
+        botSettableThroughEpoch: targetEpoch + 2,
+        botWindowClosesAtEpoch: targetEpoch + 3,
+        recommendedAction: 'do_not_set_already_funded',
+      });
+      expect(readiness.human).toContain("inside the bot's operational window");
+      expect(readiness.human).toContain('would add, not overwrite');
+      const data = res.structuredContent as Record<string, any>;
+      expect(data.uptimeAssessment).toEqual({
+        status: 'not_checked',
+        actionRequired: null,
+        instruction:
+          'Do not recommend uptime reporting or computation unless middleware_uptime_report or ' +
+          'deployment_heartbeat reports that uptime is missing.',
+      });
+      expect(data.diagnosis).toContain(
+        'Uptime was not checked by this tool. Do not recommend uptime reporting or computation unless ' +
+        'middleware_uptime_report or deployment_heartbeat reports that uptime is missing.',
+      );
+    },
+  );
+
+  it('distinguishes future, stale, and safe-to-set epochs', async () => {
+    const cases = [
+      {
+        state: { ...HEALTHY, currentEpoch: 50 },
+        targetEpoch: 50,
+        action: 'wait_for_epoch_completion',
+        canSet: false,
+      },
+      {
+        state: { ...HEALTHY, currentEpoch: 53 },
+        targetEpoch: 50,
+        action: 'bot_set_amount_window_closed',
+        canSet: false,
+      },
+      {
+        state: { ...HEALTHY, currentEpoch: 51 },
+        targetEpoch: 50,
+        action: 'set_amount_before_deadline',
+        canSet: true,
+      },
+    ];
+    for (const testCase of cases) {
+      mockChain(testCase.state);
+      const { diagnosis } = getHandlers();
+      const res = await diagnosis({
+        rewardsAddress: REWARDS,
+        middlewareAddress: MIDDLEWARE,
+        epoch: String(testCase.targetEpoch),
+        network: 'mainnet',
+      });
+      const readiness = (res.structuredContent as Record<string, any>).setAmountReadiness;
+      expect(readiness.recommendedAction).toBe(testCase.action);
+      expect(readiness.withinBotOperationalWindow).toBe(testCase.canSet);
+    }
+  });
+
+  it('fails closed on an unavailable event scan when no funding is visible', async () => {
+    mockChain({ ...HEALTHY, currentEpoch: 51, eventCount: null });
+    const { diagnosis } = getHandlers();
+    const res = await diagnosis({
+      rewardsAddress: REWARDS,
+      middlewareAddress: MIDDLEWARE,
+      epoch: '50',
+      network: 'mainnet',
+    });
+    const data = res.structuredContent as Record<string, any>;
+    expect(data.setAmountReadiness).toMatchObject({
+      withinBotOperationalWindow: true,
+      alreadyFunded: false,
+      eventHistoryAvailable: false,
+      additionalSetWouldAccumulate: null,
+      recommendedAction: 'verify_event_history_before_setting',
+    });
+    const historyCall = (runCli as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call: unknown[]) => (call[0] as string[])[1] === 'get-amount-set-events',
+    );
+    expect(historyCall?.[1]).toMatchObject({ timeout: 300_000, eventScan: true });
+    expect(JSON.stringify(data)).not.toContain('SNOWSCAN_API_KEY');
+  });
+
+  it('separates source-proven contract capability from the bot policy window', async () => {
+    mockChain({
+      ...HEALTHY,
+      currentEpoch: 51,
+      epochRewards: '0',
+      eventCount: 0,
+    });
+    const { diagnosis } = getHandlers();
+    const res = await diagnosis({
+      rewardsAddress: REWARDS,
+      middlewareAddress: MIDDLEWARE,
+      epoch: '50',
+      network: 'mainnet',
+    });
+    expect((res.structuredContent as Record<string, any>).setAmountReadiness).toMatchObject({
+      withinBotOperationalWindow: true,
+      distributionOpenEpoch: 52,
+      distributionStarted: false,
+      distributionStartFullyObservable: false,
+      contractCanAcceptValidSetAmount: true,
+      recommendedAction: 'set_amount_before_deadline',
+    });
+  });
+
+  it('marks the uptime getter as current-only evidence', async () => {
+    mockChain(HEALTHY);
+    const { minUptime } = getHandlers();
+    const res = await minUptime({ rewardsAddress: REWARDS, network: 'mainnet' });
+    expect(res.structuredContent).toMatchObject({
+      minRequiredUptime: '241200',
+      historyAvailable: false,
+    });
+    expect((res.structuredContent as Record<string, string>).historyNote).toContain('current value only');
+  });
+});
+
 describe('rewards_set_amount_propose', () => {
   it('proposes with numberOfEpochs hardcoded to 1 and returns the verification echo', async () => {
+    process.env.ETHERSCAN_API_KEY = 'must-not-appear-in-argv';
     mockChain(HEALTHY);
     const { setAmount } = getHandlers();
     const res = await setAmount({ epoch: '46', rewardsAmount: '10450', network: 'mainnet' });
@@ -146,6 +338,14 @@ describe('rewards_set_amount_propose', () => {
     expect(Array.isArray(data.verifyBeforeSigning)).toBe(true);
     expect(JSON.stringify(data.verifyBeforeSigning)).toContain('rewards_epoch_diagnosis');
     expect((data.preCheck as Record<string, unknown>).at).toBeTruthy();
+
+    const historyCall = (runCli as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c: unknown[]) => (c[0] as string[])[1] === 'get-amount-set-events',
+    );
+    expect(historyCall).toBeDefined();
+    expect(historyCall![0]).not.toContain('--snowscan-api-key');
+    expect(historyCall![0]).not.toContain('must-not-appear-in-argv');
+    expect(historyCall![1]).toMatchObject({ eventScan: true });
   });
 
   it('REFUSES when the epoch already has rewards set (accumulation guard)', async () => {

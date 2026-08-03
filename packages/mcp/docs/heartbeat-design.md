@@ -138,9 +138,9 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 ## Operational caveats
 
-- Cron jobs are lost on container rebuild — keep the two `openclaw.mjs cron create` commands in a post-start script. One alerts cron every 4 h; the digest fires when that run detects `epoch != lastReportedEpoch` (the tool returns `epoch`, so the bot compares against its last message — no extra scheduler needed for the 3.5-day period a fixed cron can't express).
+- Cron declarations persist in the fresh `suzaku-monitor-kimi-state-v1` volume. `register-heartbeat-cron.sh` uses an idempotent declaration key and should be rerun after an upgrade, then verified as the only job with `verify-heartbeat-cron.mjs`.
 - Two runs inside the 60 s dedup window return cached data — harmless at these cadences.
-- Use a dedicated RPC, not `api.avax.network`. Heartbeat-only crons can run on `claude-haiku-4-5` to cut cost; the formatting task is trivial.
+- Public Avalanche RPC is the default. A paid Etherscan V2 key can accelerate event history if production measurements justify it. The deployed scheduler uses the same Kimi K3 primary as the monitor.
 
 ## Implementation status (June 2026)
 
@@ -163,18 +163,17 @@ Behavior notes vs. the design above:
 
 ## OpenClaw setup
 
-Two crons, both every 4 h — add to the post-start script so they survive container rebuilds:
+The production deployment uses one Kimi job every four hours, not two. The isolated `heartbeat` agent can see only `deployment_heartbeat`, checkpoint read/write, and Telegram send. It first calls alerts mode; when the returned epoch differs from `memory/heartbeat-digest-state.json`, the same turn calls digest mode, sends it once, and updates the checkpoint after successful delivery. This halves scheduled model turns and prevents ordinary chat users from changing scheduler state.
+
+Register or update it after the gateway is healthy:
 
 ```bash
-# 1. Alerts: post only when something needs attention
-openclaw.mjs cron create \
-  --schedule "10 */4 * * *" \
-  --prompt "Call deployment_heartbeat with mode=alerts, middlewareAddress=0x9411307279456450ABF9B5181aA7a02271f0DC34, rewardsAddress=0x0f388C7c6201014Ad836400e9e2ebD211BDBcB00, lstWrapperAddress=0xDc1c4428F3145286f262980d36C640285c0DA403, network=mainnet. If humanLines is empty, do nothing. Otherwise post humanLines verbatim as a monospace block to the group."
-
-# 2. Digest: post once per epoch rollover (the bot compares the returned epoch to the last digest it posted)
-openclaw.mjs cron create \
-  --schedule "25 */4 * * *" \
-  --prompt "Call deployment_heartbeat with mode=digest (same addresses as the alerts cron). If the returned epoch equals the epoch of the last digest you posted, do nothing. Otherwise post humanLines verbatim as a monospace block to the group, then remember this epoch."
+docker compose exec suzaku-bot register-heartbeat-cron.sh
+docker compose exec suzaku-bot node openclaw.mjs cron list --json
 ```
 
-Use a dedicated `rpcUrl` in production; the digest's event scans are too slow for rate-limited public endpoints. `claude-haiku-4-5` is sufficient for both crons — the message is pre-formatted.
+The script pins all four production addresses, including `uptimeTrackerAddress=0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF`. It uses `--no-deliver`, so only an explicit `message` tool call can reach Telegram. Event scans use public RPC by default. Optional `ETHERSCAN_API_KEY` acceleration requires a paid Etherscan tier for Avalanche; it is not a deployment prerequisite.
+
+Checkpointing occurs only after a successful Telegram send. Delivery is therefore
+at-least-once, not exactly-once: a process crash after Telegram accepts the message
+but before the checkpoint write can duplicate one digest.

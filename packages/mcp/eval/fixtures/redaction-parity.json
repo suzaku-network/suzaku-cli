@@ -1,0 +1,58 @@
+{
+  "$comment": "Shared behavioral corpus for the two redaction layers: sanitizeOutput() in src/cli-runner.ts and guardOutboundText() in deploy/openclaw/plugins/suzaku-output-guard/transform.mjs. Both test suites run every case; assertions are absence/presence, not exact output, because the layers legitimately differ (hex redaction, SNOWSCAN phrase rewrites). Changing either regex without updating the other must fail both suites.",
+  "cases": [
+    {
+      "name": "known internal name, uppercase",
+      "input": "SNOWSCAN_API_KEY unavailable during the event scan",
+      "mustNotContain": ["SNOWSCAN_API_KEY"]
+    },
+    {
+      "name": "known internal names, lowercase variants",
+      "input": "check snowscan_api_key and sig_agg_url before retrying",
+      "mustNotContain": ["snowscan_api_key", "sig_agg_url"]
+    },
+    {
+      "name": "current explorer credential name",
+      "input": "ETHERSCAN_API_KEY unavailable during the event scan",
+      "mustNotContain": ["ETHERSCAN_API_KEY"]
+    },
+    {
+      "name": "GNUPGHOME is a known internal name",
+      "input": "GNUPGHOME points at the keystore directory",
+      "mustNotContain": ["GNUPGHOME"]
+    },
+    {
+      "name": "suzaku-prefixed names, lowercase",
+      "input": "set suzaku_pk or SUZAKU_SECRET_NAME first",
+      "mustNotContain": ["suzaku_pk", "SUZAKU_SECRET_NAME"]
+    },
+    {
+      "name": "generic secret-shaped names, uppercase only",
+      "input": "FOO_PASSWORD and BAR_API_KEY_FILE and BAZ_ACCESS_TOKEN must be set",
+      "mustNotContain": ["FOO_PASSWORD", "BAR_API_KEY_FILE", "BAZ_ACCESS_TOKEN"]
+    },
+    {
+      "name": "ordinary mixed-case text is preserved",
+      "input": "MyPassword is just a variable name and sharedSecret is prose",
+      "mustContain": ["MyPassword", "sharedSecret"]
+    },
+    {
+      "name": "internal paths",
+      "input": "wrote to /data/audit/mcp-audit.log and /run/secrets/delegate_pk and /home/node/.openclaw",
+      "mustNotContain": ["/data/audit", "/run/secrets", "/home/node"]
+    },
+    {
+      "name": "internal secret path after assignment",
+      "input": "SUZAKU_PK_FILE=/run/secrets/delegate_pk",
+      "mustNotContain": ["SUZAKU_PK_FILE", "/run/secrets"]
+    },
+    {
+      "name": "public identifiers are preserved",
+      "input": "operator 0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B tx 0x1111111111111111111111111111111111111111111111111111111111111111",
+      "mustContain": [
+        "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
+        "0x1111111111111111111111111111111111111111111111111111111111111111"
+      ]
+    }
+  ]
+}

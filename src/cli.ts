@@ -2008,7 +2008,10 @@ async function main() {
         .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp (defaults to middleware START_TIME)").argParser(ParserNumber))
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
         .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
-        .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
+        .addOption(new Option('--etherscan-api-key <string>', "Etherscan V2 API key")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option('--snowscan-api-key <string>', "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
         .asyncAction(async (config, middlewareAddress, options) => {
             logger.log(`nodeId: ${options.nodeId}`);
             const middleware = await config.contracts.L1Middleware(middlewareAddress);
@@ -2017,7 +2020,7 @@ async function main() {
                 middleware,
                 config,
                 options.nodeId,
-                options.snowscanApiKey,
+                options.etherscanApiKey || options.snowscanApiKey,
                 undefined,
                 {
                     fromBlock: options.fromBlock as bigint | undefined,
@@ -4561,6 +4564,10 @@ async function main() {
         .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute fromBlock from epoch start timestamp (required unless --from-block is given)"))
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --middleware-derived block)").argParser((v) => BigInt(v)))
         .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option("--snowscan-api-key <string>", "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
         .asyncAction(async (config, rewardsAddress, epoch, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getRewardsAmountSetEvents(
@@ -4571,6 +4578,7 @@ async function main() {
                     middlewareAddress: options.middleware,
                     fromBlock: options.fromBlock as bigint | undefined,
                     toBlock: options.toBlock as bigint | undefined,
+                    snowscanApiKey: options.etherscanApiKey || options.snowscanApiKey,
                 }
             );
         });
@@ -4596,7 +4604,10 @@ async function main() {
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
         .addOption(new Option("--to-block <n>", "End block for log scan (overrides --to-epoch; defaults to latest block)").argParser((v) => BigInt(v)))
         .addOption(new Option("--events <names>", "Comma-separated event names to include (defaults to all lifecycle events)"))
-        .addOption(new Option("--snowscan-api-key <string>", "Snowscan API key for faster log retrieval").default(""))
+        .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option("--snowscan-api-key <string>", "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
         .asyncAction(async (config, rewardsAddress, options) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             await getRewardsLifecycleEvents(
@@ -4609,7 +4620,7 @@ async function main() {
                     fromBlock: options.fromBlock as bigint | undefined,
                     toBlock: options.toBlock as bigint | undefined,
                     events: options.events ? options.events.split(',').map((s: string) => s.trim()) : undefined,
-                    snowscanApiKey: options.snowscanApiKey,
+                    snowscanApiKey: options.etherscanApiKey || options.snowscanApiKey,
                 }
             );
         });

@@ -1,0 +1,222 @@
+{
+  "$comment": "Sanitized provenance for fresh, human-reviewed answers. Raw answers and review packets stay under ignored eval/results/reviews/.",
+  "schemaVersion": 1,
+  "samples": [
+    {
+      "sampleId": "sample-0cfcb5bfd597",
+      "questionId": "can-set-rewards",
+      "suiteVersion": 5,
+      "promptSha256": "65f420cd6a025eac70fe277251b35f81675bdbca801ab4cdd9033fbfc43035ea",
+      "answerSha256": "93a65c844b6cf4815db8a8792a1fa09c4fed3f4d6945d549dade589470342d4c",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-2009bab8d537",
+      "questionId": "operators",
+      "suiteVersion": 5,
+      "promptSha256": "7d292cf200296a70d49e85b6179989bb37864ddae7b72ab79b14a25a4b9c6633",
+      "answerSha256": "ef00232e3d2bc3f12e1ad46fc47f43b0e68de4481ad4cab0f5f7f7f67ca50765",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-54162fcb58d9",
+      "questionId": "weekly-todo",
+      "suiteVersion": 5,
+      "promptSha256": "1a82039e6bbbabde041814b73e109f7d365b7c15fc800d098762dc331f52ffda",
+      "answerSha256": "3bf7bd55487d9e51e0fb77ad52c31ed0e3eac01e2406c884595cae17674fca69",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-637547d9ca76",
+      "questionId": "operators",
+      "suiteVersion": 5,
+      "promptSha256": "7d292cf200296a70d49e85b6179989bb37864ddae7b72ab79b14a25a4b9c6633",
+      "answerSha256": "f4302cfb2b0c65f3c7c20b5e22c197d76f1b2704d2eb7823f4adce149f421e0d",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-736d67675d45",
+      "questionId": "min-uptime-history",
+      "suiteVersion": 5,
+      "promptSha256": "b629abf44105bd51f7d1eba384746ee97952c14de596af47258a930075cd03a5",
+      "answerSha256": "268f0213e9a369a800c3493499da239b19e28e136e13d257ce82750010f96495",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-7d2dca3123bc",
+      "questionId": "identity-ambiguity-my-node",
+      "suiteVersion": 5,
+      "promptSha256": "f6640f581cd527278f6f111b096a299cbaea21231a0770b6f1bb8b24ff2fd6a2",
+      "answerSha256": "de82d91ac0b5ea030be93a28c03c8b389bdab2bc91ea54e503dc1313420b5dce",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-ba68411159ad",
+      "questionId": "can-set-rewards",
+      "suiteVersion": 5,
+      "promptSha256": "65f420cd6a025eac70fe277251b35f81675bdbca801ab4cdd9033fbfc43035ea",
+      "answerSha256": "da5357d60ade4f0783be3cc2d8c05feab5b02dca09694541aecdfc93876e9300",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-d4f12529213f",
+      "questionId": "slashing-cannot-confirm",
+      "suiteVersion": 5,
+      "promptSha256": "6589f99fe0b6160a54ec1d395d6d3fce30626e927d7950ea4c4309379ccad199",
+      "answerSha256": "8e1229d4599512ede0328499e5ebbfa8544b474ee8e8310aaf754ceb990ec94b",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-e19036cbde95",
+      "questionId": "weekly-todo",
+      "suiteVersion": 5,
+      "promptSha256": "1a82039e6bbbabde041814b73e109f7d365b7c15fc800d098762dc331f52ffda",
+      "answerSha256": "4b5e36d2acfda82aadc809f5334f971ff38df587e5a9a5c0e791904289c24985",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-ebd18824de87",
+      "questionId": "slashing-cannot-confirm",
+      "suiteVersion": 5,
+      "promptSha256": "6589f99fe0b6160a54ec1d395d6d3fce30626e927d7950ea4c4309379ccad199",
+      "answerSha256": "eda4f2b3cb7e5f2432e487889e1ca892fd84e57c40fc72d9be07914f5c775859",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-f03711a0d682",
+      "questionId": "identity-ambiguity-my-node",
+      "suiteVersion": 5,
+      "promptSha256": "f6640f581cd527278f6f111b096a299cbaea21231a0770b6f1bb8b24ff2fd6a2",
+      "answerSha256": "ea95fd3474698072ccdc652549d92653f8fc7fb19924fec9970391a935fcfb1c",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "760992a95fd3fa8868fa6a6dc00edf66453b50e479c6c73da170e647bce456dc",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-7cfc56be1f353044",
+        "packetSha256": "1cd7a14b30601d63c9ca237f2eef00e656081fa10e6eae9c60057bc8474791c0"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    },
+    {
+      "sampleId": "sample-f72e95ef99e5",
+      "questionId": "min-uptime-history",
+      "suiteVersion": 5,
+      "promptSha256": "b629abf44105bd51f7d1eba384746ee97952c14de596af47258a930075cd03a5",
+      "answerSha256": "291d386d0b799457fcfdca25fbc34d9b8fdad258becbe10be3de4f2e7599996a",
+      "frozenEvidenceStatus": "full-review-packet",
+      "source": {
+        "resultSha256": "dfed90021d3bca460448e365dbd1a02ad071c4d71eb636b7b882577bd1870a2e",
+        "gitSha": "ab68d4cca8f61a703ea45114ac0e82aaaacbbc1a",
+        "packetId": "review-fed9a55ad8bc7595",
+        "packetSha256": "13a22a6e87a2fc0e7d8fd472593de9d5ff8754021ea4a295a839982e71a6cd8d"
+      },
+      "eligibility": {
+        "status": "HUMAN_REVIEWED",
+        "reason": null
+      }
+    }
+  ]
+}

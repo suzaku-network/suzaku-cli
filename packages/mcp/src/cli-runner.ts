@@ -104,13 +104,35 @@ export function tryParseJsonBlock(text: string): Record<string, unknown> | null 
   }
 }
 
+// Kept behaviorally in sync with deploy/openclaw/plugins/suzaku-output-guard/transform.mjs
+// via eval/fixtures/redaction-parity.json — update both layers and the fixture together.
+const KNOWN_CONFIG_NAME =
+  /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|ETHERSCAN_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/gi;
+
+// Uppercase-only so ordinary text such as "MyPassword" is never rewritten.
+const GENERIC_SECRET_NAME =
+  /\b[A-Z][A-Z0-9_]*(?:PRIVATE_KEY|API_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|SECRET)(?:_FILE)?\b/g;
+
+const INTERNAL_PATH =
+  /(?:^|(?<=[\s("'`=]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
+
 /**
- * Strip private key material from output to prevent leakage.
- * Redacts the exact configured secrets and bare (un-prefixed) 64-char hex; 0x-prefixed
- * 64-char hex passes through — tx hashes, role hashes, and validation IDs are legitimate output.
+ * Strip secret material and private deployment configuration from model-visible
+ * output. Public identifiers such as contract addresses and transaction hashes
+ * remain intact.
  */
 export function sanitizeOutput(text: string): string {
-  let out = text;
+  let out = text
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\s+(?:is\s+)?unavailable\b/gi, 'event-history service unavailable')
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\s+(?:is\s+)?(?:missing|invalid)\b/gi, 'event-history service misconfigured')
+    .replace(/\b(?:ETHER|SNOW)SCAN_API_KEY\b/gi, 'event-history service credential')
+    .replace(/--(?:ether|snow)scan-api-key\b/gi, 'event-history credential option')
+    .replace(KNOWN_CONFIG_NAME, '[internal configuration]')
+    .replace(GENERIC_SECRET_NAME, '[internal configuration]')
+    .replace(INTERNAL_PATH, (match) => {
+      const trailing = match.match(/[.,;:!?]+$/)?.[0] ?? '';
+      return `[internal path]${trailing}`;
+    });
   for (const secret of [process.env.SUZAKU_PK, process.env.SUZAKU_PCHAIN_PK]) {
     if (!secret || !/^(0x)?[0-9a-fA-F]{64}$/.test(secret)) continue;
     const bare = secret.replace(/^0x/, '');
@@ -120,16 +142,32 @@ export function sanitizeOutput(text: string): string {
   return out.replace(/(?<![0-9a-fA-Fx])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g, '[REDACTED]');
 }
 
+/** Recursively sanitize every model-visible string in structured CLI output. */
+export function sanitizeOutputValue<T>(value: T): T {
+  if (typeof value === 'string') return sanitizeOutput(value) as T;
+  if (Array.isArray(value)) return value.map((item) => sanitizeOutputValue(item)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, sanitizeOutputValue(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 /** Flags whose following value should be redacted in audit logs */
-const REDACT_FLAGS = new Set(['--snowscan-api-key', '--private-key', '-k']);
+const REDACT_FLAGS = new Set(['--etherscan-api-key', '--snowscan-api-key', '--private-key', '-k']);
 
 export function sanitizeArgs(args: string[]): string[] {
   const result: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (REDACT_FLAGS.has(a) && i + 1 < args.length) {
-      result.push(a, '[REDACTED]');
-      i++; // skip the value
+    if (REDACT_FLAGS.has(a)) {
+      result.push(a);
+      if (i + 1 < args.length) {
+        result.push('[REDACTED]');
+        i++; // skip the value
+      }
     } else {
       result.push(sanitizeOutput(a));
     }
@@ -179,6 +217,10 @@ export interface RunCliOptions {
   skipLimiter?: boolean;
   /** Skip the dedup cache for calls whose result anchors follow-up reads (e.g. current epoch) */
   skipDedup?: boolean;
+  /** Forward the explorer credential to this event-scan subprocess only. */
+  eventScan?: boolean;
+  /** Internal/test override for the SIGTERM-to-SIGKILL grace period. */
+  killGraceMs?: number;
   /**
    * Skip the network-aware suggest/confirm matrix. HARDCODE true only in:
    * - Safe propose tools (off-chain Safe proposal; Safe UI signatures gate execution)
@@ -299,8 +341,13 @@ export function buildChildEnv(options: RunCliOptions): Record<string, string | u
     GNUPGHOME: process.env.GNUPGHOME,
     SIG_AGG_URL: process.env.SIG_AGG_URL,
     LogLevel: process.env.LogLevel,
-    SNOWSCAN_API_KEY: process.env.SNOWSCAN_API_KEY,
   };
+  const explorerApiKey = process.env.ETHERSCAN_API_KEY?.trim()
+    || process.env.SNOWSCAN_API_KEY?.trim();
+  if (options.eventScan && explorerApiKey) {
+    // Always normalize the legacy SnowScan variable to the current V2 name.
+    env.ETHERSCAN_API_KEY = explorerApiKey;
+  }
   const usingLedger = options.privateKey && process.env.SUZAKU_MCP_LEDGER === 'true';
   if (options.privateKey && !usingLedger && !process.env.SUZAKU_SECRET_NAME) {
     const pk = readSecret('SUZAKU_PK', 'SUZAKU_PK_FILE');
@@ -484,20 +531,33 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
 
     // Timeout handling with SIGKILL fallback
     let timedOut = false;
+    let killFallbackTimer: ReturnType<typeof setTimeout> | undefined;
     const killTimer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-      setTimeout(() => {
+      killFallbackTimer = setTimeout(() => {
         if (!exited) {
           child.kill('SIGKILL');
         }
-      }, SIGKILL_GRACE_MS);
+      }, options.killGraceMs ?? SIGKILL_GRACE_MS);
     }, timeout);
 
     child.on('close', (code) => {
       exited = true;
       activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
+
+      // Timeout is authoritative. A child may print plausible JSON and then hang;
+      // returning that payload would turn a killed/incomplete command into success.
+      if (timedOut) {
+        resolve({
+          success: false,
+          data: null,
+          error: `Command timed out after ${timeout}ms and was killed. ${sanitizeOutput(stderr.trim() || stdout.trim())}`.trim(),
+        });
+        return;
+      }
 
       // Try to parse JSON from stdout regardless of exit code —
       // some commands exit non-zero but still produce valid JSON with an error field
@@ -530,9 +590,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
         resolve({
           success: false,
           data: null,
-          error: timedOut
-            ? `Command timed out after ${timeout}ms and was killed. ${sanitizeOutput(stderr.trim() || stdout.trim())}`.trim()
-            : sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
+          error: sanitizeOutput(stderr.trim() || stdout.trim() || `Process exited with code ${code}`),
         });
         return;
       }
@@ -545,6 +603,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
       exited = true;
       activeSubprocesses = Math.max(0, activeSubprocesses - 1);
       clearTimeout(killTimer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
       resolve({ success: false, data: null, error: err.message });
     });
   });
@@ -624,19 +683,23 @@ export function formatResult(result: CliResult) {
       isError: true,
     };
   }
-  if (result.data != null && typeof result.data === 'object' && !Array.isArray(result.data)) {
+  const safeData = sanitizeOutputValue(result.data);
+  if (safeData != null && typeof safeData === 'object' && !Array.isArray(safeData)) {
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
-      structuredContent: result.data as Record<string, unknown>,
+      content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
+      structuredContent: safeData as Record<string, unknown>,
     };
   }
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
   };
 }
 
 export function formatGuardError(err: string) {
-  return { content: [{ type: 'text' as const, text: `Error: ${err}` }], isError: true as const };
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${sanitizeOutput(err)}` }],
+    isError: true as const,
+  };
 }
 
 export function requireSigner(): ReturnType<typeof formatResult> | null {

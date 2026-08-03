@@ -1,0 +1,14 @@
+{
+  "lstWrapperInfo": {
+    "address": "0xDc1c4428F3145286f262980d36C640285c0DA403",
+    "name": "Wrapped Staked ALOT",
+    "symbol": "wsALOT",
+    "decimals": 18,
+    "totalAssets": "5900532344504373983682338",
+    "totalSupply": "5822813496782570366382843",
+    "paused": false,
+    "totalAssetsHuman": "5,900,532.34",
+    "totalSupplyHuman": "5,822,813.49",
+    "rate": "1.0133"
+  }
+}

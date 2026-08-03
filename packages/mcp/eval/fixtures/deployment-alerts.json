@@ -1,0 +1,49 @@
+{
+  "mode": "alerts",
+  "epoch": 48,
+  "timing": {
+    "observedAtTs": 1752747120,
+    "observedAtUtc": "Jul 17 08:52 UTC",
+    "currentEpochStartTs": 1752501600,
+    "currentEpochStartUtc": "Jul 14 14:00 UTC",
+    "currentEpochEndTs": 1752804000,
+    "currentEpochEndUtc": "Jul 18 02:00 UTC",
+    "currentEpochSecondsRemaining": 56880,
+    "currentEpochTimeRemaining": "15h 48m remaining",
+    "updateWindowCloseTs": 1752760800,
+    "updateWindowCloseUtc": "Jul 17 14:00 UTC",
+    "updateWindowSecondsRemaining": 13680,
+    "updateWindowTimeRemaining": "3h 48m remaining"
+  },
+  "uptime": {
+    "epoch": 47,
+    "trackerConfigured": true,
+    "status": "complete",
+    "allOperatorsSet": true,
+    "operatorCount": 1,
+    "reportedOperators": ["0x853323787b0F515d2C2b1c64994BA7D312B6e655"],
+    "missingOperators": [],
+    "unknownOperators": [],
+    "byOperator": { "0x853323787b0F515d2C2b1c64994BA7D312B6e655": true }
+  },
+  "windowStartEpoch": 42,
+  "rewards": {
+    "claimability": [
+      { "epoch": 46, "funded": true, "distributionComplete": true, "status": "claimable" },
+      { "epoch": 47, "funded": true, "distributionComplete": false, "status": "waiting_distribution_window" },
+      { "epoch": 48, "funded": false, "distributionComplete": false, "status": "current_epoch" }
+    ]
+  },
+  "validators": { "count": 10 },
+  "checks": [
+    {
+      "name": "stake_cache",
+      "status": "warn",
+      "detail": "cache incomplete, window closes Jul 17 14:00 UTC"
+    }
+  ],
+  "humanLines": [
+    "Suzaku heartbeat — epoch 48 · 1 check(s) need attention",
+    "stake cache not ready — update window closes Jul 17 14:00 UTC"
+  ]
+}

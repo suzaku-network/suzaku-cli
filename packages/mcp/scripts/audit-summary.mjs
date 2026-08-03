@@ -46,6 +46,7 @@ if (GATEWAY_MODE) {
   const lines = raw.split('\n');
   const markers = {
     fallback: /fallback|falling back|fell back/i,
+    'moonshot/kimi': /moonshot\/kimi|kimi-k3/i,
     'openai/gpt': /openai\/gpt|gpt-5/i,
     'anthropic/claude': /anthropic\/claude|claude-sonnet|claude-haiku|claude-opus/i,
     'rate-limit': /rate.?limit|429|overloaded/i,
