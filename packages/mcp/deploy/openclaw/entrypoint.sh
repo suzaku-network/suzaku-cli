@@ -1,17 +1,33 @@
 #!/bin/sh
 set -e
 
-# Substitute env vars into openclaw.json template → runtime config
+# Refresh image-bundled extensions into the persistent state volume on every
+# start. This makes upgrades deterministic even when the volume predates the
+# image, without downloading packages at boot.
+mkdir -p /home/node/.openclaw/npm/projects /home/node/.openclaw/extensions
+if [ -d /opt/openclaw-plugin-seed/npm/projects ]; then
+  for source in /opt/openclaw-plugin-seed/npm/projects/*; do
+    [ -d "$source" ] || continue
+    target="/home/node/.openclaw/npm/projects/$(basename "$source")"
+    rm -rf "$target"
+    cp -a "$source" "$target"
+  done
+fi
+if [ -d /opt/suzaku-openclaw-extensions/suzaku-output-guard ]; then
+  rm -rf /home/node/.openclaw/extensions/suzaku-output-guard
+  cp -a /opt/suzaku-openclaw-extensions/suzaku-output-guard /home/node/.openclaw/extensions/
+fi
+
+# Render the selected template into a validated runtime config. Secrets remain
+# native ${NAME} references for OpenClaw and are never written into this file.
 CONFIG_TPL="/home/node/.openclaw/openclaw.json.tpl"
 CONFIG_OUT="/home/node/.openclaw/openclaw.json"
 
-if [ -f "$CONFIG_TPL" ]; then
-  sed \
-    -e "s|\${TELEGRAM_BOT_TOKEN}|${TELEGRAM_BOT_TOKEN}|g" \
-    -e "s|\${TELEGRAM_ADMIN_USER_ID}|${TELEGRAM_ADMIN_USER_ID}|g" \
-    -e "s|\${TELEGRAM_GROUP_ID}|${TELEGRAM_GROUP_ID}|g" \
-    "$CONFIG_TPL" > "$CONFIG_OUT"
+if [ ! -f "$CONFIG_TPL" ]; then
+  echo "OpenClaw configuration template is missing" >&2
+  exit 1
 fi
+node /usr/local/lib/suzaku/render-config.mjs "$CONFIG_TPL" "$CONFIG_OUT"
 
 # Substitute the non-secret config vars into mcporter templates (propose/cache bots —
 # mcporter does not inherit the container environment). Delegate/cache keys and Safe API
@@ -34,25 +50,12 @@ if [ -f "$MCPORTER_TPL" ]; then
   chmod 600 "$MCPORTER_OUT"
 fi
 
-# Register the Suzaku MCP server natively with the Codex app-server harness:
-# openai/* agent turns run through Codex, which manages its OWN MCP servers — the
-# mcporter skill does not bridge into it. The block is regenerated on every start
-# (idempotent) so env changes like SNOWSCAN_API_KEY propagate. Read-only bot only
-# (the propose/cache bots are identified by their mcporter template mount and stay on
-# the Anthropic runtime).
-CODEX_CFG="/home/node/.openclaw/agents/main/agent/codex-home/config.toml"
-if [ ! -f "$MCPORTER_TPL" ]; then
-  mkdir -p "$(dirname "$CODEX_CFG")"
-  touch "$CODEX_CFG"
-  awk 'BEGIN{skip=0} /^\[mcp_servers\.suzaku\]/{skip=1;next} /^\[/{if(skip)skip=0} skip==0{print}' \
-    "$CODEX_CFG" > "$CODEX_CFG.tmp" && mv "$CODEX_CFG.tmp" "$CODEX_CFG"
-  cat >> "$CODEX_CFG" <<EOF
+# The monitor profiles register Suzaku through OpenClaw's typed mcp.servers
+# registry. This works for embedded Kimi/Anthropic turns and for the optional
+# Codex profile without giving the model an mcporter shell bridge.
 
-[mcp_servers.suzaku]
-command = "node"
-args = ["/mcp/packages/mcp/dist/server.js", "--read-only"]
-env = { PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", HOME = "/home/node", SNOWSCAN_API_KEY = "${SNOWSCAN_API_KEY}", SUZAKU_MCP_PUBLIC_HEALTH = "true", SUZAKU_MCP_AUDIT_DIR = "/data/audit" }
-EOF
+if [ "${SUZAKU_VALIDATE_ONLY:-false}" = "true" ]; then
+  exec node openclaw.mjs config validate
 fi
 
 exec docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured
