@@ -15,6 +15,14 @@ describe('OpenClaw monitor config rendering', () => {
   it('renders Kimi-only by default and removes every active Anthropic reference', () => {
     const config = renderConfig(load('openclaw.json'), baseEnv);
     expect(config.agents.defaults.model).toEqual({ primary: 'moonshot/kimi-k3' });
+    expect(config.models.providers.moonshot.models).toEqual([
+      { id: 'kimi-k3', name: 'Kimi K3' },
+    ]);
+    expect(config.models.providers.moonshot).toMatchObject({
+      baseUrl: 'https://api.moonshot.ai/v1',
+      apiKey: '${MOONSHOT_API_KEY}',
+      api: 'openai-completions',
+    });
     expect(config.agents.defaults.models['anthropic/claude-sonnet-4-6']).toBeUndefined();
     expect(config.plugins.allow).not.toContain('anthropic');
     expect(config.channels.telegram.allowFrom).toEqual(['tg:123456789']);

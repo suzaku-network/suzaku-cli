@@ -51,6 +51,11 @@ describe('monospace-aware bold conversion', () => {
     );
   });
 
+  it('leaves bold inside inline code untouched after OpenClaw normalizes HTML code', () => {
+    const text = '**test** and `**keep**`';
+    expect(guardOutboundText(text).content).toBe('<b>test</b> and `**keep**`');
+  });
+
   it('protects everything after an unclosed monospace opener', () => {
     const text = 'Before **bold** <pre>**stuck** and **more**';
     expect(guardOutboundText(text).content).toBe(

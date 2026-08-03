@@ -12,8 +12,10 @@ const INTERNAL_PATH =
   /(?:^|(?<=[\s("'`=]))\/(?:run\/secrets|home\/node|data\/audit|mcp)(?:\/[^\s"'`)<]*)?/g;
 
 // Telegram rejects nested entities inside <pre>/<code>, so bold conversion must
-// never touch monospace regions. Fenced ``` blocks are treated the same way.
-const MONOSPACE_OPEN = /<pre(?:\s[^>]*)?>|<code(?:\s[^>]*)?>|```/gi;
+// never touch monospace regions. OpenClaw may normalize <code> to inline `code`
+// before this hook runs, so both inline and fenced backticks are protected.
+// Keep ``` before ` so a fence is consumed as one opener.
+const MONOSPACE_OPEN = /<pre(?:\s[^>]*)?>|<code(?:\s[^>]*)?>|```|`/gi;
 
 /**
  * Transform exactly what the OpenClaw delivery hook sends to Telegram.
@@ -67,7 +69,13 @@ export function guardOutboundText(input) {
     }
     converted += convertSegment(content.slice(cursor, open.index));
     const openTag = open[0].toLowerCase();
-    const closer = openTag.startsWith('<pre') ? '</pre>' : openTag.startsWith('<code') ? '</code>' : '```';
+    const closer = openTag.startsWith('<pre')
+      ? '</pre>'
+      : openTag.startsWith('<code')
+        ? '</code>'
+        : openTag === '```'
+          ? '```'
+          : '`';
     const closeIdx = lower.indexOf(closer, open.index + open[0].length);
     if (closeIdx === -1) {
       converted += content.slice(open.index);

@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('openclaw/plugin-sdk/plugin-entry', () => ({
-  definePluginEntry: (definition) => definition,
-}));
-
 import plugin from '../deploy/openclaw/plugins/suzaku-output-guard/index.mjs';
 
 describe('suzaku-output-guard plugin registration', () => {

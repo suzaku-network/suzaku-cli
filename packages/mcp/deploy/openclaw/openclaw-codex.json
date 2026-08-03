@@ -117,6 +117,7 @@
   },
   "tools": {
     "profile": "minimal",
+    "alsoAllow": ["bundle-mcp", "read", "write", "message"],
     "web": {
       "search": {
         "enabled": false

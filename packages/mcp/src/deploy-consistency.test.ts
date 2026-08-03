@@ -68,6 +68,14 @@ describe('monitor model profiles and direct MCP boundary', () => {
 
   it('ships the Kimi K3 template and keeps Codex out of it', () => {
     expect(kimi.agents.defaults.model.primary).toBe('moonshot/kimi-k3');
+    expect(kimi.models.providers.moonshot.models).toEqual([
+      { id: 'kimi-k3', name: 'Kimi K3' },
+    ]);
+    expect(kimi.models.providers.moonshot).toMatchObject({
+      baseUrl: 'https://api.moonshot.ai/v1',
+      apiKey: '${MOONSHOT_API_KEY}',
+      api: 'openai-completions',
+    });
     expect(Object.keys(kimi.agents.defaults.models)).toEqual([
       'moonshot/kimi-k3',
       'anthropic/claude-sonnet-4-6',
@@ -122,6 +130,8 @@ describe('monitor model profiles and direct MCP boundary', () => {
   ])('%s denies shell and filesystem writes to public chat turns', (_name, config) => {
     const main = config.agents.list.find((agent: { id: string }) => agent.id === 'main');
     const heartbeat = config.agents.list.find((agent: { id: string }) => agent.id === 'heartbeat');
+    expect(config.tools.profile).toBe('minimal');
+    expect(config.tools.alsoAllow).toEqual(['bundle-mcp', 'read', 'write', 'message']);
     expect(main.tools.allow).toEqual(['suzaku__*', 'read']);
     expect(main.tools.deny).toEqual(expect.arrayContaining(['exec', 'process', 'write', 'edit', 'cron']));
     expect(main.tools.exec.mode).toBe('deny');
