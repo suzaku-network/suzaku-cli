@@ -592,6 +592,8 @@ describe('deployment_heartbeat handler', () => {
       (call) => ['node-logs', 'get-events'].includes((call[0] as string[])[1]),
     );
     expect(scanCalls).toHaveLength(2);
+    const nodeLogArgs = scanCalls.find((call) => (call[0] as string[])[1] === 'node-logs')?.[0] as string[];
+    expect(nodeLogArgs).toContain('--include-global-stake-events');
     for (const [args, options] of scanCalls) {
       expect(args).not.toContain('--snowscan-api-key');
       expect(args).not.toContain('must-not-appear-in-argv');

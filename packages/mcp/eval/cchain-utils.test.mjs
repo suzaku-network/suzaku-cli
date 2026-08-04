@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeAbiParameters, encodeEventTopics } from 'viem';
-import { GetContractEvents } from '../../../dist/lib/cChainUtils.js';
+import { GetContractEvents, getFinalizedBlockNumber, resolveEventScanEnd } from '../../../dist/lib/cChainUtils.js';
 
 const ADDRESS = `0x${'1'.repeat(40)}`;
 const API_KEY = 'explorer-secret';
@@ -140,6 +140,60 @@ describe('Etherscan V2 event transport', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(kiteClient.getContractEvents).toHaveBeenCalled();
+    expect(kiteClient.getContractEvents.mock.calls[0][0]).toMatchObject({
+      fromBlock: 10n,
+      toBlock: 20n,
+    });
+  });
+
+  it('patches a missing RPC timestamp from the event block', async () => {
+    const rpcClient = client('mainnet');
+    rpcClient.getContractEvents.mockResolvedValueOnce([{
+      address: ADDRESS,
+      blockNumber: 12n,
+      transactionHash: `0x${'3'.repeat(64)}`,
+      eventName: 'ValueSet',
+      args: { value: 7n },
+    }]);
+    rpcClient.getBlock.mockResolvedValueOnce({ number: 12n, timestamp: 123n });
+
+    const events = await GetContractEvents(rpcClient, ADDRESS, 10, 20, EMPTY_ABI);
+
+    expect(events[0].timestamp).toBe(123);
+    expect(rpcClient.getBlock).toHaveBeenCalledWith({ blockNumber: 12n, includeTransactions: false });
+  });
+
+  it('patches a missing explorer timestamp but preserves valid explorer timestamps', async () => {
+    const abi = [{
+      type: 'event',
+      name: 'ValueSet',
+      anonymous: false,
+      inputs: [{ indexed: false, name: 'value', type: 'uint256' }],
+    }];
+    const eventClient = client('mainnet');
+    eventClient.getBlock.mockResolvedValueOnce({ number: 16n, timestamp: 321n });
+    vi.stubGlobal('fetch', vi.fn(async () => response([{
+      address: ADDRESS,
+      topics: encodeEventTopics({ abi, eventName: 'ValueSet' }),
+      data: encodeAbiParameters([{ type: 'uint256' }], [7n]),
+      blockNumber: '0x10',
+      blockHash: `0x${'2'.repeat(64)}`,
+      transactionHash: `0x${'3'.repeat(64)}`,
+      transactionIndex: '0x0',
+      logIndex: '0x0',
+    }])));
+
+    const events = await GetContractEvents(eventClient, ADDRESS, 10, 20, abi, ['ValueSet'], API_KEY);
+
+    expect(events[0].timestamp).toBe(321);
+    expect(eventClient.getBlock).toHaveBeenCalledOnce();
+  });
+
+  it('uses latest minus two only for an open-ended caller range and clamps small chains', async () => {
+    expect(await getFinalizedBlockNumber({ getBlockNumber: vi.fn(async () => 20n) })).toBe(18n);
+    expect(await getFinalizedBlockNumber({ getBlockNumber: vi.fn(async () => 1n) })).toBe(0n);
+    expect(resolveEventScanEnd(20n, 20n)).toBe(20n);
+    expect(resolveEventScanEnd(20n, undefined, 17n)).toBe(17n);
   });
 
   it('decodes explorer logs and preserves their timestamp without a block RPC read', async () => {

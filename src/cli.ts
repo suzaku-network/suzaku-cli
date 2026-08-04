@@ -1981,12 +1981,13 @@ async function main() {
 
     middlewareCmd
         .command("node-logs")
-        .description("Get middleware node logs (NodeAdded/NodeRemoved/NodeStakeUpdated/AllNodeStakesUpdated/OperatorHasLeftoverStake plus all BalancerValidatorManager events)")
+        .description("Get middleware node logs (the established NodeAdded/NodeRemoved/NodeStakeUpdated set plus BalancerValidatorManager events)")
         .addArgument(argMiddlewareAddress)
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
         .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp (defaults to middleware START_TIME)").argParser(ParserNumber))
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
-        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--include-global-stake-events", "Also include AllNodeStakesUpdated and OperatorHasLeftoverStake"))
         .addOption(new Option('--etherscan-api-key <string>', "Etherscan V2 API key")
             .env('ETHERSCAN_API_KEY').default(""))
         .addOption(new Option('--snowscan-api-key <string>', "Deprecated alias for --etherscan-api-key")
@@ -2005,6 +2006,7 @@ async function main() {
                     fromBlock: options.fromBlock as bigint | undefined,
                     toBlock: options.toBlock as bigint | undefined,
                     fromEpoch: options.fromEpoch,
+                    includeGlobalStakeEvents: options.includeGlobalStakeEvents,
                 }
             );
         });
@@ -4514,7 +4516,7 @@ async function main() {
         .addArgument(ArgNumber("epoch", "Epoch to inspect"))
         .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute fromBlock from epoch start timestamp (required unless --from-block is given)"))
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --middleware-derived block)").argParser((v) => BigInt(v)))
-        .addOption(new Option("--to-block <n>", "End block for log scan (defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
         .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
             .env('ETHERSCAN_API_KEY').default(""))
         .addOption(new Option("--snowscan-api-key <string>", "Deprecated alias for --etherscan-api-key")
@@ -4553,7 +4555,7 @@ async function main() {
         .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp").argParser(ParserNumber))
         .addOption(new Option("--to-epoch <n>", "End epoch (inclusive); toBlock is derived from the next epoch start timestamp").argParser(ParserNumber))
         .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
-        .addOption(new Option("--to-block <n>", "End block for log scan (overrides --to-epoch; defaults to latest block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (overrides --to-epoch; defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
         .addOption(new Option("--events <names>", "Comma-separated event names to include (defaults to all lifecycle events)"))
         .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
             .env('ETHERSCAN_API_KEY').default(""))

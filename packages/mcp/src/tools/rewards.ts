@@ -218,7 +218,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
       fromEpoch: z.string().optional().describe('Start epoch; fromBlock derived from its start timestamp'),
       toEpoch: z.string().optional().describe('End epoch (inclusive); toBlock derived from the next epoch start'),
       fromBlock: z.string().optional().describe('Start block (overrides fromEpoch)'),
-      toBlock: z.string().optional().describe('End block (overrides toEpoch; defaults to latest)'),
+      toBlock: z.string().optional().describe('Inclusive end block (overrides toEpoch; defaults to latest minus two confirmations)'),
       events: z.string().optional().describe('Comma-separated event names to include (defaults to all lifecycle events)'),
       network: Network,
       rpcUrl: RpcUrl,

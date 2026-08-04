@@ -5,7 +5,7 @@ import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
-import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, getFinalizedBlockNumber, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
 import { completeValidatorRemoval } from './securityModule';
 import { Validator, ValidatorStatus, ValidatorStatusNames } from './balancer';
@@ -301,6 +301,23 @@ export async function getActiveCollateralClasses(
   return result;
 }
 
+export const DEFAULT_MIDDLEWARE_NODE_EVENTS = [
+  'NodeAdded',
+  'NodeRemoved',
+  'NodeStakeUpdated',
+] as const;
+
+export const GLOBAL_MIDDLEWARE_STAKE_EVENTS = [
+  'AllNodeStakesUpdated',
+  'OperatorHasLeftoverStake',
+] as const;
+
+export function middlewareNodeEventNames(includeGlobalStakeEvents = false): string[] {
+  return includeGlobalStakeEvents
+    ? [...DEFAULT_MIDDLEWARE_NODE_EVENTS, ...GLOBAL_MIDDLEWARE_STAKE_EVENTS]
+    : [...DEFAULT_MIDDLEWARE_NODE_EVENTS];
+}
+
 export async function middlewareGetNodeLogs(
   client: ExtendedClient,
   middleware: SuzakuContract['L1Middleware'],
@@ -312,11 +329,12 @@ export async function middlewareGetNodeLogs(
     fromBlock?: bigint;
     toBlock?: bigint;
     fromEpoch?: number;
+    includeGlobalStakeEvents?: boolean;
   }
 ) {
   logger.log("Reading logs from middleware and balancer...");
 
-  const to = range?.toBlock ?? (await client.getBlockNumber());
+  const to = range?.toBlock ?? (await getFinalizedBlockNumber(client));
 
   let from: bigint;
   if (range?.fromBlock !== undefined) {
@@ -338,9 +356,9 @@ export async function middlewareGetNodeLogs(
     Number(from),
     Number(to),
     config.abis.L1Middleware,
-    ["NodeAdded", "NodeRemoved", "NodeStakeUpdated", "AllNodeStakesUpdated", "OperatorHasLeftoverStake"],
+    middlewareNodeEventNames(range?.includeGlobalStakeEvents),
     snowscanApiKey,
-    snowscanApiKey ? false : true,
+    true,
     bar
   ));
 
@@ -357,7 +375,7 @@ export async function middlewareGetNodeLogs(
       config.abis.BalancerValidatorManager,
       undefined,
       snowscanApiKey,
-      snowscanApiKey ? false : true,
+      true,
       bar
     ));
   }
@@ -378,10 +396,11 @@ export async function middlewareGetNodeLogs(
     args: Object.fromEntries(Object.entries(log.args).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v])),
     timestamp: log.timestamp,
   })));
-  const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
-    log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
-    return log;
-  }))
+  const displayLogs = logs.map((log: DecodedEvent) => ({
+    ...log,
+    address: log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager",
+  }));
+  const logOfInterest = groupEventsByNodeId(displayLogs);
 
   if (nodeId != undefined) {
     const nodeIdHex32 = parseNodeID(nodeId);
@@ -393,6 +412,19 @@ export async function middlewareGetNodeLogs(
       logger.log('\t\t\t\t\t\t' + color.blue(nodeId));
       logger.table(value);
     }
+  }
+
+  const globalEvents = displayLogs
+    .filter((log) => !log.args.nodeId)
+    .map((log) => ({
+      source: log.address,
+      event: log.eventName,
+      executionTime: log.timestamp ? new Date(log.timestamp * 1000).toLocaleString() : 'N/A',
+      hash: log.transactionHash,
+    }));
+  if (globalEvents.length > 0) {
+    logger.log('\t\tGlobal stake events');
+    logger.table(globalEvents);
   }
 
 }

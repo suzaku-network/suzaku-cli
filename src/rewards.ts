@@ -3,7 +3,7 @@ import type { Hex, Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
 import { ExtendedPublicClient } from './client';
-import { blockAtTimestamp, collectEventsInRange, DecodedEvent, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, getFinalizedBlockNumber, GetContractEvents } from './lib/cChainUtils';
 
 /**
  * Distributes rewards for a specific epoch
@@ -395,14 +395,12 @@ export async function getRewardsAmountSetEvents(
     fromBlock = options.fromBlock;
   } else if (options.middlewareAddress) {
     const middleware = await config.contracts.L1Middleware(options.middlewareAddress);
-    const lookbackEpoch = Math.max(epoch - 2, 0);
-    const epochStartTs = await middleware.read.getEpochStartTs([lookbackEpoch]);
-    fromBlock = await blockAtTimestamp(client, BigInt(epochStartTs));
+    fromBlock = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
   } else {
     throw new Error('Either --from-block or --middleware must be provided');
   }
 
-  const toBlock = options.toBlock ?? (await client.getBlockNumber());
+  const toBlock = options.toBlock ?? (await getFinalizedBlockNumber(client));
 
   const events = options.snowscanApiKey
     ? await GetContractEvents(
@@ -443,8 +441,10 @@ export async function getRewardsAmountSetEvents(
   };
 
   const formattedEvents = await Promise.all(matching.map(async (e) => {
-    const explorerTimestamp = 'timestamp' in e ? e.timestamp : undefined;
-    const ts = explorerTimestamp || await getBlockTimestamp(e.blockNumber);
+    const explorerTimestamp = 'timestamp' in e ? Number(e.timestamp) : Number.NaN;
+    const ts = Number.isFinite(explorerTimestamp) && explorerTimestamp > 0
+      ? explorerTimestamp
+      : await getBlockTimestamp(e.blockNumber);
     return {
       txHash: e.transactionHash,
       blockNumber: e.blockNumber.toString(),
@@ -472,6 +472,12 @@ export async function getRewardsAmountSetEvents(
     eventCount: formattedEvents.length,
     totalAmount: totalAmount.toString(),
     currentEpochRewards,
+    scan: {
+      fromBlock: fromBlock.toString(),
+      toBlock: toBlock.toString(),
+      lowerBound: options.fromBlock !== undefined ? 'explicit' : 'middleware_start_time',
+      completeFromMiddlewareStart: options.fromBlock === undefined,
+    },
     events: formattedEvents,
   });
 
@@ -583,6 +589,7 @@ export async function getRewardsLifecycleEvents(
   }
 
   const latestBlock = await client.getBlock({ includeTransactions: false });
+  const finalizedHead = latestBlock.number > 2n ? latestBlock.number - 2n : 0n;
   let toBlock: bigint;
   if (options.toBlock !== undefined) {
     toBlock = options.toBlock;
@@ -590,10 +597,10 @@ export async function getRewardsLifecycleEvents(
     if (!middleware) throw new Error('--middleware is required when using --to-epoch');
     const nextEpochStartTs = BigInt(await middleware.read.getEpochStartTs([options.toEpoch + 1]));
     toBlock = nextEpochStartTs > latestBlock.timestamp
-      ? latestBlock.number
+      ? finalizedHead
       : await blockAtTimestamp(client, nextEpochStartTs);
   } else {
-    toBlock = latestBlock.number;
+    toBlock = finalizedHead;
   }
 
   const events = await GetContractEvents(

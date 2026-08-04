@@ -132,13 +132,11 @@ export async function GetContractEvents(
   bar?: SingleBar
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
-  let usedExplorer = false;
   try {
     // Use the RPC-reported chain id rather than the coarse mainnet/fuji label:
     // Kite and custom chains deliberately share those labels.
     const runtimeChainId = snowscanApiKey ? await client.getChainId() : undefined;
     if (snowscanApiKey && runtimeChainId !== undefined && AVALANCHE_EXPLORER_CHAIN_IDS.has(runtimeChainId)) {
-      usedExplorer = true;
       // SnowScan V1 was retired in 2026. Keep the public parameter name for CLI
       // compatibility, but use Etherscan V2 with the Avalanche chain id. Avalanche
       // requires a paid Etherscan API tier; provider errors must fail the scan.
@@ -157,8 +155,6 @@ export async function GetContractEvents(
         }, [])
     } else {
       // Fetch logs using viem client
-      toBlock = toBlock - 2 // to avoid reading the current block, which may not be finalized yet
-
       const blockToScan = toBlock - fromBlock;
       if (!bar) {
         bar = new SingleBar({}, Presets.shades_classic);
@@ -200,14 +196,33 @@ export async function GetContractEvents(
         timestamp: Number(log.timeStamp!)
       } as DecodedEvent
     });
-  return forceTimestamp ? usedExplorer ? result : PatchEventsTimestamp(client, result) : result;
+  return forceTimestamp ? PatchEventsTimestamp(client, result) : result;
+}
+
+/** Resolve an inclusive scan end without altering explicit or epoch-derived bounds. */
+export function resolveEventScanEnd(
+  latestBlock: bigint,
+  explicitToBlock?: bigint,
+  epochDerivedToBlock?: bigint,
+): bigint {
+  if (explicitToBlock !== undefined) return explicitToBlock;
+  if (epochDerivedToBlock !== undefined) return epochDerivedToBlock;
+  return latestBlock > 2n ? latestBlock - 2n : 0n;
+}
+
+/** Latest block safe for an open-ended scan. */
+export async function getFinalizedBlockNumber(client: ExtendedClient): Promise<bigint> {
+  return resolveEventScanEnd(await client.getBlockNumber());
 }
 
 export async function PatchEventsTimestamp(
   client: ExtendedClient,
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
-  const blockTimstamps = (await Promise.all([...new Set(events.map(event => event.blockNumber))]
+  const needsTimestamp = events.filter((event) => !Number.isFinite(event.timestamp) || event.timestamp <= 0);
+  if (needsTimestamp.length === 0) return events;
+
+  const blockTimstamps = (await Promise.all([...new Set(needsTimestamp.map(event => event.blockNumber))]
     .map((blockNumber: bigint) =>
       client.getBlock({
         blockNumber,
@@ -221,7 +236,9 @@ export async function PatchEventsTimestamp(
 
   return events.map(event => ({
     ...event,
-    timestamp: event.timestamp || blockTimstamps[Number(event.blockNumber)],
+    timestamp: Number.isFinite(event.timestamp) && event.timestamp > 0
+      ? event.timestamp
+      : blockTimstamps[Number(event.blockNumber)],
   }));
 }
 

@@ -708,7 +708,7 @@ export function registerHeartbeatTools(server: McpServer) {
       const phase2 = await Promise.all([
         runCli(['middleware', 'get-validator-balances', middlewareAddress], opts),
         ...(isDigest ? [
-          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
+          runCli(['middleware', 'node-logs', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1)), '--include-global-stake-events'], scanOpts),
           runCli(['rewards', 'get-events', rewardsAddress, '--middleware', middlewareAddress, '--from-epoch', String(Math.max(0, currentEpoch - 1))], scanOpts),
         ] : []),
       ]);

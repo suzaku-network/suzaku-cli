@@ -59,4 +59,19 @@ describe('event-scan credential transport', () => {
     expect(args).not.toContain(SECRET);
     expect(options).toMatchObject({ eventScan: true });
   });
+
+  it('keeps global stake events opt-in at the MCP boundary', async () => {
+    const handler = tools().middleware_get_node_logs.handler;
+    await handler({ middlewareAddress: MIDDLEWARE, fromEpoch: '50', network: 'mainnet' }, {});
+    expect((runCli as ReturnType<typeof vi.fn>).mock.calls[0][0]).not.toContain('--include-global-stake-events');
+
+    (runCli as ReturnType<typeof vi.fn>).mockClear();
+    await handler({
+      middlewareAddress: MIDDLEWARE,
+      fromEpoch: '50',
+      includeGlobalStakeEvents: true,
+      network: 'mainnet',
+    }, {});
+    expect((runCli as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('--include-global-stake-events');
+  });
 });
