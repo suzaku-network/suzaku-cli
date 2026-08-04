@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runCli, runPublicCacheCli, formatResult, formatGuardError, requireSigner, CliResult, RunCliOptions } from '../cli-runner.js';
+import { runCli, formatResult, formatGuardError, requireSigner, CliResult, RunCliOptions } from '../cli-runner.js';
 import { guardWriteOperation } from '../guard.js';
 import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
 import { extractL1s } from './l1-registry.js';
@@ -24,110 +24,6 @@ function isNullOrZeroLike(value: unknown): boolean {
   if (value === 0 || value === 0n) return true;
   if (typeof value === 'string') return /^0+$/.test(value.trim());
   return false;
-}
-
-function getPinnedMiddlewareAddress(): string | null {
-  const pinned = process.env.SUZAKU_MIDDLEWARE_ADDRESS?.trim();
-  return pinned && /^0x[0-9a-fA-F]{40}$/.test(pinned) ? pinned : null;
-}
-
-function getPinnedMiddlewareNetwork(): string {
-  return process.env.SUZAKU_MIDDLEWARE_NETWORK?.trim() || 'mainnet';
-}
-
-function cacheByClassFrom(result: CliResult): Record<string, boolean> | null {
-  if (!result.success || result.data == null || typeof result.data !== 'object') return null;
-  const cacheStatus = (result.data as Record<string, unknown>).cacheStatus;
-  if (cacheStatus == null || typeof cacheStatus !== 'object') return null;
-  const cacheByClass = (cacheStatus as Record<string, unknown>).cacheByClass;
-  if (cacheByClass == null || typeof cacheByClass !== 'object') return null;
-  return cacheByClass as Record<string, boolean>;
-}
-
-export function registerMiddlewarePublicCacheTools(server: McpServer) {
-  server.tool(
-    'middleware_cache_stakes',
-    'Execute the public, permissionless stake cache for one epoch and collateral class on the pinned middleware. ' +
-    'Fresh-checks cacheByClass[class] before and after execution; if the class is already cached, no transaction is sent. ' +
-    'This broadcasts a real transaction using the configured cache key and is limited to SUZAKU_MIDDLEWARE_ADDRESS / SUZAKU_MIDDLEWARE_NETWORK.',
-    {
-      middlewareAddress: Address.describe('Pinned L1Middleware contract address'),
-      epoch: z.string().regex(/^\d+$/).describe('Epoch number'),
-      collateralClass: z.string().regex(/^\d+$/).describe('Collateral class ID'),
-      network: Network,
-      rpcUrl: RpcUrl,
-    },
-    { destructiveHint: true },
-    async ({ middlewareAddress, epoch, collateralClass, network, rpcUrl }) => {
-      const pkErr = requireSigner();
-      if (pkErr) return pkErr;
-
-      const pinnedMiddleware = getPinnedMiddlewareAddress();
-      if (!pinnedMiddleware) return formatGuardError('SUZAKU_MIDDLEWARE_ADDRESS must be set to the single middleware this public cache tool may touch');
-      const pinnedNetwork = getPinnedMiddlewareNetwork();
-      if (middlewareAddress.toLowerCase() !== pinnedMiddleware.toLowerCase()) {
-        return formatGuardError(`middlewareAddress must match the pinned SUZAKU_MIDDLEWARE_ADDRESS (${pinnedMiddleware})`);
-      }
-      if (network !== pinnedNetwork) {
-        return formatGuardError(`network must match SUZAKU_MIDDLEWARE_NETWORK (${pinnedNetwork})`);
-      }
-      if (rpcUrl) {
-        return formatGuardError('rpcUrl is not accepted by the public cache tool; use the pinned network RPC');
-      }
-
-      const guardErr = await guardWriteOperation('middleware_cache_stakes', { middlewareAddress, epoch, collateralClass, network });
-      if (guardErr) return formatGuardError(guardErr);
-
-      const readOpts: RunCliOptions = { network, skipDedup: true };
-      const preResult = await runCli(['middleware', 'get-cache-status', middlewareAddress, '--epoch', epoch], readOpts);
-      if (!preResult.success) return formatResult(preResult);
-
-      const preCacheByClass = cacheByClassFrom(preResult);
-      if (!preCacheByClass) return formatGuardError('Pre-check failed: get-cache-status returned no cacheByClass data');
-      if (!(collateralClass in preCacheByClass)) {
-        return formatGuardError(`Collateral class ${collateralClass} is not present in cache status for epoch ${epoch}`);
-      }
-      if (preCacheByClass[collateralClass] === true) {
-        return formatResult({
-          success: true,
-          data: {
-            executed: false,
-            reason: 'already_cached',
-            middlewareAddress,
-            network,
-            epoch,
-            collateralClass,
-            cacheByClass: preCacheByClass,
-          },
-        });
-      }
-
-      const txResult = await runPublicCacheCli(
-        ['middleware', 'calc-operator-cache', middlewareAddress, epoch, collateralClass, '--public-call'],
-        { network, timeout: 180_000 },
-      );
-      if (!txResult.success) return formatResult(txResult);
-
-      const postResult = await runCli(['middleware', 'get-cache-status', middlewareAddress, '--epoch', epoch], readOpts);
-      if (!postResult.success) return formatResult(postResult);
-      const postCacheByClass = cacheByClassFrom(postResult);
-      if (!postCacheByClass) return formatGuardError('Post-check failed: get-cache-status returned no cacheByClass data');
-
-      return formatResult({
-        success: true,
-        data: {
-          executed: true,
-          middlewareAddress,
-          network,
-          epoch,
-          collateralClass,
-          transactionResult: txResult.data ?? null,
-          cacheByClass: postCacheByClass,
-          classCached: postCacheByClass[collateralClass] === true,
-        },
-      });
-    },
-  );
 }
 
 export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {

@@ -16,7 +16,7 @@ process.on('unhandledRejection', (err) => {
 import { setMcpServer, runCli, formatResult } from './cli-runner.js';
 import { setGuardServer } from './guard.js';
 import { Network, RpcUrl } from './schemas.js';
-import { registerMiddlewareTools, registerMiddlewarePublicCacheTools } from './tools/middleware.js';
+import { registerMiddlewareTools } from './tools/middleware.js';
 import { registerVaultTools } from './tools/vault.js';
 import { registerOperatorTools } from './tools/operator.js';
 import { registerL1RegistryTools } from './tools/l1-registry.js';
@@ -39,7 +39,7 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-const { readOnly, proposeOnly, publicWrite } = profile;
+const { readOnly } = profile;
 
 const server = new McpServer({
   name: 'suzaku',
@@ -197,12 +197,6 @@ server.prompt(
     epoch: z.string().optional().describe('Epoch number to process (e.g. "35"). If omitted, query the current epoch first using middleware_get_current_epoch.'),
   },
   ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, epoch }) => {
-    const cliOnlyNote = (toolName: string) => (
-      proposeOnly
-        ? [`  • ${toolName} is not available in this profile — run via the Suzaku CLI.`]
-        : []
-    );
-
     return {
       messages: [{
         role: 'user' as const,
@@ -211,7 +205,7 @@ server.prompt(
           text: [
             `Run the Dexalot weekly epoch rewards workflow for middleware ${middlewareAddress} and rewards contract ${rewardsAddress}${epoch ? ` (epoch ${epoch})` : ''}.`,
             ...(readOnly
-              ? ['PROFILE NOTE: this server is read-only. Steps 1, 2, 4, 5 and 6 are write operations NOT available here — for each, tell the human the exact CLI command family to run (uptime report/compute, rewards set-amount, rewards distribute, lst-wrapper harvest) or to use the propose bot for set-amount/distribute proposals. You can still execute step 3 (rewards_epoch_diagnosis) and every verification read.']
+              ? ['PROFILE NOTE: this server is read-only. Steps 1, 2, 4, 5 and 6 are write operations NOT available here — for each, tell the human the exact Suzaku CLI command family to run. You can still execute step 3 (rewards_epoch_diagnosis) and every verification read.']
               : []),
             '',
             `If no epoch was provided, start by calling middleware_get_current_epoch with middlewareAddress=${middlewareAddress} to determine which epoch to process.`,
@@ -219,23 +213,17 @@ server.prompt(
             'Follow these steps in order:',
             '',
             `Step 1 — Report validator uptimes (call uptime_report_validator once per active validator):`,
-            ...cliOnlyNote('uptime_report_validator'),
             uptimeTrackerAddress
               ? `  • uptimeTrackerAddress: ${uptimeTrackerAddress}`
               : `  • You need the UptimeTracker address — check if it is known or ask the user.`,
             `  • Get the node IDs of the active validators from middleware_get_active_nodes with middlewareAddress=${middlewareAddress}.`,
-            proposeOnly
-              ? `  • For each validator node, run the Suzaku CLI uptime report command with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`
-              : `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
+            `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
             `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
             `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
             `  • A warp signature collection timeout means the signature-aggregation service is unreachable or validators are offline — report the raw error, do not retry silently.`,
             '',
             `Step 2 — Compute operator uptime:`,
-            ...cliOnlyNote('uptime_compute_operator_uptime'),
-            proposeOnly
-              ? `  • Run the Suzaku CLI uptime compute command with the uptimeTrackerAddress, the operator address, and the epoch.`
-              : `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
+            `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
             `  • This must be called once per operator after all validator uptime reports for that operator are submitted.`,
             '',
             `Step 3 — Diagnose epoch rewards state before setting amounts (CRITICAL):`,
@@ -246,25 +234,16 @@ server.prompt(
             `  • Only proceed to Step 4 if the diagnosis confirms zero or the expected rewards amount for this epoch.`,
             '',
             `Step 4 — Set rewards amount:`,
-            proposeOnly
-              ? `  • Call rewards_set_amount_propose with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, the epoch, and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain). numberOfEpochs is fixed to 1 and the proposal is queued for Safe owner review — relay the verifyBeforeSigning checklist.`
-              : `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
-            proposeOnly
-              ? `  • If you need to correct an already-set amount, rewards_claim_undistributed is not available in this profile — run via the Suzaku CLI first to reclaim the accumulated total, then queue the corrected amount with rewards_set_amount_propose.`
-              : `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
+            `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
+            `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
             '',
             `Step 5 — Distribute rewards:`,
-            proposeOnly
-              ? `  • Call rewards_distribute_propose with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`
-              : `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
+            `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
             `  • After each distribute call, check completion with rewards_get_distribution_batch. Repeat if isComplete is false.`,
             '',
             `Step 6 — Harvest into the LST wrapper:`,
-            ...cliOnlyNote('lst_wrapper_harvest'),
             lstWrapperAddress
-              ? (proposeOnly
-                  ? `  • Run the Suzaku CLI lst-wrapper harvest command with lstWrapperAddress=${lstWrapperAddress}.`
-                  : `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`)
+              ? `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`
               : `  • You need the LSTWrapper address (e.g. wsALOT contract) — check if it is known or ask the user.`,
             `  • Harvest is permissionless — any signer can call it. It compounds accrued staking rewards as vault shares, raising the wsALOT exchange rate.`,
             '',
@@ -309,8 +288,6 @@ server.tool(
     const placeholderSecretName = isUnexpandedPlaceholder(process.env.SUZAKU_SECRET_NAME);
     const placeholderPrivateKey = isUnexpandedPlaceholder(process.env.SUZAKU_PK);
     const placeholderPchainSigner = isUnexpandedPlaceholder(process.env.SUZAKU_PCHAIN_PK);
-    const placeholderSafeApiKey = isUnexpandedPlaceholder(process.env.SAFE_API_KEY);
-    const placeholderSafeApiKeyFile = isUnexpandedPlaceholder(process.env.SAFE_API_KEY_FILE);
     const placeholderGuardSuggest = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_SUGGEST);
     const placeholderGuardRequireConfirm = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_REQUIRE_CONFIRM);
     const placeholderGuardMaxAvaxPerTx = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_MAX_AVAX_PER_TX);
@@ -323,8 +300,6 @@ server.tool(
     if (placeholderSecretName) addPlaceholderWarning('SUZAKU_SECRET_NAME', 'GPG keystore signer');
     if (placeholderPrivateKey) addPlaceholderWarning('SUZAKU_PK', 'private-key signer');
     if (placeholderPchainSigner) addPlaceholderWarning('SUZAKU_PCHAIN_PK', 'P-Chain signer');
-    if (proposeOnly && placeholderSafeApiKey) addPlaceholderWarning('SAFE_API_KEY', 'Safe API key');
-    if (proposeOnly && placeholderSafeApiKeyFile) addPlaceholderWarning('SAFE_API_KEY_FILE', 'Safe API key file');
     if (placeholderGuardSuggest) addPlaceholderWarning('SUZAKU_MCP_SUGGEST', 'guard suggest setting');
     if (placeholderGuardRequireConfirm) addPlaceholderWarning('SUZAKU_MCP_REQUIRE_CONFIRM', 'guard requireConfirm setting');
     if (placeholderGuardMaxAvaxPerTx) addPlaceholderWarning('SUZAKU_MCP_MAX_AVAX_PER_TX', 'guard maxAvaxPerTx setting');
@@ -334,7 +309,7 @@ server.tool(
     if (process.env.SUZAKU_SAFE_ADDRESS && !placeholderSafeAddress && !/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_SAFE_ADDRESS)) {
       addHiddenConfigWarning('SUZAKU_SAFE_ADDRESS is not a valid 0x address');
     }
-    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly, proposeOnly, publicWrite };
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly };
 
     // In public health mode, suppress internal config details (signer type, Safe, guard config)
     if (!publicHealth) {
@@ -359,13 +334,6 @@ server.tool(
       }
       if (process.env.SUZAKU_PCHAIN_PK) {
         status.pchainSigner = placeholderPchainSigner ? unexpandedPlaceholderValue : 'configured';
-      }
-      // Propose tools' Safe queue duplicate-check fails open without a mainnet API key.
-      // Accept either the direct env var or the file-secret form used by the deploy.
-      const safeApiKeyConfigured = Boolean(process.env.SAFE_API_KEY && !placeholderSafeApiKey);
-      const safeApiKeyFileConfigured = Boolean(process.env.SAFE_API_KEY_FILE && !placeholderSafeApiKeyFile);
-      if (proposeOnly && !safeApiKeyConfigured && !safeApiKeyFileConfigured) {
-        status.safeApiKeyWarning = 'Neither SAFE_API_KEY nor SAFE_API_KEY_FILE is set; the Safe queue duplicate-check fails open on mainnet (HTTP 401). Set one from developer.safe.global.';
       }
     }
 
@@ -416,16 +384,13 @@ server.tool(
 
 // ── Tool Groups ──
 
-// In constrained profiles every normal group is registered as read-only; each
-// constrained profile then adds its own narrow write/propose surface explicitly.
-const suppressWrites = readOnly || proposeOnly || publicWrite;
+const suppressWrites = readOnly;
 registerMiddlewareTools(server, suppressWrites);
-if (publicWrite) registerMiddlewarePublicCacheTools(server);
 registerVaultTools(server, suppressWrites);
 registerOperatorTools(server, suppressWrites);
 registerL1RegistryTools(server, suppressWrites);
 registerOptInTools(server, suppressWrites);
-registerRewardsTools(server, readOnly || publicWrite, proposeOnly);
+registerRewardsTools(server, readOnly);
 registerKiteStakingTools(server, suppressWrites);
 registerStakingVaultTools(server, suppressWrites);
 registerBalancerTools(server, suppressWrites);

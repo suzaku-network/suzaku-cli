@@ -5,15 +5,10 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { bridgedStdioCommand } from '../eval/stdio-bridge.mjs';
-import {
-  EXPECTED_PROFILE_TOOL_NAMES,
-  PROPOSE_TOOL_NAMES,
-  PUBLIC_WRITE_TOOL_NAMES,
-} from './test-support/tool-surfaces.js';
+import { EXPECTED_PROFILE_TOOL_NAMES } from './test-support/tool-surfaces.js';
 import { resolveProfileConfig } from './profile-config.js';
 
 const SERVER_PATH = new URL('../dist/server.js', import.meta.url).pathname;
-const DUMMY_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const MIDDLEWARE = '0x9411307279456450ABF9B5181aA7a02271f0DC34';
 const INTERNAL_CONFIG_NAME =
   /\b(?:SUZAKU_[A-Z0-9_]+|SAFE_API_KEY(?:_FILE)?|ANTHROPIC_API_KEY|ETHERSCAN_API_KEY|SNOWSCAN_API_KEY|OPENCLAW_GATEWAY_TOKEN|GNUPGHOME|SIG_AGG_URL|PASSWORD_STORE_DIR|PK_PCHAIN)\b/i;
@@ -23,7 +18,7 @@ interface Profile {
   name: ProfileName;
   args: string[];
   env: Record<string, string>;
-  flags: { readOnly: boolean; proposeOnly: boolean; publicWrite: boolean };
+  flags: { readOnly: boolean };
 }
 
 let tempRoot: string;
@@ -56,20 +51,12 @@ function baseEnv(extra: Record<string, string> = {}): Record<string, string> {
 function profiles(): Profile[] {
   return [
     {
-      name: 'full', args: [], env: baseEnv({ SUZAKU_PK: DUMMY_KEY }),
-      flags: { readOnly: false, proposeOnly: false, publicWrite: false },
+      name: 'full', args: [], env: baseEnv(),
+      flags: { readOnly: false },
     },
     {
       name: 'readOnly', args: ['--read-only'], env: baseEnv(),
-      flags: { readOnly: true, proposeOnly: false, publicWrite: false },
-    },
-    {
-      name: 'proposeOnly', args: ['--propose-only'], env: baseEnv({ SUZAKU_MAX_REWARDS_AMOUNT: '1000' }),
-      flags: { readOnly: false, proposeOnly: true, publicWrite: false },
-    },
-    {
-      name: 'publicWrite', args: ['--public-write'], env: baseEnv({ SUZAKU_PK: DUMMY_KEY, SUZAKU_MIDDLEWARE_ADDRESS: MIDDLEWARE }),
-      flags: { readOnly: false, proposeOnly: false, publicWrite: true },
+      flags: { readOnly: true },
     },
   ];
 }
@@ -80,7 +67,7 @@ function parseToolPayload(result: { content?: Array<{ type: string; text?: strin
 }
 
 describe('built stdio profile contract', () => {
-  for (const profileName of ['full', 'readOnly', 'proposeOnly', 'publicWrite'] as const) {
+  for (const profileName of ['full', 'readOnly'] as const) {
     it(`${profileName} exposes the exact surface and executes health_check`, async () => {
       const profile = profiles().find((item) => item.name === profileName)!;
       const launch = bridgedStdioCommand(process.execPath, [SERVER_PATH, ...profile.args]);
@@ -99,8 +86,6 @@ describe('built stdio profile contract', () => {
           .map((tool) => tool.name)
           .sort();
         if (profile.name === 'readOnly') expect(destructive).toEqual([]);
-        if (profile.name === 'proposeOnly') expect(destructive).toEqual([...PROPOSE_TOOL_NAMES].sort());
-        if (profile.name === 'publicWrite') expect(destructive).toEqual([...PUBLIC_WRITE_TOOL_NAMES].sort());
 
         const health = await client.callTool({ name: 'health_check', arguments: {} });
         expect(health.isError).not.toBe(true);
@@ -151,8 +136,6 @@ describe('built stdio profile contract', () => {
   it('OpenClaw model instructions contain no internal configuration names', () => {
     const instructionFiles = [
       '../deploy/openclaw/SOUL.md',
-      '../deploy/openclaw/SOUL-propose.md',
-      '../deploy/openclaw/SOUL-cache.md',
       '../deploy/openclaw/EPOCHS.md',
     ];
     for (const path of instructionFiles) {
@@ -161,14 +144,13 @@ describe('built stdio profile contract', () => {
     }
   });
 
-  it('fails closed at startup when constrained-profile bounds are absent', () => {
+  it('fails closed when retired write profiles are requested', () => {
     const cases = [
-      { args: ['--propose-only'], env: baseEnv(), marker: 'requires SUZAKU_MAX_REWARDS_AMOUNT' },
-      { args: ['--public-write'], env: baseEnv({ SUZAKU_MIDDLEWARE_ADDRESS: MIDDLEWARE }), marker: 'requires a signing method' },
-      { args: ['--read-only', '--propose-only'], env: baseEnv({ SUZAKU_MAX_REWARDS_AMOUNT: '1000' }), marker: 'mutually exclusive' },
+      { args: ['--propose-only'], marker: 'was removed from this release' },
+      { args: ['--public-write'], marker: 'was removed from this release' },
     ];
     for (const testCase of cases) {
-      expect(() => resolveProfileConfig(testCase.args, testCase.env)).toThrow(testCase.marker);
+      expect(() => resolveProfileConfig(testCase.args, baseEnv())).toThrow(testCase.marker);
     }
   });
 });

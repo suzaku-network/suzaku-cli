@@ -127,21 +127,12 @@ export const FULL_WRITE_TOOL_NAMES = [
   'poa_complete_weight_update',
   'rewards_set_amount',
   'rewards_claim_undistributed',
-  'rewards_set_amount_propose',
-  'rewards_distribute_propose',
   'lst_wrapper_deposit',
   'lst_wrapper_redeem',
   'lst_wrapper_harvest',
   'uptime_report_validator',
   'uptime_compute_operator_uptime',
 ] as const;
-
-export const PROPOSE_TOOL_NAMES = [
-  'rewards_distribute_propose',
-  'rewards_set_amount_propose',
-] as const;
-
-export const PUBLIC_WRITE_TOOL_NAMES = ['middleware_cache_stakes'] as const;
 
 function sorted(values: readonly string[]): string[] {
   return [...values].sort();
@@ -150,7 +141,4 @@ function sorted(values: readonly string[]): string[] {
 export const EXPECTED_PROFILE_TOOL_NAMES = {
   full: sorted([...READ_ONLY_TOOL_NAMES, ...FULL_WRITE_TOOL_NAMES]),
   readOnly: sorted(READ_ONLY_TOOL_NAMES),
-  proposeOnly: sorted([...READ_ONLY_TOOL_NAMES, ...PROPOSE_TOOL_NAMES]),
-  publicWrite: sorted([...READ_ONLY_TOOL_NAMES, ...PUBLIC_WRITE_TOOL_NAMES]),
 } as const;
-

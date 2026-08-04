@@ -53,15 +53,12 @@ ENTRYPOINT ["node", "packages/mcp/dist/server.js", "--read-only"]
 # environment-boundary, and Telegram hardening. Never replace this with :latest.
 FROM ghcr.io/openclaw/openclaw:2026.7.1@sha256:6a31d44b2944e7adcd2b582bf6fb463111264ebca97a0201795b799135bd102c AS bot
 
-# Install mcporter + runtime libs for the optional Ledger path. Read-only startup
-# no longer loads Ledger/HID, but the shared image retains the dependencies for
-# explicitly selected signer workflows.
+# Retain runtime libraries required by the root CLI's optional Ledger module.
+# The monitor itself is read-only and does not install a shell-to-MCP bridge.
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libusb-1.0-0 libudev1 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g mcporter@0.12.0 \
-    && mkdir -p /home/node/.openclaw/workspace/config \
     && mkdir -p /opt/openclaw-plugin-seed/npm \
     && chown -R node:node /opt/openclaw-plugin-seed \
     && chown -R node:node /home/node/.openclaw \

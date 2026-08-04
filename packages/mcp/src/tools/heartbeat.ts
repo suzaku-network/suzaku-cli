@@ -4,14 +4,6 @@ import { z } from 'zod';
 import { runCli, formatResult, CliResult, RunCliOptions } from '../cli-runner.js';
 import { Address, Network, RpcUrl } from '../schemas.js';
 
-const DEFAULT_C_CHAIN_RPC: Record<string, string> = {
-  mainnet: 'https://api.avax.network/ext/bc/C/rpc',
-  fuji: 'https://api.avax-test.network/ext/bc/C/rpc',
-  anvil: 'http://127.0.0.1:8545',
-  kiteaitestnet: 'https://rpc-testnet.gokite.ai/',
-  kiteai: 'https://rpc.gokite.ai',
-};
-
 /** Extract data from a CliResult, returning empty object on failure.
  *  When label and warnings are provided, records failed sub-calls for surfacing to the caller. */
 function extractData(result: CliResult, label?: string, warnings?: string[]): Record<string, unknown> {
@@ -466,7 +458,6 @@ export interface AlertCheckInput {
   uptimeSetByOperator: Record<string, boolean | null>;
   lstPaused: boolean | null;
   validatorBalances: Array<{ nodeID: string; balanceAVAX: string; operator?: string }>;
-  cacheKeyBalance?: { address: string; balanceAVAX: string; minAVAX: number } | null;
   stuckTwoPhase: Array<{ validationID: string; initiated: string }>;
   thresholds: { pChainMinAVAX: number; cacheLateDays: number; uptimeMissingEpochFraction: number };
   now: number;
@@ -538,18 +529,6 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
     }
   }
 
-  // 7. Cache-key C-Chain gas balance — this is the public-write spam ceiling.
-  if (input.cacheKeyBalance) {
-    const bal = Number(input.cacheKeyBalance.balanceAVAX);
-    if (Number.isFinite(bal) && bal < input.cacheKeyBalance.minAVAX) {
-      checks.push({
-        name: 'cache_key_balance_low',
-        status: 'alert',
-        detail: `${shortHex(input.cacheKeyBalance.address)} C-Chain balance ${input.cacheKeyBalance.balanceAVAX} AVAX below ${input.cacheKeyBalance.minAVAX}`,
-        human: `🔴 cache key C-Chain balance ${input.cacheKeyBalance.balanceAVAX} AVAX — refill or stake-cache writes will fail`,
-      });
-    }
-  }
   if (input.validatorBalances.length === 0) {
     checks.push({ name: 'pchain_validators', status: 'warn', detail: 'no current validators returned for the subnet', human: '⚠️ P-Chain returned no current validators for the subnet' });
   }
@@ -565,30 +544,6 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
   }
 
   return checks;
-}
-
-async function getCChainBalanceAVAX(address: string, network: string | undefined, rpcUrl: string | undefined): Promise<string | null> {
-  const endpoint = rpcUrl ?? DEFAULT_C_CHAIN_RPC[network ?? 'mainnet'];
-  if (!endpoint) return null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] }),
-    });
-    if (!res.ok) return null;
-    const body = await res.json() as { result?: string };
-    if (typeof body.result !== 'string' || !/^0x[0-9a-fA-F]+$/.test(body.result)) return null;
-    const wei = BigInt(body.result);
-    const whole = wei / 10n ** 18n;
-    const frac = ((wei % (10n ** 18n)) * 10000n) / (10n ** 18n);
-    return `${whole.toString()}.${frac.toString().padStart(4, '0')}`.replace(/\.?0+$/, '');
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 // ── Digest text assembly (pure, exported for tests) ──
@@ -682,13 +637,11 @@ export function registerHeartbeatTools(server: McpServer) {
       pChainMinAVAX: z.number().default(0.05).describe('Alert when a validator P-Chain continuous-fee balance falls below this (AVAX)'),
       cacheLateDays: z.number().default(1).describe('Warn when stake cache is incomplete and the update window closes within this many days'),
       uptimeMissingEpochFraction: z.number().default(0.5).describe('Warn when last-epoch uptime is missing past this fraction of the current epoch'),
-      cacheKeyAddress: Address.optional().describe('Cache bot signer C-Chain address (defaults to the server-configured cache key address)'),
-      cacheKeyMinAVAX: z.number().optional().describe('Alert when cache key C-Chain balance falls below this AVAX amount (defaults to the server-configured threshold, 0.05 if unset)'),
       network: Network,
       rpcUrl: RpcUrl,
     },
     { readOnlyHint: true, idempotentHint: true },
-    async ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, mode, windowEpochs, pChainMinAVAX, cacheLateDays, uptimeMissingEpochFraction, cacheKeyAddress: cacheKeyAddressParam, cacheKeyMinAVAX: cacheKeyMinAVAXParam, network, rpcUrl }) => {
+    async ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, mode, windowEpochs, pChainMinAVAX, cacheLateDays, uptimeMissingEpochFraction, network, rpcUrl }) => {
       const collectAttempt = async (epochRetry: number): Promise<ReturnType<typeof formatResult>> => {
       const opts: RunCliOptions = { network, rpcUrl, skipLimiter: true };
       const scanOpts: RunCliOptions = { ...opts, timeout: 180_000, eventScan: true };
@@ -802,28 +755,6 @@ export function registerHeartbeatTools(server: McpServer) {
         uptimeSetByOperator[op] = typeof u.isOperatorUptimeSet === 'boolean' ? u.isOperatorUptimeSet : null;
       });
 
-      // The cache signer balance is part of the monitored snapshot, so complete
-      // this final external read before validating that the epoch stayed stable.
-      const cacheKeyAddress = cacheKeyAddressParam ?? process.env.SUZAKU_CACHE_KEY_ADDRESS;
-      const cacheKeyMinAVAX = cacheKeyMinAVAXParam ?? Number(process.env.SUZAKU_CACHE_KEY_MIN_AVAX ?? 0.05);
-      let cacheKeyBalance: { address: string; balanceAVAX: string; minAVAX: number } | null = null;
-      let cacheKeyBalanceAvailable = !cacheKeyAddress;
-      if (cacheKeyAddress) {
-        try {
-          const balanceAVAX = await getCChainBalanceAVAX(cacheKeyAddress, network, rpcUrl);
-          if (balanceAVAX == null) {
-            _warnings.push('cache-key-balance: no balance data');
-          } else if (Number.isFinite(cacheKeyMinAVAX)) {
-            cacheKeyBalance = { address: cacheKeyAddress, balanceAVAX, minAVAX: cacheKeyMinAVAX };
-            cacheKeyBalanceAvailable = true;
-          } else {
-            _warnings.push('cache-key-balance: invalid minimum balance threshold');
-          }
-        } catch (err) {
-          _warnings.push(`cache-key-balance: ${err instanceof Error ? err.message : 'failed'}`);
-        }
-      }
-
       // A heartbeat can straddle an epoch boundary because it performs several
       // independent reads. Retry the complete collection once rather than mixing
       // old-epoch deadlines with new-epoch state.
@@ -908,9 +839,6 @@ export function registerHeartbeatTools(server: McpServer) {
       if (!lstInfoAvailable) {
         dataChecks.push({ name: 'lst_data_unavailable', status: 'alert', detail: 'configured LST wrapper read failed', human: '🔴 LST wrapper monitoring unavailable — wrapper state could not be read' });
       }
-      if (!cacheKeyBalanceAvailable) {
-        dataChecks.push({ name: 'cache_key_balance_data_unavailable', status: 'alert', detail: 'configured cache-key balance read failed', human: '🔴 cache-key balance monitoring unavailable — signer balance could not be read' });
-      }
       if (nodeLogsFailed) {
         dataChecks.push({ name: 'event_scan_failed', status: 'warn', detail: 'middleware node-logs scan failed — node/stake changes unknown', human: '⚠️ node/stake event scan failed — CHANGED section incomplete' });
       }
@@ -938,7 +866,6 @@ export function registerHeartbeatTools(server: McpServer) {
         uptimeSetByOperator,
         lstPaused: lstInfo?.paused ?? null,
         validatorBalances: validators,
-        cacheKeyBalance,
         stuckTwoPhase,
         thresholds: { pChainMinAVAX, cacheLateDays, uptimeMissingEpochFraction },
         now,
@@ -971,7 +898,6 @@ export function registerHeartbeatTools(server: McpServer) {
           claimability,
         },
         validators: { count: validators.length, balances: validators },
-        ...(cacheKeyBalance ? { cacheKey: cacheKeyBalance } : {}),
         checks,
         humanLines,
         ...(_warnings.length > 0 ? { _warnings } : {}),

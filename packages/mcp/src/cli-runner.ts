@@ -221,13 +221,6 @@ export interface RunCliOptions {
   eventScan?: boolean;
   /** Internal/test override for the SIGTERM-to-SIGKILL grace period. */
   killGraceMs?: number;
-  /**
-   * Skip the network-aware suggest/confirm matrix. HARDCODE true only in:
-   * - Safe propose tools (off-chain Safe proposal; Safe UI signatures gate execution)
-   * - runPublicCacheCli below (one exact permissionless stake-cache call)
-   * Never derive this from env or client input.
-   */
-  bypassSuggest?: boolean;
 }
 
 const dedupCache = new Map<string, { ts: number; result: CliResult }>();
@@ -354,8 +347,7 @@ export function buildChildEnv(options: RunCliOptions): Record<string, string | u
     if (pk) env.PK = pk;
   }
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
-    // tx-service auth (mainnet); travels with --safe only. The CLI refuses owner keys
-    // in propose mode, so this cannot widen into direct on-chain execution.
+    // tx-service auth (mainnet); travels with --safe only.
     env.SAFE_API_KEY = readSecret('SAFE_API_KEY', 'SAFE_API_KEY_FILE');
   }
   if (options.pchainPrivateKey) {
@@ -426,9 +418,8 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
     }
   }
 
-  // Safe multisig wiring. The tx-service API key (mainnet auth) travels ONLY with --safe
-  // (see buildChildEnv). The CLI refuses owner keys in --safe-propose mode, so this
-  // cannot widen into direct on-chain execution.
+  // Safe multisig wiring. The tx-service API key (mainnet auth) travels ONLY with
+  // Safe-wired writes (see buildChildEnv); normal signer policy still applies.
   if (options.privateKey && process.env.SUZAKU_SAFE_ADDRESS) {
     cliArgs.push('--safe', process.env.SUZAKU_SAFE_ADDRESS);
     signerMethod = signerMethod ? `${signerMethod}+SUZAKU_SAFE_ADDRESS` : 'SUZAKU_SAFE_ADDRESS';
@@ -448,7 +439,7 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   }
 
   // Network-aware suggest / show+confirm for write operations
-  if (options.privateKey && !options.bypassSuggest) {
+  if (options.privateKey) {
     // Explicit testnet allowlist — unknown networks (mainnet, kiteai, custom RPCs) get mainnet-safe handling
     const isTestnet = options.network != null && TESTNET_NETWORKS.has(options.network);
     const suggestEnv = process.env.SUZAKU_MCP_SUGGEST;
@@ -652,28 +643,6 @@ export async function runCli(args: string[], options: RunCliOptions = {}): Promi
   });
 
   return result;
-}
-
-export async function runPublicCacheCli(args: string[], options: Omit<RunCliOptions, 'privateKey' | 'bypassSuggest'> = {}): Promise<CliResult> {
-  const [group, command, middlewareAddress, epoch, collateralClass, publicFlag, ...rest] = args;
-  const exactPublicCacheCall =
-    group === 'middleware' &&
-    command === 'calc-operator-cache' &&
-    /^0x[0-9a-fA-F]{40}$/.test(middlewareAddress ?? '') &&
-    /^\d+$/.test(epoch ?? '') &&
-    /^\d+$/.test(collateralClass ?? '') &&
-    publicFlag === '--public-call' &&
-    rest.length === 0;
-
-  if (!exactPublicCacheCall) {
-    return {
-      success: false,
-      data: null,
-      error: 'Internal error: public cache execution only permits middleware calc-operator-cache <middleware> <epoch> <collateralClass> --public-call',
-    };
-  }
-
-  return runCli(args, { ...options, privateKey: true, bypassSuggest: true });
 }
 
 export function formatResult(result: CliResult) {

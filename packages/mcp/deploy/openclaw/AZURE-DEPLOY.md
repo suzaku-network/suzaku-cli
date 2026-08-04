@@ -1,8 +1,8 @@
 # Production runbook — Suzaku Kimi monitor
 
-This runbook deploys only the read-only `suzaku-bot` to the existing VM. The
-propose/cache Compose profiles are not part of this release: do not start them and
-do not install their tokens, Anthropic key, signer keys, or Safe credentials.
+This runbook deploys only the read-only `suzaku-bot` to the existing VM.
+Safe-proposer and public-cache write profiles are absent from this release; do not
+install their tokens, Anthropic key, signer keys, or Safe credentials.
 
 ## Release identity
 
@@ -359,6 +359,6 @@ At the first failed gate:
 4. diagnose and test in the development checkout;
 5. produce a new signed candidate and restart from release gates.
 
-Never patch the VM checkout, expose the gateway, start dormant profiles, loosen
+Never patch the VM checkout, expose the gateway, add signer-bearing profiles, loosen
 tool policy, disable the guard/firewall, edit paired-device state, or install an
 unpinned plugin.

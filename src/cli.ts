@@ -11,10 +11,7 @@ console.warn = function (...args) {
 };
 
 import { Command, CommandUnknownOpts, Option } from '@commander-js/extra-typings';
-import { Abi, encodeFunctionData, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
-import { SuzakuABI } from "./abis";
-import { handleBatchTransaction } from "./lib/safeUtils";
-import { isCastMode } from "./lib/castUtils";
+import { Abi, formatUnits, fromBytes, getAbiItem, Hex, hexToBytes, parseUnits } from "viem";
 import { registerL1, setL1MetadataUrl, setL1Middleware } from "./l1";
 import { listOperators, registerOperator } from "./operator";
 import { getConfig } from "./config";
@@ -242,39 +239,22 @@ async function main() {
             logger.error('Error: --rpc-url is required when using --network custom');
             process.exit(1);
         }
+        // Block manually private key on mainnet
+        if (opts.privateKey! && chainList[opts.network].testnet === false) {
+            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
+            process.exit(1);
+        }
         // Activate json output if --json is provided
         logger.setJsonMode(opts.json);
     });
 
-    program.hook("preAction", (_thisCommand, actionCommand) => {
+    program.hook("preAction", () => {
         const opts = program.opts();
-        const hasRawPrivateKey = Boolean(opts.privateKey);
         // Ensure privateKey is set if opts.secret or ledger is provided
         if (opts.secretName) {
             program.setOptionValue('privateKey', opts.secretName)
         } else if (opts.ledger) {
             program.setOptionValue('privateKey', 'ledger')
-        }
-
-        const actionParent = actionCommand.parent;
-        const actionOpts = actionCommand.opts() as { safePropose?: boolean; publicCall?: boolean };
-        const isSafeProposeAction =
-            opts.safe
-            && actionParent?.name() === 'rewards'
-            && (actionCommand.name() === 'set-amount' || actionCommand.name() === 'distribute')
-            && actionOpts.safePropose === true;
-        const isPublicCacheAction =
-            actionParent?.name() === 'middleware'
-            && actionCommand.name() === 'calc-operator-cache'
-            && actionOpts.publicCall === true;
-
-        // Raw software keys are blocked on mainnet except for two narrow flows:
-        // Safe delegate proposals (off-chain) and the public stake-cache call below.
-        if (hasRawPrivateKey && chainList[opts.network].testnet === false
-            && !isSafeProposeAction
-            && !isPublicCacheAction) {
-            logger.error("Using private key on mainnet is not allowed. Use the secret keystore or a ledger instead.");
-            process.exit(1);
         }
     });
 
@@ -1635,7 +1615,6 @@ async function main() {
         .addArgument(argMiddlewareAddress)
         .addArgument(ArgNumber("epoch", "Epoch number"))
         .addArgument(ArgBigInt("collateralClass", "Collateral class ID"))
-        .addOption(new Option("--public-call", "Permit this permissionless stake-cache call to execute with a software key on mainnet"))
         .asyncAction({ signer: true }, async (config, middlewareAddress, epoch, collateralClass) => {
             logger.log("Calculating and caching stakes...");
 
@@ -4072,33 +4051,8 @@ async function main() {
         .addArgument(argRewardsAddress)
         .addArgument(ArgNumber("epoch", "Epoch to distribute rewards for"))
         .addArgument(ArgNumber("batchSize", "Number of operators to process in this batch"))
-        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
-        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize, options) => {
+        .asyncAction({ signer: true }, async (config, rewardsAddress, epoch, batchSize) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
-            const client = config.client;
-            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
-                throw new Error('--safe-propose requires --safe <address>');
-            }
-            if ('safe' in client && client.safe != undefined && !isCastMode()) {
-                // Route through the batch helper so the Safe propose path surfaces the
-                // safeTxHash and enforces propose-only, without touching the shared proxy.
-                const batch = await handleBatchTransaction([
-                    {
-                        to: rewardsAddress,
-                        data: encodeFunctionData({
-                            abi: SuzakuABI.RewardsNativeToken as Abi,
-                            functionName: 'distributeRewards',
-                            args: [epoch, batchSize],
-                        }),
-                        value: '0',
-                    },
-                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
-                if (batch.ethereumTxHash) {
-                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
-                }
-                logger.log(`distributeRewards for epoch ${epoch} batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
-                return;
-            }
             const txHash = await distributeRewards(
                 rewardsContract,
                 epoch,
@@ -4266,8 +4220,7 @@ async function main() {
         .addArgument(ArgNumber("startEpoch", "Starting epoch"))
         .addArgument(ArgNumber("numberOfEpochs", "Number of epochs"))
         .argument("rewardsAmount", "Amount of rewards in decimal format")
-        .addOption(new Option("--safe-propose", "With --safe, propose to the Safe queue as a delegate (refuse owner keys, never execute); also permits a software key on mainnet for this flow"))
-        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount, options) => {
+        .asyncAction({ signer: true }, async (config, rewardsAddress, startEpoch, numberOfEpochs, rewardsAmount) => {
             const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
             if (rewardsContract.name !== 'RewardsNativeToken') {
                 throw new Error('Rewards contract is not a RewardsNativeToken');
@@ -4277,41 +4230,6 @@ async function main() {
             const decimals = await token.read.decimals();
             const rewardsAmountWei = parseUnits(rewardsAmount, decimals);
             const amountToApprove = rewardsAmountWei * BigInt(numberOfEpochs);
-            const client = config.client;
-            if (options.safePropose && !('safe' in client && client.safe != undefined)) {
-                throw new Error('--safe-propose requires --safe <address>');
-            }
-            if ('safe' in client && client.safe != undefined && !isCastMode()) {
-                // One atomic MultiSend: separate approve/set proposals would collide on
-                // the Safe nonce, and the set call cannot be simulated (or executed)
-                // while the approve is unmined — setRewardsAmountForEpochs pulls the
-                // tokens via transferFrom at set time.
-                const batch = await handleBatchTransaction([
-                    {
-                        to: tokenAddress,
-                        data: encodeFunctionData({
-                            abi: SuzakuABI.ERC20 as Abi,
-                            functionName: 'approve',
-                            args: [rewardsAddress, amountToApprove],
-                        }),
-                        value: '0',
-                    },
-                    {
-                        to: rewardsAddress,
-                        data: encodeFunctionData({
-                            abi: SuzakuABI.RewardsNativeToken as Abi,
-                            functionName: 'setRewardsAmountForEpochs',
-                            args: [startEpoch, numberOfEpochs, rewardsAmountWei],
-                        }),
-                        value: '0',
-                    },
-                ], client.safe, client.account!.address as Hex, client.network, !!options.safePropose);
-                if (batch.ethereumTxHash) {
-                    await client.waitForTransactionReceipt({ hash: batch.ethereumTxHash });
-                }
-                logger.log(`approve + setRewardsAmountForEpochs batched as Safe tx ${batch.safeTxHash} (${batch.action})`);
-                return;
-            }
             await token.safeWrite.approve([rewardsAddress, amountToApprove], {
                 chain: null,
                 account: config.client.account!,

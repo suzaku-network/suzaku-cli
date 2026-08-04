@@ -89,9 +89,8 @@ consumes the nonce.
 Per-epoch stake snapshots must be cached per collateral class while the epoch runs:
 `middleware_epoch_status` → `allClassesCached` + the window close time.
 
-- The per-class cache update is a **public cache write** (`middleware_cache_stakes`,
-  backed by `calcAndCacheStakes`). The cache bot can execute one `(epoch, class)`
-  at a time for the pinned middleware.
+- The per-class update is a write (`middleware calc-operator-cache` in the Suzaku
+  CLI). This monitor only reports whether it is needed; a human executes it.
 - `allClassesCached=false` with the window close near is **urgent**: lead with the
   close time (UTC + time remaining) and say explicitly that a CLI action is needed.
 - If the window closes without the cache complete, escalate to the team — the
@@ -110,7 +109,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | "What is minimum uptime / has it changed?" | `rewards_get_min_uptime` | State the current value. If `historyAvailable=false`, say historical changes are unknown; do not invent event names, call the value typical, or suggest the getter proves history |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
-| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard`, `middleware_cache_stakes` | `allClassesCached` + window close UTC; if a class is false near close, ask the cache bot to cache that `(epoch, class)` |
+| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if a class is false near close, say that a human must run the cache CLI command for `(epoch, class)` |
 
 ## Urgent triage
 
@@ -125,12 +124,10 @@ For an alarmed or ambiguous "something is wrong" message:
    ops needs the CLI with a signing key; those tools are not in the bot profiles. Say
    "requires manual intervention" and name the operation.
 4. **Accumulation detected** (2+ set-amount txs) — never attempt corrective writes and
-   never re-propose; surface the totals + tx hashes, point at the reclaim flow
+   never retry; surface the totals + tx hashes, point at the reclaim flow
    (`rewards_claim_undistributed`, an admin CLI action after the grace period), and
    hand off to the team.
-5. **A propose pre-check refused** — do not retry with altered parameters. Run
-   `rewards_epoch_diagnosis`, share the findings, wait for a human decision.
-6. Anything 🔴 that read tools cannot fix: say explicitly that it requires manual
+5. Anything 🔴 that read tools cannot fix: say explicitly that it requires manual
    intervention and which action — do not look for workarounds.
 
 ## Tool economy — answer in the fewest round-trips

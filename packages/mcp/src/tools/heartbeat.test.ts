@@ -279,12 +279,6 @@ describe('runAlertChecks', () => {
     expect(runAlertChecks(input).find((c) => c.name === 'pchain_balance_low')?.status).toBe('alert');
   });
 
-  it('alerts on low cache-key C-Chain gas balance', () => {
-    const input = baseInput();
-    input.cacheKeyBalance = { address: '0x' + 'a'.repeat(40), balanceAVAX: '0.01', minAVAX: 0.05 };
-    expect(runAlertChecks(input).find((c) => c.name === 'cache_key_balance_low')?.status).toBe('alert');
-  });
-
   it('alerts on paused LST wrapper and warns on stuck two-phase', () => {
     const input = baseInput();
     input.lstPaused = true;
@@ -645,20 +639,6 @@ describe('deployment_heartbeat handler', () => {
     expect(data.humanLines).toContainEqual(expect.stringContaining('cache unknown'));
     expect(data.humanLines.join('\n')).not.toContain('cache incomplete');
     expect(data.humanLines.join('\n')).not.toContain('cache pending');
-  });
-
-  it('surfaces a failed configured cache-key balance read as an alert', async () => {
-    mockRunCli(MOCK_BASE);
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
-
-    const res = await getHandler()({
-      ...ADDRS,
-      cacheKeyAddress: `0x${'4'.repeat(40)}`,
-      mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5,
-    });
-    const data = JSON.parse(res.content[0].text);
-
-    expect(data.checks.find((c: { name: string }) => c.name === 'cache_key_balance_data_unavailable')?.status).toBe('alert');
   });
 
   it('retries the complete snapshot once when the epoch changes during collection', async () => {

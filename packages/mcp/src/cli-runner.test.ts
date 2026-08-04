@@ -11,7 +11,6 @@ import {
   formatGuardError,
   requireSigner,
   runCli,
-  runPublicCacheCli,
   buildChildEnv,
   getActiveSubprocesses,
   resetActiveSubprocesses,
@@ -420,7 +419,7 @@ describe('buildChildEnv', () => {
   });
 });
 
-describe('bypassSuggest', () => {
+describe('mainnet write suggestions', () => {
   beforeEach(() => {
     resetActiveSubprocesses();
     resetRateLimiter();
@@ -444,32 +443,6 @@ describe('bypassSuggest', () => {
     expect((result.data as Record<string, unknown>).command).toContain(`--safe 0x${'1'.repeat(40)}`);
   });
 
-  it('bypassSuggest skips the suggest matrix and reaches execution', async () => {
-    // The unknown command makes the spawned CLI fail fast — getting a non-suggest
-    // failure proves the matrix was bypassed and the subprocess actually ran.
-    const result = await runCli(['nonexistent-command'], { privateKey: true, network: 'mainnet', bypassSuggest: true, timeout: 30_000 });
-    expect(result.success).toBe(false);
-    expect((result.data as Record<string, unknown> | null)?._suggest_mode).toBeUndefined();
-  }, 35_000);
-});
-
-describe('runPublicCacheCli', () => {
-  it('rejects any non-cache command shape before execution', async () => {
-    const result = await runPublicCacheCli(['vault', 'deposit', '1', '--public-call'], { network: 'mainnet', timeout: 30_000 });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('public cache execution only permits');
-  });
-
-  it('reaches execution for the exact public cache command shape', async () => {
-    const result = await runPublicCacheCli(
-      ['middleware', 'calc-operator-cache', '0x' + 'a'.repeat(40), '38', '1', '--public-call'],
-      { network: 'mainnet', timeout: 30_000 },
-    );
-    // The command reaches the CLI and fails only after execution starts (no signer
-    // configured in this test process), proving the exact allowlist passed.
-    expect(result.success).toBe(false);
-    expect(result.error).not.toContain('public cache execution only permits');
-  }, 35_000);
 });
 
 describe('redaction parity corpus (shared with the delivery guard)', () => {
