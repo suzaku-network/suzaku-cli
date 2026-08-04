@@ -198,6 +198,7 @@ import { execSync } from 'child_process';
 import { chainList, setCustomChainRpcUrl } from './lib/chainList';
 import { readFileSync } from 'fs';
 import packageJson from '../package.json';
+import { findPChainValidator, formatPChainBalance, operatorStakeArgs } from './lib/accountInfo';
 
 // Main function to set up the CLI commands
 async function main() {
@@ -2118,6 +2119,7 @@ async function main() {
         .asyncAction(async (config, middlewareAddress, account) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [owner, operators, epoch, balancerAddress] = await middlewareSvc.multicall(['owner', 'getAllOperators', 'getCurrentEpoch', 'BALANCER']);
+            const primaryAssetClass = await middlewareSvc.read.PRIMARY_ASSET_CLASS();
             const roles = getRoles(middlewareSvc);
             const accessControl = await config.contracts.AccessControl(middlewareAddress);
             const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
@@ -2133,7 +2135,7 @@ async function main() {
             if (operators.includes(account)) {
                 const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
                 const [stake, validationIDs] = await middlewareSvc.multicall([
-                    { name: 'getOperatorStake', args: [account, 1, BigInt(epoch)] },
+                    { name: 'getOperatorStake', args: operatorStakeArgs(account, Number(epoch), primaryAssetClass) },
                     { name: 'getOperatorValidationIDs', args: [account] }]);
                 const validators = await balancerSvc.multicall(validationIDs.flatMap(id => { return [{ name: 'getValidator', args: [id] }, { name: 'isValidatorPendingWeightUpdate', args: [id] }] }));
                 logger.log(`Operator with stake ${stake} and the following validators: `);
@@ -2144,11 +2146,17 @@ async function main() {
                     const validator = validators[i] as Validator;
                     const pendingWeightUpdate = validators[i + 1];
                     const status = ValidatorStatusNames[validator.status == ValidatorStatus.Active && pendingWeightUpdate ? ValidatorStatus.PendingStakeUpdated : validator.status];
-                    const pChainValidator = pChainValidators.find(v => v.nodeID === validator.nodeID);
-                    formated[encodeNodeID(validator.nodeID)] = { NodeID: encodeNodeID(validator.nodeID), status, weight: validator.weight, ValidationId: validationIDs[i / 2], continuousAVAXBalance: parseUnits(pChainValidator?.balance?.toString() ?? '0', 9) }
+                    const pChainValidator = findPChainValidator(validator.nodeID, pChainValidators);
+                    formated[encodeNodeID(validator.nodeID)] = {
+                        NodeID: encodeNodeID(validator.nodeID),
+                        status,
+                        weight: validator.weight.toString(),
+                        ValidationId: validationIDs[i / 2],
+                        ...formatPChainBalance(pChainValidator?.balance),
+                    };
                 }
                 logger.logJsonTree(formated);
-                accountInfo.operator = { stake, validators: formated };
+                accountInfo.operator = { stake: stake.toString(), validators: formated };
             }
             logger.addData('accountInfo', accountInfo);
         });

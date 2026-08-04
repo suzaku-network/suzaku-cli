@@ -140,7 +140,7 @@ export async function getVaultTotalSupply(
 
   const totalSupply = await vault.read.totalSupply();
   logger.log("Total supply:", totalSupply.toString());
-  logger.addData('totalSupplyAtEpoch', totalSupply.toString());
+  logger.addData('totalSupply', totalSupply.toString());
   return totalSupply;
 }
 
@@ -153,7 +153,7 @@ export async function getVaultTotalSupplyAtEpoch(
   const epochEndTs = StartTs + epochDuration * (Number(epoch) + 1);
   const totalSupply = await vault.read.activeSharesAt([epochEndTs, '0x']);
   logger.log("Total supply:", totalSupply.toString());
-  logger.addData('totalSupplyAtEpoch', totalSupply.toString());
+  logger.addData('totalSupplyAtEpoch', { epoch: epoch.toString(), totalSupply: totalSupply.toString() });
   return totalSupply;
 }
 

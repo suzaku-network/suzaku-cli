@@ -457,7 +457,7 @@ export interface AlertCheckInput {
   claimability: ClaimabilityRow[];
   uptimeSetByOperator: Record<string, boolean | null>;
   lstPaused: boolean | null;
-  validatorBalances: Array<{ nodeID: string; balanceAVAX: string; operator?: string }>;
+  validatorBalances: Array<{ nodeID: string; balanceAVAX: string | null; balanceKnown?: boolean; operator?: string }>;
   stuckTwoPhase: Array<{ validationID: string; initiated: string }>;
   thresholds: { pChainMinAVAX: number; cacheLateDays: number; uptimeMissingEpochFraction: number };
   now: number;
@@ -523,6 +523,7 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
 
   // 6. P-Chain continuous-fee balances
   for (const v of input.validatorBalances) {
+    if (v.balanceKnown === false || v.balanceAVAX === null) continue;
     const bal = Number(v.balanceAVAX);
     if (Number.isFinite(bal) && bal < thresholds.pChainMinAVAX) {
       checks.push({ name: 'pchain_balance_low', status: 'alert', detail: `${v.nodeID} balance ${v.balanceAVAX} AVAX below ${thresholds.pChainMinAVAX}`, human: `🔴 ${v.nodeID} P-Chain balance ${v.balanceAVAX} AVAX — top up or validator deactivates` });
@@ -713,7 +714,10 @@ export function registerHeartbeatTools(server: McpServer) {
         ] : []),
       ]);
       const validatorBalancesData = extractData(phase2[0], 'get-validator-balances', _warnings).validatorBalances as {
-        validators: Array<{ nodeID: string; validationID?: string; operator?: string; balanceNAvax: string; balanceAVAX: string; weight: string }>;
+        knownBalanceCount?: number;
+        unknownBalanceCount?: number;
+        balanceStatus?: 'complete' | 'partial' | 'unknown';
+        validators: Array<{ nodeID: string; validationID?: string; operator?: string; balanceKnown?: boolean; balanceNAvax: string | null; balanceAVAX: string | null; weight: string }>;
       } | undefined;
       const validatorBalancesAvailable = Array.isArray(validatorBalancesData?.validators);
       const nodeLogs = isDigest
@@ -810,12 +814,15 @@ export function registerHeartbeatTools(server: McpServer) {
       const changedLines = summarizeChangedEvents(nodeLogs);
 
       const validators = validatorBalancesData?.validators ?? [];
-      const minBalance = validators.length > 0
-        ? validators.reduce((min, v) => Number(v.balanceAVAX) < Number(min.balanceAVAX) ? v : min)
+      const validatorsWithKnownBalances = validators.filter((validator) => validator.balanceKnown !== false && validator.balanceAVAX !== null);
+      const minBalance = validatorsWithKnownBalances.length > 0
+        ? validatorsWithKnownBalances.reduce((min, v) => Number(v.balanceAVAX) < Number(min.balanceAVAX) ? v : min)
         : null;
-      const validatorSummary = validators.length > 0
-        ? `validators ${validators.length} · P-Chain min balance ${minBalance!.balanceAVAX} AVAX (${minBalance!.nodeID})`
-        : null;
+      const validatorSummary = validators.length === 0
+        ? null
+        : minBalance
+          ? `validators ${validators.length} · P-Chain min balance ${minBalance.balanceAVAX} AVAX (${minBalance.nodeID})${validatorsWithKnownBalances.length < validators.length ? ` · ${validators.length - validatorsWithKnownBalances.length} balance unknown` : ''}`
+          : `validators ${validators.length} · P-Chain balances unknown`;
       const tvlLine = lstInfo?.totalAssets && lstInfo?.totalSupply
         ? `wrapper assets ${weiToToken(lstInfo.totalAssets)} · rate ${exchangeRate(lstInfo.totalAssets, lstInfo.totalSupply)} per ${lstInfo.symbol ?? 'share'} · deposits ${lstInfo.paused ? '🔴 PAUSED' : 'open'}`
         : null;
@@ -835,6 +842,9 @@ export function registerHeartbeatTools(server: McpServer) {
       }
       if (!validatorBalancesAvailable) {
         dataChecks.push({ name: 'validator_balance_data_unavailable', status: 'alert', detail: 'validator P-Chain balance read failed', human: '🔴 validator balance monitoring unavailable — P-Chain balances could not be read' });
+      } else if (validatorsWithKnownBalances.length < validators.length) {
+        const unknownCount = validators.length - validatorsWithKnownBalances.length;
+        dataChecks.push({ name: 'validator_balance_data_partial', status: 'warn', detail: `${unknownCount} of ${validators.length} validator balance(s) unavailable`, human: `⚠️ ${unknownCount} validator P-Chain balance${unknownCount === 1 ? '' : 's'} unknown — low-balance coverage is incomplete` });
       }
       if (!lstInfoAvailable) {
         dataChecks.push({ name: 'lst_data_unavailable', status: 'alert', detail: 'configured LST wrapper read failed', human: '🔴 LST wrapper monitoring unavailable — wrapper state could not be read' });

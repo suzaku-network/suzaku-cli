@@ -1,4 +1,4 @@
-import { bytesToHex, formatUnits, Hex, hexToBytes } from 'viem';
+import { bytesToHex, Hex, hexToBytes } from 'viem';
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
 import { ExtendedClient, ExtendedPublicClient, ExtendedWalletClient } from './client';
 import { color } from 'console-log-colors';
@@ -9,6 +9,7 @@ import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId,
 import { logger } from './lib/logger';
 import { completeValidatorRemoval } from './securityModule';
 import { Validator, ValidatorStatus, ValidatorStatusNames } from './balancer';
+import { formatPChainBalanceFields } from './lib/accountInfo';
 import { getCurrentValidators } from './lib/pChainUtils';
 import { utils } from '@avalabs/avalanchejs';
 
@@ -462,19 +463,23 @@ export async function middlewareGetValidatorBalances(
     nodeID: v.nodeID,
     validationID: v.validationID,
     operator: operatorByNodeId[v.nodeID],
-    balanceNAvax: (v.balance ?? 0).toString(),
-    balanceAVAX: formatUnits(BigInt(v.balance ?? 0), 9),
+    ...formatPChainBalanceFields(v.balance),
     weight: String(v.weight),
   }));
+  const knownBalanceCount = validatorRows.filter((row) => row.balanceKnown).length;
+  const unknownBalanceCount = validatorRows.length - knownBalanceCount;
 
   logger.log(`P-Chain validators for subnet ${subnetId}: ${validatorRows.length}`);
   for (const row of validatorRows) {
-    logger.log(`  ${row.nodeID} balance=${row.balanceAVAX} AVAX weight=${row.weight}${row.operator ? ` operator=${row.operator}` : ''}`);
+    logger.log(`  ${row.nodeID} balance=${row.balanceAVAX ?? 'unknown'} AVAX weight=${row.weight}${row.operator ? ` operator=${row.operator}` : ''}`);
   }
 
   logger.addData('validatorBalances', {
     subnetId,
     totalValidators: validatorRows.length,
+    knownBalanceCount,
+    unknownBalanceCount,
+    balanceStatus: unknownBalanceCount === 0 ? 'complete' : knownBalanceCount === 0 ? 'unknown' : 'partial',
     validators: validatorRows,
   });
 

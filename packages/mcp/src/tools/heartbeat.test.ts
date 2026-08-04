@@ -613,6 +613,29 @@ describe('deployment_heartbeat handler', () => {
     expect(data.checks.some((c: { name: string }) => c.name === 'validator_balance_data_unavailable')).toBe(true);
   });
 
+  it('warns about unknown validator balances without fabricating a low-balance alert', async () => {
+    mockRunCli({
+      ...MOCK_BASE,
+      'get-validator-balances': {
+        validatorBalances: {
+          subnetId: 'x',
+          totalValidators: 1,
+          knownBalanceCount: 0,
+          unknownBalanceCount: 1,
+          balanceStatus: 'unknown',
+          validators: [{ nodeID: 'NodeID-x', balanceKnown: false, balanceNAvax: null, balanceAVAX: null, weight: '500000' }],
+        },
+      },
+    });
+
+    const res = await getHandler()({ ...ADDRS, mode: 'alerts', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
+    const data = JSON.parse(res.content[0].text);
+
+    expect(data.checks.find((check: { name: string }) => check.name === 'validator_balance_data_partial')?.status).toBe('warn');
+    expect(data.checks.some((check: { name: string }) => check.name === 'pchain_balance_low')).toBe(false);
+    expect(data.validators.balances[0].balanceAVAX).toBeNull();
+  });
+
   it.each([
     ['get-cache-status', 'cache_data_unavailable'],
     ['lst-wrapper info', 'lst_data_unavailable'],
