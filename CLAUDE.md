@@ -6,7 +6,7 @@ TypeScript CLI for the Suzaku restaking protocol on Avalanche. Built with Comman
 
 ```
 /                   CLI package (this level)
-packages/mcp/       MCP server (127 full-profile tools plus one public cache profile tool; --read-only, --propose-only, and --public-write profiles) — see packages/mcp/CLAUDE.md
+packages/mcp/       MCP server (125 full-profile tools; 69-tool --read-only profile) — see packages/mcp/CLAUDE.md
 ```
 
 pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
@@ -27,7 +27,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 | `operator.ts` | OperatorRegistry commands (list, register) |
 | `operatorOptIn.ts` | Opt-in/out for L1 and vault |
 | `delegator.ts` | L1RestakeDelegator commands (set L1 limit, set operator shares) |
-| `rewards.ts` | Rewards commands (distribute, claim, fee config, epoch queries). `set-amount`/`distribute` support `--safe-propose` for atomic MultiSend Safe proposals via `handleBatchTransaction` |
+| `rewards.ts` | Rewards commands (distribute, claim, fee config, epoch queries) |
 | `l1.ts` | L1Registry commands (register L1, set metadata URL, set middleware) |
 | `balancer.ts` | BalancerValidatorManager commands (security modules, validator lifecycle) |
 | `securityModule.ts` | PoASecurityModule commands (complete validator registration/removal, weight update) |
@@ -48,7 +48,7 @@ pnpm workspace. Root is the CLI; `packages/mcp/` is the only sub-package.
 | `viemUtils.ts` | `curriedContract()` — curried contract factory with ABI validation. `withSafeWrite()` — proxy adding simulate-then-execute, Safe tx strategy, cast mode, event log parsing. `contractAbiValidation()` — selector matching with Aho-Corasick + proxy detection |
 | `chainList.ts` | Chain definitions (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom). `setCustomChainRpcUrl()` for `--rpc-url` |
 | `castUtils.ts` | `--cast` mode: formats equivalent `cast call`/`cast send`/`curl` commands instead of executing |
-| `safeUtils.ts` | Safe multisig transaction strategy: `handleTransactionStrategy` (match pending txs, confirm/propose/skip) and `handleBatchTransaction` (atomic batch send/propose for `rewards set-amount`/`distribute` whenever `--safe` is active; pins nonce for a deterministic, idempotent SafeTxHash; `--safe-propose` sets `proposeOnly` to refuse owner keys). Also exports `safeQueueUrl` |
+| `safeUtils.ts` | Safe multisig transaction strategy: `handleTransactionStrategy` matches pending transactions, then confirms, proposes, creates, or skips |
 | `ledgerUtils.ts` | Ledger hardware wallet integration (account derivation, Safe provider adapter) |
 | `pChainUtils.ts` | P-Chain operations (create subnet, convert to L1, validator balance, `getCurrentValidators`) |
 | `cChainUtils.ts` | C-Chain utilities (get chain ID) |
@@ -117,15 +117,11 @@ Defined in `src/lib/chainList.ts`:
 
 A single guard in the `preAction` hook in `cli.ts` enforces keystore or Ledger on non-testnet networks. The hook runs after Commander has parsed the resolved leaf command, so it uses `actionCommand.parent`, `actionCommand.name()`, and the parsed per-command option booleans rather than raw `process.argv` string matching. `ParserPrivateKey` in `cliParser.ts` validates key shape only and does not make policy decisions.
 
-The guard relaxes for exactly two flows:
-- `--safe` + `--safe-propose` on `rewards set-amount` / `rewards distribute`, permitting a software key for the Safe delegate propose-only flow. Those commands route through `handleBatchTransaction`, which refuses Safe OWNER keys, so the relaxed key can queue proposals but never execute.
-- `--public-call` on `middleware calc-operator-cache`, permitting a software key for the permissionless `calcAndCacheStakes` cache call. The flag is defined only on that command; Commander rejects it everywhere else. This path executes a real transaction and is intended for the MCP `--public-write` cache bot, whose profile exposes only `middleware_cache_stakes`.
+There are no raw-key exceptions on mainnet. Use a GPG keystore or Ledger for mainnet writes.
 
 ### Safe multisig
 
 `--safe <address>` creates a `SafeClient` overlay. Transaction strategy in `safeUtils.ts`: searches for matching pending Safe txs, then confirms/proposes/creates new/skips. Works with any signing method.
-
-For `rewards set-amount`/`distribute`, any `--safe` run already routes through `handleBatchTransaction` (an atomic batch, bypassing the per-call `withSafeWrite` proxy): set-amount batches `approve` + `setRewardsAmountForEpochs` as a MultiSend; distribute is a single-call batch. **`--safe-propose`** (per-command, only on these two commands) additionally forces propose-only mode — it refuses Safe OWNER keys (never executes) and is what relaxes the mainnet raw-key guard. The shared `withSafeWrite` proxy and `handleTransactionStrategy` are unchanged.
 
 ### GPG keystore
 
@@ -187,7 +183,7 @@ Type-check only: `npx tsc --noEmit`
 
 ## Key Invariants
 
-1. **Mainnet raw-PK blocked** — the `preAction` hook in `cli.ts` blocks raw hex private keys on non-testnet networks using Commander's resolved leaf command and parsed per-command options. Use `--secret-name` or `--ledger` for normal mainnet writes. Exceptions are limited to `--safe` + `--safe-propose` on `rewards set-amount`/`distribute` (off-chain Safe proposal; owner keys refused) and `--public-call` on `middleware calc-operator-cache` (permissionless stake-cache transaction).
+1. **Mainnet raw-PK blocked** — `ParserPrivateKey` rejects raw hex private keys when mainnet is selected explicitly or through the environment. Use `--secret-name` or `--ledger` for mainnet writes; there are no command-specific exceptions.
 2. **ABI validation on by default** — every `curriedContract` call validates selectors against on-chain bytecode. Skip with `--skip-abi-validation`.
 3. **JSON output contract** — `--json` mode: all output goes through `logger`, `printJson()` called on success. Commands must use `logger.log`/`logger.addData` (not `console.log`).
 4. **Two-phase ops need separate P-Chain key** — `complete_*` commands require a P-Chain private key for warp message signing and P-Chain tx issuance.

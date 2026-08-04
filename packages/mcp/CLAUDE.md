@@ -1,8 +1,8 @@
 # @suzaku/mcp
 
-MCP server exposing 127 full-profile tools for the Suzaku protocol (Avalanche restaking), plus one profile-only public cache tool — with a mainnet-safe-by-default security model.
+MCP server exposing 125 full-profile tools for the Suzaku protocol (Avalanche restaking), with a 69-tool read-only profile and a mainnet-safe-by-default security model.
 
-Four server profiles: full (127 tools), `--read-only` (69 read tools, the public group monitor bot), `--propose-only` (69 reads + the 2 Safe propose tools, the DM-only propose bot), `--public-write` (69 reads + exactly `middleware_cache_stakes`, the separate group cache bot).
+Two server profiles: full (125 tools) and `--read-only` (69 read tools, used by the public monitor bot). Retired `--propose-only` and `--public-write` flags fail closed.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ src/
 │   ├── operator.ts      # 2 tools — OperatorRegistry (1 read, 1 write)
 │   ├── l1-registry.ts   # 2 tools — L1Registry (1 read, 1 write)
 │   ├── opt-in.ts        # 6 tools — operator opt-in/out (2 read, 4 write)
-│   ├── rewards.ts       # 17 tools — Rewards contract (11 read, 4 write, 2 Safe propose)
+│   ├── rewards.ts       # 15 tools — Rewards contract (11 read, 4 write)
 │   ├── kite-staking.ts  # 12 tools — KiteStakingManager (3 read, 9 write, two-phase lifecycle)
 │   ├── staking-vault.ts # 22 tools — StakingVault (8 read, 14 write, two-phase lifecycle)
 │   ├── balancer.ts      # 8 tools — BalancerValidatorManager (3 read, 5 write)
@@ -58,15 +58,6 @@ Five layers, checked in order for every write operation:
 
 Layers 2–4 are orchestrated by `guardWriteOperation(toolName, params, amountField?)`.
 
-**Safe propose tools** (`rewards_set_amount_propose`, `rewards_distribute_propose`) replace layer 5 with their own gates: they call `runCli` with `bypassSuggest: true` (hardcoded — never env-configurable) because the CLI call is an off-chain Safe **proposal**, not a transaction; the human signature on the decoded calldata in the Safe UI is the execution gate. They append the CLI `--safe-propose` flag, which (a) permits a software key on mainnet with `--safe` and (b) makes the CLI refuse Safe OWNER keys (propose-only). Both require `SUZAKU_SAFE_ADDRESS` and a Safe **delegate** key, and run all pre-check reads with `skipDedup: true` (a stale cache must never green-light a duplicate). Their pre-checks differ:
-
-- `rewards_set_amount_propose` hard-refuses on: epoch already has rewards set on-chain, set-amount events already exist (accumulation guard), epoch outside the settable window (`currentEpoch-2 ≤ epoch < currentEpoch`), amount missing/unconfigured-cap/at-or-above `SUZAKU_MAX_REWARDS_AMOUNT`, or a matching `setRewardsAmountForEpochs` proposal already pending in the Safe queue.
-- `rewards_distribute_propose` hard-refuses on: epoch has no rewards set (`epochRewards == 0`) or a matching `distributeRewards` proposal already pending; returns early (non-error) if distribution is already complete. It does **not** check the epoch window, accumulation, or the amount cap.
-
-The pending-queue check (`checkPendingSafeQueue`) is **fail-open**: a network error or any non-OK HTTP response returns a warning, not a block (the CLI's own exact-hash dedup and the human signature remain the hard gates). It authenticates with `SAFE_API_KEY` (or `SAFE_API_KEY_FILE`) on mainnet.
-
-**Public cache tool** (`middleware_cache_stakes`) also bypasses layer 5, but for the opposite reason: it broadcasts a real transaction. It is registered only under `--public-write`, where `server.ts` suppresses the entire normal write surface and then registers this one tool from `registerMiddlewarePublicCacheTools()`. The tool requires a signer, `SUZAKU_MIDDLEWARE_ADDRESS`, and non-custom `SUZAKU_MIDDLEWARE_NETWORK` (default `mainnet`), rejects `rpcUrl` and middleware/network mismatches, fresh-reads `cacheByClass[collateralClass]` with `skipDedup: true`, and calls `runPublicCacheCli()` with the exact CLI shape `middleware calc-operator-cache <middleware> <epoch> <class> --public-call`. `runPublicCacheCli()` hard-rejects any other args before it can reach `runCli({ privateKey: true, bypassSuggest: true })`. The CLI guard is the other half: `--public-call` is a per-command option on `middleware calc-operator-cache`, and mainnet software-key execution is allowed only for the resolved Commander action command `middleware/calc-operator-cache` with parsed `publicCall`.
-
 ## Network-Aware Decision Matrix
 
 Only applies to write tools (where `options.privateKey === true`):
@@ -96,18 +87,7 @@ Testnet networks: `fuji`, `anvil`, `kiteaitestnet`. Mainnet networks: `mainnet`,
 | `SUZAKU_MCP_LEDGER` | `'true'` to use hardware Ledger. Extends timeout to 180 s | — |
 | `SUZAKU_PCHAIN_PK` / `SUZAKU_PCHAIN_PK_FILE` | P-Chain key (direct or file) for cross-chain warp ops. Injected as `PK_PCHAIN` in child env. **Known limitation: the CLI does not read `PK_PCHAIN` yet** — `--pchain-tx-private-key` falls back to the main key, so a separate P-Chain key is currently ignored | — |
 | `SUZAKU_SAFE_ADDRESS` | Safe multisig overlay. Appends `--safe <address>` to CLI args; also forwards `SAFE_API_KEY` to the child env | — |
-| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file, never argv. Injected into the CLI child env for Safe calls, and read by the server process for the propose tools' pending-queue check | — |
-
-### Safe propose tools
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `SUZAKU_REWARDS_ADDRESS` | Default rewards contract for `rewards_*_propose` (param overrides) | — |
-| `SUZAKU_MIDDLEWARE_ADDRESS` | Default middleware for the propose tools' epoch-window pre-check; required under `--public-write` as the only middleware the public cache tool may touch | — |
-| `SUZAKU_MIDDLEWARE_NETWORK` | Required non-custom network for the public cache tool; defaults to `mainnet` under `--public-write` | `mainnet` |
-| `SUZAKU_CACHE_KEY_ADDRESS` | Optional cache-key address for `deployment_heartbeat` C-Chain gas-balance alert | — |
-| `SUZAKU_CACHE_KEY_MIN_AVAX` | Cache-key low-balance threshold used by `deployment_heartbeat` when `SUZAKU_CACHE_KEY_ADDRESS` is set | `0.05` |
-| `SUZAKU_MAX_REWARDS_AMOUNT` | Upper bound (human token units) for `rewards_set_amount_propose`; amounts at or above are refused. **Required under `--propose-only`** (server exits at startup if unset or ≤ 0); in full mode `rewards_set_amount_propose` hard-refuses per-call if unset. No effect on `rewards_distribute_propose` | — |
+| `SAFE_API_KEY` / `SAFE_API_KEY_FILE` | Safe transaction-service auth (mainnet; fuji's Ash-hosted service needs none), direct or file, never argv. Injected only for Safe-wired write calls | — |
 
 ### Safety / Guard
 
@@ -141,7 +121,7 @@ The base subprocess allowlist is `PATH`, `HOME`, `NODE_ENV`, `PASSWORD_STORE_DIR
 
 ## Tool Catalog
 
-Full profile: 127 tools total (69 read, 58 write — the W column below includes the 2 Safe propose tools, which never execute). The profile-only `middleware_cache_stakes` tool is registered only under `--public-write` and intentionally omitted from the full profile.
+Full profile: 125 tools total (69 read, 56 write). The production monitor uses the 69-tool `--read-only` profile.
 
 | File | R | W | Key tools |
 |---|---|---|---|
@@ -150,7 +130,7 @@ Full profile: 127 tools total (69 read, 58 write — the W column below includes
 | `operator.ts` | 1 | 1 | `operator_registry_get_all`, `operator_registry_register` |
 | `l1-registry.ts` | 1 | 1 | `l1_registry_get_all`, `l1_registry_register` |
 | `opt-in.ts` | 2 | 4 | `check_opt_in_l1`, `check_opt_in_vault`, `opt_in_l1`, `opt_out_l1`, `opt_in_vault`, `opt_out_vault` |
-| `rewards.ts` | 11 | 6 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed`, **`rewards_set_amount_propose`**, **`rewards_distribute_propose`** (Safe propose — registered in full and `--propose-only` modes) |
+| `rewards.ts` | 11 | 4 | `rewards_get_epoch_rewards`, `rewards_get_epoch_status`, `rewards_get_events`, `rewards_get_distribution_batch`, `rewards_get_fees_config`, `rewards_get_operator_shares`, `rewards_get_vault_shares`, `rewards_get_curator_shares`, `rewards_get_min_uptime`, `rewards_get_last_claimed`, `rewards_epoch_diagnosis`, `rewards_distribute`, `rewards_claim`, `rewards_set_amount`, `rewards_claim_undistributed` |
 | `kite-staking.ts` | 3 | 9 | `kite_info`, `kite_info_validator`, `kite_info_delegator`, `kite_update_staking_config`, `kite_initiate_validator_registration`, `kite_complete_validator_registration` |
 | `staking-vault.ts` | 8 | 14 | `staking_vault_info`, `staking_vault_full_info`, `staking_vault_deposit`, `staking_vault_process_epoch` |
 | `balancer.ts` | 3 | 5 | `balancer_get_security_modules`, `balancer_get_validator_status`, `balancer_set_up_security_module`, `balancer_resend_*`, `balancer_transfer_l1_ownership` |
@@ -174,10 +154,6 @@ Priority order (first match wins in `runCli()`):
 **P-Chain key** (`SUZAKU_PCHAIN_PK`) — separate from the above, injected as `PK_PCHAIN`. Intended for `complete_*` two-phase lifecycle tools. Known limitation: current CLI versions do not read `PK_PCHAIN` and sign P-Chain transactions with the main key instead.
 
 **Key sanitization**: `sanitizeOutput()` redacts the configured secrets and **bare** (un-prefixed) 64-char hex from all outputs, logs, and audit entries; `0x`-prefixed 64-char hex (tx hashes, role hashes, validation IDs) passes through.
-
-### Future: KMS / remote signing (key never in the container)
-
-The propose bot's delegate key currently lives in the container as a file secret (read at spawn time). The genuine custody upgrade — the key never present on the host at all — is **KMS signing**. AWS KMS (`ECC_SECG_P256K1`) and GCP Cloud KMS (`EC_SIGN_SECP256K1_SHA256`) both sign secp256k1, and Safe proposals only need an EIP-712 `signTypedData` over the SafeTxHash. The CLI already has the exact template: `src/lib/ledgerUtils.ts` builds a viem account via `toAccount()` with `signTypedData`/`signMessage`/`signTransaction` callbacks — a KMS account is the same shape with the device call replaced by a KMS `Sign` API call. Estimated ~50 LOC in `src/client.ts` + a `--kms` path in the mainnet guard (a recognized signer, like `--ledger`); the container then holds only `KMS_KEY_ID` + an IAM role, no key. Cost ~$1/mo. **Out of scope here; documented so it's on record.**
 
 ## Adding a New Tool
 
@@ -268,6 +244,4 @@ Start: `node packages/mcp/dist/server.js` (stdio transport).
 9. **SSRF blocklist on RpcUrl** — `RpcUrl` schema rejects private/loopback/link-local IPs (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `0.0.0.0`, `localhost`, IPv6 ULA/link-local). All read tools that accept `rpcUrl` inherit this via shared schema (uptime write tools use a separate `l1RpcUrl` regex that permits private hosts for internal L1 RPCs).
 10. **Concurrency + rate limiting** — `runCli()` rejects calls when `activeSubprocesses >= SUZAKU_MCP_MAX_CONCURRENT` (default 10) or when sliding-window rate exceeds `SUZAKU_MCP_RATE_MAX_CALLS` (default 60) per `SUZAKU_MCP_RATE_WINDOW_MS` (default 60s).
 11. **Public health mode** — `SUZAKU_MCP_PUBLIC_HEALTH=true` suppresses signer type, Safe address, P-Chain signer, and guard config from `health_check` output to prevent information leakage in public-facing deployments.
-12. **Propose tools never execute** — `rewards_set_amount_propose` / `rewards_distribute_propose` only queue an off-chain Safe proposal; the bot key must be a Safe DELEGATE (the CLI refuses owner keys under the `--safe-propose` flag the tools append), and execution requires owner signatures on the decoded calldata in the Safe UI. `bypassSuggest: true` is hardcoded at exactly these two call sites and must never become env-configurable.
-13. **Public cache tool executes, but only through exact gates** — `middleware_cache_stakes` is the only `--public-write` write tool. It broadcasts a real `calcAndCacheStakes` transaction, so its `bypassSuggest: true` site lives only in `runPublicCacheCli()`, which accepts one exact command shape with `--public-call`; the CLI then permits mainnet software-key execution only for the resolved `middleware calc-operator-cache` command.
-14. **Profile registration surfaces** — `--propose-only` registers all read tools + ONLY the two propose tools; `--public-write` registers all read tools + ONLY `middleware_cache_stakes`; the rest of the write surface never appears in `tools/list` (asserted by `read-only.test.ts`). Profile flags are mutually exclusive. `--propose-only` requires `SUZAKU_MAX_REWARDS_AMOUNT` at startup. `--public-write` requires a signer and `SUZAKU_MIDDLEWARE_ADDRESS` at startup.
+12. **Profile registration surfaces** — `--read-only` registers exactly 69 reads and no writes; the normal profile registers 125 tools. Retired `--propose-only` and `--public-write` flags abort startup. Exact names are asserted by `read-only.test.ts` and the shared tool-surface oracle.

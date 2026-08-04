@@ -28,7 +28,7 @@ not add a second outage monitor.
 
 ## 1. Release gates on the development host
 
-After PR #79 has passed and merged, bind the candidate to the fetched remote:
+After PR #80 has passed and merged into `mcp`, bind the candidate to the fetched remote:
 
 ```bash
 git fetch origin mcp

@@ -128,13 +128,13 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 - Returns `{ epoch, windowStartEpoch, changed: {nodes[], validators[], operators, tvl, rate}, rewards: { activity[], claimability[] }, checks: [{name, epoch?, status, detail, human}] }` — `human` fields pre-humanized.
 - ~12–18 CLI sub-calls per digest (more event scans than the alert mode); at the digest cadence this is negligible on a dedicated RPC.
 
-## Gaps to close (ordered)
+## Implementation inputs
 
 1. **`rewards get-epoch-status`** — wrap `epochStatus(epoch) → (funded, distributionComplete)`; `funded` (actual token transfer) is the cleanest funding-deadline signal and is currently invisible. Tiny additive CLI read + MCP wrapper.
 2. **Rewards lifecycle event-scan command** — generalize `get-amount-set-events` into `rewards get-events <addr> --from-epoch --to-epoch` covering `RewardsDistributed/Claimed/UndistributedRewardsClaimed/*FeeClaimed/ZeroRewardsClaim`, so the digest's "activity" line has one efficient source instead of N reads.
 3. **Generalize `middleware node-logs`** to also surface `AllNodeStakesUpdated` / `OperatorHasLeftoverStake` and the balancer validator-lifecycle events for the CHANGED section.
 4. **P-Chain continuous-fee balances** — no read command exists (`getCurrentValidators` has the data; only `top-up-*` writes use it). Needed for the validator-liveness alert.
-5. **Kite-path addData fix** (`issue-stakingvault-kite-empty-json.md`) — unblocks the Kite profile only.
+5. **Structured read payloads** — StakingVault, Kite, Balancer weights, and uptime-message reads must return semantic JSON rather than relying on human console output.
 
 ## Operational caveats
 
@@ -144,14 +144,14 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 ## Implementation status (June 2026)
 
-Implemented in `packages/mcp/src/tools/heartbeat.ts` as the `deployment_heartbeat` tool (read-only; registered in all three server modes — full, `--read-only`, and `--propose-only`). CLI gaps 1–4 are closed:
+Implemented in `packages/mcp/src/tools/heartbeat.ts` as the `deployment_heartbeat` tool (read-only; registered in both server modes — full and `--read-only`). The CLI inputs above are closed:
 
 1. `rewards get-epoch-status <addr> <epoch> [--to-epoch <n>]` — wraps `epochStatus` + `getEpochRewards` + scheduling constants; one call covers the whole claimability window. MCP: `rewards_get_epoch_status`.
 2. `rewards get-events <addr> --middleware <mw> --from-epoch <n> [--to-epoch <n>]` — single-pass scan of all 8 lifecycle events with per-type counts. MCP: `rewards_get_events`.
 3. `middleware node-logs` — extended with `--from-epoch/--from-block/--to-block` and the `AllNodeStakesUpdated`/`OperatorHasLeftoverStake` events. MCP: `middleware_get_node_logs` (new `fromEpoch`/`fromBlock`/`toBlock` params).
 4. `middleware get-validator-balances <addr>` — P-Chain continuous-fee balances for all subnet validators, matched to operators. MCP: `middleware_get_validator_balances`.
 
-Gap 5 (Kite-path `addData`) remains a separate issue and only blocks the Kite profile.
+The structured payload work also covers all eight StakingVault info tools, the three Kite aggregate reads, Balancer weight values, and the uptime-message read. Large integer fields are decimal strings.
 
 Behavior notes vs. the design above:
 

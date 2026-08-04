@@ -854,8 +854,8 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
 
 ### Rewards Commands (`rewards`)
 
-- **distribute `<rewardsAddress>` `<epoch>` `<batchSize>` [--safe-propose]**
-  Distribute rewards for a specific epoch. With `--safe`, routes through an atomic Safe batch; `--safe-propose` additionally forces propose-only mode (queues a Safe proposal as a delegate, refuses owner keys, never executes — the only flow that permits a software key on mainnet).
+- **distribute `<rewardsAddress>` `<epoch>` `<batchSize>`**
+  Distribute rewards for a specific epoch.
 - **claim `<rewardsAddress>` [--recipient `<recipient>]**
   Claim rewards for a staker in batch of 64 epochs.
 - **claim-operator-fee `<rewardsAddress>` [--recipient `<recipient>]**
@@ -866,8 +866,8 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Claim protocol fees (only for protocol owner).
 - **claim-undistributed `<rewardsAddress>` `<epoch>` [--recipient `<recipient>]**
   Claim undistributed rewards (admin only).
-- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsAmount>` [--safe-propose]**
-  Set rewards amount for epochs. With `--safe`, batches `approve` + `setRewardsAmountForEpochs` into one atomic MultiSend (the contract pulls tokens at set time, so separate transactions would fail); `--safe-propose` additionally forces propose-only mode (delegate key queues a proposal, owner keys refused).
+- **set-amount `<rewardsAddress>` `<startEpoch>` `<numberOfEpochs>` `<rewardsAmount>`**
+  Set rewards amount for epochs.
 - **set-bips-collateral-class `<rewardsAddress>` `<collateralClass>` `<bips>`**
   Set rewards bips for collateral class.
 - **set-min-uptime `<rewardsAddress>` `<minUptime>`**

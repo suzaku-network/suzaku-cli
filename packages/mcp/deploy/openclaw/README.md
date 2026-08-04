@@ -29,7 +29,7 @@ Generate `OPENCLAW_GATEWAY_TOKEN` with `openssl rand -hex 24`. Production keeps 
 
 ```bash
 docker compose build suzaku-bot
-docker compose up -d --no-build --wait --wait-timeout 120 suzaku-bot
+docker compose up -d --no-build --wait --wait-timeout 120
 docker compose ps
 docker compose logs -f --tail 100 suzaku-bot
 ```
