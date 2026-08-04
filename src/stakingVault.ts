@@ -1392,6 +1392,25 @@ export async function getGeneralInfo(stakingVault: StakingVaultContract, client:
     logger.log(`  Current Epoch:           ${currentEpoch}`);
     logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
     logger.log(`  Contract Balance:        ${formatUnits(contractBalance, 18)} KITE`);
+
+    return {
+        owner,
+        paused,
+        symbol,
+        decimals: Number(decimals),
+        totalPooledStake: totalPooledStake.toString(),
+        totalSupply: totalSupply.toString(),
+        exchangeRate: exchangeRate.toString(),
+        availableStake: availableStake.toString(),
+        totalValidatorStake: totalValidatorStake.toString(),
+        totalDelegatedStake: totalDelegatedStake.toString(),
+        pendingWithdrawals: pendingWithdrawals.toString(),
+        claimableWithdrawals: claimableWithdrawals.toString(),
+        inFlightExiting: inFlightExiting.toString(),
+        currentEpoch: currentEpoch.toString(),
+        lastEpochProcessed: lastEpochProcessed.toString(),
+        contractBalance: contractBalance.toString(),
+    };
 }
 
 /**
@@ -1413,6 +1432,16 @@ export async function getFeesInfo(stakingVault: StakingVaultContract) {
     logger.log(`  Operator Fee:            ${operatorFeeBips} bips (${Number(operatorFeeBips) / 100}%)`);
     logger.log(`  Total Accrued Op. Fees:  ${fmt(totalAccruedOperatorFees, decimals)} KITE`);
     logger.log(`  Liquidity Buffer:        ${liquidityBufferBips} bips (${Number(liquidityBufferBips) / 100}%)`);
+
+    return {
+        protocolFeeBips: protocolFeeBips.toString(),
+        protocolFeeRecipient,
+        pendingProtocolFees: pendingProtocolFees.toString(),
+        operatorFeeBips: operatorFeeBips.toString(),
+        totalAccruedOperatorFees: totalAccruedOperatorFees.toString(),
+        liquidityBufferBips: liquidityBufferBips.toString(),
+        decimals: Number(decimals),
+    };
 }
 
 /**
@@ -1430,7 +1459,7 @@ export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
 
     let totalActive = 0;
     let totalAllocationBips = 0n;
-    stakingVault.read.getOperatorCurrentEpochPendingAmount
+    const operatorRows = [];
     for (const operator of operatorList) {
         const [info, exitDebt, validators, delegators] = await stakingVault.multicall([
             { name: 'getOperatorInfo', args: [operator] },
@@ -1451,11 +1480,33 @@ export async function getOperatorsInfo(stakingVault: StakingVaultContract) {
         logger.log(`    Exit Debt:         ${fmt(exitDebt, decimals)} KITE`);
         logger.log(`    Validators:        ${validators.length}`);
         logger.log(`    Delegations:       ${delegators.length}`);
+        operatorRows.push({
+            operator,
+            active: info.active,
+            allocationBips: info.allocationBips.toString(),
+            activeStake: info.activeStake.toString(),
+            accruedFees: info.accruedFees.toString(),
+            feeRecipient: info.feeRecipient,
+            exitDebt: exitDebt.toString(),
+            validatorIDs: [...validators],
+            delegatorIDs: [...delegators],
+        });
     }
 
     logger.log(`\n  ── Summary ──`);
     logger.log(`    Active / Total:        ${totalActive} / ${operatorList.length}`);
     logger.log(`    Total Allocation:      ${totalAllocationBips} bips (${Number(totalAllocationBips) / 100}%)`);
+
+    return {
+        maxOperators: maxOperators.toString(),
+        maxValidatorsPerOperator: maxValidatorsPerOp.toString(),
+        registeredOperators: operatorList.length,
+        activeOperators: totalActive,
+        totalAllocationBips: totalAllocationBips.toString(),
+        decimals: Number(decimals),
+        symbol,
+        operators: operatorRows,
+    };
 }
 
 /**
@@ -1472,7 +1523,7 @@ export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
 
     let totalValidators = 0;
     let totalPendingRemoval = 0;
-
+    const validatorRows = [];
 
     for (const operator of operatorList) {
         const [validatorIDs] = await stakingVault.multicall([
@@ -1499,12 +1550,27 @@ export async function getValidatorsInfo(stakingVault: StakingVaultContract) {
             logger.log(`    ${validatorIDs[i]}`);
             logger.log(`      Stake:           ${fmt(stakeAmount, decimals)} KITE`);
             logger.log(`      Pending Removal: ${pendingRemoval}`);
+            validatorRows.push({
+                operator,
+                validationID: validatorIDs[i],
+                stakeAmount: stakeAmount.toString(),
+                pendingRemoval,
+            });
         }
     }
 
     logger.log(`\n  ── Summary ──`);
     logger.log(`    Total Validators:      ${totalValidators}`);
     logger.log(`    Pending Removal:       ${totalPendingRemoval}`);
+
+    return {
+        totalValidatorStake: totalValidatorStake.toString(),
+        maximumValidatorStake: maxValidatorStake.toString(),
+        decimals: Number(decimals),
+        totalValidators,
+        totalPendingRemoval,
+        validators: validatorRows,
+    };
 }
 
 /**
@@ -1520,6 +1586,7 @@ export async function getDelegatorsInfo(stakingVault: StakingVaultContract) {
     logger.log(`  Max Delegator Stake:     ${fmt(maxDelegatorStake, decimals)} KITE`);
 
     let totalDelegations = 0;
+    const delegationRows = [];
 
     for (const operator of operatorList) {
         const [delegatorIDs] = await stakingVault.multicall([
@@ -1545,11 +1612,25 @@ export async function getDelegatorsInfo(stakingVault: StakingVaultContract) {
             logger.log(`      Target Validator:     ${info.validationID}`);
             logger.log(`      Vault-Owned Validator: ${info.isVaultOwnedValidator}`);
             logger.log(`      Operator:             ${info.operator}`);
+            delegationRows.push({
+                delegationID: delegatorIDs[i],
+                validationID: info.validationID,
+                isVaultOwnedValidator: info.isVaultOwnedValidator,
+                operator: info.operator,
+            });
         }
     }
 
     logger.log(`\n  ── Summary ──`);
     logger.log(`    Total Delegations:     ${totalDelegations}`);
+
+    return {
+        totalDelegatedStake: totalDelegatedStake.toString(),
+        maximumDelegatorStake: maxDelegatorStake.toString(),
+        decimals: Number(decimals),
+        totalDelegations,
+        delegations: delegationRows,
+    };
 }
 
 /**
@@ -1573,6 +1654,18 @@ export async function getWithdrawalsInfo(stakingVault: StakingVaultContract) {
     logger.log(`  Current Epoch:           ${currentEpoch}`);
     logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
     logger.log(`  Epoch Duration:          ${epochDuration}s`);
+
+    return {
+        queueLength: queueLength.toString(),
+        queueHead: queueHead.toString(),
+        pendingWithdrawals: pendingWithdrawals.toString(),
+        claimableWithdrawals: claimableWithdrawals.toString(),
+        totalExitDebt: totalExitDebt.toString(),
+        currentEpoch: currentEpoch.toString(),
+        lastEpochProcessed: lastEpochProcessed.toString(),
+        epochDuration: epochDuration.toString(),
+        decimals: Number(decimals),
+    };
 }
 
 /**
@@ -1591,4 +1684,24 @@ export async function getEpochInfo(stakingVault: StakingVaultContract) {
     logger.log(`  Last Epoch Processed:    ${lastEpochProcessed}`);
     logger.log(`  Epochs Behind:           ${epochsBehind}`);
     logger.log(`  Min Stake Duration:      ${minStakeDuration}s`);
+
+    return {
+        currentEpoch: currentEpoch.toString(),
+        epochDuration: epochDuration.toString(),
+        lastEpochProcessed: lastEpochProcessed.toString(),
+        epochsBehind: epochsBehind.toString(),
+        minimumStakeDuration: minStakeDuration.toString(),
+    };
+}
+
+export async function getFullInfo(stakingVault: StakingVaultContract, client: ExtendedClient) {
+    return {
+        general: await getGeneralInfo(stakingVault, client),
+        fees: await getFeesInfo(stakingVault),
+        operators: await getOperatorsInfo(stakingVault),
+        validators: await getValidatorsInfo(stakingVault),
+        delegators: await getDelegatorsInfo(stakingVault),
+        withdrawals: await getWithdrawalsInfo(stakingVault),
+        epoch: await getEpochInfo(stakingVault),
+    };
 }

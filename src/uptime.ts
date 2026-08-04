@@ -77,6 +77,14 @@ export async function getValidationUptimeMessage(
   return signedValidationUptimeMessage;
 }
 
+export function formatValidationUptimeMessageResult(
+  nodeId: string,
+  blockchainId: string,
+  signedMessage: string,
+) {
+  return { nodeId, blockchainId, signedMessage };
+}
+
 
 export async function computeValidatorUptime(
   uptimeTracker: SafeSuzakuContract['UptimeTracker'],

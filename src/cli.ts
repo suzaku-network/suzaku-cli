@@ -134,6 +134,7 @@ import {
 } from "./balancer";
 import {
     getValidationUptimeMessage,
+    formatValidationUptimeMessageResult,
     computeValidatorUptime,
     reportAndSubmitValidatorUptime,
     computeOperatorUptimeAtEpoch,
@@ -187,7 +188,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo, submitUptimeProof } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getFullInfo as getStakingVaultFullInfo, getValidatorManagerAddress, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -2682,6 +2683,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getKiteStakingManagerInfo(kiteStakingManager);
             logger.logJsonTree(info);
+            logger.addData('kiteInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -2693,6 +2695,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getValidatorFullInfo(kiteStakingManager, validationID);
             logger.logJsonTree(info);
+            logger.addData('kiteValidatorInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -2704,6 +2707,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getDelegatorFullInfo(kiteStakingManager, delegationID);
             logger.logJsonTree(info);
+            logger.addData('kiteDelegatorInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -3643,9 +3647,9 @@ async function main() {
         .command("info")
         .description("Get general overview of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .asyncAction({ signer: true }, async (config, options) => {
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, config.client);
+            logger.addData('stakingVaultInfo', await getGeneralInfo(stakingVault, config.client));
         });
 
     stakingVaultCmd
@@ -3654,7 +3658,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getFeesInfo(stakingVault);
+            logger.addData('stakingVaultFeesInfo', await getFeesInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3663,7 +3667,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getOperatorsInfo(stakingVault);
+            logger.addData('stakingVaultOperatorsInfo', await getOperatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3672,7 +3676,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getValidatorsInfo(stakingVault);
+            logger.addData('stakingVaultValidatorsInfo', await getValidatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3681,7 +3685,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getDelegatorsInfo(stakingVault);
+            logger.addData('stakingVaultDelegatorsInfo', await getDelegatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3690,7 +3694,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getWithdrawalsInfo(stakingVault);
+            logger.addData('stakingVaultWithdrawalsInfo', await getWithdrawalsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3699,7 +3703,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getEpochInfo(stakingVault);
+            logger.addData('stakingVaultEpochInfo', await getEpochInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3708,13 +3712,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, config.client);
-            await getFeesInfo(stakingVault);
-            await getOperatorsInfo(stakingVault);
-            await getValidatorsInfo(stakingVault);
-            await getDelegatorsInfo(stakingVault);
-            await getWithdrawalsInfo(stakingVault);
-            await getEpochInfo(stakingVault);
+            logger.addData('stakingVaultFullInfo', await getStakingVaultFullInfo(stakingVault, config.client));
         });
 
     stakingVaultCmd
@@ -3874,12 +3872,13 @@ async function main() {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            await getValidationUptimeMessage(
+            const signedMessage = await getValidationUptimeMessage(
                 config.client,
                 rpcUrl,
                 nodeId,
                 config.client.network === "fuji" ? 5 : 1,
                 blockchainId);
+            logger.addData('validationUptimeMessage', formatValidationUptimeMessageResult(nodeId, blockchainId, signedMessage));
         });
 
     uptimeCmd

@@ -64,5 +64,9 @@ export async function getSecurityModuleWeights(
     [securityModule]
   );
   logger.log(val);
-  logger.addData('securityModuleWeights', { securityModule, weights: val });
+  logger.addData('securityModuleWeights', {
+    securityModule,
+    weight: val[0].toString(),
+    maxWeight: val[1].toString(),
+  });
 }
