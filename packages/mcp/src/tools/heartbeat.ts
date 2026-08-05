@@ -93,6 +93,8 @@ export interface ClaimabilityRow extends EpochStatusRow {
   statusHuman: string;
   distributionOpenEpoch?: number;
   distributionOpenTs?: number;
+  setAmountActionDeadlineTs?: number;
+  contractFundingDeadlineTs?: number;
 }
 
 // ── Humanizers (pure, exported for tests) ──
@@ -295,9 +297,24 @@ export function deriveClaimabilityStatus(
   human: string;
   distributionOpenEpoch?: number;
   distributionOpenTs?: number;
+  setAmountActionDeadlineTs?: number;
+  contractFundingDeadlineTs?: number;
 } {
   const isSet = row.epochRewards !== '0';
   const fundingDeadlineTs = epochStartOf(timing, row.epoch) + constants.fundingDeadlineOffset * timing.epochDuration;
+  // The monitor's operational policy permits setting N only while
+  // currentEpoch - 2 <= N < currentEpoch, so N stops being settable when
+  // epoch N+3 begins.  This can be earlier than the contract funding
+  // deadline; operator-facing action text must use the earlier boundary.
+  const botSetAmountDeadlineTs = epochStartOf(timing, row.epoch + 3);
+  const setAmountDeadlineTs = Math.min(fundingDeadlineTs, botSetAmountDeadlineTs);
+  const notSetDeadlines = {
+    setAmountActionDeadlineTs: setAmountDeadlineTs,
+    contractFundingDeadlineTs: fundingDeadlineTs,
+  };
+  const notSetDeadlineHuman = setAmountDeadlineTs < fundingDeadlineTs
+    ? `set by ${tsToUtc(setAmountDeadlineTs)} (bot policy; contract funding closes ${tsToUtc(fundingDeadlineTs)})`
+    : `fund by ${tsToUtc(fundingDeadlineTs)} (contract deadline)`;
 
   if (row.epoch >= timing.currentEpoch) {
     if (setTxCount !== null && setTxCount > 1) {
@@ -311,7 +328,9 @@ export function deriveClaimabilityStatus(
 
   const distributable = row.epoch <= timing.currentEpoch - constants.distributionEarliestOffset;
   if (!distributable) {
-    if (!isSet) return { status: 'not_set', human: `not set yet · fund by ${tsToUtc(fundingDeadlineTs)}` };
+    if (!isSet) {
+      return { status: 'not_set', human: `not set yet · ${notSetDeadlineHuman}`, ...notSetDeadlines };
+    }
     const distributionOpenEpoch = row.epoch + constants.distributionEarliestOffset;
     const distributionOpenTs = epochStartOf(timing, distributionOpenEpoch);
     return {
@@ -323,14 +342,18 @@ export function deriveClaimabilityStatus(
   }
 
   if (!row.funded) {
-    if (now > fundingDeadlineTs) {
-      return isSet
-        ? { status: 'funding_closed', human: `⚠ set but never funded · funding closed ${tsToUtc(fundingDeadlineTs)}` }
-        : { status: 'not_set_closed', human: `not set · funding closed ${tsToUtc(fundingDeadlineTs)}` };
+    if (isSet && now > fundingDeadlineTs) {
+      return { status: 'funding_closed', human: `⚠ set but never funded · funding closed ${tsToUtc(fundingDeadlineTs)}` };
+    }
+    if (!isSet && now >= setAmountDeadlineTs) {
+      const human = now >= fundingDeadlineTs
+        ? `not set · contract funding closed ${tsToUtc(fundingDeadlineTs)}`
+        : `not set · bot set window closed ${tsToUtc(setAmountDeadlineTs)} · contract funding closes ${tsToUtc(fundingDeadlineTs)}`;
+      return { status: 'not_set_closed', human, ...notSetDeadlines };
     }
     return isSet
       ? { status: 'not_funded', human: `set · not funded · closes ${tsToUtc(fundingDeadlineTs)}` }
-      : { status: 'not_set', human: `not set · funding closes ${tsToUtc(fundingDeadlineTs)}` };
+      : { status: 'not_set', human: `not set · ${notSetDeadlineHuman}`, ...notSetDeadlines };
   }
 
   if (!row.distributionComplete) {
@@ -500,14 +523,19 @@ export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
         checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'alert', detail: `epoch ${row.epoch} set but never funded; funding window closed`, human: `🔴 epoch ${row.epoch} rewards set but never funded — funding window closed` });
         break;
       case 'not_set_closed':
-        checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'alert', detail: `epoch ${row.epoch} rewards never set; funding window closed`, human: `🔴 epoch ${row.epoch} rewards never set — funding window closed` });
+        checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'alert', detail: `epoch ${row.epoch} rewards never set; bot set-amount window closed`, human: `🔴 epoch ${row.epoch} rewards never set — bot set-amount window closed` });
         break;
       case 'not_funded':
       case 'not_set': {
-        // warn when less than one epoch remains to the funding deadline
+        // For an unset epoch, the bot-policy set window can close before the
+        // contract funding deadline.  Alert on the actionable earlier bound.
         const fundingDeadlineTs = epochStartOf(timing, row.epoch) + input.constants.fundingDeadlineOffset * timing.epochDuration;
-        if (fundingDeadlineTs - now < timing.epochDuration && fundingDeadlineTs > now) {
-          checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'warn', detail: `epoch ${row.epoch} ${row.status === 'not_set' ? 'has no rewards set' : 'is set but not funded'}; funding closes ${tsToUtc(fundingDeadlineTs)}`, human: `⚠️ epoch ${row.epoch} ${row.status === 'not_set' ? 'rewards not set' : 'not funded'} — funding closes ${tsToUtc(fundingDeadlineTs)}` });
+        const actionDeadlineTs = row.status === 'not_set'
+          ? Math.min(fundingDeadlineTs, epochStartOf(timing, row.epoch + 3))
+          : fundingDeadlineTs;
+        if (actionDeadlineTs - now < timing.epochDuration && actionDeadlineTs > now) {
+          const deadlineLabel = row.status === 'not_set' ? 'bot set window closes' : 'funding closes';
+          checks.push({ name: 'funding_deadline', epoch: row.epoch, status: 'warn', detail: `epoch ${row.epoch} ${row.status === 'not_set' ? 'has no rewards set' : 'is set but not funded'}; ${deadlineLabel} ${tsToUtc(actionDeadlineTs)}`, human: `⚠️ epoch ${row.epoch} ${row.status === 'not_set' ? 'rewards not set' : 'not funded'} — ${deadlineLabel} ${tsToUtc(actionDeadlineTs)}` });
         }
         break;
       }

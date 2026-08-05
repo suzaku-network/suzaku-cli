@@ -130,10 +130,23 @@ describe('deriveClaimabilityStatus', () => {
     expect(res.human).toContain(`epoch 39 · ${tsToUtc(epochStartOf(TIMING, 39))}`);
   });
 
-  it('N-1 unset shows funding deadline', () => {
+  it('N-1 unset shows the earlier bot-policy deadline, not the contract funding deadline', () => {
     const res = derive(row(37, '0', false, false));
     expect(res.status).toBe('not_set');
-    expect(res.human).toContain('fund by');
+    expect(res.human).toBe(
+      `not set yet · set by ${tsToUtc(epochStartOf(TIMING, 40))} ` +
+      `(bot policy; contract funding closes ${tsToUtc(epochStartOf(TIMING, 41))})`,
+    );
+    expect(res.setAmountActionDeadlineTs).toBe(epochStartOf(TIMING, 40));
+    expect(res.contractFundingDeadlineTs).toBe(epochStartOf(TIMING, 41));
+  });
+
+  it('an unset epoch closes when the bot-policy window ends, before the contract deadline', () => {
+    const afterBotWindow = epochStartOf(TIMING, 39) + 1;
+    const res = derive(row(36, '0', false, false), { now: afterBotWindow });
+    expect(res.status).toBe('not_set_closed');
+    expect(res.human).toContain(`bot set window closed ${tsToUtc(epochStartOf(TIMING, 39))}`);
+    expect(res.human).toContain(`contract funding closes ${tsToUtc(epochStartOf(TIMING, 40))}`);
   });
 
   it('N-2 open boundary requires an uptime check without claiming uptime is missing', () => {
@@ -312,7 +325,7 @@ describe('runAlertChecks', () => {
     expect(checks.find((c) => c.name === 'funding_deadline')?.status).toBe('alert');
   });
 
-  it('alerts when an epoch was never set and its funding window closed (not_set_closed)', () => {
+  it('alerts when an epoch was never set and its bot set-amount window closed (not_set_closed)', () => {
     const input = baseInput();
     input.claimability = [
       { ...row(32, '0', false, false), setAlot: '—', setTxCount: null, status: 'not_set_closed', statusHuman: '' },
@@ -321,6 +334,7 @@ describe('runAlertChecks', () => {
     expect(check?.status).toBe('alert');
     expect(check?.epoch).toBe(32);
     expect(check?.human).toContain('never set');
+    expect(check?.human).toContain('bot set-amount window closed');
   });
 });
 
