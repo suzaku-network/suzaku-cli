@@ -356,14 +356,15 @@ type Fetcher<T> = (opts: FetchOpts) => Promise<T[]>;
  * @param toBlock    inclusive
  * @param count      -1 = all (default). If >0, stops after collecting `count` events.
  * @param fetcher    e.g. (opts) => middlewareSvc.getEvents.NodeAdded(args, opts)
- * @param chunkSize  block span per RPC call (default: 8_000n)
+ * @param concurrency bounded parallelism for complete scans; count-limited scans remain sequential
  * @returns          collected events (ordered per `order`)
  */
 export async function collectEventsInRange<T>(
   fromBlock: bigint,
   toBlock: bigint,
   count: number = -1,
-  fetcher: Fetcher<T>
+  fetcher: Fetcher<T>,
+  concurrency: number = 1,
 ): Promise<T[]> {
   const chunkSize = 2048n;
 
@@ -373,6 +374,39 @@ export async function collectEventsInRange<T>(
     [fromBlock, toBlock] = [toBlock, fromBlock];
   }
   if (count === 0) return [];
+
+  // Complete historical scans may span thousands of provider-limited ranges.
+  // Process a bounded wave at a time so a batching transport can combine the
+  // calls without creating an unbounded request queue. Count-limited scans stay
+  // sequential because they rely on early-stop semantics.
+  if (count < 0 && concurrency > 1) {
+    const chunks: FetchOpts[] = [];
+    if (order === "asc") {
+      for (let start = fromBlock; start <= toBlock; start += chunkSize) {
+        const end = start + chunkSize - 1n > toBlock ? toBlock : start + chunkSize - 1n;
+        chunks.push({ fromBlock: start, toBlock: end });
+        if (end === toBlock) break;
+      }
+    } else {
+      for (let end = toBlock; end >= fromBlock; end -= chunkSize) {
+        const start = end - (chunkSize - 1n) < fromBlock ? fromBlock : end - (chunkSize - 1n);
+        chunks.push({ fromBlock: start, toBlock: end });
+        if (start === fromBlock) break;
+      }
+    }
+
+    const waveSize = Math.max(1, Math.min(20, Math.trunc(concurrency)));
+    const out: T[] = [];
+    for (let offset = 0; offset < chunks.length; offset += waveSize) {
+      const batches = await Promise.all(
+        chunks.slice(offset, offset + waveSize).map((chunk) => fetcher(chunk)),
+      );
+      for (const batch of batches) {
+        if (batch?.length) out.push(...(order === "desc" ? [...batch].reverse() : batch));
+      }
+    }
+    return out;
+  }
 
   const out: T[] = [];
 

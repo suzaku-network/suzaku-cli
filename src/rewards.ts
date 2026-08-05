@@ -1,5 +1,5 @@
 import { SafeSuzakuContract, SuzakuContract } from './lib/viemUtils';
-import type { Hex, Account } from 'viem';
+import { createPublicClient, http, type Hex, type Account } from 'viem';
 import { logger } from './lib/logger';
 import { Config } from './config';
 import { ExtendedPublicClient } from './client';
@@ -402,6 +402,23 @@ export async function getRewardsAmountSetEvents(
 
   const toBlock = options.toBlock ?? (await getFinalizedBlockNumber(client));
 
+  // Avalanche's public RPC limits eth_getLogs to 2,048 blocks. A complete
+  // deployment-history scan therefore needs thousands of calls. Keep this
+  // batching transport local to the diagnostic command so unrelated CLI reads
+  // retain their existing transport behavior. Ten requests per JSON-RPC batch
+  // and two batches per wave keep the scan bounded.
+  const rpcUrl = (client.transport as { url?: string } | undefined)?.url;
+  const historyClient = !options.snowscanApiKey && client.chain && rpcUrl
+    ? createPublicClient({
+        chain: client.chain,
+        transport: http(rpcUrl, {
+          batch: { batchSize: 10, wait: 0 },
+          retryCount: 2,
+          timeout: 60_000,
+        }),
+      })
+    : client;
+
   const events = options.snowscanApiKey
     ? await GetContractEvents(
         client,
@@ -416,13 +433,14 @@ export async function getRewardsAmountSetEvents(
         fromBlock,
         toBlock,
         -1,
-        (opts) => client.getContractEvents({
+        (opts) => historyClient.getContractEvents({
           address: rewards.address as Hex,
           abi: rewards.abi,
           eventName: 'RewardsAmountSet',
           fromBlock: opts.fromBlock,
           toBlock: opts.toBlock,
         }),
+        20,
       );
 
   const matching = events.filter((e) => {

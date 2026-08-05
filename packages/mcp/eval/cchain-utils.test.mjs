@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeAbiParameters, encodeEventTopics } from 'viem';
-import { GetContractEvents, getFinalizedBlockNumber, resolveEventScanEnd } from '../../../dist/lib/cChainUtils.js';
+import { collectEventsInRange, GetContractEvents, getFinalizedBlockNumber, resolveEventScanEnd } from '../../../dist/lib/cChainUtils.js';
 
 const ADDRESS = `0x${'1'.repeat(40)}`;
 const API_KEY = 'explorer-secret';
@@ -25,6 +25,38 @@ function response(result, status = '1', message = 'OK') {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('bounded RPC history scans', () => {
+  it('runs complete scans concurrently while preserving ascending chunk order', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const events = await collectEventsInRange(0n, 6_143n, -1, async ({ fromBlock }) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active--;
+      return [fromBlock.toString()];
+    }, 2);
+
+    expect(maxActive).toBe(2);
+    expect(events).toEqual(['0', '2048', '4096']);
+  });
+
+  it('keeps count-limited reverse scans sequential and newest-first', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const events = await collectEventsInRange(6_143n, 0n, 1, async ({ fromBlock }) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active--;
+      return [fromBlock.toString()];
+    }, 20);
+
+    expect(maxActive).toBe(1);
+    expect(events).toEqual(['4096']);
+  });
 });
 
 describe('Etherscan V2 event transport', () => {
