@@ -53,13 +53,13 @@
     {
       "id": "can-set-rewards",
       "userNeed": "Decide whether a set-amount/top-up is technically possible and operationally appropriate.",
-      "expectedOutcome": "Distinguish contract capability from bot policy: existing funding does not itself make the contract revert; before distribution starts another valid call adds to the epoch total, while the propose bot intentionally refuses accidental accumulation. Report what is already set and warn that a top-up must be deliberate.",
+      "expectedOutcome": "Distinguish contract capability from monitor policy: existing funding does not itself make the contract revert; before distribution starts another valid call adds to the epoch total, while the read-only monitor must not recommend an accidental top-up. Report what is already set and warn that a top-up must be deliberate.",
       "required": ["State whether the target is in the operational settable window.", "Report existing amount/event evidence when available.", "Explain addition rather than overwrite."],
       "prohibited": ["Do not claim 'already funded' alone means the contract would revert.", "Do not recommend another call merely because it is technically possible."],
       "evidence": [
         {"kind": "source", "ref": "evidence/dexalot-mainnet-2026-07-29.json#sourcePin", "claim": "The rewards contract accumulates and gates on distribution having started."},
         {"kind": "live-mcp", "ref": "questions.json#can-set-rewards", "claim": "Live status/diagnosis establishes target epoch state."},
-        {"kind": "product-policy", "ref": "../src/tools/rewards.ts#rewards_set_amount_propose", "claim": "The propose guard rejects prior funding/events to prevent accidental accumulation."}
+        {"kind": "product-policy", "ref": "../src/tools/rewards.ts#rewards_epoch_diagnosis", "claim": "The read-only diagnostic requires live event checks, warns that amounts accumulate, and does not perform the write."}
       ],
       "machineChecks": ["Correct target epoch in tool arguments.", "Existing reward amount and event-count evidence when resolved."],
       "semanticCriteria": ["The yes/no answer preserves the technical-versus-operational distinction and warns about accumulation."],

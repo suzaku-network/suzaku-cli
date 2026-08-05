@@ -435,7 +435,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
         recommendedAction = 'do_not_set_already_funded';
         setAmountSummary =
           `Epoch ${targetEpoch} is inside the bot's operational window, but rewards are already present; ` +
-          'the bot will refuse another proposal because any successful contract call would add, not overwrite. ' +
+          'the read-only monitor should not recommend another set-amount because any successful contract call would add, not overwrite. ' +
           'Do not top up unless the additional funding is deliberate and reviewed.';
       } else if (additionalSetWouldAccumulate === null) {
         recommendedAction = 'verify_event_history_before_setting';

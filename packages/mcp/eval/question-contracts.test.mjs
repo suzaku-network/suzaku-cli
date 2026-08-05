@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { scoreTrace } from './scoring.mjs';
 
@@ -45,10 +45,38 @@ describe('eval question contracts', () => {
     }
   });
 
+  it('keeps every evidence reference attached to an existing question or source anchor', () => {
+    const questionIds = new Set(questions.questions.map(({ id }) => id));
+    const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    for (const contract of contracts.contracts) {
+      for (const item of contract.evidence) {
+        const [relativePath, fragment] = item.ref.split('#', 2);
+        if (item.kind === 'live-mcp') {
+          expect(relativePath, `${contract.id}: ${item.ref}`).toBe('questions.json');
+          expect(questionIds.has(fragment), `${contract.id}: ${item.ref}`).toBe(true);
+          continue;
+        }
+
+        const target = new URL(relativePath, import.meta.url);
+        expect(existsSync(target), `${contract.id}: ${item.ref}`).toBe(true);
+        if (fragment) {
+          const source = readFileSync(target, 'utf8');
+          expect(
+            source.includes(fragment) || normalize(source).includes(normalize(fragment)),
+            `${contract.id}: dead evidence anchor ${item.ref}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
   it('locks the two corrected protocol conclusions without phrase grading', () => {
     const rewards = contracts.contracts.find(({ id }) => id === 'can-set-rewards');
     expect(rewards.expectedOutcome).toContain('existing funding does not itself make the contract revert');
     expect(rewards.expectedOutcome).toContain('adds to the epoch total');
+    expect(rewards.expectedOutcome).toContain('read-only monitor');
+    expect(JSON.stringify(rewards)).not.toContain('rewards_set_amount_propose');
     expect(rewards.prohibited.join(' ')).toContain("already funded' alone");
 
     const slashing = contracts.contracts.find(({ id }) => id === 'slashing-cannot-confirm');
