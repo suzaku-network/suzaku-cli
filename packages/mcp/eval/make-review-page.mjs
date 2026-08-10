@@ -46,6 +46,7 @@ try {
   const reportText = readText(input);
   const questionsText = readText(resolve(here, 'questions.json'));
   const contractsText = readText(resolve(here, 'question-contracts.json'));
+  const questionPromptsText = readText(resolve(here, 'question-prompts.mjs'));
   const scoringText = readText(resolve(here, 'scoring.mjs'));
   const reviewWorkflowText = readText(resolve(here, 'review-workflow.mjs'));
   const outputGuardText = readText(resolve(here, '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs'));
@@ -57,6 +58,7 @@ try {
     expectedHashes: {
       questions: sha256(questionsText),
       questionContracts: sha256(contractsText),
+      questionPrompts: sha256(questionPromptsText),
       scoring: sha256(scoringText),
       reviewWorkflow: sha256(reviewWorkflowText),
       outputGuard: sha256(outputGuardText),

@@ -31,6 +31,7 @@ describe('review workflow CLI', () => {
     const outputDir = join(dir, 'reviews');
     const questionsText = readFileSync(join(evalDir, 'questions.json'), 'utf8');
     const contractsText = readFileSync(join(evalDir, 'question-contracts.json'), 'utf8');
+    const questionPromptsText = readFileSync(join(evalDir, 'question-prompts.mjs'), 'utf8');
     const scoringText = readFileSync(join(evalDir, 'scoring.mjs'), 'utf8');
     const reviewWorkflowText = readFileSync(join(evalDir, 'review-workflow.mjs'), 'utf8');
     const outputGuardText = readFileSync(join(evalDir, '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs'), 'utf8');
@@ -46,6 +47,7 @@ describe('review workflow CLI', () => {
       hashes: {
         questions: sha256(questionsText),
         questionContracts: sha256(contractsText),
+        questionPrompts: sha256(questionPromptsText),
         scoring: sha256(scoringText),
         reviewWorkflow: sha256(reviewWorkflowText),
         outputGuard: sha256(outputGuardText),

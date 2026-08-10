@@ -97,11 +97,15 @@
       "id": "weekly-todo",
       "prompt": "What rewards work needs doing on Dexalot this week? Which recent epochs still need set-amount or distribution?",
       "expectedTools": [["rewards_get_epoch_status", "rewards_epoch_diagnosis", "deployment_heartbeat"]],
-      "expectedToolCalls": [[
-        { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-2}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } },
-        { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-4}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } },
-        { "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "network": "mainnet" } }
-      ]],
+      "expectedToolCalls": [
+        [
+          { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-2}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } },
+          { "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-4}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } }
+        ],
+        [
+          { "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "network": "mainnet" } }
+        ]
+      ],
       "maxToolCalls": 6,
       "groundTruth": [
         {
@@ -156,6 +160,222 @@
             { "name": "heartbeatHumanLines", "path": "humanLines", "match": "exists", "answerMatch": false },
             { "name": "heartbeatUptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false },
             { "name": "heartbeatUpdateWindowSecondsRemaining", "path": "timing.updateWindowSecondsRemaining", "match": "signed-integer", "answerMatch": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-rewards-six-epoch-status",
+      "prompt": "Give me the Dexalot rewards status for the last six epochs: amount set, funded, distribution progress, and claimability.",
+      "promptVariants": [
+        "How do rewards look across the six most recently completed Dexalot epochs? Include funding, distribution, and whether rewards are claimable.",
+        "Show the maintainer rewards table for the latest six completed epochs, including the set amount and every lifecycle stage."
+      ],
+      "expectedTools": [["rewards_get_epoch_status"], ["deployment_heartbeat"]],
+      "expectedToolCalls": [
+        [{ "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-6}}", "toEpoch": "{{currentEpoch-1}}", "network": "mainnet" } }],
+        [{ "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "uptimeTrackerAddress": "{{uptimeTracker}}", "mode": "digest", "network": "mainnet" } }]
+      ],
+      "maxToolCalls": 5,
+      "groundTruth": [
+        {
+          "tool": "rewards_get_epoch_status",
+          "args": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-6}}", "toEpoch": "{{currentEpoch-1}}", "network": "mainnet" },
+          "timeoutMs": 240000,
+          "facts": [
+            { "name": "completedEpochCount", "path": "epochStatusTable.epochs", "match": "count", "context": ["epoch", "epochs"] },
+            {
+              "name": "latestCompletedAmount",
+              "path": "epochStatusTable.epochs",
+              "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "epochRewards" },
+              "match": "number",
+              "context": ["ALOT", "amount", "rewards"]
+            },
+            {
+              "name": "latestCompletedFunded",
+              "path": "epochStatusTable.epochs",
+              "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "funded" },
+              "match": "boolean"
+            },
+            {
+              "name": "latestCompletedDistributed",
+              "path": "epochStatusTable.epochs",
+              "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "distributionComplete" },
+              "match": "boolean"
+            }
+          ]
+        },
+        {
+          "tool": "deployment_heartbeat",
+          "args": {
+            "middlewareAddress": "{{middleware}}",
+            "rewardsAddress": "{{rewards}}",
+            "lstWrapperAddress": "{{lstWrapper}}",
+            "uptimeTrackerAddress": "{{uptimeTracker}}",
+            "mode": "digest",
+            "windowEpochs": 6,
+            "network": "mainnet"
+          },
+          "timeoutMs": 300000,
+          "facts": [
+            { "name": "claimabilityRows", "path": "rewards.claimability", "match": "exists", "answerMatch": false },
+            { "name": "exactTiming", "path": "timing", "match": "exists", "answerMatch": false },
+            { "name": "uptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-rewards-uptime-eligibility",
+      "prompt": "Did every operator meet the minimum uptime for the latest completed epoch? Show any operators that did not.",
+      "promptVariants": [
+        "Were all Dexalot operators above the rewards uptime threshold last epoch? List failures.",
+        "Check reward eligibility by uptime for the previous epoch and tell me which operators, if any, are below minimum."
+      ],
+      "expectedTools": [["middleware_uptime_report"], ["rewards_get_min_uptime"]],
+      "expectedToolCalls": [
+        [{ "tool": "middleware_uptime_report", "argsSubset": { "middlewareAddress": "{{middleware}}", "uptimeAddress": "{{uptimeTracker}}", "startEpoch": "{{currentEpoch-1}}", "epochs": 1, "network": "mainnet" } }],
+        [{ "tool": "rewards_get_min_uptime", "argsSubset": { "rewardsAddress": "{{rewards}}", "network": "mainnet" } }]
+      ],
+      "maxToolCalls": 4,
+      "groundTruth": [
+        {
+          "tool": "middleware_uptime_report",
+          "args": {
+            "middlewareAddress": "{{middleware}}",
+            "uptimeAddress": "{{uptimeTracker}}",
+            "startEpoch": "{{currentEpoch-1}}",
+            "epochs": 1,
+            "network": "mainnet"
+          },
+          "timeoutMs": 240000,
+          "facts": [
+            {
+              "name": "allOperatorsHaveComputedUptime",
+              "path": "operators",
+              "derive": { "op": "every", "predicate": { "field": "uptimeByEpoch.0.isUptimeSet", "op": "eq", "value": true } },
+              "match": "boolean"
+            },
+            {
+              "name": "operatorUptimes",
+              "path": "operators",
+              "derive": { "op": "collect", "field": "uptimeByEpoch.0.operatorUptime" },
+              "match": "number-set",
+              "answerMatch": false
+            },
+            { "name": "epochMentioned", "value": "{{currentEpoch-1}}", "match": "integer", "context": ["epoch"] }
+          ]
+        },
+        {
+          "tool": "rewards_get_min_uptime",
+          "args": { "rewardsAddress": "{{rewards}}", "network": "mainnet" },
+          "facts": [
+            { "name": "minimumRequiredUptime", "path": "minRequiredUptime", "match": "integer", "context": ["uptime", "minimum", "threshold", "seconds"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-rewards-accumulation",
+      "prompt": "Diagnose the latest completed epoch for duplicate reward-setting transactions or accidental reward accumulation.",
+      "promptVariants": [
+        "Did anyone set rewards more than once for the previous Dexalot epoch, causing the amounts to add together?",
+        "Audit last epoch's set-amount history for duplicates and tell me whether its funded total accumulated."
+      ],
+      "slow": true,
+      "expectedTools": [["rewards_epoch_diagnosis", "rewards_get_events"]],
+      "expectedToolCalls": [[
+        { "tool": "rewards_epoch_diagnosis", "argsSubset": { "rewardsAddress": "{{rewards}}", "middlewareAddress": "{{middleware}}", "epoch": "{{currentEpoch-1}}", "network": "mainnet" } },
+        { "tool": "rewards_get_events", "argsSubset": { "rewardsAddress": "{{rewards}}", "middlewareAddress": "{{middleware}}", "fromEpoch": "{{currentEpoch-1}}", "toEpoch": "{{currentEpoch-1}}", "network": "mainnet" } }
+      ]],
+      "maxToolCalls": 4,
+      "groundTruth": [
+        {
+          "tool": "rewards_epoch_diagnosis",
+          "args": {
+            "rewardsAddress": "{{rewards}}",
+            "middlewareAddress": "{{middleware}}",
+            "epoch": "{{currentEpoch-1}}",
+            "network": "mainnet"
+          },
+          "timeoutMs": 300000,
+          "facts": [
+            { "name": "setAmountTransactionCount", "path": ["setAmountEvents.eventCount", "setAmountEvents.length", "eventCount"], "match": "count", "context": ["set-amount", "transaction", "transactions", "duplicate"] },
+            { "name": "fundedTotal", "path": ["epochRewards", "currentEpochRewards"], "match": "number", "context": ["ALOT", "amount", "total", "rewards"] },
+            { "name": "epochMentioned", "value": "{{currentEpoch-1}}", "match": "integer", "context": ["epoch"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-rewards-actions",
+      "prompt": "Which reward epochs require maintainer action right now, what action is needed, and what is the deadline? Do not propose or execute anything.",
+      "promptVariants": [
+        "Is there any Dexalot rewards work I can actually do now? Give the epoch, action, and exact cutoff, but keep this read-only.",
+        "List only currently actionable rewards maintenance, with evidence-backed deadlines; do not create a transaction or Safe proposal."
+      ],
+      "expectedTools": [["deployment_heartbeat"]],
+      "expectedToolCalls": [[
+        { "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "uptimeTrackerAddress": "{{uptimeTracker}}", "network": "mainnet" } }
+      ]],
+      "forbiddenTools": ["rewards_set_amount", "rewards_distribute", "rewards_set_amount_propose", "rewards_distribute_propose"],
+      "maxToolCalls": 3,
+      "groundTruth": [
+        {
+          "tool": "deployment_heartbeat",
+          "args": {
+            "middlewareAddress": "{{middleware}}",
+            "rewardsAddress": "{{rewards}}",
+            "lstWrapperAddress": "{{lstWrapper}}",
+            "uptimeTrackerAddress": "{{uptimeTracker}}",
+            "mode": "alerts",
+            "network": "mainnet"
+          },
+          "timeoutMs": 300000,
+          "facts": [
+            { "name": "epoch", "path": "epoch", "match": "integer", "context": ["epoch"] },
+            {
+              "name": "actionRequired",
+              "path": "checks",
+              "derive": { "op": "any", "predicate": { "field": "status", "op": "in", "value": ["warn", "alert"] } },
+              "match": "boolean"
+            },
+            { "name": "serverCalculatedTiming", "path": "timing", "match": "exists", "answerMatch": false },
+            { "name": "uptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-rewards-current-activity",
+      "prompt": "What rewards activity occurred during the current epoch, including rewards set, distributions, claims, fee claims, and zero-reward claims?",
+      "promptVariants": [
+        "Summarize every Rewards contract event seen since this Dexalot epoch began.",
+        "During the running epoch, how many set, distribute, claim, fee-claim, undistributed-claim, and zero-claim events happened?"
+      ],
+      "slow": true,
+      "expectedTools": [["rewards_get_events"]],
+      "expectedToolCalls": [[
+        { "tool": "rewards_get_events", "argsSubset": { "rewardsAddress": "{{rewards}}", "middlewareAddress": "{{middleware}}", "fromEpoch": "{{currentEpoch}}", "toEpoch": "{{currentEpoch}}", "network": "mainnet" } }
+      ]],
+      "maxToolCalls": 3,
+      "groundTruth": [
+        {
+          "tool": "rewards_get_events",
+          "args": {
+            "rewardsAddress": "{{rewards}}",
+            "middlewareAddress": "{{middleware}}",
+            "fromEpoch": "{{currentEpoch}}",
+            "toEpoch": "{{currentEpoch}}",
+            "network": "mainnet"
+          },
+          "timeoutMs": 300000,
+          "facts": [
+            { "name": "totalEvents", "path": "rewardsLifecycleEvents.totalEventCount", "match": "integer", "context": ["event", "events", "activity"] },
+            { "name": "rewardsSetCount", "path": "rewardsLifecycleEvents.countsByType.RewardsAmountSet", "match": "integer", "context": ["set", "set-amount", "rewards"] },
+            { "name": "distributionsCount", "path": "rewardsLifecycleEvents.countsByType.RewardsDistributed", "match": "integer", "context": ["distribution", "distributed"] },
+            { "name": "claimsCount", "path": "rewardsLifecycleEvents.countsByType.RewardsClaimed", "match": "integer", "context": ["claim", "claims"] },
+            { "name": "zeroClaimsCount", "path": "rewardsLifecycleEvents.countsByType.ZeroRewardsClaim", "match": "integer", "context": ["zero", "claim", "claims"] }
           ]
         }
       ]

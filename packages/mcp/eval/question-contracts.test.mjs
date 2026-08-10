@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { questionPrompts } from './question-prompts.mjs';
 import { scoreTrace } from './scoring.mjs';
 
 function readJson(relative) {
@@ -90,6 +91,7 @@ describe('eval question contracts', () => {
   it('routes weekly work through the composite heartbeat and accepts a covering status range', () => {
     const weekly = questions.questions.find(({ id }) => id === 'weekly-todo');
     const alternatives = weekly.expectedToolCalls.flat();
+    expect(weekly.expectedToolCalls).toHaveLength(2);
     expect(alternatives).toContainEqual(expect.objectContaining({
       tool: 'deployment_heartbeat',
     }));
@@ -108,6 +110,95 @@ describe('eval question contracts', () => {
     expect(route).not.toContain('middleware_epoch_status');
     expect(epochs).toContain('Never infer missing');
     expect(soul).toContain('rather than calculating or guessing');
+  });
+
+  it('covers the five maintainer rewards questions as semantic prompt families', () => {
+    const expected = new Map([
+      [
+        'maintainer-rewards-six-epoch-status',
+        'Give me the Dexalot rewards status for the last six epochs: amount set, funded, distribution progress, and claimability.',
+      ],
+      [
+        'maintainer-rewards-uptime-eligibility',
+        'Did every operator meet the minimum uptime for the latest completed epoch? Show any operators that did not.',
+      ],
+      [
+        'maintainer-rewards-accumulation',
+        'Diagnose the latest completed epoch for duplicate reward-setting transactions or accidental reward accumulation.',
+      ],
+      [
+        'maintainer-rewards-actions',
+        'Which reward epochs require maintainer action right now, what action is needed, and what is the deadline? Do not propose or execute anything.',
+      ],
+      [
+        'maintainer-rewards-current-activity',
+        'What rewards activity occurred during the current epoch, including rewards set, distributions, claims, fee claims, and zero-reward claims?',
+      ],
+    ]);
+
+    for (const [id, canonical] of expected) {
+      const question = questions.questions.find((item) => item.id === id);
+      const contract = contracts.contracts.find((item) => item.id === id);
+      expect(question?.prompt, id).toBe(canonical);
+      expect(questionPrompts(question), id).toHaveLength(3);
+      expect(contract?.semanticCriteria.length, id).toBeGreaterThan(0);
+      expect(contract?.requiredGroundTruth.length, id).toBeGreaterThan(0);
+      expect(contract?.prohibited.length, id).toBeGreaterThan(0);
+    }
+
+    const byId = (id) => questions.questions.find((question) => question.id === id);
+    expect(byId('maintainer-rewards-six-epoch-status').expectedToolCalls).toHaveLength(2);
+    expect(byId('maintainer-rewards-uptime-eligibility').expectedToolCalls).toHaveLength(2);
+    expect(byId('maintainer-rewards-actions').expectedToolCalls.flat())
+      .toContainEqual(expect.objectContaining({ tool: 'deployment_heartbeat' }));
+    expect(byId('maintainer-rewards-current-activity').expectedToolCalls.flat())
+      .toContainEqual(expect.objectContaining({ tool: 'rewards_get_events' }));
+  });
+
+  it('fails the observed one-tool rewards shortcut and requires complete evidence', () => {
+    const status = questions.questions.find(({ id }) => id === 'maintainer-rewards-six-epoch-status');
+    const rawStatusOnly = [{
+      name: 'rewards_get_epoch_status',
+      args: {
+        rewardsAddress: '{{rewards}}',
+        epoch: '{{currentEpoch-6}}',
+        toEpoch: '{{currentEpoch-1}}',
+        network: 'mainnet',
+      },
+    }];
+    expect(scoreTrace(rawStatusOnly, {
+      expectedToolCalls: status.expectedToolCalls,
+      maxToolCalls: status.maxToolCalls,
+    }).ok).toBe(false);
+    expect(scoreTrace([...rawStatusOnly, {
+      name: 'deployment_heartbeat',
+      args: {
+        middlewareAddress: '{{middleware}}',
+        rewardsAddress: '{{rewards}}',
+        uptimeTrackerAddress: '{{uptimeTracker}}',
+        mode: 'digest',
+        network: 'mainnet',
+      },
+    }], {
+      expectedToolCalls: status.expectedToolCalls,
+      maxToolCalls: status.maxToolCalls,
+    }).ok).toBe(true);
+
+    const uptime = questions.questions.find(({ id }) => id === 'maintainer-rewards-uptime-eligibility');
+    const reportOnly = [{
+      name: 'middleware_uptime_report',
+      args: {
+        middlewareAddress: '{{middleware}}',
+        uptimeAddress: '{{uptimeTracker}}',
+        startEpoch: '{{currentEpoch-1}}',
+        epochs: 1,
+        network: 'mainnet',
+      },
+    }];
+    expect(scoreTrace(reportOnly, {
+      expectedToolCalls: uptime.expectedToolCalls,
+      maxToolCalls: uptime.maxToolCalls,
+    }).ok).toBe(false);
   });
 
   it('accepts equivalent read paths observed in the Kimi pilot without weakening scope checks', () => {

@@ -7,6 +7,7 @@ import {
 const hashes = {
   questions: 'a'.repeat(64),
   questionContracts: 'b'.repeat(64),
+  questionPrompts: 'f'.repeat(64),
   scoring: 'c'.repeat(64),
   reviewWorkflow: 'e'.repeat(64),
 };
@@ -16,6 +17,7 @@ const questionSpec = {
   questions: [{
     id: 'q1',
     prompt: 'Is epoch {{currentEpoch-1}} ready?',
+    promptVariants: ['Tell me whether epoch {{currentEpoch-1}} is ready.'],
   }],
 };
 const contractSpec = {
@@ -136,6 +138,24 @@ describe('human review packet', () => {
       reason: null,
     });
     expect(decisions.decisions[0].criteria.every(({ status }) => status === null)).toBe(true);
+  });
+
+  it('preserves a configured paraphrase and rejects an unregistered prompt', () => {
+    const paraphrased = {
+      ...report,
+      results: [{
+        ...baseResult,
+        prompt: 'Tell me whether epoch 51 is ready.',
+        promptVariant: 1,
+        promptVariantCount: 2,
+      }],
+    };
+    expect(packetFor(paraphrased).samples[0].prompt)
+      .toBe('Tell me whether epoch 51 is ready.');
+    expect(() => packetFor({
+      ...report,
+      results: [{ ...baseResult, prompt: 'Unregistered wording' }],
+    })).toThrow('not a configured question variant');
   });
 
   it('rejects stale, dirty, and infrastructure-invalid source results', () => {

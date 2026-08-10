@@ -4,6 +4,7 @@ import {
   readFileSync, readdirSync, statSync,
 } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { questionPrompts } from './question-prompts.mjs';
 
 export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -205,7 +206,12 @@ export function inventoryCorpus({
       let promptError = snapshot.error;
       if (question) {
         try {
-          prompt = substitute(question.prompt, report.vars ?? {});
+          const configured = questionPrompts(question)
+            .map((candidate) => substitute(candidate, report.vars ?? {}));
+          prompt = result.prompt == null ? configured[0] : String(result.prompt);
+          if (!configured.includes(prompt)) {
+            throw new TypeError('result prompt is not a configured question variant');
+          }
         } catch (error) {
           promptError = `prompt reconstruction failed: ${error.message}`;
         }

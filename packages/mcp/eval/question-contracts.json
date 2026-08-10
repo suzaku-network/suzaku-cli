@@ -51,6 +51,142 @@
       "invalidWhen": ["The batch crosses an epoch boundary or either required ground-truth source is incomplete."]
     },
     {
+      "id": "maintainer-rewards-six-epoch-status",
+      "userNeed": "Review the complete rewards lifecycle for the six most recently completed epochs.",
+      "expectedOutcome": "Report exactly currentEpoch-6 through currentEpoch-1 with each set amount, funding state, distribution state, and protocol-level claimability; distinguish an incomplete future-gated distribution from work actionable now.",
+      "required": [
+        "Use the live six-epoch rewards range and the deterministic heartbeat together.",
+        "Keep every amount and lifecycle conclusion attached to the correct epoch.",
+        "If any UTC time or action recommendation is included, copy the server-calculated heartbeat fields rather than deriving it."
+      ],
+      "prohibited": [
+        "Do not label a funded but time-gated epoch as actionable now.",
+        "Do not treat protocol-level distribution completion as proof that a particular account has an unclaimed balance.",
+        "Do not calculate epoch timestamps or deadlines from offsets in prose."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-six-epoch-status", "claim": "The rewards range supplies amounts and lifecycle flags; the heartbeat supplies deterministic claimability, uptime, and timing context."}
+      ],
+      "requiredGroundTruth": ["rewards_get_epoch_status", "deployment_heartbeat"],
+      "machineChecks": [
+        "Both required read paths succeed with the exact deployment pins.",
+        "The queried range contains the six completed epochs and resolves the latest completed amount and status."
+      ],
+      "semanticCriteria": [
+        "The answer covers all four requested lifecycle dimensions without inventing a current action or account-specific claim."
+      ],
+      "invalidWhen": ["The epoch changes during collection or either required source is incomplete."]
+    },
+    {
+      "id": "maintainer-rewards-uptime-eligibility",
+      "userNeed": "Identify operators that failed the rewards uptime threshold in the latest completed epoch.",
+      "expectedOutcome": "Compare every current operator's computed uptime for currentEpoch-1 with the live minimum required uptime, list only actual failures, and distinguish unset uptime from a computed value below threshold.",
+      "required": [
+        "Use the full live operator uptime report for currentEpoch-1.",
+        "Fetch the rewards contract's current minimum uptime and compare actual values against it.",
+        "Name each operator that is unset or below minimum, or explicitly say none are."
+      ],
+      "prohibited": [
+        "Do not equate isUptimeSet=true with meeting the minimum without checking the value.",
+        "Do not inspect the running epoch as if it were the latest completed epoch.",
+        "Do not infer missing uptime from incomplete rewards distribution."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-uptime-eligibility", "claim": "middleware_uptime_report supplies every operator value and set flag; rewards_get_min_uptime supplies the threshold."}
+      ],
+      "requiredGroundTruth": ["middleware_uptime_report", "rewards_get_min_uptime"],
+      "machineChecks": [
+        "Both tools target currentEpoch-1 on mainnet.",
+        "The all-operators flag, actual uptime values, and minimum threshold resolve."
+      ],
+      "semanticCriteria": [
+        "Eligibility is based on the numerical threshold and complete operator set, not a proxy flag."
+      ],
+      "invalidWhen": ["Operator enumeration, an uptime value, or the minimum threshold is unavailable."]
+    },
+    {
+      "id": "maintainer-rewards-accumulation",
+      "userNeed": "Detect duplicate set-amount calls and accumulated rewards for the latest completed epoch.",
+      "expectedOutcome": "Report the verified set-amount event count and funded total for currentEpoch-1, clearly stating whether multiple calls accumulated or that the result is unconfirmed if the historical scan fails.",
+      "required": [
+        "Use a full diagnosis or equivalent complete event scan for currentEpoch-1.",
+        "Treat more than one covering RewardsAmountSet event as accumulation.",
+        "Keep event count and total amount separate."
+      ],
+      "prohibited": [
+        "Do not infer a single transaction from a funded flag or final amount.",
+        "Do not claim no duplicates when the event scan is incomplete.",
+        "Do not recommend another set-amount call from this read-only audit."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-accumulation", "claim": "rewards_epoch_diagnosis reconstructs covering set-amount events and the accumulated on-chain total."}
+      ],
+      "requiredGroundTruth": ["rewards_epoch_diagnosis"],
+      "machineChecks": [
+        "The exact latest completed epoch is scanned.",
+        "Event count, total, and epoch evidence resolve from the diagnosis."
+      ],
+      "semanticCriteria": [
+        "The answer makes the accumulation conclusion only from complete event evidence."
+      ],
+      "invalidWhen": ["The event scan is incomplete or crosses an epoch transition."]
+    },
+    {
+      "id": "maintainer-rewards-actions",
+      "userNeed": "Know which rewards maintenance is actionable now without initiating any write.",
+      "expectedOutcome": "List only heartbeat-supported actions that can be performed at the observed time, with their epoch and exact server-provided deadline; otherwise say no action is required now and identify future work as scheduled rather than pending action.",
+      "required": [
+        "Use the heartbeat's checks, uptime status, and server-calculated timing fields.",
+        "Separate actionable now from waiting for a contract time gate.",
+        "Remain read-only and make no transaction or Safe proposal."
+      ],
+      "prohibited": [
+        "Do not call a future-gated distribution the one current action.",
+        "Do not calculate or convert dates from epoch numbers, durations, or offsets.",
+        "Do not infer missing uptime from distribution state.",
+        "Do not execute or propose any write."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-actions", "claim": "deployment_heartbeat supplies deterministic current actions, exact timing, and uptime status."}
+      ],
+      "requiredGroundTruth": ["deployment_heartbeat"],
+      "machineChecks": [
+        "The pinned mainnet heartbeat succeeds and no forbidden write tool is called.",
+        "Epoch, action-presence, timing, and uptime evidence resolve."
+      ],
+      "semanticCriteria": [
+        "Every recommendation is currently executable according to the deterministic checks, and future work is not framed as urgent now."
+      ],
+      "invalidWhen": ["The heartbeat is partial, fails, or the epoch changes during the answer."]
+    },
+    {
+      "id": "maintainer-rewards-current-activity",
+      "userNeed": "Audit all rewards lifecycle events that occurred during the running middleware epoch.",
+      "expectedOutcome": "Report event counts from the current epoch's block-time range for reward setting, distribution, staker claims, undistributed claims, operator/curator/protocol fee claims, and zero-reward claims, including explicit zeroes rather than silently omitting categories.",
+      "required": [
+        "Bound the event scan from currentEpoch start through the finalized head.",
+        "Use the lifecycle event source rather than current contract status as a proxy for activity.",
+        "Distinguish when an event occurred from which reward epoch its arguments target."
+      ],
+      "prohibited": [
+        "Do not substitute a rewards status table for event history.",
+        "Do not omit zero-count categories requested by the maintainer.",
+        "Do not describe an event targeting an older epoch as having occurred in that older epoch when its block is in the current one."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-current-activity", "claim": "rewards_get_events scans all eight lifecycle event types over the exact current middleware epoch range."}
+      ],
+      "requiredGroundTruth": ["rewards_get_events"],
+      "machineChecks": [
+        "The event scan uses fromEpoch=currentEpoch and toEpoch=currentEpoch.",
+        "Total, set, distribution, claim, and zero-claim counts resolve."
+      ],
+      "semanticCriteria": [
+        "The answer reports the requested activity categories and keeps occurrence time separate from target epoch."
+      ],
+      "invalidWhen": ["The event scan is incomplete, the finalized head is unavailable, or the epoch changes during collection."]
+    },
+    {
       "id": "can-set-rewards",
       "userNeed": "Decide whether a set-amount/top-up is technically possible and operationally appropriate.",
       "expectedOutcome": "Distinguish contract capability from monitor policy: existing funding does not itself make the contract revert; before distribution starts another valid call adds to the epoch total, while the read-only monitor must not recommend an accidental top-up. Report what is already set and warn that a top-up must be deliberate.",

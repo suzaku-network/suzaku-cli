@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { questionPrompts } from './question-prompts.mjs';
 import { hasCompleteUsage } from './reproducibility.mjs';
 
 const HUMAN_VERDICTS = new Set(['CORRECT', 'PARTIAL', 'WRONG']);
@@ -167,11 +168,16 @@ export function buildReviewPacket({
     if (!question || !contract) throw new TypeError(`missing current question contract: ${result.id}`);
     const answer = String(result.answer ?? '');
     if (answer.length === 0) throw new TypeError(`${result.id}: answer is empty`);
+    const allowedPrompts = questionPrompts(question).map((prompt) => substitute(prompt, report.vars ?? {}));
+    const prompt = result.prompt == null ? allowedPrompts[0] : String(result.prompt);
+    if (!allowedPrompts.includes(prompt)) {
+      throw new TypeError(`${result.id}: result prompt is not a configured question variant`);
+    }
     assertRequiredGroundTruth(result, contract);
     return {
       sampleId: `sample-${sha256(`${resultSha256}:${index}:${result.id}`).slice(0, 12)}`,
       questionId: result.id,
-      prompt: substitute(question.prompt, report.vars ?? {}),
+      prompt,
       expectedOutcome: contract.expectedOutcome,
       authoritativeEvidence: contract.evidence ?? [],
       criteria: questionCriteria(contract),
@@ -188,7 +194,7 @@ export function buildReviewPacket({
       },
       answer,
       hashes: {
-        promptSha256: sha256(substitute(question.prompt, report.vars ?? {})),
+        promptSha256: sha256(prompt),
         answerSha256: sha256(answer),
         evidenceSha256: sha256(JSON.stringify(evidenceFor(result))),
       },

@@ -6,6 +6,7 @@
 //     --anthropic-models …   provider-specific model lists (with --engines).
 //     --kimi-models …        Kimi model lists (with --engines).
 //     --repeat N --canary    repeat each target; gate wiring before paid suite calls.
+//                            Repeats walk each question's configured paraphrases.
 //     --canary-only          run the operators wiring check once per target, then stop.
 //     --engine anthropic     (default) Anthropic API tool-runner; needs ANTHROPIC_API_KEY.
 //                            --model <id> or --models a,b,c to compare models.
@@ -35,6 +36,7 @@ import { EvalArgumentError, parseEvalArgs } from './args.mjs';
 import { normalizeKimiToolSchema, runKimiToolConversation } from './kimi.mjs';
 import { bridgedStdioCommand } from './stdio-bridge.mjs';
 import { createSpendGuard } from './spend-guard.mjs';
+import { questionPrompts, selectQuestionPrompt } from './question-prompts.mjs';
 import { runEval } from './runner.mjs';
 import { writeAttemptManifest } from './manifest-store.mjs';
 import { guardOutboundText } from '../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs';
@@ -162,6 +164,9 @@ function dryRunSummary() {
     anthropicModels: ANTHROPIC_MODELS,
     kimiModels: KIMI_MODELS,
     questions: questions.map((question) => question.id),
+    promptVariants: Object.fromEntries(
+      questions.map((question) => [question.id, questionPrompts(question).length]),
+    ),
     repeat: REPEAT,
     canary: CANARY,
     canaryOnly: CANARY_ONLY,
@@ -300,6 +305,7 @@ async function main() {
     const definingFiles = {
       'eval/questions.json': new URL('./questions.json', here),
       'eval/question-contracts.json': new URL('./question-contracts.json', here),
+      'eval/question-prompts.mjs': new URL('./question-prompts.mjs', here),
       'eval/evidence/dexalot-mainnet-2026-07-29.json': new URL('./evidence/dexalot-mainnet-2026-07-29.json', here),
       'eval/args.mjs': new URL('./args.mjs', here),
       'eval/kimi.mjs': new URL('./kimi.mjs', here),
@@ -437,6 +443,15 @@ function substitute(value, vars) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substitute(v, vars)]));
   }
   return value;
+}
+
+function resolveQuestionPrompt(question, { repeat = 1, canary = false } = {}) {
+  const selected = selectQuestionPrompt(question, canary ? 1 : Math.max(1, repeat));
+  return {
+    prompt: substitute(selected.template, vars),
+    promptVariant: selected.index,
+    promptVariantCount: selected.count,
+  };
 }
 
 // ---------- MCP clients ----------
@@ -578,6 +593,11 @@ const preflightQuestions = CANARY_ONLY
   ? canaryQuestions
   : [...new Map([...questions, ...canaryQuestions].map((question) => [question.id, question])).values()];
 for (const q of preflightQuestions) {
+  try {
+    questionPrompts(q);
+  } catch (error) {
+    preflightErrors.push(error.message);
+  }
   if (!contractById.has(q.id)) preflightErrors.push(`question contract missing: ${q.id}`);
   if (![undefined, null, 'no-new'].includes(q.addressPolicy)) {
     preflightErrors.push(`unsupported addressPolicy '${q.addressPolicy}' (question ${q.id})`);
@@ -670,7 +690,7 @@ async function scoreRun(q, run, traceMode) {
   const gts = await fetchGroundTruth(q); // after the answer, so dedup can't pre-warm the engine
   const infrastructureError = groundTruthTrustFailure(gts);
   const allowedAddresses = new Set([
-    ...collectAddresses(substitute(q.prompt, vars)),
+    ...collectAddresses(run.prompt ?? substitute(q.prompt, vars)),
     ...collectAddresses(spec.deployment),
     ...collectAddresses(q.allowedAddresses ?? []),
     ...gts.flatMap((group) => group.addresses ?? []),
@@ -780,11 +800,12 @@ async function makeAnthropicEngine(model) {
       return res.text.slice(0, 30_000);
     },
   }));
-  return async function runQuestion(q) {
+  return async function runQuestion(q, options = {}) {
     trace = [];
     let usage = null;
     const usageParts = [];
-    const prompt = substitute(q.prompt, vars);
+    const promptSelection = resolveQuestionPrompt(q, options);
+    const { prompt } = promptSelection;
     const t0 = performance.now();
     let answer = '';
     let runError = null;
@@ -815,6 +836,7 @@ async function makeAnthropicEngine(model) {
       usage = null;
     }
     return {
+      ...promptSelection,
       answer, runError, stopReason, usage, timedOut, authError,
       wallMs: Math.round(performance.now() - t0),
       trace: trace.map((t) => ({ name: t.name, args: t.args, ms: t.ms, isError: t.isError })),
@@ -844,9 +866,10 @@ async function makeKimiEngine(model) {
   }));
   let trace = [];
 
-  return async function runQuestion(q) {
+  return async function runQuestion(q, options = {}) {
     trace = [];
-    const prompt = substitute(q.prompt, vars);
+    const promptSelection = resolveQuestionPrompt(q, options);
+    const { prompt } = promptSelection;
     const t0 = performance.now();
     let answer = '';
     let runError = null;
@@ -893,6 +916,7 @@ async function makeKimiEngine(model) {
       usage = null;
     }
     return {
+      ...promptSelection,
       answer,
       runError,
       stopReason,
@@ -938,8 +962,9 @@ async function botExec(cmd, timeoutMs = 60_000, attempts = 4) {
 
 function makeCodexEngine() {
   const runIdTag = Math.trunc(performance.now() * 1000) % 1_000_000; // unique-enough per invocation
-  return async function runQuestion(q) {
-    const prompt = substitute(q.prompt, vars);
+  return async function runQuestion(q, options = {}) {
+    const promptSelection = resolveQuestionPrompt(q, options);
+    const { prompt } = promptSelection;
     const answerFile = `eval/answers/${q.id}.md`;
     const jobMessage = [
       'Benchmark task. Do NOT send any Telegram or chat messages under any circumstances.',
@@ -1000,6 +1025,7 @@ function makeCodexEngine() {
         ? `cron run status=${entry.status}: ${String(entry.summary).slice(0, 200)}`
         : (noAnswer ? 'run ok but no answer file written' : null);
       return {
+        ...promptSelection,
         answer,
         runError,
         stopReason: entry.status,
@@ -1012,6 +1038,7 @@ function makeCodexEngine() {
       };
     } catch (e) {
       return {
+        ...promptSelection,
         answer: '', runError: e.message, stopReason: null, usage: null,
         timedOut: /timed?\s*out|timeout/i.test(e.message),
         authError: /credit balance|billing|authentication|unauthorized|\b401\b/i.test(e.message),
@@ -1292,6 +1319,7 @@ for (const runSet of allRuns) {
     hashes: {
       questions: sha256File(new URL('./questions.json', here)),
       questionContracts: sha256File(new URL('./question-contracts.json', here)),
+      questionPrompts: sha256File(new URL('./question-prompts.mjs', here)),
       scoring: sha256File(new URL('./scoring.mjs', here)),
       reviewWorkflow: sha256File(new URL('./review-workflow.mjs', here)),
       outputGuard: sha256File(new URL('../deploy/openclaw/plugins/suzaku-output-guard/transform.mjs', here)),
