@@ -48,9 +48,15 @@ describe('humanizers', () => {
     expect(timeRemaining(30)).toBe('less than 1m remaining');
 
     const summary = summarizeHeartbeatTiming(TIMING, TIMING.currentEpochStartTs + 238_320);
-    expect(summary.updateWindowSecondsRemaining).toBe(20_880);
-    expect(summary.updateWindowTimeRemaining).toBe('5h 48m remaining');
+    expect(summary.weightUpdateWindowSecondsUntilOpen).toBe(20_880);
+    expect(summary.weightUpdateWindowTimeUntilOpen).toBe('5h 48m remaining');
+    expect(summary.weightUpdateWindowActive).toBe(false);
     expect(summary.currentEpochSecondsRemaining).toBe(64_080);
+
+    const active = summarizeHeartbeatTiming(TIMING, TIMING.currentEpochStartTs + TIMING.updateWindow + 3_600);
+    expect(active.weightUpdateWindowActive).toBe(true);
+    expect(active.weightUpdateWindowClosesTs).toBe(TIMING.currentEpochStartTs + TIMING.epochDuration);
+    expect(active.weightUpdateWindowTimeUntilClose).toBe('11h remaining');
   });
 
   it('reports uptime as an explicit tri-state instead of relying on absent alerts', () => {
@@ -264,19 +270,12 @@ describe('runAlertChecks', () => {
     expect(checks.filter((c) => c.status !== 'ok')).toEqual([]);
   });
 
-  it('warns when cache incomplete and window closes within a day', () => {
+  it('does not warn when a stake snapshot is not materialized', () => {
     const input = baseInput();
     input.allClassesCached = false;
-    input.now = TIMING.currentEpochStartTs + TIMING.updateWindow - 3600; // 1h before close
-    const cache = runAlertChecks(input).find((c) => c.name === 'stake_cache');
-    expect(cache?.status).toBe('warn');
-  });
-
-  it('alerts when cache incomplete and window already closed', () => {
-    const input = baseInput();
-    input.allClassesCached = false;
-    input.now = TIMING.currentEpochStartTs + TIMING.updateWindow + 3600;
-    expect(runAlertChecks(input).find((c) => c.name === 'stake_cache')?.status).toBe('alert');
+    const snapshot = runAlertChecks(input).find((c) => c.name === 'stake_snapshot');
+    expect(snapshot).toMatchObject({ status: 'ok' });
+    expect(snapshot?.detail).toContain('no action or deadline');
   });
 
   it('warns on missing uptime past half the epoch', () => {
@@ -411,7 +410,9 @@ describe('buildHumanLines', () => {
       checks: [okCheck],
     });
     expect(lines[0]).toContain('epoch 38 started');
+    expect(lines[1]).toContain('weight-update window opens');
     expect(lines[1]).toContain('5h 48m remaining');
+    expect(lines[2]).toContain('stake snapshot materialized');
     expect(lines).toContain('  no node/stake/validator changes');
     expect(lines).toContain('  uptime epoch 37: complete (1/1 operators)');
     expect(lines.some((l) => l.includes('35,120.55'))).toBe(true);
@@ -496,8 +497,8 @@ describe('deployment_heartbeat handler', () => {
     expect(data.rewards.claimability.find((r: ClaimabilityRow) => r.epoch === 36).status).toBe('distributing');
     expect(data.humanLines).toEqual([]);
     expect(data.changed).toBeUndefined();
-    expect(data.timing.updateWindowSecondsRemaining).toBe(
-      data.timing.updateWindowCloseTs - data.timing.observedAtTs,
+    expect(data.timing.weightUpdateWindowSecondsUntilOpen).toBe(
+      data.timing.weightUpdateWindowOpensTs - data.timing.observedAtTs,
     );
     expect(data.uptime).toMatchObject({ status: 'not_checked', allOperatorsSet: null });
 
@@ -651,7 +652,6 @@ describe('deployment_heartbeat handler', () => {
   });
 
   it.each([
-    ['get-cache-status', 'cache_data_unavailable'],
     ['lst-wrapper info', 'lst_data_unavailable'],
   ])('surfaces a failed %s monitoring layer as an alert', async (responseKey, checkName) => {
     const partial = { ...MOCK_BASE } as MockResponses;
@@ -673,11 +673,9 @@ describe('deployment_heartbeat handler', () => {
     const res = await getHandler()({ ...ADDRS, mode: 'digest', windowEpochs: 6, pChainMinAVAX: 0.05, cacheLateDays: 1, uptimeMissingEpochFraction: 0.5 });
     const data = JSON.parse(res.content[0].text);
 
-    expect(data.checks.find((check: { name: string }) => check.name === 'cache_data_unavailable')?.status).toBe('alert');
-    expect(data.checks.some((check: { name: string }) => check.name === 'stake_cache')).toBe(false);
-    expect(data.humanLines).toContainEqual(expect.stringContaining('cache unknown'));
-    expect(data.humanLines.join('\n')).not.toContain('cache incomplete');
-    expect(data.humanLines.join('\n')).not.toContain('cache pending');
+    expect(data.checks.some((check: { name: string }) => check.name.includes('cache'))).toBe(false);
+    expect(data.humanLines).toContainEqual(expect.stringContaining('stake snapshot unknown'));
+    expect(data.humanLines.join('\n')).not.toContain('action');
   });
 
   it('retries the complete snapshot once when the epoch changes during collection', async () => {

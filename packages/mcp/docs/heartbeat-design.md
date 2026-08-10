@@ -14,7 +14,7 @@ Proactive monitoring for the Dexalot Suzaku deployment, delivered through the Op
 | Constant | Value | Meaning |
 |---|---|---|
 | middleware `EPOCH_DURATION` | 302,400 s | **3.5 days — one epoch = half a week** |
-| middleware `UPDATE_WINDOW` | 259,200 s | 3-day window within each epoch for stake/weight updates |
+| middleware `UPDATE_WINDOW` | 259,200 s | Offset from epoch start when the final validator weight-update window opens; it closes at epoch end |
 | rewards `minRequiredUptime` | 241,200 s | ~80% of an epoch — below ⇒ operator ineligible that epoch |
 | rewards `DISTRIBUTION_EARLIEST_OFFSET` | 2 | epoch N distributable only from epoch N+2 |
 | rewards `FUNDING_DEADLINE_OFFSET` | 4 | funding for epoch N closes when N+4 starts (`FundingWindowClosed`) |
@@ -33,7 +33,7 @@ When epoch N starts, four epochs are operationally live:
 
 | Epoch | State | Required action | Deadline |
 |---|---|---|---|
-| N | running | stake cache set; weight updates inside update window | window close (start + 3 d) |
+| N | running | validator weight updates during the final window; stake snapshots materialize lazily | weight-update window opens at start + 3 d and closes at epoch end |
 | N−1 | uptime phase | report validator uptimes → compute operator uptime (≥80%) | before distributing N−1 (earliest N+1) |
 | N−2 | distributable | fund + set-amount (once!) → distribute in batches | funding closes at N+2 start |
 | N−3 / N−4 | closing | distribution complete; undistributed reclaimable after grace | funding for N−4 closes now |
@@ -77,7 +77,8 @@ Telegram is the only channel that exists here; the visualization is a tight mono
 
 ```
 🟢 Suzaku · Dexalot — epoch 39 started (Jun 13 14:00 UTC)
-   update window closes Jun 16 14:00 · cache ✅ ready (class 1)
+   weight-update window opens Jun 16 14:00 · closes Jun 17 02:00
+   stake snapshot not materialized (lazy; no action)
 
 CHANGED this epoch
   ~ stake NodeID-Fsk…Bt  4.80M → 5.00M ALOT  (0x9de4…)
@@ -104,7 +105,6 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 | Check | Condition | Source |
 |---|---|---|
-| Stake cache late | `!allClassesCached` and update window < 1 day to close | `middleware_epoch_status` |
 | Uptime missing late | `isUptimeSet=false` for N−1 past 50% of epoch N | `middleware_uptime_report` |
 | Funding deadline at risk | epoch unset and < 1 epoch to `FundingWindowClosed` | `rewards_get_epoch_rewards` (+ `epochStatus`) |
 | Set-amount accumulation | `eventCount > 1` for any epoch in window | `rewards_epoch_diagnosis` |
@@ -125,7 +125,7 @@ Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or
 
 `deployment_heartbeat` — `{ readOnlyHint: true }`, `skipLimiter: true`, new `packages/mcp/src/tools/heartbeat.ts`.
 
-- Params (as implemented): `middlewareAddress`, `rewardsAddress`, `lstWrapperAddress` (optional), `uptimeTrackerAddress` (optional), `network`, `rpcUrl`; optional `mode: 'digest' | 'alerts'` (default `alerts`), `windowEpochs` (default 6 for the table), thresholds `pChainMinAVAX` (default 0.05), `cacheLateDays` (default 1), `uptimeMissingEpochFraction` (default 0.5). (`balancerAddress`/`vaultAddress` were planned but dropped — see behavior notes.)
+- Params (as implemented): `middlewareAddress`, `rewardsAddress`, `lstWrapperAddress` (optional), `uptimeTrackerAddress` (optional), `network`, `rpcUrl`; optional `mode: 'digest' | 'alerts'` (default `alerts`), `windowEpochs` (default 6 for the table), thresholds `pChainMinAVAX` (default 0.05) and `uptimeMissingEpochFraction` (default 0.5). `cacheLateDays` remains accepted only for compatibility and is ignored because snapshot materialization has no deadline. (`balancerAddress`/`vaultAddress` were planned but dropped — see behavior notes.)
 - Returns `{ epoch, windowStartEpoch, changed: {nodes[], validators[], operators, tvl, rate}, rewards: { activity[], claimability[] }, checks: [{name, epoch?, status, detail, human}] }` — `human` fields pre-humanized.
 - ~12–18 CLI sub-calls per digest (more event scans than the alert mode); at the digest cadence this is negligible on a dedicated RPC.
 

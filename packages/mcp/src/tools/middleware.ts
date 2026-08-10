@@ -5,9 +5,15 @@ import { guardWriteOperation } from '../guard.js';
 import { Address, NodeID, Network, RpcUrl } from '../schemas.js';
 import { extractL1s } from './l1-registry.js';
 import { extractOperators } from './operator.js';
+import { timeRemaining } from './heartbeat.js';
 
 /** Maximum number of operators processed by composite tools. Configurable via SUZAKU_MCP_MAX_OPERATORS. */
 const MAX_OPERATORS = Number(process.env.SUZAKU_MCP_MAX_OPERATORS ?? 50);
+
+/** Unix seconds -> an unambiguous, model-ready UTC timestamp. */
+export function timestampToIsoUtc(timestamp: number): string {
+  return new Date(timestamp * 1_000).toISOString().replace('.000Z', 'Z');
+}
 
 /** Extract data from a CliResult, returning empty object on failure.
  *  When label and warnings are provided, records failed sub-calls for surfacing to the caller. */
@@ -418,13 +424,21 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
       let epochTiming: Record<string, unknown> | undefined;
       if (epochConfigData && epochStartTs) {
         const nextEpochStartTs = epochStartTs + epochConfigData.epochDuration;
-        const updateWindowDeadlineTs = epochStartTs + epochConfigData.updateWindow;
+        const weightUpdateWindowOpensAtTs = epochStartTs + epochConfigData.updateWindow;
         const nowSeconds = Math.floor(Date.now() / 1000);
         epochTiming = {
           currentEpochStartTs: epochStartTs,
+          currentEpochStartUtc: timestampToIsoUtc(epochStartTs),
           nextEpochStartTs,
-          updateWindowDeadlineTs,
-          updateWindowOpen: nowSeconds < updateWindowDeadlineTs,
+          nextEpochStartUtc: timestampToIsoUtc(nextEpochStartTs),
+          weightUpdateWindow: {
+            opensAfterEpochStartSeconds: epochConfigData.updateWindow,
+            opensAtTs: weightUpdateWindowOpensAtTs,
+            opensAtUtc: timestampToIsoUtc(weightUpdateWindowOpensAtTs),
+            closesAtTs: nextEpochStartTs,
+            closesAtUtc: timestampToIsoUtc(nextEpochStartTs),
+            active: nowSeconds >= weightUpdateWindowOpensAtTs && nowSeconds < nextEpochStartTs,
+          },
           secondsUntilNextEpoch: Math.max(0, nextEpochStartTs - nowSeconds),
         };
       }
@@ -873,7 +887,7 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'middleware_epoch_status',
-    'Epoch operational readiness dashboard: timing (epoch start/end, seconds until next epoch), update window status (open/closed, deadline), stake cache completeness, and per-operator rebalance flags. Pure MCP-layer arithmetic over read-only CLI calls.',
+    'Epoch operational readiness dashboard: server-calculated UTC timing and relative time remaining, validator weight-update window status, lazy stake-snapshot materialization, and per-operator rebalance flags. UPDATE_WINDOW is the offset when the final weight-update window opens, not a stake-cache deadline. An unmaterialized stake snapshot requires no action and may be populated permissionlessly or lazily by Rewards. Quote returned UTC/relative strings verbatim; never convert raw Unix timestamps in the model.',
     {
       middlewareAddress: Address.describe('L1Middleware contract address'),
       network: Network,
@@ -918,32 +932,47 @@ export function registerMiddlewareTools(server: McpServer, readOnly?: boolean) {
 
       // MCP-layer arithmetic
       const epochEndTs = epochStartTs + epochConfig.epochDuration;
-      const updateWindowDeadlineTs = epochStartTs + epochConfig.updateWindow;
+      const weightUpdateWindowOpensAtTs = epochStartTs + epochConfig.updateWindow;
       const nowSeconds = Math.floor(Date.now() / 1000);
       const secondsUntilNextEpoch = Math.max(0, epochEndTs - nowSeconds);
-      const updateWindowOpen = nowSeconds < updateWindowDeadlineTs;
-      const secondsUntilWindowClose = updateWindowOpen ? updateWindowDeadlineTs - nowSeconds : 0;
+      const weightUpdateWindowActive = nowSeconds >= weightUpdateWindowOpensAtTs && nowSeconds < epochEndTs;
       const nodeStakeCacheLag = currentEpoch - epochConfig.lastNodeStakeUpdateEpoch;
 
       const result = {
+        observedAtTs: nowSeconds,
+        observedAtUtc: timestampToIsoUtc(nowSeconds),
         epoch: {
           current: currentEpoch,
           startTs: epochStartTs,
+          startUtc: timestampToIsoUtc(epochStartTs),
           endTs: epochEndTs,
+          endUtc: timestampToIsoUtc(epochEndTs),
           durationSeconds: epochConfig.epochDuration,
           secondsUntilNextEpoch,
+          timeRemaining: timeRemaining(epochEndTs - nowSeconds),
         },
-        updateWindow: {
-          durationSeconds: epochConfig.updateWindow,
-          deadlineTs: updateWindowDeadlineTs,
-          open: updateWindowOpen,
-          secondsUntilClose: secondsUntilWindowClose,
+        weightUpdateWindow: {
+          opensAfterEpochStartSeconds: epochConfig.updateWindow,
+          opensAtTs: weightUpdateWindowOpensAtTs,
+          opensAtUtc: timestampToIsoUtc(weightUpdateWindowOpensAtTs),
+          closesAtTs: epochEndTs,
+          closesAtUtc: timestampToIsoUtc(epochEndTs),
+          active: weightUpdateWindowActive,
+          secondsUntilOpen: Math.max(0, weightUpdateWindowOpensAtTs - nowSeconds),
+          opensIn: weightUpdateWindowActive ? null : timeRemaining(weightUpdateWindowOpensAtTs - nowSeconds),
+          secondsUntilClose: Math.max(0, epochEndTs - nowSeconds),
+          closesIn: timeRemaining(epochEndTs - nowSeconds),
         },
-        stakeCache: {
-          nodeStakeCacheLag,
-          cacheUpToDate: nodeStakeCacheLag === 0,
+        nodeStakeCache: {
+          lastUpdatedEpoch: epochConfig.lastNodeStakeUpdateEpoch,
+          lagEpochs: nodeStakeCacheLag,
+          upToDate: nodeStakeCacheLag === 0,
+        },
+        stakeSnapshot: {
           byClass: cacheStatus?.cacheByClass ?? {},
-          allClassesCached: cacheStatus?.allClassesCached ?? false,
+          allClassesMaterialized: cacheStatus?.allClassesCached ?? null,
+          actionRequired: false,
+          note: 'Lazy optimization for rewards reads; no deadline. It can be materialized permissionlessly or by Rewards when needed.',
         },
         rebalance: {
           byOperator: cacheStatus?.rebalanceByOperator ?? {},

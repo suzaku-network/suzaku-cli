@@ -2,8 +2,10 @@
 
 This is the domain reference for answering operator questions. The people asking run the
 validators and the rewards workflow: they care about **what needs doing, by when,
-and what is claimable** — not generic status. Always convert epochs to concrete UTC
-times using the scheduling constants and epoch duration fetched live.
+and what is claimable** — not generic status. Never convert raw Unix timestamps or
+calculate relative time in the model. Quote the composite tool's server-calculated
+`*Utc` and `timeRemaining` fields verbatim. If those fields are unavailable, omit the
+conversion rather than estimating it.
 
 **Cadence:** epochs are 3.5 days; the human workflow traditionally runs weekly, covering
 the ~2 epochs completed since the last pass. Note the tension: the set-amount window is
@@ -13,9 +15,11 @@ whenever an unset epoch is near the window edge.
 
 ## The lifecycle of one epoch N (3.5-day epochs on Dexalot)
 
-1. **Epoch N runs** (~3.5 days). Validators accrue uptime; stake snapshots are cached.
-   The **stake-cache update window** for the running epoch must complete before it
-   closes (`middleware_epoch_status` → `allClassesCached`, window close time).
+1. **Epoch N runs** (~3.5 days). Validators accrue uptime. Per-class stake snapshots
+   may be materialized permissionlessly or lazily by Rewards. `allClassesCached=false`
+   is informational and has no deadline or required action. `UPDATE_WINDOW` is the
+   offset when the final validator weight-update window opens; it is not a cache
+   deadline (`middleware_epoch_status` returns its exact open and close times).
 2. **Epoch N ends.** Now its rewards workflow begins:
    a. **Uptime** — validator uptimes are reported, then operator uptime is computed
       (`uptime_report_validator` → `uptime_compute_operator_uptime`). Distribution
@@ -86,16 +90,15 @@ consumes the nonce.
 
 ## Stake cache
 
-Per-epoch stake snapshots must be cached per collateral class while the epoch runs:
-`middleware_epoch_status` → `allClassesCached` + the window close time.
+`totalStakeCached(epoch, class)=false` means only that the optional on-chain stake
+snapshot has not been materialized. `calcAndCacheStakes` is permissionless, accepts
+current or past epochs, and Rewards calls it lazily when needed. Therefore:
 
-- The per-class update is a write (`middleware calc-operator-cache` in the Suzaku
-  CLI). This monitor only reports whether it is needed; a human executes it.
-- `allClassesCached=false` with the window close near is **urgent**: lead with the
-  close time (UTC + time remaining) and say explicitly that a CLI action is needed.
-- If the window closes without the cache complete, escalate to the team — the
-  heartbeat fires a 🔴 `stake_cache` alert for this; do not improvise an impact
-  assessment.
+- Never label an unmaterialized snapshot urgent, incomplete, or action-required.
+- Never attach `UPDATE_WINDOW` to snapshot materialization. That constant controls
+  when the final validator weight-update window opens.
+- A human may deliberately materialize a snapshot for operational reasons, but the
+  monitor must not recommend a transaction merely because the flag is false.
 
 ## What operators actually ask, and how to answer
 
@@ -109,7 +112,7 @@ Per-epoch stake snapshots must be cached per collateral class while the epoch ru
 | "What is minimum uptime / has it changed?" | `rewards_get_min_uptime` | State the current value. If `historyAvailable=false`, say historical changes are unknown; do not invent event names, call the value typical, or suggest the getter proves history |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
-| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | `allClassesCached` + window close UTC; if a class is false near close, say that a human must run the cache CLI command for `(epoch, class)` |
+| "Stake/weights look wrong" | `middleware_epoch_status`, `middleware_operator_dashboard` | Distinguish `nodeStakeCache` lag and validator weight-update status from lazy `stakeSnapshot` materialization. A false snapshot flag alone requires no action. Quote returned UTC/relative strings verbatim; never derive them from raw timestamps. |
 
 ## Urgent triage
 
@@ -182,7 +185,7 @@ For an alarmed or ambiguous "something is wrong" message:
   prefer posting the digest's `humanLines` block verbatim with your actions-needed
   summary above it.
 
-- **Actionables first**: anything with a deadline (stake cache close, funding deadline,
+- **Actionables first**: anything with a real deadline (funding deadline,
   distribution waiting on uptime) goes at the top with its UTC time and tool-calculated
   time-remaining. If no relative-time field was returned, omit it rather than estimating.
 - Epoch statuses in one compact table: epoch · set amount · #set-txs · funded ·

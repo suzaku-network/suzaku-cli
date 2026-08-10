@@ -32,10 +32,15 @@ export interface HeartbeatTimingSummary {
   currentEpochEndUtc: string;
   currentEpochSecondsRemaining: number;
   currentEpochTimeRemaining: string;
-  updateWindowCloseTs: number;
-  updateWindowCloseUtc: string;
-  updateWindowSecondsRemaining: number;
-  updateWindowTimeRemaining: string;
+  weightUpdateWindowOpensTs: number;
+  weightUpdateWindowOpensUtc: string;
+  weightUpdateWindowSecondsUntilOpen: number;
+  weightUpdateWindowTimeUntilOpen: string;
+  weightUpdateWindowClosesTs: number;
+  weightUpdateWindowClosesUtc: string;
+  weightUpdateWindowSecondsUntilClose: number;
+  weightUpdateWindowTimeUntilClose: string;
+  weightUpdateWindowActive: boolean;
 }
 
 export interface UptimeSummary {
@@ -129,9 +134,10 @@ export function timeRemaining(seconds: number): string {
 
 export function summarizeHeartbeatTiming(timing: EpochTiming, observedAtTs: number): HeartbeatTimingSummary {
   const currentEpochEndTs = timing.currentEpochStartTs + timing.epochDuration;
-  const updateWindowCloseTs = timing.currentEpochStartTs + timing.updateWindow;
+  const weightUpdateWindowOpensTs = timing.currentEpochStartTs + timing.updateWindow;
   const currentEpochSecondsRemaining = currentEpochEndTs - observedAtTs;
-  const updateWindowSecondsRemaining = updateWindowCloseTs - observedAtTs;
+  const weightUpdateWindowSecondsUntilOpen = weightUpdateWindowOpensTs - observedAtTs;
+  const weightUpdateWindowSecondsUntilClose = currentEpochEndTs - observedAtTs;
   return {
     observedAtTs,
     observedAtUtc: tsToUtc(observedAtTs),
@@ -141,10 +147,15 @@ export function summarizeHeartbeatTiming(timing: EpochTiming, observedAtTs: numb
     currentEpochEndUtc: tsToUtc(currentEpochEndTs),
     currentEpochSecondsRemaining,
     currentEpochTimeRemaining: timeRemaining(currentEpochSecondsRemaining),
-    updateWindowCloseTs,
-    updateWindowCloseUtc: tsToUtc(updateWindowCloseTs),
-    updateWindowSecondsRemaining,
-    updateWindowTimeRemaining: timeRemaining(updateWindowSecondsRemaining),
+    weightUpdateWindowOpensTs,
+    weightUpdateWindowOpensUtc: tsToUtc(weightUpdateWindowOpensTs),
+    weightUpdateWindowSecondsUntilOpen,
+    weightUpdateWindowTimeUntilOpen: timeRemaining(weightUpdateWindowSecondsUntilOpen),
+    weightUpdateWindowClosesTs: currentEpochEndTs,
+    weightUpdateWindowClosesUtc: tsToUtc(currentEpochEndTs),
+    weightUpdateWindowSecondsUntilClose,
+    weightUpdateWindowTimeUntilClose: timeRemaining(weightUpdateWindowSecondsUntilClose),
+    weightUpdateWindowActive: observedAtTs >= weightUpdateWindowOpensTs && observedAtTs < currentEpochEndTs,
   };
 }
 
@@ -489,20 +500,14 @@ export interface AlertCheckInput {
 export function runAlertChecks(input: AlertCheckInput): AlertCheck[] {
   const checks: AlertCheck[] = [];
   const { timing, thresholds, now } = input;
-  const windowDeadlineTs = timing.currentEpochStartTs + timing.updateWindow;
 
-  // 1. Stake cache late in (or past) the update window
+  // Stake snapshots are a permissionless/lazy read optimization, not a
+  // deadline-gated operator obligation. Never turn an unmaterialized snapshot
+  // into an action or alert.
   if (input.allClassesCached === false) {
-    const secondsLeft = windowDeadlineTs - now;
-    if (secondsLeft < 0) {
-      checks.push({ name: 'stake_cache', status: 'alert', detail: `update window closed ${tsToUtc(windowDeadlineTs)}, cache incomplete`, human: `🔴 stake cache incomplete and update window closed ${tsToUtc(windowDeadlineTs)}` });
-    } else if (secondsLeft < thresholds.cacheLateDays * 86_400) {
-      checks.push({ name: 'stake_cache', status: 'warn', detail: `cache incomplete, window closes ${tsToUtc(windowDeadlineTs)}`, human: `⚠️ stake cache not ready — update window closes ${tsToUtc(windowDeadlineTs)}` });
-    } else {
-      checks.push({ name: 'stake_cache', status: 'ok', detail: 'cache incomplete, window has time left', human: 'stake cache pending (window open)' });
-    }
+    checks.push({ name: 'stake_snapshot', status: 'ok', detail: 'not materialized; computed permissionlessly or lazily by Rewards; no action or deadline', human: 'stake snapshot not materialized (lazy; no action)' });
   } else if (input.allClassesCached === true) {
-    checks.push({ name: 'stake_cache', status: 'ok', detail: 'all classes cached', human: 'stake cache ✅' });
+    checks.push({ name: 'stake_snapshot', status: 'ok', detail: 'materialized for all collateral classes', human: 'stake snapshot materialized ✅' });
   }
 
   // 2. Uptime not reported for last epoch past the threshold fraction of the current epoch
@@ -619,8 +624,11 @@ export function buildHumanLines(args: {
   const headIcon = nonOk.some((c) => c.status === 'alert') ? '🔴' : nonOk.length > 0 ? '⚠️' : '🟢';
   const lines: string[] = [
     `${headIcon} Suzaku heartbeat — epoch ${timing.currentEpoch} started ${tsToUtc(timing.currentEpochStartTs)}`,
-    `   update window closes ${args.timingSummary?.updateWindowCloseUtc ?? tsToUtc(timing.currentEpochStartTs + timing.updateWindow)}` +
-      `${args.timingSummary ? ` (${args.timingSummary.updateWindowTimeRemaining})` : ''} · cache ${args.cacheOk === true ? '✅' : args.cacheOk === false ? '⚠️ pending' : 'unknown'}`,
+    args.timingSummary?.weightUpdateWindowActive
+      ? `   weight-update window active · closes ${args.timingSummary.weightUpdateWindowClosesUtc} (${args.timingSummary.weightUpdateWindowTimeUntilClose})`
+      : `   weight-update window opens ${args.timingSummary?.weightUpdateWindowOpensUtc ?? tsToUtc(timing.currentEpochStartTs + timing.updateWindow)}` +
+        `${args.timingSummary ? ` (${args.timingSummary.weightUpdateWindowTimeUntilOpen})` : ''} · closes ${args.timingSummary?.weightUpdateWindowClosesUtc ?? tsToUtc(timing.currentEpochStartTs + timing.epochDuration)}`,
+    `   stake snapshot ${args.cacheOk === true ? 'materialized ✅' : args.cacheOk === false ? 'not materialized (lazy; no action)' : 'unknown'}`,
     '',
     `CHANGED since epoch ${timing.currentEpoch - 1} start`,
   ];
@@ -652,7 +660,7 @@ export function registerHeartbeatTools(server: McpServer) {
     'mode=alerts (default): fast state checks, returns only warn/alert findings in humanLines — empty humanLines means all good, post nothing. ' +
     'mode=digest: full epoch digest with event scans — what changed (nodes/stakes/validators), rewards activity, and a per-epoch claimability table; run once per epoch rollover (compare the returned epoch to the last reported one). ' +
     'All checks are computed deterministically; humanLines are ready to post verbatim in a Telegram monospace block. ' +
-    'The timing object contains server-calculated UTC deadlines and remaining seconds/text; quote it instead of recomputing. ' +
+    'The timing object contains server-calculated epoch and validator weight-update-window UTC/relative values; quote them instead of recomputing. UPDATE_WINDOW marks when the final weight-update window opens, not a cache deadline. Unmaterialized stake snapshots are lazy and require no action. ' +
     'The uptime object explicitly reports complete/missing/unknown/not_checked for the previous epoch; never infer uptime from distribution state. ' +
     'Digest mode scans events over the elapsed epoch (~30-60s; prefer a dedicated RPC); accumulation detection covers that window — use rewards_epoch_diagnosis for historical epochs. ' +
     'Event scans use the server-configured explorer service when available (~5s per scan vs ~60s RPC-only).',
@@ -664,7 +672,7 @@ export function registerHeartbeatTools(server: McpServer) {
       mode: z.enum(['digest', 'alerts']).default('alerts').describe('digest = full epoch report with event scans; alerts = quick checks, non-OK findings only'),
       windowEpochs: z.number().int().min(1).max(8).default(6).describe('How many past epochs the claimability table covers (table = N-windowEpochs..N)'),
       pChainMinAVAX: z.number().default(0.05).describe('Alert when a validator P-Chain continuous-fee balance falls below this (AVAX)'),
-      cacheLateDays: z.number().default(1).describe('Warn when stake cache is incomplete and the update window closes within this many days'),
+      cacheLateDays: z.number().default(1).describe('Deprecated compatibility parameter; ignored because stake snapshots are lazy and have no cache deadline'),
       uptimeMissingEpochFraction: z.number().default(0.5).describe('Warn when last-epoch uptime is missing past this fraction of the current epoch'),
       network: Network,
       rpcUrl: RpcUrl,
@@ -708,7 +716,6 @@ export function registerHeartbeatTools(server: McpServer) {
           : epochStartResult);
       }
       const cacheStatus = extractData(cacheStatusResult, 'get-cache-status', _warnings).cacheStatus as { allClassesCached?: boolean } | undefined;
-      const cacheStatusAvailable = typeof cacheStatus?.allClassesCached === 'boolean';
       const operatorsValue = extractData(operatorsResult, 'get-all-operators', _warnings).operators;
       const operatorListAvailable = Array.isArray(operatorsValue);
       const operators = operatorListAvailable ? operatorsValue as string[] : [];
@@ -861,9 +868,6 @@ export function registerHeartbeatTools(server: McpServer) {
       const dataChecks: AlertCheck[] = [];
       if (!epochStatusTable) {
         dataChecks.push({ name: 'rewards_data_unavailable', status: 'alert', detail: 'rewards get-epoch-status sub-call failed — claimability table empty', human: '🔴 rewards monitoring unavailable — epoch status reads failed (check CLI version / RPC)' });
-      }
-      if (!cacheStatusAvailable) {
-        dataChecks.push({ name: 'cache_data_unavailable', status: 'alert', detail: 'middleware cache status read failed', human: '🔴 stake-cache monitoring unavailable — cache status could not be read' });
       }
       if (!operatorListAvailable) {
         dataChecks.push({ name: 'operator_data_unavailable', status: 'alert', detail: 'middleware operator list read failed', human: '🔴 operator monitoring unavailable — operator list could not be read' });

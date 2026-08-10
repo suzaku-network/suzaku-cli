@@ -208,7 +208,7 @@ The script pins the middleware, rewards, wrapper, **and UptimeTracker** addresse
 
 **Use `--no-deliver`, and have the agent send the message itself** (as the prompts above do). The default delivery mode is announce, which fallback-forwards the agent's final text **and any job-failure notice** to a chat — that double-posts every digest (content + a "Posted digest…" meta line) and spams the group with "⚠️ Cron job failed" on transient errors. With `--no-deliver` the only group message is the one the agent deliberately sends; check job health with `cron list` (Last column) or `cron runs <id>` instead.
 
-Alerts stay quiet unless a deterministic check trips (stake cache late, funding
+Alerts stay quiet unless a deterministic check trips (funding
 deadline at risk, set-amount accumulation, validator P-Chain balance low, and
 similar checks). The digest posts once per 3.5-day epoch. With only two runs per
 week, a failed run is not automatically retried and alert latency can approach
