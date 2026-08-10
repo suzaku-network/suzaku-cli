@@ -12,7 +12,7 @@ OpenClaw 2026.7.1 gateway
   ├─ primary model: moonshot/kimi-k3
   ├─ optional, disabled-by-default Anthropic fallback
   ├─ output guard: Telegram formatting + secret/path redaction
-  ├─ one isolated four-hourly heartbeat job
+  ├─ two low-thinking, epoch-aligned heartbeat runs per week
   └─ typed MCP connection over stdio
           │
           ▼

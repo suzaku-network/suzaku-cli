@@ -60,6 +60,7 @@
       {
         "id": "heartbeat",
         "name": "Suzaku scheduled heartbeat",
+        "thinkingDefault": "low",
         "workspace": "/home/node/.openclaw/workspace",
         "runtime": {
           "type": "embedded"

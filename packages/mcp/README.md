@@ -57,7 +57,7 @@ The retired `--propose-only` and `--public-write` flags fail closed. Proposer an
 - **Register a new operator**: `register-new-operator` prompt — guides through registry, opt-ins, middleware registration, and node addition.
 - **Register / remove a validator**: `validator-lifecycle` prompt — two-phase C-Chain + P-Chain lifecycle (needs `SUZAKU_PCHAIN_PK`); covers both `manager=kite|vault`.
 - **Weekly epoch rewards (Dexalot)**: `epoch-rewards-runbook` prompt — 6-step workflow: report validator uptimes → compute operator uptime → diagnose rewards state (warns on set-amount accumulation) → set rewards → distribute → harvest the LST wrapper.
-- **Monitor a deployment**: `deployment_heartbeat` — `mode=digest` (per-epoch changes, rewards activity, claimability table) or `mode=alerts` (4-hourly checks, quiet unless something trips).
+- **Monitor a deployment**: `deployment_heartbeat` — `mode=digest` (per-epoch changes, rewards activity, claimability table) or `mode=alerts` (non-OK findings only). Production invokes both at the twice-weekly epoch boundaries.
 - **Monitor network state**: `middleware_network_overview` — operators, nodes, stakes, epoch config, and vault listing in one call.
 - **Deposit into a vault**: `vault_deposit` — on mainnet returns the CLI command to run manually (suggest mode).
 

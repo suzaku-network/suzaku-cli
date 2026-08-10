@@ -62,7 +62,14 @@ Moonshot's Kimi K3 catalog price used by OpenClaw and the evaluator is **$3 per 
 
 The retained paid evaluation gives a concrete upper-context reference: one 22-question Kimi repetition cost about **$1.04**, plus about **$0.02** for its canary. Individual evaluation turns had a median around **$0.030**, a mean around **$0.047**, and a measured range of roughly **$0.011–$0.117**. Production prompts will not have identical context, so these are planning observations, not a quote.
 
-The production scheduler uses one Kimi turn every four hours (about 180/month), rather than the old two-job design (about 360/month), and the heartbeat agent sees only one MCP schema. Until a week of production data exists, budget conservatively using the full-tool evaluation mean: about **$8.50/month for scheduled turns**, plus interactive use (100 comparable turns would be about $4.70 at the observed mean). The restricted heartbeat context should be cheaper, but that saving is intentionally not claimed before measurement. Anthropic and Codex cost zero while inactive.
+The production scheduler uses two low-thinking Kimi turns per week (about nine
+per month), aligned ten minutes after the two weekly middleware epoch
+boundaries. Using the full-tool evaluation mean gives about **$0.42/month for
+scheduled turns**; budgeting about **$1/month** covers the highest observed
+full-eval per-turn cost. The restricted heartbeat context should be cheaper,
+but that saving is intentionally not claimed before measurement. Interactive
+use is additional (100 comparable turns would be about $4.70 at the observed
+mean). Anthropic and Codex cost zero while inactive.
 
 The VM already exists, so VM procurement/pricing is outside this runbook. Telegram, Docker Engine, OpenClaw, and the public Avalanche RPC add no direct software fee. Explorer acceleration is optional and separately billed; leave `ETHERSCAN_API_KEY` empty unless public-RPC history scans prove insufficient.
 
@@ -171,16 +178,27 @@ Upgrade procedure:
 2. Bump the host tag+digest and the Moonshot plugin version together. Build and validate locally; do not discover compatibility on the production VM.
 3. Run `docker compose exec suzaku-bot node openclaw.mjs config validate` and `docker compose exec suzaku-bot node openclaw.mjs doctor`.
 4. Repeat the full Telegram acceptance gate in `AZURE-DEPLOY.md`, including a real output-guard transformation and a direct MCP answer.
-5. Register the declaration again and verify `cron list`; then review 24-hour usage before considering the upgrade complete.
+5. Register both declarations again and verify `cron list`; then review 24-hour usage before considering the upgrade complete.
 
 ## Scheduled Epoch Alerts (cron)
 
-`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs persist in the `openclaw-state` volume across container rebuilds. The committed registration script uses a declaration key, so it is safe to repeat after an image/config upgrade and updates the same job rather than creating duplicates.
+`cron.enabled: true` turns on OpenClaw's built-in scheduler. Jobs persist in the
+`openclaw-state` volume across container rebuilds. The committed registration
+script uses one declaration key per epoch slot, so each invocation is safe to
+repeat after an image/config upgrade and updates the same job rather than
+creating duplicates.
 
-The production design deliberately registers **one** four-hourly Kimi turn, not separate alert and digest turns. It always calls deterministic alert mode; only after detecting a new epoch does that same turn call digest mode. The isolated `heartbeat` agent sees only `deployment_heartbeat`, its workspace checkpoint, and Telegram send. The public chat agent cannot write that checkpoint.
+The production design deliberately registers **two** low-thinking Kimi turns
+per week: Tuesday 14:10 UTC and Saturday 02:10 UTC, ten minutes after the live
+Dexalot middleware's 3.5-day epoch boundaries. Each turn calls deterministic
+alert mode; after detecting a new epoch, that same turn calls digest mode. The
+isolated `heartbeat` agent sees only `deployment_heartbeat`, its workspace
+checkpoint, and Telegram send. The public chat agent cannot write that
+checkpoint.
 
 ```bash
-docker compose exec suzaku-bot register-heartbeat-cron.sh
+docker compose exec suzaku-bot register-heartbeat-cron.sh tuesday
+docker compose exec suzaku-bot register-heartbeat-cron.sh saturday
 docker compose exec suzaku-bot node openclaw.mjs cron list
 ```
 
@@ -190,7 +208,12 @@ The script pins the middleware, rewards, wrapper, **and UptimeTracker** addresse
 
 **Use `--no-deliver`, and have the agent send the message itself** (as the prompts above do). The default delivery mode is announce, which fallback-forwards the agent's final text **and any job-failure notice** to a chat — that double-posts every digest (content + a "Posted digest…" meta line) and spams the group with "⚠️ Cron job failed" on transient errors. With `--no-deliver` the only group message is the one the agent deliberately sends; check job health with `cron list` (Last column) or `cron runs <id>` instead.
 
-Alerts stay quiet unless a deterministic check trips (stake cache late, funding deadline at risk, set-amount accumulation, validator P-Chain balance low, and similar checks). The digest posts once per 3.5-day epoch. Inspect `cron list` and recent `cron runs` after deployment and after every upgrade; scheduler success is an acceptance gate, not an assumption.
+Alerts stay quiet unless a deterministic check trips (stake cache late, funding
+deadline at risk, set-amount accumulation, validator P-Chain balance low, and
+similar checks). The digest posts once per 3.5-day epoch. With only two runs per
+week, a failed run is not automatically retried and alert latency can approach
+3.5 days. Inspect `cron list` and recent `cron runs` after deployment and after
+every upgrade; scheduler success is an acceptance gate, not an assumption.
 
 ## Example Queries
 

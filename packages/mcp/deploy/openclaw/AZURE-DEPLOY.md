@@ -257,20 +257,26 @@ log—not plugin registration alone—prove outbound protection.
 Run the free Tier-1 evaluation on the exact VM checkout. It must not make model
 calls.
 
-## 8. Register exactly one scheduler job
+## 8. Register exactly two epoch-aligned scheduler jobs
 
 Only after the old poller and runtime acceptance gates pass:
 
 ```bash
-sudo -u suzaku docker compose exec suzaku-bot register-heartbeat-cron.sh
+sudo -u suzaku docker compose exec suzaku-bot register-heartbeat-cron.sh tuesday
+sudo -u suzaku docker compose exec suzaku-bot register-heartbeat-cron.sh saturday
 sudo -u suzaku docker compose exec -T suzaku-bot sh -c \
   'node openclaw.mjs cron list --json | node /usr/local/lib/suzaku/verify-heartbeat-cron.mjs'
 ```
 
-The only job must use declaration `suzaku-monitor-heartbeat-v1`, agent
-`heartbeat`, cadence `10 */4 * * *` UTC, and `--no-deliver`. A quiet run sends
-nothing. Delivery is at-least-once: a crash after Telegram accepts a message but
-before checkpointing can duplicate one digest.
+The two jobs must use declarations `suzaku-monitor-heartbeat-tuesday-v1` and
+`suzaku-monitor-heartbeat-saturday-v1`, agent `heartbeat`, low thinking, exact
+UTC cadences `10 14 * * 2` and `10 2 * * 6`, and `--no-deliver`. These run ten
+minutes after the live middleware's Tuesday 14:00 and Saturday 02:00 UTC epoch
+boundaries. Recheck `EPOCH_DURATION`, the current epoch, and its start timestamp
+from the deployed middleware before registration; stop if they no longer imply
+these boundaries. A quiet run sends nothing. Delivery is at-least-once: a crash
+after Telegram accepts a message but before checkpointing can duplicate one
+digest.
 
 Review actual usage daily for seven days:
 
@@ -279,10 +285,11 @@ sudo -u suzaku docker compose exec suzaku-bot node openclaw.mjs gateway usage-co
 sudo -u suzaku docker compose exec suzaku-bot node openclaw.mjs gateway usage-cost --days 7 --json
 ```
 
-Kimi is the only default model cost. Six scheduled turns/day means roughly 180
-turns/month; the old full-eval mean gives a deliberately conservative planning
-estimate near `$8.50/month`, while the restricted heartbeat should be cheaper.
-Interactive traffic is additional. Anthropic and Codex cost zero while inactive.
+Kimi is the only default model cost. Two scheduled turns/week means roughly nine
+turns/month. The old full-eval mean implies about `$0.42/month`; budgeting about
+`$1/month` covers the highest observed full-eval per-turn cost, while this
+low-thinking restricted heartbeat should be cheaper. Interactive traffic is
+additional. Anthropic and Codex cost zero while inactive.
 OpenClaw has no dollar ceiling, so use Moonshot-side prepaid credit/alerts.
 
 ## 9. Reboot acceptance

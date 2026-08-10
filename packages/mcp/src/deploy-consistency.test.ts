@@ -202,14 +202,18 @@ describe('production image and host lifecycle', () => {
     expect(service).toContain('docker compose up -d --no-build --wait --wait-timeout 120 suzaku-bot');
   });
 
-  it('registers one idempotent, isolated heartbeat with the uptime tracker pinned', () => {
+  it('registers two epoch-aligned heartbeats one mutation at a time', () => {
     const cron = read('register-heartbeat-cron.sh');
-    expect(cron).toContain('--declaration-key suzaku-monitor-heartbeat-v1');
+    expect(cron).toContain('suzaku-monitor-heartbeat-tuesday-v1');
+    expect(cron).toContain('suzaku-monitor-heartbeat-saturday-v1');
+    expect(cron).toContain('cron_expr="10 14 * * 2"');
+    expect(cron).toContain('cron_expr="10 2 * * 6"');
     expect(cron).toContain('--agent heartbeat');
+    expect(cron).toContain('--thinking low');
     expect(cron).toContain('--tools "suzaku__deployment_heartbeat,read,write,message"');
     expect(cron).toContain('uptimeTrackerAddress=0xd6eCFF67596cCb2D03a5F5c8219F1C27f244CEaF');
     expect(cron.match(/openclaw\.mjs cron create/g)).toHaveLength(1);
-    expect(read('verify-heartbeat-cron.mjs')).toContain('expected exactly one cron job');
+    expect(read('verify-heartbeat-cron.mjs')).toContain('expected exactly two cron jobs');
   });
 
   it('keeps deployment environments and secret directories out of Git and Docker contexts', () => {

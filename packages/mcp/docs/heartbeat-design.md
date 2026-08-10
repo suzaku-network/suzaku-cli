@@ -3,7 +3,8 @@
 Proactive monitoring for the Dexalot Suzaku deployment, delivered through the OpenClaw Telegram bot. Two outputs from one composite `deployment_heartbeat` read tool (checks run deterministically in TypeScript; the LLM only formats the result):
 
 1. **Epoch digest** — one formatted Telegram message per middleware epoch (every 3.5 days = half a week), answering the maintainer's two standing questions: *what changed* (nodes / stakes / operators / validators) and *what happened in rewards* (set / funded / distributed / claimed — for which epochs, and what is claimable now).
-2. **Anomaly alerts** — a quiet 4-hourly cron that posts only `warn`/`alert` rows.
+2. **Anomaly alerts** — evaluated by the same twice-weekly epoch-boundary runs,
+   which post only `warn`/`alert` rows in addition to the new-epoch digest.
 
 ## Grounding
 
@@ -99,7 +100,7 @@ REWARDS
 
 Markers: 🟢/✅ ok · ⚠️ action-needed/anomaly · 🔴 deadline-at-risk or confirmed problem. The claimability table is the centerpiece; the CHANGED block is omitted entirely (replaced by "no changes this epoch") when the scans come back empty.
 
-## Alert-only checks between digests (4-hourly, post only non-OK)
+## Alert checks at each epoch boundary (twice weekly, post only non-OK)
 
 | Check | Condition | Source |
 |---|---|---|
@@ -163,12 +164,22 @@ Behavior notes vs. the design above:
 
 ## OpenClaw setup
 
-The production deployment uses one Kimi job every four hours, not two. The isolated `heartbeat` agent can see only `deployment_heartbeat`, checkpoint read/write, and Telegram send. It first calls alerts mode; when the returned epoch differs from `memory/heartbeat-digest-state.json`, the same turn calls digest mode, sends it once, and updates the checkpoint after successful delivery. This halves scheduled model turns and prevents ordinary chat users from changing scheduler state.
+The production deployment runs two Kimi turns per week, ten minutes after the
+live Dexalot middleware's 3.5-day epoch boundaries: Tuesday 14:10 UTC and
+Saturday 02:10 UTC. Two weekly cron declarations are required because one
+standard cron expression cannot encode those two weekday/time pairs without
+also producing two extra runs. The isolated `heartbeat` agent uses low thinking
+and can see only `deployment_heartbeat`, checkpoint read/write, and Telegram
+send. It first calls alerts mode; when the returned epoch differs from
+`memory/heartbeat-digest-state.json`, the same turn calls digest mode, sends it
+once, and updates the checkpoint after successful delivery. Ordinary chat users
+cannot change scheduler state.
 
 Register or update it after the gateway is healthy:
 
 ```bash
-docker compose exec suzaku-bot register-heartbeat-cron.sh
+docker compose exec suzaku-bot register-heartbeat-cron.sh tuesday
+docker compose exec suzaku-bot register-heartbeat-cron.sh saturday
 docker compose exec suzaku-bot node openclaw.mjs cron list --json
 ```
 
@@ -177,3 +188,8 @@ The script pins all four production addresses, including `uptimeTrackerAddress=0
 Checkpointing occurs only after a successful Telegram send. Delivery is therefore
 at-least-once, not exactly-once: a process crash after Telegram accepts the message
 but before the checkpoint write can duplicate one digest.
+
+The twice-weekly ceiling means a failed run is not automatically retried and an
+anomaly that appears between boundaries can remain unreported until the next
+boundary. Operators that need lower alert latency must use a non-LLM monitor or
+explicitly approve a higher heartbeat budget.

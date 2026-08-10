@@ -138,7 +138,7 @@ Full profile: 125 tools total (69 read, 56 write). The production monitor uses t
 | `lst-wrapper.ts` | 6 | 3 | `lst_wrapper_info`, `lst_wrapper_get_balance`, `lst_wrapper_preview_deposit`, `lst_wrapper_preview_redeem`, `lst_wrapper_max_deposit`, `lst_wrapper_paused`, `lst_wrapper_deposit`, `lst_wrapper_redeem`, `lst_wrapper_harvest` |
 | `vault-helper.ts` | 4 | 0 | `vault_helper_info`, `vault_helper_get_pending_withdraws`, `vault_helper_get_claimable_reward`, `vault_helper_get_latest_distributed_rewards` |
 | `uptime.ts` | 1 | 2 | `uptime_get_validation_uptime_message`, `uptime_report_validator`, `uptime_compute_operator_uptime` |
-| `heartbeat.ts` | 1 | 0 | `deployment_heartbeat` — composite monitor; `mode=digest` (per-epoch: changed nodes/stakes/validators, rewards activity, claimability table) or `mode=alerts` (4-hourly checks, non-OK findings only). See `docs/heartbeat-design.md` |
+| `heartbeat.ts` | 1 | 0 | `deployment_heartbeat` — composite monitor; `mode=digest` (per-epoch: changed nodes/stakes/validators, rewards activity, claimability table) or `mode=alerts` (non-OK findings only). Production runs both at the two weekly epoch boundaries. See `docs/heartbeat-design.md` |
 | `server.ts` | 1 | 0 | `health_check` — verifies CLI path, signer config, optional network connectivity |
 
 ## Signing Methods
