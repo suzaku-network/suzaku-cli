@@ -23,9 +23,16 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
-      - name: Build and Test
+      - name: Install and build
         run: |
           pnpm install --frozen-lockfile
+          pnpm --filter @suzaku-network/mcp build
+
+      - name: MCP test suite
+        run: pnpm --filter @suzaku-network/mcp test
+
+      - name: CLI help smoke test
+        run: |
           pnpm suzaku-cli --help
 
       - uses: ncipollo/release-action@v1

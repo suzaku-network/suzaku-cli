@@ -16,7 +16,7 @@
     "suzaku-keeper": "dist/index.js"
   },
   "dependencies": {
-    "suzaku-cli": "workspace:*",
+    "suzaku-cli": "workspace:@suzaku-network/suzaku-cli@*",
     "@commander-js/extra-typings": "^14.0.0",
     "commander": "^14.0.0",
     "console-log-colors": "^0.5.0",

@@ -1,0 +1,35 @@
+{
+  "epochStatusTable": {
+    "fromEpoch": 46,
+    "toEpoch": 48,
+    "constants": {
+      "fundingDeadlineOffset": 4,
+      "distributionEarliestOffset": 2,
+      "claimGracePeriodEpochs": 1
+    },
+    "epochs": [
+      {
+        "epoch": 46,
+        "epochRewards": "11397150000000000000000",
+        "funded": true,
+        "distributionComplete": true,
+        "epochRewardsHuman": "11,397.15"
+      },
+      {
+        "epoch": 47,
+        "epochRewards": "11402850000000000000000",
+        "funded": true,
+        "distributionComplete": false,
+        "epochRewardsHuman": "11,402.85"
+      },
+      {
+        "epoch": 48,
+        "epochRewards": "0",
+        "funded": false,
+        "distributionComplete": false,
+        "epochRewardsHuman": "0"
+      }
+    ],
+    "humanNote": "human values assume 18 decimals"
+  }
+}

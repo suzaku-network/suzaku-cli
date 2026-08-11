@@ -1,0 +1,158 @@
+{
+  "$comment": "Pinned evidence for deployment-specific eval claims. Live reads are eth_call/rpc reads at one Avalanche C-Chain block. Source references explain behavior but are not represented as bytecode-equivalence proofs.",
+  "capturedAt": "2026-07-29T08:47:17.000Z",
+  "network": {
+    "name": "Avalanche C-Chain mainnet",
+    "chainId": 43114,
+    "rpcUrl": "https://api.avax.network/ext/bc/C/rpc",
+    "blockNumber": 91505169,
+    "blockHash": "0x518b864af2dea72bc01a2e3d2ee04f88b80cb687cef851c48157a6f3a23f68d2",
+    "blockTimestamp": 1785314837
+  },
+  "addresses": {
+    "middleware": "0x9411307279456450ABF9B5181aA7a02271f0DC34",
+    "vaultManager": "0x2d4c52DdeC04319cbBbEBF762D31c277BeF96a66",
+    "vault": "0xc9a25F0a8436dE76e999787bd509eDBa0d2471A2",
+    "rewards": "0x0f388C7c6201014Ad836400e9e2ebD211BDBcB00",
+    "registeredOperator": "0x853323787b0F515d2C2b1c64994BA7D312B6e655"
+  },
+  "liveReads": [
+    {
+      "target": "middleware",
+      "signature": "getVaultManager()(address)",
+      "args": [],
+      "result": "0x2d4c52DdeC04319cbBbEBF762D31c277BeF96a66"
+    },
+    {
+      "target": "middleware",
+      "signature": "getAllOperators()(address[])",
+      "args": [],
+      "result": [
+        "0x853323787b0F515d2C2b1c64994BA7D312B6e655"
+      ]
+    },
+    {
+      "target": "vaultManager",
+      "signature": "getVaultCount()(uint256)",
+      "args": [],
+      "result": "1"
+    },
+    {
+      "target": "vaultManager",
+      "signature": "getVaultAtWithTimes(uint256)(address,uint48,uint48)",
+      "args": [
+        "0"
+      ],
+      "result": {
+        "vault": "0xc9a25F0a8436dE76e999787bd509eDBa0d2471A2",
+        "enabledTime": "1769694748",
+        "disabledTime": "0"
+      }
+    },
+    {
+      "target": "vault",
+      "signature": "isSlasherInitialized()(bool)",
+      "args": [],
+      "result": false
+    },
+    {
+      "target": "vault",
+      "signature": "slasher()(address)",
+      "args": [],
+      "result": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "target": "vaultManager",
+      "signature": "slashVault()",
+      "args": [],
+      "revertData": "0x98de12eb",
+      "decodedError": "MiddlewareVaultManager__SlasherNotImplemented()"
+    },
+    {
+      "target": "rewards",
+      "signature": "getEpochRewards(uint48)(uint256)",
+      "args": [
+        "35"
+      ],
+      "result": "27914800000000000000000"
+    },
+    {
+      "target": "rewards",
+      "signature": "epochStatus(uint48)(bool,bool)",
+      "args": [
+        "35"
+      ],
+      "result": {
+        "funded": true,
+        "distributionComplete": true
+      }
+    },
+    {
+      "target": "rewards",
+      "signature": "distributionBatches(uint48)(uint48,bool)",
+      "args": [
+        "35"
+      ],
+      "result": {
+        "lastProcessedOperator": "1",
+        "isComplete": true
+      }
+    },
+    {
+      "target": "rewards",
+      "signature": "getEpochRewards(uint48)(uint256)",
+      "args": [
+        "51"
+      ],
+      "result": "11429450000000000000000"
+    },
+    {
+      "target": "rewards",
+      "signature": "epochStatus(uint48)(bool,bool)",
+      "args": [
+        "51"
+      ],
+      "result": {
+        "funded": true,
+        "distributionComplete": false
+      }
+    },
+    {
+      "target": "rewards",
+      "signature": "distributionBatches(uint48)(uint48,bool)",
+      "args": [
+        "51"
+      ],
+      "result": {
+        "lastProcessedOperator": "0",
+        "isComplete": false
+      }
+    }
+  ],
+  "sourcePin": {
+    "repository": "https://github.com/suzaku-network/suzaku-core",
+    "commit": "260de6b00bd873df4778f4dca0a8cd1885499e0d",
+    "claims": [
+      {
+        "file": "src/contracts/rewards/RewardsNativeToken.sol",
+        "lines": "547-580",
+        "claim": "setRewardsAmountForEpochs rejects a zero amount/count and a distribution that has started; successful calls add with epochRewards[targetEpoch] += epochAmount."
+      },
+      {
+        "file": "src/contracts/middleware/MiddlewareVaultManager.sol",
+        "lines": "175-177",
+        "claim": "slashVault always reverts MiddlewareVaultManager__SlasherNotImplemented."
+      },
+      {
+        "file": "src/contracts/middleware/AvalancheL1Middleware.sol",
+        "lines": "684-693",
+        "claim": "the middleware slash entry point reverts AvalancheL1Middleware__NotImplemented after its cache updates."
+      }
+    ]
+  },
+  "limitations": [
+    "The official source commit is a behavior reference; this artifact does not claim a byte-for-byte match to every deployed implementation.",
+    "A future proxy upgrade, vault registration change, or slasher initialization invalidates the deployment-specific slashing conclusion.",
+    "The epoch-35 event count is not asserted by this snapshot; event-history evidence remains a separate dynamic ground-truth requirement."
+  ]
+}

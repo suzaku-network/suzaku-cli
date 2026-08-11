@@ -1,0 +1,13 @@
+{
+  "id": "suzaku-output-guard",
+  "name": "Suzaku Output Guard",
+  "description": "Redacts internal configuration references and normalizes safe Telegram bold markup before delivery.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

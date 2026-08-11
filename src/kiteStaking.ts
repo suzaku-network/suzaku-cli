@@ -908,9 +908,9 @@ export async function getKiteStakingManagerInfo(
         owner,
         pendingOwner,
         // Protocol constants
-        BIPS_CONVERSION_FACTOR: bipsFactor,
-        MAXIMUM_DELEGATION_FEE_BIPS: maxDelegationFeeBips,
-        MAXIMUM_STAKE_MULTIPLIER_LIMIT: maxStakeMultiplierLimit,
+        BIPS_CONVERSION_FACTOR: bipsFactor.toString(),
+        MAXIMUM_DELEGATION_FEE_BIPS: maxDelegationFeeBips.toString(),
+        MAXIMUM_STAKE_MULTIPLIER_LIMIT: maxStakeMultiplierLimit.toString(),
         // Human-readable summaries
         formatted: {
             minimumStakeAmount: formatKITE(config[0]),

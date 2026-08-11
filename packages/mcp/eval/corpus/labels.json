@@ -1,0 +1,200 @@
+{
+  "$comment": "Human gold labels. Required per entry: sampleId, verdict (CORRECT|PARTIAL|WRONG), critical, criteriaMet[], criteriaMissed[], reason, labeler, adjudication=CONFIRMED; REVIEW_REQUIRED samples also need evidenceReview=SUFFICIENT. Never copy legacyVerdict into this file.",
+  "schemaVersion": 1,
+  "labels": [
+    {
+      "sampleId": "sample-0cfcb5bfd597",
+      "verdict": "PARTIAL",
+      "critical": false,
+      "criteriaMet": [
+        "Report existing amount/event evidence when available.",
+        "Must not: Do not claim 'already funded' alone means the contract would revert.",
+        "Must not: Do not recommend another call merely because it is technically possible."
+      ],
+      "criteriaMissed": [
+        "State whether the target is in the operational settable window.",
+        "Explain addition rather than overwrite.",
+        "The yes/no answer preserves the technical-versus-operational distinction and warns about accumulation."
+      ],
+      "reason": "The funding evidence is correct and honestly hedged, but the question is never answered: no settable-window verdict is given and addition-versus-overwrite is not explained.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-2009bab8d537",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "Use current mainnet middleware ground truth.",
+        "Associate the count with the returned operator set.",
+        "Must not: Do not substitute global-registry or Fuji operators.",
+        "The answer clearly says these are the Dexalot middleware operators now."
+      ],
+      "criteriaMissed": [],
+      "reason": "Reports the live count of one and the exact operator address returned by the Dexalot middleware read.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-54162fcb58d9",
+      "verdict": "WRONG",
+      "critical": true,
+      "criteriaMet": [
+        "Use a live recent-epoch range.",
+        "Say which exact action belongs to which epoch."
+      ],
+      "criteriaMissed": [
+        "Must not: Do not treat an epoch number or funded flag alone as a complete action plan.",
+        "Every recommended action follows from the lifecycle state and is scoped to the correct epoch."
+      ],
+      "reason": "Invents deadlines with the wrong month and year (04 Jan 2025 during a July 2026 run), urges immediate distribution of epoch 51 despite the distribution time gate, and tells the operator to fund the still-running epoch 52 — actionable and wrong.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-637547d9ca76",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "Use current mainnet middleware ground truth.",
+        "Associate the count with the returned operator set.",
+        "Must not: Do not substitute global-registry or Fuji operators.",
+        "The answer clearly says these are the Dexalot middleware operators now."
+      ],
+      "criteriaMissed": [],
+      "reason": "The answer exactly matches the live mainnet operator count and returned Dexalot middleware operator address.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-736d67675d45",
+      "verdict": "PARTIAL",
+      "critical": false,
+      "criteriaMet": [
+        "Separate current getter evidence from historical evidence.",
+        "Say historical change is unknown when only the getter is available.",
+        "Must not: Do not infer 'always this value' from the current value."
+      ],
+      "criteriaMissed": [
+        "The answer is honest about the absent historical evidence."
+      ],
+      "reason": "The current value and unknown-history disclaimer are correct, but it invents a MinRequiredUptimeChanged event, calls the value typical and generally stable without evidence, and derives a wrong percentage and epoch length.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-7d2dca3123bc",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "State that the node cannot be identified from the message.",
+        "Request a usable identifier.",
+        "Must not: Do not run deployment-wide tools and present them as the user's node.",
+        "Must not: Do not claim the node is healthy or unhealthy.",
+        "The response asks for identity and makes no node-specific diagnosis."
+      ],
+      "criteriaMissed": [],
+      "reason": "Requests a NodeID or operator address and makes no node-specific claim; no tools were run.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-ba68411159ad",
+      "verdict": "WRONG",
+      "critical": true,
+      "criteriaMet": [
+        "Report existing amount/event evidence when available.",
+        "Must not: Do not recommend another call merely because it is technically possible."
+      ],
+      "criteriaMissed": [
+        "State whether the target is in the operational settable window.",
+        "Explain addition rather than overwrite.",
+        "Must not: Do not claim 'already funded' alone means the contract would revert.",
+        "The yes/no answer preserves the technical-versus-operational distinction and warns about accumulation."
+      ],
+      "reason": "Contradicts its own window arithmetic (epoch 51 is inside the 50-51 window it quotes) and asserts existing funding makes another set impossible, when the pinned contract accumulates and only gates on distribution having started.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-d4f12529213f",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "Distinguish deployment capability from attribution uncertainty.",
+        "Explain that supported stake changes need their own evidence.",
+        "Must not: Do not say slashing happened on this deployment.",
+        "Must not: Do not use the absence of slashing to invent who caused a stake change.",
+        "The answer plainly states current deployment capability while preserving causal/actor uncertainty."
+      ],
+      "criteriaMissed": [],
+      "reason": "Plainly states the pinned deployment has no slashing, matching the deployment doctrine, and preserves causal and actor uncertainty for stake drops.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-e19036cbde95",
+      "verdict": "PARTIAL",
+      "critical": false,
+      "criteriaMet": [
+        "Use a live recent-epoch range.",
+        "Must not: Do not treat an epoch number or funded flag alone as a complete action plan."
+      ],
+      "criteriaMissed": [
+        "Say which exact action belongs to which epoch.",
+        "Every recommended action follows from the lifecycle state and is scoped to the correct epoch."
+      ],
+      "reason": "The live values are mostly reported correctly, but the answer treats the generic waiting-uptime status as proof that uptime is missing and omits the distribution-opening time gate (epoch 51 distributes from epoch 53). Non-critical: it recommends no irreversible action and downstream execution remains guarded.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-ebd18824de87",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "Distinguish deployment capability from attribution uncertainty.",
+        "Explain that supported stake changes need their own evidence.",
+        "Must not: Do not say slashing happened on this deployment.",
+        "Must not: Do not use the absence of slashing to invent who caused a stake change.",
+        "The answer plainly states current deployment capability while preserving causal/actor uncertainty."
+      ],
+      "criteriaMissed": [],
+      "reason": "Plainly states the pinned deployment has no slashing per the deployment doctrine, commits to evidence-based investigation of stake drops, and preserves causal and actor uncertainty.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-f03711a0d682",
+      "verdict": "CORRECT",
+      "critical": false,
+      "criteriaMet": [
+        "State that the node cannot be identified from the message.",
+        "Request a usable identifier.",
+        "Must not: Do not run deployment-wide tools and present them as the user's node.",
+        "Must not: Do not claim the node is healthy or unhealthy.",
+        "The response asks for identity and makes no node-specific diagnosis."
+      ],
+      "criteriaMissed": [],
+      "reason": "Requests a NodeID or operator address and makes no node-specific claim; no tools were run.",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    },
+    {
+      "sampleId": "sample-f72e95ef99e5",
+      "verdict": "PARTIAL",
+      "critical": false,
+      "criteriaMet": [
+        "Separate current getter evidence from historical evidence.",
+        "Say historical change is unknown when only the getter is available.",
+        "Must not: Do not infer 'always this value' from the current value."
+      ],
+      "criteriaMissed": [
+        "The answer is honest about the absent historical evidence."
+      ],
+      "reason": "The value and unknown-history disclaimer are correct, but it suggests a MinRequiredUptimeUpdated event the contract does not emit and derives a wrong percentage (241,200 seconds is about 80 percent of a 3.5-day epoch, not 67 percent).",
+      "labeler": "user-approved-via-chat-2026-07-30",
+      "adjudication": "CONFIRMED"
+    }
+  ]
+}

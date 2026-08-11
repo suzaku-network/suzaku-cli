@@ -28,6 +28,7 @@ async function listOperators(
         metadataUrl: metadataUrls[i]
     }));
     logger.logJsonTree(operators);
+    logger.addData('operators', operators);
 
 }
 

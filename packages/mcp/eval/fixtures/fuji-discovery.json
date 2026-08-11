@@ -1,0 +1,10 @@
+{
+  "l1s": [
+    { "middleware": "0x0d686149A2624107C04E3331e13E563766CFb044" },
+    { "middleware": "0xb7ed777E841c026F2fE17B70cADfD32704453803" },
+    { "middleware": "0x14E3Cd82956f771974b433874E8F4EBca0B185f4" },
+    { "middleware": "0x4acA4463aAce4e741fB228EE9DFFd38C4049f1e4" },
+    { "middleware": "0x4037De5eeF190EDFaa0f7F432409a1c278f8AD1C" },
+    { "middleware": "0x8627DF4bC6071c1E919AF7c152d5227F93acf1a0" }
+  ]
+}

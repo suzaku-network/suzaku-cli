@@ -5,10 +5,11 @@ import { color } from 'console-log-colors';
 import cliProgress from 'cli-progress';
 import { Config } from './config';
 import { encodeNodeID, NodeId, parseNodeID } from './lib/utils';
-import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, GetContractEvents } from './lib/cChainUtils';
+import { blockAtTimestamp, collectEventsInRange, DecodedEvent, fillEventsNodeId, getFinalizedBlockNumber, GetContractEvents } from './lib/cChainUtils';
 import { logger } from './lib/logger';
 import { completeValidatorRemoval } from './securityModule';
 import { Validator, ValidatorStatus, ValidatorStatusNames } from './balancer';
+import { formatPChainBalanceFields } from './lib/accountInfo';
 import { getCurrentValidators } from './lib/pChainUtils';
 import { utils } from '@avalabs/avalanchejs';
 
@@ -128,6 +129,7 @@ export async function middlewareGetOperatorStake(
     [operator, epoch, collateralClass]
   );
   logger.log(val);
+  logger.addData('operatorStake', val.toString());
 }
 
 // getCurrentEpoch
@@ -137,6 +139,7 @@ export async function middlewareGetCurrentEpoch(
   logger.log("Reading current epoch...");
   const val = await middleware.read.getCurrentEpoch();
   logger.log(val);
+  logger.addData('epoch', Number(val));
 }
 
 // getEpochStartTs
@@ -150,6 +153,7 @@ export async function middlewareGetEpochStartTs(
     [epoch]
   );
   logger.log(val);
+  logger.addData('epochStartTs', Number(val));
 }
 
 // getActiveNodesForEpoch
@@ -176,7 +180,7 @@ export async function middlewareGetOperatorNodesLength(
 
   const length = await middleware.read.getOperatorNodesLength([operator]);
   logger.log(length);
-
+  logger.addData('nodesLength', Number(length));
 }
 
 // nodeStakeCache
@@ -189,7 +193,7 @@ export async function middlewareGetNodeStakeCache(
 
   const val = await middleware.read.nodeStakeCache([epoch, validationId]);
   logger.log(val);
-
+  logger.addData('nodeStakeCache', val.toString());
 }
 
 // operatorLockedStake
@@ -201,7 +205,7 @@ export async function middlewareGetOperatorLockedStake(
 
   const val = await middleware.read.operatorLockedStake([operator]);
   logger.log(val);
-
+  logger.addData('lockedStake', val.toString());
 }
 
 // nodePendingRemoval
@@ -213,7 +217,7 @@ export async function middlewareNodePendingRemoval(
 
   const val = await middleware.read.nodePendingRemoval([validatorId]);
   logger.log(val);
-
+  logger.addData('pendingRemoval', val);
 }
 
 // nodePendingUpdate - Note: This function is not available in the current contract
@@ -235,7 +239,7 @@ export async function middlewareGetOperatorUsedStake(
 
   const val = await middleware.read.getOperatorUsedStakeCached([operator]);
   logger.log(val);
-
+  logger.addData('usedStake', val.toString());
 }
 
 // getOperatorUsedStakeCachedPerEpoch
@@ -260,7 +264,7 @@ export async function middlewareGetAllOperators(
 
   const operators = await middleware.read.getAllOperators();
   logger.log(operators);
-
+  logger.addData('operators', operators);
 }
 
 /**
@@ -282,6 +286,7 @@ export async function getCollateralClassIds(
 ) {
   const collateralClassIds = await middleware.read.getCollateralClassIds();
   logger.log("Collateral class IDs:", collateralClassIds);
+  logger.addData('collateralClassIds', collateralClassIds.map(id => id.toString()));
   return collateralClassIds;
 }
 
@@ -293,7 +298,25 @@ export async function getActiveCollateralClasses(
 ) {
   const result = await middleware.read.getActiveCollateralClasses();
   logger.log("Active collateral classes - Primary:", result[0], "Secondaries:", result[1]);
+  logger.addData('activeCollateralClasses', { primary: result[0].toString(), secondaries: result[1].map((s: bigint) => s.toString()) });
   return result;
+}
+
+export const DEFAULT_MIDDLEWARE_NODE_EVENTS = [
+  'NodeAdded',
+  'NodeRemoved',
+  'NodeStakeUpdated',
+] as const;
+
+export const GLOBAL_MIDDLEWARE_STAKE_EVENTS = [
+  'AllNodeStakesUpdated',
+  'OperatorHasLeftoverStake',
+] as const;
+
+export function middlewareNodeEventNames(includeGlobalStakeEvents = false): string[] {
+  return includeGlobalStakeEvents
+    ? [...DEFAULT_MIDDLEWARE_NODE_EVENTS, ...GLOBAL_MIDDLEWARE_STAKE_EVENTS]
+    : [...DEFAULT_MIDDLEWARE_NODE_EVENTS];
 }
 
 export async function middlewareGetNodeLogs(
@@ -302,13 +325,26 @@ export async function middlewareGetNodeLogs(
   config: Config<ExtendedPublicClient>,
   nodeId?: NodeId,
   snowscanApiKey?: string,
-  quiet?: boolean
+  quiet?: boolean,
+  range?: {
+    fromBlock?: bigint;
+    toBlock?: bigint;
+    fromEpoch?: number;
+    includeGlobalStakeEvents?: boolean;
+  }
 ) {
   logger.log("Reading logs from middleware and balancer...");
 
-  const to = await client.getBlockNumber();
+  const to = range?.toBlock ?? (await getFinalizedBlockNumber(client));
 
-  const from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
+  let from: bigint;
+  if (range?.fromBlock !== undefined) {
+    from = range.fromBlock;
+  } else if (range?.fromEpoch !== undefined) {
+    from = await blockAtTimestamp(client, BigInt(await middleware.read.getEpochStartTs([range.fromEpoch])));
+  } else {
+    from = await blockAtTimestamp(client, BigInt(await middleware.read.START_TIME()));
+  }
 
   const bar = snowscanApiKey ? undefined : new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   if (bar) bar.start(0, 0);
@@ -321,9 +357,9 @@ export async function middlewareGetNodeLogs(
     Number(from),
     Number(to),
     config.abis.L1Middleware,
-    ["NodeAdded", "NodeRemoved", "NodeStakeUpdated"],
+    middlewareNodeEventNames(range?.includeGlobalStakeEvents),
     snowscanApiKey,
-    snowscanApiKey ? false : true,
+    true,
     bar
   ));
 
@@ -340,7 +376,7 @@ export async function middlewareGetNodeLogs(
       config.abis.BalancerValidatorManager,
       undefined,
       snowscanApiKey,
-      snowscanApiKey ? false : true,
+      true,
       bar
     ));
   }
@@ -353,10 +389,19 @@ export async function middlewareGetNodeLogs(
     return logs;
   }
   // Human readable addresses and structured logs
-  const logOfInterest = groupEventsByNodeId(logs.map((log: DecodedEvent) => {
-    log.address = log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager";
-    return log;
-  }))
+  logger.addData('nodeLogs', logs.map((log: DecodedEvent) => ({
+    blockNumber: log.blockNumber.toString(),
+    transactionHash: log.transactionHash,
+    eventName: log.eventName,
+    address: log.address,
+    args: Object.fromEntries(Object.entries(log.args).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v])),
+    timestamp: log.timestamp,
+  })));
+  const displayLogs = logs.map((log: DecodedEvent) => ({
+    ...log,
+    address: log.address.toLowerCase() === middleware.address.toLowerCase() ? "Middleware" : "ValidatorManager",
+  }));
+  const logOfInterest = groupEventsByNodeId(displayLogs);
 
   if (nodeId != undefined) {
     const nodeIdHex32 = parseNodeID(nodeId);
@@ -370,6 +415,75 @@ export async function middlewareGetNodeLogs(
     }
   }
 
+  const globalEvents = displayLogs
+    .filter((log) => !log.args.nodeId)
+    .map((log) => ({
+      source: log.address,
+      event: log.eventName,
+      executionTime: log.timestamp ? new Date(log.timestamp * 1000).toLocaleString() : 'N/A',
+      hash: log.transactionHash,
+    }));
+  if (globalEvents.length > 0) {
+    logger.log('\t\tGlobal stake events');
+    logger.table(globalEvents);
+  }
+
+}
+
+/**
+ * Reads P-Chain continuous-fee balances for all current subnet validators,
+ * matched to their middleware operators. Validators whose balance drains are
+ * deactivated on the P-Chain, so this is the liveness-risk signal.
+ */
+export async function middlewareGetValidatorBalances(
+  client: ExtendedClient,
+  middleware: SuzakuContract['L1Middleware'],
+  config: Config<ExtendedPublicClient>
+) {
+  logger.log("Reading validator balances from middleware and P-Chain...");
+  const [balancerAddress, operators] = await middleware.multicall(['BALANCER', 'getAllOperators']);
+  const balancer = await config.contracts.BalancerValidatorManager(balancerAddress as Hex);
+  const subnetIdHex = await balancer.read.subnetID();
+  const subnetId = utils.base58check.encode(hexToBytes(subnetIdHex));
+
+  const pChainValidators = await getCurrentValidators(client, subnetId);
+
+  const operatorByNodeId: Record<string, Hex> = {};
+  await Promise.all((operators as Hex[]).map(async (operator) => {
+    const validationIDs = await middleware.read.getOperatorValidationIDs([operator]);
+    if (validationIDs.length === 0) return;
+    const validators = await balancer.multicall(validationIDs.map((id: Hex) => ({ name: 'getValidator' as const, args: [id] })));
+    for (const validator of validators as (Validator | undefined)[]) {
+      if (!validator?.nodeID) continue; // failed multicall slot (e.g. deregistered validator)
+      operatorByNodeId[encodeNodeID(validator.nodeID)] = operator;
+    }
+  }));
+
+  const validatorRows = pChainValidators.map((v) => ({
+    nodeID: v.nodeID,
+    validationID: v.validationID,
+    operator: operatorByNodeId[v.nodeID],
+    ...formatPChainBalanceFields(v.balance),
+    weight: String(v.weight),
+  }));
+  const knownBalanceCount = validatorRows.filter((row) => row.balanceKnown).length;
+  const unknownBalanceCount = validatorRows.length - knownBalanceCount;
+
+  logger.log(`P-Chain validators for subnet ${subnetId}: ${validatorRows.length}`);
+  for (const row of validatorRows) {
+    logger.log(`  ${row.nodeID} balance=${row.balanceAVAX ?? 'unknown'} AVAX weight=${row.weight}${row.operator ? ` operator=${row.operator}` : ''}`);
+  }
+
+  logger.addData('validatorBalances', {
+    subnetId,
+    totalValidators: validatorRows.length,
+    knownBalanceCount,
+    unknownBalanceCount,
+    balanceStatus: unknownBalanceCount === 0 ? 'complete' : knownBalanceCount === 0 ? 'unknown' : 'partial',
+    validators: validatorRows,
+  });
+
+  return { subnetId, totalValidators: validatorRows.length, validators: validatorRows };
 }
 
 export function groupEventsByNodeId(events: DecodedEvent[]): Record<string, { source: string; event: string; hash: string; executionTime: string/*args: string*/ }[]> {
@@ -794,4 +908,105 @@ export async function operatorsInfo(
   })
   
   return {...operatorsInfo, currentEpoch: results[0], lastGlobalNodeStakeUpdateEpoch: results[2], needsStakeUpdate: results[2] !== results[0]};
+}
+
+// getLinkedAddresses — multicall for all address-returning view functions
+export async function middlewareGetLinkedAddresses(
+  middleware: SuzakuContract['L1Middleware']
+) {
+  logger.log("Reading linked addresses...");
+
+  const [balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn] = await middleware.multicall([
+    'BALANCER',
+    'getVaultManager',
+    'PRIMARY_ASSET',
+    'OPERATOR_REGISTRY',
+    'OPERATOR_L1_OPTIN',
+  ]);
+
+  const result = {
+    balancer: balancer as Hex,
+    vaultManager: vaultManager as Hex,
+    primaryAsset: primaryAsset as Hex,
+    operatorRegistry: operatorRegistry as Hex,
+    operatorL1OptIn: operatorL1OptIn as Hex,
+  };
+
+  logger.log(result);
+  logger.addData('linkedAddresses', result);
+}
+
+// getEpochConfig — multicall for epoch timing parameters
+export async function middlewareGetEpochConfig(
+  middleware: SuzakuContract['L1Middleware']
+) {
+  logger.log("Reading epoch config...");
+
+  const [epochDuration, updateWindow, epoch, lastNodeStakeUpdateEpoch] = await middleware.multicall([
+    'EPOCH_DURATION',
+    'UPDATE_WINDOW',
+    'getCurrentEpoch',
+    'lastGlobalNodeStakeUpdateEpoch',
+  ]);
+
+  const result = {
+    epochDuration: Number(epochDuration),
+    updateWindow: Number(updateWindow),
+    epoch: Number(epoch),
+    lastNodeStakeUpdateEpoch: Number(lastNodeStakeUpdateEpoch),
+  };
+
+  logger.log(result);
+  logger.addData('epochConfig', result);
+}
+
+// getCacheStatus — totalStakeCached per class + rebalancedThisEpoch per operator
+export async function middlewareGetCacheStatus(
+  middleware: SuzakuContract['L1Middleware'],
+  epochOverride?: number
+) {
+  logger.log("Reading cache status...");
+
+  const [currentEpoch, classIds, operators] = await middleware.multicall([
+    'getCurrentEpoch',
+    'getCollateralClassIds',
+    'getAllOperators',
+  ]);
+
+  const epoch = epochOverride ?? Number(currentEpoch);
+
+  // Parameterized reads in parallel
+  const cachePromises = (classIds as bigint[]).map(classId =>
+    middleware.read.totalStakeCached([epoch, classId])
+  );
+  const rebalancePromises = (operators as Hex[]).map(op =>
+    middleware.read.rebalancedThisEpoch([op, epoch])
+  );
+
+  const [cacheResults, rebalanceResults] = await Promise.all([
+    Promise.all(cachePromises),
+    Promise.all(rebalancePromises),
+  ]);
+
+  const cacheByClass: Record<string, boolean> = {};
+  (classIds as bigint[]).forEach((classId, i) => {
+    cacheByClass[classId.toString()] = cacheResults[i] as boolean;
+  });
+
+  const rebalanceByOperator: Record<string, boolean> = {};
+  (operators as Hex[]).forEach((op, i) => {
+    rebalanceByOperator[op] = rebalanceResults[i] as boolean;
+  });
+
+  const allClassesCached = Object.values(cacheByClass).every(v => v === true);
+
+  const result = {
+    epoch,
+    cacheByClass,
+    rebalanceByOperator,
+    allClassesCached,
+  };
+
+  logger.log(result);
+  logger.addData('cacheStatus', result);
 }

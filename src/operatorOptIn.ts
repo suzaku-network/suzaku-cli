@@ -29,6 +29,7 @@ export async function checkOptInL1(
     [operator, l1Address]
   );
   logger.log(`Operator ${operator} opt-in status for L1 ${l1Address}: ${result}`);
+  logger.addData('isOptedIn', result);
   return result;
 }
 
@@ -58,5 +59,6 @@ export async function checkOptInVault(
     [operator, vaultAddress]
   );
   logger.log(`Operator ${operator} opt-in status for vault ${vaultAddress}: ${result}`);
+  logger.addData('isOptedIn', result);
   return result;
 }

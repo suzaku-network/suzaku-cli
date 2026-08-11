@@ -1,0 +1,26 @@
+[Unit]
+Description=Suzaku Kimi monitor bot
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=suzaku
+Group=suzaku
+SupplementaryGroups=docker
+WorkingDirectory=/opt/suzaku/packages/mcp/deploy/openclaw
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Create the container/network without starting the poller, install the host
+# firewall with privilege, then start and wait for OpenClaw readiness.
+ExecStartPre=/usr/bin/docker compose create --no-build suzaku-bot
+ExecStartPre=+/usr/bin/bash /opt/suzaku/packages/mcp/deploy/openclaw/iptables-setup.sh
+ExecStart=/usr/bin/docker compose up -d --no-build --wait --wait-timeout 120 suzaku-bot
+ExecStop=/usr/bin/docker compose stop suzaku-bot
+TimeoutStartSec=600
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

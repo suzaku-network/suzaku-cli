@@ -1,0 +1,72 @@
+services:
+  suzaku-bot:
+    image: ${SUZAKU_BOT_IMAGE:-suzaku-monitor:local}
+    build:
+      context: ../../../..
+      dockerfile: packages/mcp/deploy/openclaw/Dockerfile
+      target: bot
+    restart: unless-stopped
+    # MCP and concurrent CLI subprocesses are Node processes (~12 threads each;
+    # threads count against pids_limit). 100 previously starved heavy turns.
+    pids_limit: 256
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    # A heavy Kimi multi-tool turn can overlap the MCP/CLI subprocesses. Two cores
+    # keep the gateway responsive while the model waits on chain reads.
+    cpus: 2.0
+    stop_grace_period: 30s
+    tmpfs:
+      - /tmp:size=128m
+    volumes:
+      - audit-data:/data/audit
+      # Persists sessions, cron declarations, Telegram spool, usage accounting,
+      # and the isolated heartbeat agent's digest checkpoint across recreates.
+      - openclaw-state:/home/node/.openclaw
+      # Default is Kimi. Set SUZAKU_MONITOR_CONFIG=./openclaw-codex.json only for
+      # the explicitly documented optional Codex profile.
+      - ${SUZAKU_MONITOR_CONFIG:-./openclaw.json}:/home/node/.openclaw/openclaw.json.tpl:ro
+      - ./SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ./EPOCHS.md:/home/node/.openclaw/workspace/EPOCHS.md:ro
+    environment:
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+      - SUZAKU_ENABLE_ANTHROPIC_FALLBACK=${SUZAKU_ENABLE_ANTHROPIC_FALLBACK:-false}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ADMIN_USER_ID=${TELEGRAM_ADMIN_USER_ID}
+      - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
+      - TELEGRAM_TOPIC_ID=${TELEGRAM_TOPIC_ID:-}
+      # OpenClaw (≥2026.x) refuses to start its gateway in a container without auth
+      # ("Refusing to bind gateway to auto without auth") — any random secret works,
+      # e.g. `openssl rand -hex 24`. The gateway port is not published; the token only
+      # gates access within the compose network.
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      # Optional paid Etherscan V2 key for Avalanche event scans. The legacy
+      # SNOWSCAN name remains accepted during migration but should stay empty.
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-}
+      - SNOWSCAN_API_KEY=${SNOWSCAN_API_KEY:-}
+    networks:
+      - suzaku-net
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  audit-data:
+    name: suzaku-monitor-audit
+  openclaw-state:
+    name: suzaku-monitor-kimi-state-v1
+
+networks:
+  suzaku-net:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.name: br-suzaku

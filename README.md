@@ -759,8 +759,10 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Get all collateral class IDs from the middleware.
 - **get-active-collateral-classes `<middlewareAddress>`**
   Get active collateral classes (primary and secondary).
-- **node-logs `<middlewareAddress>` [--node-id `<nodeId>] [--snowscan-api-key `<string>]**
-  Get middleware node logs.
+- **node-logs `<middlewareAddress>` [--node-id `<nodeId>`] [--from-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--etherscan-api-key `<string>`]**
+  Get middleware node logs (node lifecycle, stake updates, leftover-stake events) over an epoch- or block-scoped range.
+- **get-validator-balances `<middlewareAddress>`**
+  Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only).
 - **get-last-node-validation-id `<middlewareAddress>` `<nodeId>`**
   Get last node validation ID.
 - **to-vault-epoch `<middlewareAddress>` `<vaultAddress>` `<middlewareEpoch>`**
@@ -904,6 +906,12 @@ Interact with the **VaultHelper** contract — a stateless helper for reading pe
   Get last claimed epoch for an operator.
 - **get-last-claimed-curator `<rewardsAddress>` `<curator>` `<rewardToken>`**
   Get last claimed epoch for a curator.
+- **get-amount-set-events `<rewardsAddress>` `<epoch>` [--middleware `<address>`] [--from-block `<n>`] [--to-block `<n>`]**
+  List every `RewardsAmountSet` event covering a given epoch — diagnose multiple set-amount calls for the same epoch (amounts accumulate on-chain).
+- **get-epoch-status `<rewardsAddress>` `<epoch>` [--to-epoch `<n>`]**
+  Get funded/distribution-complete status and the set rewards amount for one epoch or a range.
+- **get-events `<rewardsAddress>` [--middleware `<address>`] [--from-epoch `<n>`] [--to-epoch `<n>`] [--from-block `<n>`] [--to-block `<n>`] [--events `<names>`]**
+  Scan rewards lifecycle events (set, distributed, claimed, fees, zero-claims) over a block or epoch range in a single pass.
 
 ### Key Store Commands (`key`)
 

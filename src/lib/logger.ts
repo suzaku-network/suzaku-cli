@@ -99,6 +99,10 @@ class Logger {
   public exitError(args: any[], stackPop: number = 0) {
     const err = new Error();
     this.error(...args, color.red("\nCLI Stack trace:\n" + err.stack?.split("\n").slice( 2 + stackPop, -1).join("\n")));
+    // Emit the collected JSON (incl. the error) before exiting — process.exit would
+    // otherwise kill the process before asyncAction's printJson ever runs (--json
+    // consumers got exit 1 with zero output).
+    this.printJson();
     process.exit(1);
   }
 

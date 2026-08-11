@@ -103,12 +103,16 @@ import {
     getCollateralClassIds,
     getActiveCollateralClasses,
     middlewareGetNodeLogs,
+    middlewareGetValidatorBalances,
     middlewareManualProcessNodeStakeCache,
     middlewareLastValidationId,
     weightSync,
     middlewareInfo,
     operatorsInfo as getOperatorsInfoMiddleware,
-    middlewareGetOperatorUsedStakePerEpoch
+    middlewareGetOperatorUsedStakePerEpoch,
+    middlewareGetEpochConfig,
+    middlewareGetCacheStatus,
+    middlewareGetLinkedAddresses
 } from "./middleware";
 
 import {
@@ -130,6 +134,7 @@ import {
 } from "./balancer";
 import {
     getValidationUptimeMessage,
+    formatValidationUptimeMessageResult,
     computeValidatorUptime,
     reportAndSubmitValidatorUptime,
     computeOperatorUptimeAtEpoch,
@@ -170,6 +175,9 @@ import {
     getLastEpochClaimedOperator,
     getLastEpochClaimedCurator,
     getRewardsClaimsCount,
+    getRewardsAmountSetEvents,
+    getRewardsEpochStatus,
+    getRewardsLifecycleEvents,
 } from "./rewards";
 import { getERC20Events, requirePChainBallance } from "./lib/transferUtils";
 import { encodeNodeID, NodeId, parseNodeID } from "./lib/utils";
@@ -180,7 +188,7 @@ import { convertSubnetToL1, createChain, createSubnet, getCurrentValidators, inc
 import { A, pipe, R } from '@mobily/ts-belt';
 import { completeValidatorRegistration, completeValidatorRemoval, completeWeightUpdate } from './securityModule';
 import { updateStakingConfig, initiateValidatorRegistration, initiateDelegatorRegistration, initiateDelegatorRemoval, completeDelegatorRegistration as kiteCompleteDelegatorRegistration, completeDelegatorRemoval as kiteCompleteDelegatorRemoval, initiateValidatorRemoval, completeValidatorRegistration as kiteCompleteValidatorRegistration, completeValidatorRemoval as kiteCompleteValidatorRemoval, getDelegatorFullInfo, getKiteStakingManagerInfo, getValidatorFullInfo, submitUptimeProof } from './kiteStaking';
-import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getValidatorManagerAddress, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
+import { depositStakingVault, requestWithdrawalStakingVault, claimWithdrawalStakingVault, processEpochStakingVault, initiateValidatorRegistrationStakingVault, addOperatorStakingVault, completeValidatorRegistrationStakingVault, initiateValidatorRemovalStakingVault, forceRemoveValidatorStakingVault, completeValidatorRemovalStakingVault, initiateDelegatorRegistrationStakingVault, completeDelegatorRegistrationStakingVault, initiateDelegatorRemovalStakingVault, forceRemoveDelegatorStakingVault, completeDelegatorRemovalStakingVault, getGeneralInfo, getFeesInfo, getOperatorsInfo, getValidatorsInfo, getDelegatorsInfo, getWithdrawalsInfo, getEpochInfo, getFullInfo as getStakingVaultFullInfo, getValidatorManagerAddress, recoverStrandedValidatorRewardsStakingVault, recoverStrandedDelegatorRewardsStakingVault } from './stakingVault';
 import { utils } from '@avalabs/avalanchejs';
 import { hexToUint8Array } from './lib/justification';
 import { installCompletion } from './lib/autoCompletion';
@@ -191,6 +199,7 @@ import { execSync } from 'child_process';
 import { chainList, setCustomChainRpcUrl } from './lib/chainList';
 import { readFileSync } from 'fs';
 import packageJson from '../package.json';
+import { findPChainValidator, formatPChainBalance, operatorStakeArgs } from './lib/accountInfo';
 
 // Main function to set up the CLI commands
 async function main() {
@@ -393,6 +402,7 @@ async function main() {
                 })
             }
             logger.logJsonTree(data)
+            logger.addData('l1s', data)
         });
 
     l1RegistryCmd
@@ -1902,6 +1912,7 @@ async function main() {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const availableStake = await middlewareSvc.read.getOperatorAvailableStake([operator]);
             logger.log(`Operator ${operator} available stake: ${availableStake}`);
+            logger.addData('availableStake', availableStake.toString());
         });
 
     // getAllOperators (read)
@@ -1940,12 +1951,49 @@ async function main() {
             );
         });
 
+    // getEpochConfig (read)
+    middlewareCmd
+        .command("get-epoch-config")
+        .description("Get epoch timing configuration (duration, update window, current epoch, last node stake update epoch)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetEpochConfig(middlewareSvc);
+        });
+
+    // getCacheStatus (read)
+    middlewareCmd
+        .command("get-cache-status")
+        .description("Get stake cache and rebalance status for current or specified epoch")
+        .addArgument(argMiddlewareAddress)
+        .addOption(new Option('--epoch <epoch>', 'Epoch number (defaults to current)').argParser(ParserNumber))
+        .asyncAction(async (config, middlewareAddress, options) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetCacheStatus(middlewareSvc, options.epoch);
+        });
+
+    middlewareCmd
+        .command("get-linked-addresses")
+        .description("Get all linked contract addresses from the middleware (balancer, vaultManager, primaryAsset, operatorRegistry, operatorL1OptIn)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetLinkedAddresses(middlewareSvc);
+        });
+
     middlewareCmd
         .command("node-logs")
-        .description("Get middleware node logs")
+        .description("Get middleware node logs (the established NodeAdded/NodeRemoved/NodeStakeUpdated set plus BalancerValidatorManager events)")
         .addArgument(argMiddlewareAddress)
         .addOption(new Option("--node-id <nodeId>", "Node ID to filter logs").default(undefined).argParser(ParserNodeID))
-        .addOption(new Option('--snowscan-api-key <string>', "Snowscan API key").default(""))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp (defaults to middleware START_TIME)").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--include-global-stake-events", "Also include AllNodeStakesUpdated and OperatorHasLeftoverStake"))
+        .addOption(new Option('--etherscan-api-key <string>', "Etherscan V2 API key")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option('--snowscan-api-key <string>', "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
         .asyncAction(async (config, middlewareAddress, options) => {
             logger.log(`nodeId: ${options.nodeId}`);
             const middleware = await config.contracts.L1Middleware(middlewareAddress);
@@ -1954,8 +2002,24 @@ async function main() {
                 middleware,
                 config,
                 options.nodeId,
-                options.snowscanApiKey
+                options.etherscanApiKey || options.snowscanApiKey,
+                undefined,
+                {
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    fromEpoch: options.fromEpoch,
+                    includeGlobalStakeEvents: options.includeGlobalStakeEvents,
+                }
             );
+        });
+
+    middlewareCmd
+        .command("get-validator-balances")
+        .description("Get P-Chain continuous-fee balances for all subnet validators, matched to their operators (read-only; P-Chain RPC is the canonical Avalanche endpoint for the selected network, independent of --rpc-url)")
+        .addArgument(argMiddlewareAddress)
+        .asyncAction(async (config, middlewareAddress) => {
+            const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
+            await middlewareGetValidatorBalances(config.client, middlewareSvc, config);
         });
 
     middlewareCmd
@@ -2056,9 +2120,11 @@ async function main() {
         .asyncAction(async (config, middlewareAddress, account) => {
             const middlewareSvc = await config.contracts.L1Middleware(middlewareAddress);
             const [owner, operators, epoch, balancerAddress] = await middlewareSvc.multicall(['owner', 'getAllOperators', 'getCurrentEpoch', 'BALANCER']);
+            const primaryAssetClass = await middlewareSvc.read.PRIMARY_ASSET_CLASS();
             const roles = getRoles(middlewareSvc);
             const accessControl = await config.contracts.AccessControl(middlewareAddress);
             const hasRole = await accessControl.multicall(roles.map(role => { return { name: 'hasRole', args: [ensureRoleHex(role), account] } }));
+            const accountInfo: { [key: string]: any } = { account, isOwner: account === owner, roles: roles.filter((_, index) => hasRole[index]) };
             logger.log(`Account ${account} has the following rights: `);
             if (account === owner) {
                 logger.log(`L1 owner`);
@@ -2070,7 +2136,7 @@ async function main() {
             if (operators.includes(account)) {
                 const balancerSvc = await config.contracts.BalancerValidatorManager(balancerAddress);
                 const [stake, validationIDs] = await middlewareSvc.multicall([
-                    { name: 'getOperatorStake', args: [account, 1, BigInt(epoch)] },
+                    { name: 'getOperatorStake', args: operatorStakeArgs(account, Number(epoch), primaryAssetClass) },
                     { name: 'getOperatorValidationIDs', args: [account] }]);
                 const validators = await balancerSvc.multicall(validationIDs.flatMap(id => { return [{ name: 'getValidator', args: [id] }, { name: 'isValidatorPendingWeightUpdate', args: [id] }] }));
                 logger.log(`Operator with stake ${stake} and the following validators: `);
@@ -2081,11 +2147,19 @@ async function main() {
                     const validator = validators[i] as Validator;
                     const pendingWeightUpdate = validators[i + 1];
                     const status = ValidatorStatusNames[validator.status == ValidatorStatus.Active && pendingWeightUpdate ? ValidatorStatus.PendingStakeUpdated : validator.status];
-                    const pChainValidator = pChainValidators.find(v => v.nodeID === validator.nodeID);
-                    formated[encodeNodeID(validator.nodeID)] = { NodeID: encodeNodeID(validator.nodeID), status, weight: validator.weight, ValidationId: validationIDs[i / 2], continuousAVAXBalance: parseUnits(pChainValidator?.balance?.toString() ?? '0', 9) }
+                    const pChainValidator = findPChainValidator(validator.nodeID, pChainValidators);
+                    formated[encodeNodeID(validator.nodeID)] = {
+                        NodeID: encodeNodeID(validator.nodeID),
+                        status,
+                        weight: validator.weight.toString(),
+                        ValidationId: validationIDs[i / 2],
+                        ...formatPChainBalance(pChainValidator?.balance),
+                    };
                 }
                 logger.logJsonTree(formated);
+                accountInfo.operator = { stake: stake.toString(), validators: formated };
             }
+            logger.addData('accountInfo', accountInfo);
         });
 
     middlewareCmd
@@ -2320,6 +2394,8 @@ async function main() {
             const validationId = await balancer.read.getNodeValidationID([parseNodeID(nodeId, false)]);
             if (Number(validationId) === 0) {
                 logger.log("Validator status: NotRegistered");
+                logger.addData("status", "NotRegistered");
+                logger.addData("nodeId", nodeId);
                 return;
             }
             const [validator, PendingWeightUpdate] = await Promise.all([balancer.read.getValidator([validationId]), balancer.read.isValidatorPendingWeightUpdate([validationId])]);
@@ -2607,6 +2683,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getKiteStakingManagerInfo(kiteStakingManager);
             logger.logJsonTree(info);
+            logger.addData('kiteInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -2618,6 +2695,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getValidatorFullInfo(kiteStakingManager, validationID);
             logger.logJsonTree(info);
+            logger.addData('kiteValidatorInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -2629,6 +2707,7 @@ async function main() {
             const kiteStakingManager = await config.contracts.KiteStakingManager(options.stakingManagerAddress);
             const info = await getDelegatorFullInfo(kiteStakingManager, delegationID);
             logger.logJsonTree(info);
+            logger.addData('kiteDelegatorInfo', info);
         });
 
     kiteStakingManagerCmd
@@ -3568,9 +3647,9 @@ async function main() {
         .command("info")
         .description("Get general overview of the StakingVault")
         .addOption(optStakingVaultAddress)
-        .asyncAction({ signer: true }, async (config, options) => {
+        .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, config.client);
+            logger.addData('stakingVaultInfo', await getGeneralInfo(stakingVault, config.client));
         });
 
     stakingVaultCmd
@@ -3579,7 +3658,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getFeesInfo(stakingVault);
+            logger.addData('stakingVaultFeesInfo', await getFeesInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3588,7 +3667,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getOperatorsInfo(stakingVault);
+            logger.addData('stakingVaultOperatorsInfo', await getOperatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3597,7 +3676,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getValidatorsInfo(stakingVault);
+            logger.addData('stakingVaultValidatorsInfo', await getValidatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3606,7 +3685,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getDelegatorsInfo(stakingVault);
+            logger.addData('stakingVaultDelegatorsInfo', await getDelegatorsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3615,7 +3694,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getWithdrawalsInfo(stakingVault);
+            logger.addData('stakingVaultWithdrawalsInfo', await getWithdrawalsInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3624,7 +3703,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getEpochInfo(stakingVault);
+            logger.addData('stakingVaultEpochInfo', await getEpochInfo(stakingVault));
         });
 
     stakingVaultCmd
@@ -3633,13 +3712,7 @@ async function main() {
         .addOption(optStakingVaultAddress)
         .asyncAction(async (config, options) => {
             const stakingVault = await config.contracts.StakingVault(options.stakingVaultAddress);
-            await getGeneralInfo(stakingVault, config.client);
-            await getFeesInfo(stakingVault);
-            await getOperatorsInfo(stakingVault);
-            await getValidatorsInfo(stakingVault);
-            await getDelegatorsInfo(stakingVault);
-            await getWithdrawalsInfo(stakingVault);
-            await getEpochInfo(stakingVault);
+            logger.addData('stakingVaultFullInfo', await getStakingVaultFullInfo(stakingVault, config.client));
         });
 
     stakingVaultCmd
@@ -3799,12 +3872,13 @@ async function main() {
             rpcUrl = rpcUrl + "/ext/bc/" + blockchainId;
             const opts = program.opts();
             const client = await generateClient(opts.network);
-            await getValidationUptimeMessage(
+            const signedMessage = await getValidationUptimeMessage(
                 config.client,
                 rpcUrl,
                 nodeId,
                 config.client.network === "fuji" ? 5 : 1,
                 blockchainId);
+            logger.addData('validationUptimeMessage', formatValidationUptimeMessageResult(nodeId, blockchainId, signedMessage));
         });
 
     uptimeCmd
@@ -4439,6 +4513,75 @@ async function main() {
             await getLastEpochClaimedCurator(
                 rewardsContract,
                 curator
+            );
+        });
+
+    rewardsCmd
+        .command("get-amount-set-events")
+        .description("List every RewardsAmountSet event that covers a given epoch — diagnose multiple set-amount calls for the same epoch")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Epoch to inspect"))
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute fromBlock from epoch start timestamp (required unless --from-block is given)"))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --middleware-derived block)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option("--snowscan-api-key <string>", "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsAmountSetEvents(
+                rewardsContract,
+                config,
+                epoch,
+                {
+                    middlewareAddress: options.middleware,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    snowscanApiKey: options.etherscanApiKey || options.snowscanApiKey,
+                }
+            );
+        });
+
+    rewardsCmd
+        .command("get-epoch-status")
+        .description("Get funded/distributionComplete status and set rewards amount for one epoch or a range of epochs")
+        .addArgument(argRewardsAddress)
+        .addArgument(ArgNumber("epoch", "Start epoch (the single epoch to query if --to-epoch is omitted)"))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive) for a range query").argParser(ParserNumber))
+        .asyncAction(async (config, rewardsAddress, epoch, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsEpochStatus(rewardsContract, epoch, options.toEpoch ?? epoch);
+        });
+
+    rewardsCmd
+        .command("get-events")
+        .description("Scan rewards lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range")
+        .addArgument(argRewardsAddress)
+        .addOption(OptAddress("--middleware <address>", "L1Middleware address; used to compute block range from epoch start timestamps (required with --from-epoch/--to-epoch)"))
+        .addOption(new Option("--from-epoch <n>", "Start epoch; fromBlock is derived from its start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--to-epoch <n>", "End epoch (inclusive); toBlock is derived from the next epoch start timestamp").argParser(ParserNumber))
+        .addOption(new Option("--from-block <n>", "Start block for log scan (overrides --from-epoch)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--to-block <n>", "Inclusive end block for log scan (overrides --to-epoch; defaults to latest minus two confirmations)").argParser((v) => BigInt(v)))
+        .addOption(new Option("--events <names>", "Comma-separated event names to include (defaults to all lifecycle events)"))
+        .addOption(new Option("--etherscan-api-key <string>", "Etherscan V2 API key for faster log retrieval")
+            .env('ETHERSCAN_API_KEY').default(""))
+        .addOption(new Option("--snowscan-api-key <string>", "Deprecated alias for --etherscan-api-key")
+            .env('SNOWSCAN_API_KEY').default(""))
+        .asyncAction(async (config, rewardsAddress, options) => {
+            const rewardsContract = await config.contracts.RewardsNativeToken(rewardsAddress);
+            await getRewardsLifecycleEvents(
+                rewardsContract,
+                config,
+                {
+                    middlewareAddress: options.middleware,
+                    fromEpoch: options.fromEpoch,
+                    toEpoch: options.toEpoch,
+                    fromBlock: options.fromBlock as bigint | undefined,
+                    toBlock: options.toBlock as bigint | undefined,
+                    events: options.events ? options.events.split(',').map((s: string) => s.trim()) : undefined,
+                    snowscanApiKey: options.etherscanApiKey || options.snowscanApiKey,
+                }
             );
         });
 

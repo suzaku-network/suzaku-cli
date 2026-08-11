@@ -18,6 +18,81 @@ type CommonEvent = {
   args?: Record<string, any>;
 };
 
+const ETHERSCAN_V2_API = 'https://api.etherscan.io/v2/api';
+const EXPLORER_PAGE_SIZE = 1000;
+const EXPLORER_MAX_PAGES = 100;
+
+const AVALANCHE_EXPLORER_CHAIN_IDS = new Set([43114, 43113]);
+
+function sanitizeExplorerText(apiKey: string, value: unknown): string {
+  const text = String(value ?? '');
+  return (apiKey ? text.replaceAll(apiKey, '[REDACTED]') : text).slice(0, 200);
+}
+
+async function fetchExplorerLogs(
+  client: ExtendedClient,
+  address: Hex,
+  fromBlock: number,
+  toBlock: number,
+  apiKey: string,
+  chainId: number,
+): Promise<CommonEvent[]> {
+  const events: CommonEvent[] = [];
+
+  for (let page = 1; page <= EXPLORER_MAX_PAGES; page++) {
+    const url = new URL(ETHERSCAN_V2_API);
+    url.search = new URLSearchParams({
+      chainid: chainId.toString(),
+      module: 'logs',
+      action: 'getLogs',
+      address,
+      fromBlock: fromBlock.toString(),
+      toBlock: toBlock.toString(),
+      page: page.toString(),
+      offset: EXPLORER_PAGE_SIZE.toString(),
+      apikey: apiKey,
+    }).toString();
+
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      // Do not include the URL: its query string contains the credential.
+      throw new Error('Explorer API request failed');
+    }
+    if (!res.ok) throw new Error(`Explorer API HTTP ${res.status}`);
+
+    let data: { status?: string; message?: string; result?: unknown };
+    try {
+      data = await res.json() as typeof data;
+    } catch {
+      throw new Error('Explorer API returned invalid JSON');
+    }
+    if (!Array.isArray(data.result)) {
+      const detail = typeof data.result === 'string'
+        ? `: ${sanitizeExplorerText(apiKey, data.result)}`
+        : '';
+      throw new Error(`Explorer API ${sanitizeExplorerText(apiKey, data.message) || 'error'}${detail}`);
+    }
+    // Etherscan represents a valid empty scan as status=0/message="No records
+    // found". Other status=0 responses (including NOTOK + []) are failures.
+    const canonicalNoRecords = data.status === '0'
+      && data.result.length === 0
+      && /no (records|logs|transactions) found/i.test(String(data.message ?? ''));
+    if (data.status !== '1' && !canonicalNoRecords) {
+      const resultDetail = data.result.length > 0
+        ? `: ${sanitizeExplorerText(apiKey, data.result)}`
+        : '';
+      throw new Error(`Explorer API ${sanitizeExplorerText(apiKey, data.message) || 'error'}${resultDetail}`);
+    }
+
+    events.push(...data.result as CommonEvent[]);
+    if (data.result.length < EXPLORER_PAGE_SIZE) return events;
+  }
+
+  throw new Error(`Explorer API pagination exceeded ${EXPLORER_MAX_PAGES} pages`);
+}
+
 export type DecodedEvent = {
   blockNumber: bigint;
   transactionHash: Hex;
@@ -58,34 +133,28 @@ export async function GetContractEvents(
 ): Promise<DecodedEvent[]> {
   let events: CommonEvent[] = [];
   try {
-    if (snowscanApiKey) {
-      // Fetch logs from Snowscan API (transactions are not decoded)
-      const url = `https://api${client.network === 'fuji' ? '-testnet' : ''}.snowscan.xyz/api`;
-      const urlParams = new URLSearchParams({
-        module: 'logs',
-        action: 'getLogs',
-        address,
-        fromBlock: fromBlock.toString(),
-        toBlock: toBlock.toString(),
-        apikey: snowscanApiKey
-      });
-
-      const res = await fetch(`${url}?${urlParams}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { status: string, message: string, result: any[] };
-      events = data.result
-        .reduce((acc: [], log) =>
-          [Object.assign(log, decodeEventLog({
-            abi,
-            data: log.data,
-            topics: log.topics,
-          })), ...acc]
-          , []
-        )
+    // Use the RPC-reported chain id rather than the coarse mainnet/fuji label:
+    // Kite and custom chains deliberately share those labels.
+    const runtimeChainId = snowscanApiKey ? await client.getChainId() : undefined;
+    if (snowscanApiKey && runtimeChainId !== undefined && AVALANCHE_EXPLORER_CHAIN_IDS.has(runtimeChainId)) {
+      // SnowScan V1 was retired in 2026. Keep the public parameter name for CLI
+      // compatibility, but use Etherscan V2 with the Avalanche chain id. Avalanche
+      // requires a paid Etherscan API tier; provider errors must fail the scan.
+      events = (await fetchExplorerLogs(client, address, fromBlock, toBlock, snowscanApiKey, runtimeChainId))
+        .reduce((acc: CommonEvent[], log) => {
+          try {
+            return [Object.assign(log, decodeEventLog({
+              abi,
+              data: log.data as Hex,
+              topics: log.topics as [Hex, ...Hex[]],
+            })), ...acc];
+          } catch {
+            // log emitted by the contract but absent from the provided ABI (e.g. proxy events)
+            return acc;
+          }
+        }, [])
     } else {
       // Fetch logs using viem client
-      toBlock = toBlock - 2 // to avoid reading the current block, which may not be finalized yet
-
       const blockToScan = toBlock - fromBlock;
       if (!bar) {
         bar = new SingleBar({}, Presets.shades_classic);
@@ -95,7 +164,7 @@ export async function GetContractEvents(
       }
       for (let i = fromBlock; i <= toBlock; i += 2000) {
 
-        const toSub = i + 2000 > toBlock ? toBlock : i + 2000;
+        const toSub = i + 1999 > toBlock ? toBlock : i + 1999;
         events.push(...await client.getContractEvents({
           address: address,
           abi: abi,
@@ -112,6 +181,7 @@ export async function GetContractEvents(
     if (error instanceof Error) {
       logger.error(error.message);
     }
+    throw error;
   }
 
   // Filter and format events
@@ -126,14 +196,33 @@ export async function GetContractEvents(
         timestamp: Number(log.timeStamp!)
       } as DecodedEvent
     });
-  return forceTimestamp ? snowscanApiKey ? result : PatchEventsTimestamp(client, result) : result;
+  return forceTimestamp ? PatchEventsTimestamp(client, result) : result;
+}
+
+/** Resolve an inclusive scan end without altering explicit or epoch-derived bounds. */
+export function resolveEventScanEnd(
+  latestBlock: bigint,
+  explicitToBlock?: bigint,
+  epochDerivedToBlock?: bigint,
+): bigint {
+  if (explicitToBlock !== undefined) return explicitToBlock;
+  if (epochDerivedToBlock !== undefined) return epochDerivedToBlock;
+  return latestBlock > 2n ? latestBlock - 2n : 0n;
+}
+
+/** Latest block safe for an open-ended scan. */
+export async function getFinalizedBlockNumber(client: ExtendedClient): Promise<bigint> {
+  return resolveEventScanEnd(await client.getBlockNumber());
 }
 
 export async function PatchEventsTimestamp(
   client: ExtendedClient,
   events: DecodedEvent[],
 ): Promise<DecodedEvent[]> {
-  const blockTimstamps = (await Promise.all([...new Set(events.map(event => event.blockNumber))]
+  const needsTimestamp = events.filter((event) => !Number.isFinite(event.timestamp) || event.timestamp <= 0);
+  if (needsTimestamp.length === 0) return events;
+
+  const blockTimstamps = (await Promise.all([...new Set(needsTimestamp.map(event => event.blockNumber))]
     .map((blockNumber: bigint) =>
       client.getBlock({
         blockNumber,
@@ -147,7 +236,9 @@ export async function PatchEventsTimestamp(
 
   return events.map(event => ({
     ...event,
-    timestamp: event.timestamp || blockTimstamps[Number(event.blockNumber)],
+    timestamp: Number.isFinite(event.timestamp) && event.timestamp > 0
+      ? event.timestamp
+      : blockTimstamps[Number(event.blockNumber)],
   }));
 }
 
@@ -265,14 +356,15 @@ type Fetcher<T> = (opts: FetchOpts) => Promise<T[]>;
  * @param toBlock    inclusive
  * @param count      -1 = all (default). If >0, stops after collecting `count` events.
  * @param fetcher    e.g. (opts) => middlewareSvc.getEvents.NodeAdded(args, opts)
- * @param chunkSize  block span per RPC call (default: 8_000n)
+ * @param concurrency bounded parallelism for complete scans; count-limited scans remain sequential
  * @returns          collected events (ordered per `order`)
  */
 export async function collectEventsInRange<T>(
   fromBlock: bigint,
   toBlock: bigint,
   count: number = -1,
-  fetcher: Fetcher<T>
+  fetcher: Fetcher<T>,
+  concurrency: number = 1,
 ): Promise<T[]> {
   const chunkSize = 2048n;
 
@@ -282,6 +374,39 @@ export async function collectEventsInRange<T>(
     [fromBlock, toBlock] = [toBlock, fromBlock];
   }
   if (count === 0) return [];
+
+  // Complete historical scans may span thousands of provider-limited ranges.
+  // Process a bounded wave at a time so a batching transport can combine the
+  // calls without creating an unbounded request queue. Count-limited scans stay
+  // sequential because they rely on early-stop semantics.
+  if (count < 0 && concurrency > 1) {
+    const chunks: FetchOpts[] = [];
+    if (order === "asc") {
+      for (let start = fromBlock; start <= toBlock; start += chunkSize) {
+        const end = start + chunkSize - 1n > toBlock ? toBlock : start + chunkSize - 1n;
+        chunks.push({ fromBlock: start, toBlock: end });
+        if (end === toBlock) break;
+      }
+    } else {
+      for (let end = toBlock; end >= fromBlock; end -= chunkSize) {
+        const start = end - (chunkSize - 1n) < fromBlock ? fromBlock : end - (chunkSize - 1n);
+        chunks.push({ fromBlock: start, toBlock: end });
+        if (start === fromBlock) break;
+      }
+    }
+
+    const waveSize = Math.max(1, Math.min(20, Math.trunc(concurrency)));
+    const out: T[] = [];
+    for (let offset = 0; offset < chunks.length; offset += waveSize) {
+      const batches = await Promise.all(
+        chunks.slice(offset, offset + waveSize).map((chunk) => fetcher(chunk)),
+      );
+      for (const batch of batches) {
+        if (batch?.length) out.push(...(order === "desc" ? [...batch].reverse() : batch));
+      }
+    }
+    return out;
+  }
 
   const out: T[] = [];
 

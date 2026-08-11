@@ -1,0 +1,7 @@
+{
+  "$comment": "Trimmed middleware_get_linked_addresses payload; locks the linkedAddresses envelope used by the live MCP tool.",
+  "linkedAddresses": {
+    "balancer": "0xCFF0Fc701EF47D6217FdF9DEF903990b7AfA8AC7",
+    "operatorRegistry": "0xCccb4eC6408bF2c9D057d63DAB01E55BB536936e"
+  }
+}

@@ -1,4 +1,6 @@
 .env*
+**/secrets/
 .venv
 node_modules
 dist
+packages/mcp/eval/results/

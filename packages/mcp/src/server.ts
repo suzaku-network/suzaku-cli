@@ -1,0 +1,404 @@
+#!/usr/bin/env node
+
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+  process.exit(1);
+});
+
+import { setMcpServer, runCli, formatResult } from './cli-runner.js';
+import { setGuardServer } from './guard.js';
+import { Network, RpcUrl } from './schemas.js';
+import { registerMiddlewareTools } from './tools/middleware.js';
+import { registerVaultTools } from './tools/vault.js';
+import { registerOperatorTools } from './tools/operator.js';
+import { registerL1RegistryTools } from './tools/l1-registry.js';
+import { registerOptInTools } from './tools/opt-in.js';
+import { registerRewardsTools } from './tools/rewards.js';
+import { registerKiteStakingTools } from './tools/kite-staking.js';
+import { registerStakingVaultTools } from './tools/staking-vault.js';
+import { registerBalancerTools } from './tools/balancer.js';
+import { registerPoaSecurityModuleTools } from './tools/poa-security-module.js';
+import { registerLstWrapperTools } from './tools/lst-wrapper.js';
+import { registerVaultHelperTools } from './tools/vault-helper.js';
+import { registerUptimeTools } from './tools/uptime.js';
+import { registerHeartbeatTools } from './tools/heartbeat.js';
+import { resolveProfileConfig } from './profile-config.js';
+
+let profile: ReturnType<typeof resolveProfileConfig>;
+try {
+  profile = resolveProfileConfig(process.argv, process.env);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+const { readOnly } = profile;
+
+const server = new McpServer({
+  name: 'suzaku',
+  version: '0.1.0',
+});
+
+// Wire up MCP server references.
+// Both modules hold a reference to the same server instance for different purposes:
+// cli-runner uses it for protocol logging + mainnet elicitation; guard uses it for
+// testnet write confirmation elicitation. Kept separate to avoid coupling these concerns.
+setMcpServer(server);
+setGuardServer(server);
+
+// ── Resources ──
+
+server.resource(
+  'networks',
+  'config://networks',
+  {
+    description: 'Supported networks and their RPC endpoints',
+    mimeType: 'application/json',
+  },
+  async (uri) => ({
+    contents: [{
+      uri: uri.href,
+      text: JSON.stringify({
+        _note: 'Static values mirrored from src/lib/chainList.ts. Use --rpc-url with network=custom to override.',
+        mainnet: { chainId: 43114, name: 'Avalanche Mainnet', rpcUrl: 'https://api.avax.network/ext/bc/C/rpc' },
+        fuji: { chainId: 43113, name: 'Avalanche Fuji Testnet', rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc' },
+        anvil: { chainId: 31337, name: 'Local Anvil (development)', rpcUrl: 'http://127.0.0.1:8545' },
+        kiteaitestnet: { chainId: 2368, name: 'Kite AI Testnet', rpcUrl: 'https://rpc-testnet.gokite.ai/' },
+        kiteai: { chainId: 2366, name: 'Kite AI', rpcUrl: 'https://rpc.gokite.ai' },
+        custom: { _note: 'Requires --rpc-url; chain ID and network bucket are resolved from the node at runtime' },
+      }, null, 2),
+      mimeType: 'application/json',
+    }],
+  }),
+);
+
+server.resource(
+  'contracts',
+  'config://contracts',
+  {
+    description: 'Known contract addresses per network',
+    mimeType: 'application/json',
+  },
+  async (uri) => ({
+    contents: [{
+      uri: uri.href,
+      text: JSON.stringify({
+        _note: 'Contract addresses are deployment-specific. Use discovery tools to find live addresses.',
+        discovery: {
+          entryPoint: 'discover_network — returns all addresses for a network (no address input needed)',
+          fromMiddleware: 'middleware_operator_dashboard or middleware_network_overview — resolves linked addresses automatically',
+          manual: {
+            l1Registry: 'l1_registry_get_all — lists all (balancer, middleware, metadataUrl) tuples',
+            operatorRegistry: 'operator_registry_get_all — lists all global operators',
+            balancer: 'balancer_get_security_modules — lists security modules from a balancer address',
+            middleware: 'Use get-linked-addresses (via discover_network) to find balancer, vaultManager, primaryAsset',
+          },
+        },
+        notDiscoverable: [
+          'UptimeTracker — pass explicitly to middleware_operator_dashboard/middleware_uptime_report',
+          'RewardsNativeToken — pass explicitly to middleware_epoch_rewards_report',
+          'KiteStakingManager — no registry, must be known out-of-band',
+          'StakingVault — may appear in VaultManager listing, but address must be provided to staking_vault_* tools',
+        ],
+      }, null, 2),
+      mimeType: 'application/json',
+    }],
+  }),
+);
+
+// ── Prompts ──
+
+server.prompt(
+  'check-operator-health',
+  'Check the health of an operator: get stake, active nodes, and epoch status',
+  {
+    middlewareAddress: z.string().describe('L1Middleware contract address'),
+    operatorAddress: z.string().describe('Operator address to check'),
+    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom)'),
+  },
+  ({ middlewareAddress, operatorAddress, network }) => ({
+    messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: `Check the health of operator ${operatorAddress} on middleware ${middlewareAddress}${network ? ` (network: ${network})` : ''}. Please:\n0. If you don't have the middlewareAddress, call discover_network first to list all L1s and their middleware addresses.\n1. Get the current epoch using middleware_get_current_epoch\n2. Get the operator's account info using middleware_account_info\n3. Get locked stake using middleware_get_operator_locked_stake\n4. Get available stake using middleware_get_operator_available_stake\n5. Get active nodes for the current epoch using middleware_get_active_nodes\nSummarize the operator's health status.`,
+      },
+    }],
+  }),
+);
+
+server.prompt(
+  'register-new-operator',
+  'Step-by-step guide for the full operator registration workflow',
+  {
+    network: z.string().optional().describe('Network (mainnet, fuji, anvil, kiteaitestnet, kiteai, custom)'),
+  },
+  ({ network }) => ({
+    messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: `Guide me through registering a new operator on the Suzaku protocol${network ? ` on ${network}` : ''}. The steps are:\n0. Start by calling discover_network to discover the operatorRegistry, L1Middleware, and available vaults for the target network.\n1. Register in the OperatorRegistry using operator_registry_register (requires a metadata URL)\n2. Opt into an L1 using opt_in_l1 (required before participating in that L1's validator set)\n3. Opt into a vault using opt_in_vault (required before receiving delegated stake)\n4. Register as an operator in the L1Middleware using middleware_register_operator\n5. Add validator nodes using middleware_add_node\nFor each step, ask me for the required parameters before proceeding.`,
+      },
+    }],
+  }),
+);
+
+server.prompt(
+  'validator-lifecycle',
+  'Guide through the two-phase validator registration or removal process',
+  {
+    operation: z.string().describe('Operation: "register" or "remove"'),
+    manager: z.string().optional().describe('Manager type: "kite" (KiteStakingManager) or "vault" (StakingVault). Defaults to "kite"'),
+  },
+  ({ operation, manager }) => {
+    const mgr = manager === 'vault' ? 'staking vault' : 'KiteStakingManager';
+    const prefix = manager === 'vault' ? 'staking_vault' : 'kite';
+
+    if (operation === 'remove') {
+      return {
+        messages: [{
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Guide me through removing a validator via ${mgr}. If you don't have the contract address, call discover_network to find the middleware, then use middleware_operator_dashboard to get the operator's linked addresses.\n\nThis is a two-phase process:\n\nPhase 1 — Initiate removal:\n- Use ${prefix}_initiate_validator_removal with the contract address and nodeId\n- Save the transaction hash from the response\n\nPhase 2 — Complete removal:\n- Use ${prefix}_complete_validator_removal with the contract address and the initiate tx hash\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
+          },
+        }],
+      };
+    }
+
+    return {
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `Guide me through registering a new validator via ${mgr}. If you don't have the contract address, call discover_network to find the middleware, then use middleware_operator_dashboard to get the operator's linked addresses.\n\nThis is a two-phase process:\n\nPhase 1 — Initiate registration:\n- Use ${prefix}_initiate_validator_registration with the contract address, nodeId, BLS key, and stake amount\n- Save the transaction hash from the response\n\nPhase 2 — Complete registration:\n- Use ${prefix}_complete_validator_registration with the contract address, initiate tx hash, and BLS proof of possession\n- This involves a cross-chain warp message to the P-Chain (may take several minutes)\n\nAsk me for the required parameters before each step.`,
+        },
+      }],
+    };
+  },
+);
+
+server.prompt(
+  'epoch-rewards-runbook',
+  'Step-by-step runbook for the Dexalot weekly epoch rewards workflow',
+  {
+    middlewareAddress: z.string().describe('L1Middleware contract address'),
+    rewardsAddress: z.string().describe('RewardsNativeToken contract address'),
+    lstWrapperAddress: z.string().optional().describe('LSTWrapper contract address (e.g. wsALOT) — required for the harvest step'),
+    uptimeTrackerAddress: z.string().optional().describe('UptimeTracker contract address — required for uptime steps 1 and 2'),
+    epoch: z.string().optional().describe('Epoch number to process (e.g. "35"). If omitted, query the current epoch first using middleware_get_current_epoch.'),
+  },
+  ({ middlewareAddress, rewardsAddress, lstWrapperAddress, uptimeTrackerAddress, epoch }) => {
+    return {
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: [
+            `Run the Dexalot weekly epoch rewards workflow for middleware ${middlewareAddress} and rewards contract ${rewardsAddress}${epoch ? ` (epoch ${epoch})` : ''}.`,
+            ...(readOnly
+              ? ['PROFILE NOTE: this server is read-only. Steps 1, 2, 4, 5 and 6 are write operations NOT available here — for each, tell the human the exact Suzaku CLI command family to run. You can still execute step 3 (rewards_epoch_diagnosis) and every verification read.']
+              : []),
+            '',
+            `If no epoch was provided, start by calling middleware_get_current_epoch with middlewareAddress=${middlewareAddress} to determine which epoch to process.`,
+            '',
+            'Follow these steps in order:',
+            '',
+            `Step 1 — Report validator uptimes (call uptime_report_validator once per active validator):`,
+            uptimeTrackerAddress
+              ? `  • uptimeTrackerAddress: ${uptimeTrackerAddress}`
+              : `  • You need the UptimeTracker address — check if it is known or ask the user.`,
+            `  • Get the node IDs of the active validators from middleware_get_active_nodes with middlewareAddress=${middlewareAddress}.`,
+            `  • For each validator node, call uptime_report_validator with its l1RpcUrl, blockchainId, nodeId, and the uptimeTrackerAddress above.`,
+            `  • l1RpcUrl is the L1's own RPC endpoint (not the C-Chain RPC); blockchainId is the L1's blockchain ID in CB58 format — ask the user if either is unknown.`,
+            `  • This step can take up to 5 minutes per validator due to warp signature collection.`,
+            `  • A warp signature collection timeout means the signature-aggregation service is unreachable or validators are offline — report the raw error, do not retry silently.`,
+            '',
+            `Step 2 — Compute operator uptime:`,
+            `  • Call uptime_compute_operator_uptime with the uptimeTrackerAddress, the operator address, and the epoch.`,
+            `  • This must be called once per operator after all validator uptime reports for that operator are submitted.`,
+            '',
+            `Step 3 — Diagnose epoch rewards state before setting amounts (CRITICAL):`,
+            `  • Call rewards_epoch_diagnosis with rewardsAddress=${rewardsAddress}, middlewareAddress=${middlewareAddress}, and the epoch.`,
+            `  • WARNING: rewards_set_amount accumulates on-chain — each call ADDS to the existing total rather than replacing it.`,
+            `    If set-amount was already called for this epoch, calling it again will double-count rewards.`,
+            `    The diagnosis output will warn you if eventCount > 1 (accumulation already happened) or if the epoch has existing rewards.`,
+            `  • Only proceed to Step 4 if the diagnosis confirms zero or the expected rewards amount for this epoch.`,
+            '',
+            `Step 4 — Set rewards amount:`,
+            `  • Call rewards_set_amount with rewardsAddress=${rewardsAddress}, the epoch as startEpoch, numberOfEpochs="1", and the rewards amount in human-readable decimal format (the CLI resolves token decimals on-chain).`,
+            `  • If you need to correct an already-set amount, call rewards_claim_undistributed first to reclaim the accumulated total, then set the correct amount.`,
+            '',
+            `Step 5 — Distribute rewards:`,
+            `  • Call rewards_distribute with rewardsAddress=${rewardsAddress}, the epoch, and an appropriate batchSize (e.g. "50" for a typical operator set).`,
+            `  • After each distribute call, check completion with rewards_get_distribution_batch. Repeat if isComplete is false.`,
+            '',
+            `Step 6 — Harvest into the LST wrapper:`,
+            lstWrapperAddress
+              ? `  • Call lst_wrapper_harvest with lstWrapperAddress=${lstWrapperAddress}.`
+              : `  • You need the LSTWrapper address (e.g. wsALOT contract) — check if it is known or ask the user.`,
+            `  • Harvest is permissionless — any signer can call it. It compounds accrued staking rewards as vault shares, raising the wsALOT exchange rate.`,
+            '',
+            'Ask me for any required parameters that are missing before proceeding with each step.',
+          ].join('\n'),
+        },
+      }],
+    };
+  },
+);
+
+// ── Health Check ──
+
+server.tool(
+  'health_check',
+  'Verify MCP server setup: CLI reachable, signing method configured, optional network connectivity test',
+  {
+    network: Network.optional(),
+    rpcUrl: RpcUrl,
+  },
+  { readOnlyHint: true, idempotentHint: true },
+  async ({ network, rpcUrl }) => {
+    const isUnexpandedPlaceholder = (v: unknown): v is string =>
+      typeof v === 'string' && /^\$\{[A-Z0-9_]+\}$/.test(v);
+    const unexpandedPlaceholderValue = 'NOT CONFIGURED (unexpanded placeholder)';
+    const publicHealth = process.env.SUZAKU_MCP_PUBLIC_HEALTH === 'true';
+    const configWarnings: string[] = [];
+    let hiddenPlaceholderDetected = false;
+    const addPlaceholderWarning = (envVar: string, subject: string) => {
+      if (publicHealth) {
+        hiddenPlaceholderDetected = true;
+        return;
+      }
+      configWarnings.push(`${envVar} holds an unexpanded \${...} placeholder — template substitution failed; treat ${subject} as unconfigured`);
+    };
+    const addHiddenConfigWarning = (warning: string) => {
+      if (!publicHealth) configWarnings.push(warning);
+    };
+    const placeholderPublicHealth = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_PUBLIC_HEALTH);
+    const placeholderSafeAddress = isUnexpandedPlaceholder(process.env.SUZAKU_SAFE_ADDRESS);
+    const placeholderLedger = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_LEDGER);
+    const placeholderSecretName = isUnexpandedPlaceholder(process.env.SUZAKU_SECRET_NAME);
+    const placeholderPrivateKey = isUnexpandedPlaceholder(process.env.SUZAKU_PK);
+    const placeholderPchainSigner = isUnexpandedPlaceholder(process.env.SUZAKU_PCHAIN_PK);
+    const placeholderGuardSuggest = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_SUGGEST);
+    const placeholderGuardRequireConfirm = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_REQUIRE_CONFIRM);
+    const placeholderGuardMaxAvaxPerTx = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_MAX_AVAX_PER_TX);
+    const placeholderGuardAllowTools = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_ALLOW_TOOLS);
+    const placeholderGuardDenyTools = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_DENY_TOOLS);
+    const placeholderGuardDryRun = isUnexpandedPlaceholder(process.env.SUZAKU_MCP_DRY_RUN);
+    if (placeholderPublicHealth) addPlaceholderWarning('SUZAKU_MCP_PUBLIC_HEALTH', 'public-health mode');
+    if (placeholderSafeAddress) addPlaceholderWarning('SUZAKU_SAFE_ADDRESS', 'Safe');
+    if (placeholderLedger) addPlaceholderWarning('SUZAKU_MCP_LEDGER', 'Ledger signer');
+    if (placeholderSecretName) addPlaceholderWarning('SUZAKU_SECRET_NAME', 'GPG keystore signer');
+    if (placeholderPrivateKey) addPlaceholderWarning('SUZAKU_PK', 'private-key signer');
+    if (placeholderPchainSigner) addPlaceholderWarning('SUZAKU_PCHAIN_PK', 'P-Chain signer');
+    if (placeholderGuardSuggest) addPlaceholderWarning('SUZAKU_MCP_SUGGEST', 'guard suggest setting');
+    if (placeholderGuardRequireConfirm) addPlaceholderWarning('SUZAKU_MCP_REQUIRE_CONFIRM', 'guard requireConfirm setting');
+    if (placeholderGuardMaxAvaxPerTx) addPlaceholderWarning('SUZAKU_MCP_MAX_AVAX_PER_TX', 'guard maxAvaxPerTx setting');
+    if (placeholderGuardAllowTools) addPlaceholderWarning('SUZAKU_MCP_ALLOW_TOOLS', 'guard allowTools setting');
+    if (placeholderGuardDenyTools) addPlaceholderWarning('SUZAKU_MCP_DENY_TOOLS', 'guard denyTools setting');
+    if (placeholderGuardDryRun) addPlaceholderWarning('SUZAKU_MCP_DRY_RUN', 'guard dryRun setting');
+    if (process.env.SUZAKU_SAFE_ADDRESS && !placeholderSafeAddress && !/^0x[0-9a-fA-F]{40}$/.test(process.env.SUZAKU_SAFE_ADDRESS)) {
+      addHiddenConfigWarning('SUZAKU_SAFE_ADDRESS is not a valid 0x address');
+    }
+    const status: Record<string, unknown> = { server: 'ok', version: '0.1.0', readOnly };
+
+    // In public health mode, suppress internal config details (signer type, Safe, guard config)
+    if (!publicHealth) {
+      // Check signing method
+      if (process.env.SUZAKU_MCP_LEDGER === 'true') {
+        status.signer = 'ledger';
+      } else if (process.env.SUZAKU_SECRET_NAME && !placeholderSecretName) {
+        status.signer = 'gpg-keystore';
+        status.secretName = '[configured]';
+      } else if (process.env.SUZAKU_PK && !placeholderPrivateKey) {
+        status.signer = 'private-key';
+      } else if (placeholderLedger || placeholderSecretName || placeholderPrivateKey) {
+        status.signer = unexpandedPlaceholderValue;
+        status.signerWarning = 'Signing env vars hold unexpanded ${...} placeholders — fix the template substitution; do not add another signer variable.';
+      } else {
+        status.signer = 'none';
+        status.signerWarning = 'No signing method configured. Write operations will fail. Set SUZAKU_PK, SUZAKU_SECRET_NAME, or SUZAKU_MCP_LEDGER=true.';
+      }
+
+      if (process.env.SUZAKU_SAFE_ADDRESS) {
+        status.safeAddress = placeholderSafeAddress ? unexpandedPlaceholderValue : process.env.SUZAKU_SAFE_ADDRESS;
+      }
+      if (process.env.SUZAKU_PCHAIN_PK) {
+        status.pchainSigner = placeholderPchainSigner ? unexpandedPlaceholderValue : 'configured';
+      }
+    }
+
+    // Use operator-registry get-all as a connectivity + CLI health probe
+    if (network || rpcUrl) {
+      const probe = await runCli(
+        ['operator-registry', 'get-all'],
+        { network: network ?? undefined, rpcUrl },
+      );
+      status.cli = probe.success ? 'ok' : 'error';
+      if (!probe.success) {
+        status.cliError = probe.error;
+      }
+      status.network = network ?? 'mainnet';
+    } else {
+      // Without a network, just verify the CLI binary is reachable by invoking --help
+      const probe = await runCli(['--help'], {});
+      status.cli = probe.success ? 'ok' : 'unreachable';
+      if (!probe.success) {
+        status.cliError = probe.error;
+      }
+    }
+
+    // Report guard config (suppressed in public health mode)
+    if (!publicHealth) {
+      const guardConfig: Record<string, string> = {};
+      if (process.env.SUZAKU_MCP_SUGGEST) guardConfig.suggest = placeholderGuardSuggest ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_SUGGEST;
+      if (process.env.SUZAKU_MCP_REQUIRE_CONFIRM) guardConfig.requireConfirm = placeholderGuardRequireConfirm ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_REQUIRE_CONFIRM;
+      if (process.env.SUZAKU_MCP_MAX_AVAX_PER_TX) guardConfig.maxAvaxPerTx = placeholderGuardMaxAvaxPerTx ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_MAX_AVAX_PER_TX;
+      if (process.env.SUZAKU_MCP_ALLOW_TOOLS) guardConfig.allowTools = placeholderGuardAllowTools ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_ALLOW_TOOLS;
+      if (process.env.SUZAKU_MCP_DENY_TOOLS) guardConfig.denyTools = placeholderGuardDenyTools ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_DENY_TOOLS;
+      if (process.env.SUZAKU_MCP_DRY_RUN) guardConfig.dryRun = placeholderGuardDryRun ? unexpandedPlaceholderValue : process.env.SUZAKU_MCP_DRY_RUN;
+      if (Object.keys(guardConfig).length > 0) {
+        status.guardConfig = guardConfig;
+      }
+    }
+
+    if (hiddenPlaceholderDetected) {
+      configWarnings.push('configuration placeholder detected');
+    }
+    if (configWarnings.length > 0) {
+      status.configWarnings = configWarnings;
+    }
+
+    return formatResult({ success: true, data: status });
+  },
+);
+
+// ── Tool Groups ──
+
+const suppressWrites = readOnly;
+registerMiddlewareTools(server, suppressWrites);
+registerVaultTools(server, suppressWrites);
+registerOperatorTools(server, suppressWrites);
+registerL1RegistryTools(server, suppressWrites);
+registerOptInTools(server, suppressWrites);
+registerRewardsTools(server, readOnly);
+registerKiteStakingTools(server, suppressWrites);
+registerStakingVaultTools(server, suppressWrites);
+registerBalancerTools(server, suppressWrites);
+if (!suppressWrites) registerPoaSecurityModuleTools(server);
+registerLstWrapperTools(server, suppressWrites);
+registerVaultHelperTools(server);
+registerUptimeTools(server, suppressWrites);
+registerHeartbeatTools(server);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
