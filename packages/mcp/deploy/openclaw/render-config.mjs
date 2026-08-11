@@ -81,6 +81,16 @@ export function renderConfig(template, env = process.env) {
     if (plugins.entries) delete plugins.entries.anthropic;
   }
 
+  // OpenClaw warns about an unresolved ${NAME} reference but still forwards the
+  // literal placeholder to MCP subprocesses. For optional explorer credentials
+  // that is worse than omission: the CLI treats the placeholder as a real key,
+  // selects Etherscan, and never falls back to the working public RPC scan.
+  for (const server of Object.values(config.mcp?.servers ?? {})) {
+    if (!server || typeof server !== 'object' || !server.env || typeof server.env !== 'object') continue;
+    if (!env.ETHERSCAN_API_KEY?.trim()) delete server.env.ETHERSCAN_API_KEY;
+    if (!env.SNOWSCAN_API_KEY?.trim()) delete server.env.SNOWSCAN_API_KEY;
+  }
+
   return config;
 }
 

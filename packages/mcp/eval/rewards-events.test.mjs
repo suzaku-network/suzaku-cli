@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getRewardsAmountSetEvents } from '../../../dist/rewards.js';
+import {
+  getFeesConfiguration, getRewardsAmountSetEvents,
+} from '../../../dist/rewards.js';
 
 const REWARDS = `0x${'1'.repeat(40)}`;
 const MIDDLEWARE = `0x${'2'.repeat(40)}`;
@@ -72,5 +74,22 @@ describe('RewardsAmountSet history bounds', () => {
       fromBlock: 50n,
       toBlock: 60n,
     }));
+  });
+});
+
+describe('protocol fee read evidence', () => {
+  it('returns the exact current protocolRewards value', async () => {
+    const rewards = {
+      read: {
+        protocolFee: vi.fn(async () => 500n),
+        operatorFee: vi.fn(async () => 0n),
+        curatorFee: vi.fn(async () => 0n),
+        protocolRewards: vi.fn(async () => 15_612_850_000_000_000_000_000n),
+      },
+    };
+
+    const result = await getFeesConfiguration(rewards);
+
+    expect(result.protocolRewards).toBe(15_612_850_000_000_000_000_000n);
   });
 });

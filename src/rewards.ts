@@ -290,17 +290,26 @@ export async function getDistributionBatch(
 export async function getFeesConfiguration(
   rewards: SuzakuContract['RewardsNativeToken']
 ) {
-  const protocolFee = await rewards.read.protocolFee();
-  const operatorFee = await rewards.read.operatorFee();
-  const curatorFee = await rewards.read.curatorFee();
+  const [protocolFee, operatorFee, curatorFee, protocolRewards] = await Promise.all([
+    rewards.read.protocolFee(),
+    rewards.read.operatorFee(),
+    rewards.read.curatorFee(),
+    rewards.read.protocolRewards(),
+  ]);
 
   logger.log("Fees configuration:");
   logger.log(`  Protocol fee: ${protocolFee}`);
   logger.log(`  Operator fee: ${operatorFee}`);
   logger.log(`  Curator fee: ${curatorFee}`);
+  logger.log(`  Current protocol rewards: ${protocolRewards}`);
 
-  logger.addData('feesConfig', { protocolFee: Number(protocolFee), operatorFee: Number(operatorFee), curatorFee: Number(curatorFee) });
-  return { protocolFee, operatorFee, curatorFee };
+  logger.addData('feesConfig', {
+    protocolFee: Number(protocolFee),
+    operatorFee: Number(operatorFee),
+    curatorFee: Number(curatorFee),
+    protocolRewards: protocolRewards.toString(),
+  });
+  return { protocolFee, operatorFee, curatorFee, protocolRewards };
 }
 
 /**

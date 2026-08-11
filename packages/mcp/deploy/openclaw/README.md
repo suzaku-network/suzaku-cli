@@ -9,7 +9,7 @@ The production deployment is one read-only Suzaku monitor powered by [OpenClaw](
 1. Message [@BotFather](https://t.me/BotFather) on Telegram
 2. Send `/newbot`, follow the prompts (e.g., "Suzaku Monitor")
 3. Save the bot token
-4. **Disable privacy mode** (required for group use): `/setprivacy` → select the bot → **Disable**. With privacy mode on, `@mentions` in groups are never delivered to the bot. If the bot is already in a group when you change this, remove and re-add it — Telegram applies the change only on re-join. (OpenClaw still routes only mentions to the model via `requireMention`.)
+4. Keep BotFather **privacy mode enabled** for this mention-only deployment. Telegram still delivers direct `@mentions`, commands, and replies to the bot, while unrelated group traffic stays out of its ingress. Disable privacy mode (and then remove/re-add the bot) only if you deliberately change `requireMention` to `false` or need full group-message visibility.
 5. Get your user ID: message [@userinfobot](https://t.me/userinfobot) and note the `Id` field. For a group's chat ID, add [@getidsbot](https://t.me/getidsbot) to the group briefly (supergroup IDs look like `-100…`)
 6. For group deployments, lock membership to admin approval. Telegram's default lets members add new people; that is acceptable for the read-only monitor only if you accept that access boundary.
 
@@ -127,7 +127,7 @@ The default MCP server runs in `--read-only` mode (no write tools registered). K
 "allowFrom": ["tg:123456789", "tg:987654321"]
 ```
 
-**Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. Anyone in that group can ask — access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to.
+**Groups**: The bot responds to @-mentions in the group specified by `TELEGRAM_GROUP_ID`. That group's per-group `groupPolicy: "open"` lets any invited member ask, while the top-level group allowlist blocks every other group. Access is controlled by who you invite to the group. Never use `"*"` as the group ID; that would expose the bot to every group it's added to.
 
 Slash commands and directives (including `/model` and `/new`) are restricted to
 `TELEGRAM_ADMIN_USER_ID`. Group members can ask normal @mentioned monitoring

@@ -109,10 +109,10 @@ describe('eval question contracts', () => {
     expect(route).toContain('timing fields');
     expect(route).not.toContain('middleware_epoch_status');
     expect(epochs).toContain('Never infer missing');
-    expect(soul).toContain('rather than calculating or guessing');
+    expect(soul).toContain('never calculate or guess them');
   });
 
-  it('covers the five maintainer rewards questions as semantic prompt families', () => {
+  it('covers maintainer rewards questions as semantic prompt families', () => {
     const expected = new Map([
       [
         'maintainer-rewards-six-epoch-status',
@@ -134,6 +134,10 @@ describe('eval question contracts', () => {
         'maintainer-rewards-current-activity',
         'What rewards activity occurred during the current epoch, including rewards set, distributions, claims, fee claims, and zero-reward claims?',
       ],
+      [
+        'maintainer-protocol-fees',
+        'How much protocol fee has been claimed / is claimable?',
+      ],
     ]);
 
     for (const [id, canonical] of expected) {
@@ -147,15 +151,16 @@ describe('eval question contracts', () => {
     }
 
     const byId = (id) => questions.questions.find((question) => question.id === id);
-    expect(byId('maintainer-rewards-six-epoch-status').expectedToolCalls).toHaveLength(2);
+    expect(byId('maintainer-rewards-six-epoch-status').expectedToolCalls).toHaveLength(1);
     expect(byId('maintainer-rewards-uptime-eligibility').expectedToolCalls).toHaveLength(2);
     expect(byId('maintainer-rewards-actions').expectedToolCalls.flat())
       .toContainEqual(expect.objectContaining({ tool: 'deployment_heartbeat' }));
     expect(byId('maintainer-rewards-current-activity').expectedToolCalls.flat())
       .toContainEqual(expect.objectContaining({ tool: 'rewards_get_events' }));
+    expect(byId('maintainer-protocol-fees').expectedToolCalls).toHaveLength(1);
   });
 
-  it('fails the observed one-tool rewards shortcut and requires complete evidence', () => {
+  it('keeps narrow status queries narrow while requiring complete evidence for compound intents', () => {
     const status = questions.questions.find(({ id }) => id === 'maintainer-rewards-six-epoch-status');
     const rawStatusOnly = [{
       name: 'rewards_get_epoch_status',
@@ -169,19 +174,16 @@ describe('eval question contracts', () => {
     expect(scoreTrace(rawStatusOnly, {
       expectedToolCalls: status.expectedToolCalls,
       maxToolCalls: status.maxToolCalls,
-    }).ok).toBe(false);
-    expect(scoreTrace([...rawStatusOnly, {
-      name: 'deployment_heartbeat',
-      args: {
-        middlewareAddress: '{{middleware}}',
-        rewardsAddress: '{{rewards}}',
-        uptimeTrackerAddress: '{{uptimeTracker}}',
-        mode: 'digest',
-        network: 'mainnet',
-      },
-    }], {
-      expectedToolCalls: status.expectedToolCalls,
-      maxToolCalls: status.maxToolCalls,
+    }).ok).toBe(true);
+
+    const fees = questions.questions.find(({ id }) => id === 'maintainer-protocol-fees');
+    const feeBalanceOnly = [{
+      name: 'rewards_get_fees_config',
+      args: { rewardsAddress: '{{rewards}}', network: 'mainnet' },
+    }];
+    expect(scoreTrace(feeBalanceOnly, {
+      expectedToolCalls: fees.expectedToolCalls,
+      maxToolCalls: fees.maxToolCalls,
     }).ok).toBe(true);
 
     const uptime = questions.questions.find(({ id }) => id === 'maintainer-rewards-uptime-eligibility');

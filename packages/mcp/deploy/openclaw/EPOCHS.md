@@ -109,6 +109,7 @@ current or past epochs, and Rewards calls it lazily when needed. Therefore:
 | "Can I set rewards for epoch N?" | `rewards_epoch_diagnosis` for N | Quote `setAmountReadiness`: contract evidence, the bot's operational window, existing funding, accumulation risk, and bot-policy deadline UTC. Do not call the policy window a contract restriction or recompute it |
 | "Why no rewards yet / when claimable?" | `rewards_get_epoch_status`, `rewards_get_distribution_batch` | Which lifecycle stage N is stuck at (unset / waiting uptime / distributing batch X / complete) and the earliest realistic claim time |
 | "Did the set-amount go through?" | `rewards_epoch_diagnosis` (or `rewards_get_events`, filter RewardsAmountSet) | The set-amount TX COUNT is the answer's first line. Include tx hashes/totals; >1 = accumulation alarm. If event reads failed and the count could not be verified, the first line must say "could not verify the set-amount count — treat as unconfirmed", never a plain "yes, it went through". |
+| "How much protocol fee has been claimed / is claimable?" | `rewards_get_fees_config` | Lead with the exact current `protocolRewardsHuman` claimable balance. On the pinned Dexalot implementation, `claimProtocolFee` resets `protocolRewards` without emitting `ProtocolFeeClaimed`, so historical claimed total is not directly observable from the current read surface. Say unavailable—never zero or an estimate from the fee percentage/recent epochs. |
 | "What is minimum uptime / has it changed?" | `rewards_get_min_uptime` | State the current value. If `historyAvailable=false`, say historical changes are unknown; do not invent event names, call the value typical, or suggest the getter proves history |
 | "Validator health?" | `middleware_get_validator_balances`, `middleware_uptime_report` (needs the UptimeTracker address pinned in SOUL.md) | Lowest P-Chain balance; 🔴 only below 0.05 AVAX (the heartbeat default) — never invent another threshold; uptime gaps for the previous epoch |
 | "Uptime report failed / is uptime in?" | `uptime_get_validation_uptime_message` (dry-run), `middleware_uptime_report` | Whether the proof is fetchable (RPC/blockchainId valid) and which validators are missing reports — reporting itself is a CLI action |
@@ -145,17 +146,16 @@ For an alarmed or ambiguous "something is wrong" message:
   reads for data a composite returns, and never re-fetch constants (fees config, scheduling
   offsets) you already have in this conversation.
 - Epochs beyond the current one return all-zero rows — check the current epoch first and say 'not started' rather than 'nothing set'.
-- **Event scans are fine for event questions** (`rewards_get_events`, node logs — a few seconds each with the indexer key this deployment
-  has; ~1 min each without one). Use them whenever the question is genuinely about events
+- **Event scans are fine for event questions** (`rewards_get_events`, node logs — a few seconds with a compatible configured explorer
+  plan; RPC fallback may take minutes for long ranges). Use them whenever the question is genuinely about events
   (who set what when, tx hashes, accumulation forensics) — just don't use a pile of them to
   reconstruct state a composite already summarizes. If you expect an answer to take over
   ~1 minute total, say so up front.
 
 ## Answering discipline
 
-- **Provenance**: when you follow a procedure from this file (or a server runbook
-  prompt), say which one, and list the steps with ✅ for completed and ❌ for steps you
-  could not complete — naming the tool or error that blocked each ❌.
+- **Provenance**: when the user asks for a procedure or audit, name the runbook and
+  mark completed/blocked steps. Do not narrate runbook mechanics in a normal factual answer.
 - **Partial data is not data**: if any tool call failed or timed out, say so and name
   the tool. Never present conclusions derived from incomplete reads as complete — and
   never lead with "Actions needed" computed from a partial picture without flagging it.
@@ -185,14 +185,15 @@ For an alarmed or ambiguous "something is wrong" message:
   prefer posting the digest's `humanLines` block verbatim with your actions-needed
   summary above it.
 
-- **Actionables first**: anything with a real deadline (funding deadline,
-  distribution waiting on uptime) goes at the top with its UTC time and tool-calculated
-  time-remaining. If no relative-time field was returned, omit it rather than estimating.
-- Epoch statuses in one compact table: epoch · set amount · #set-txs · funded ·
-  distributed · status/next action.
-- Flag `2+ set-amount txs` loudly every time — that is the accumulation incident, and
-  when the count could not be determined, say so in the first line — an unverified
-  set-amount answer is never a clean yes.
-- "claimable" means distribution is complete; say it explicitly per epoch.
-- Use human units (ALOT, AVAX) and absolute UTC datetimes, never raw wei or bare
-  epoch numbers without a date.
+- **Actionables first for operational questions**: when the user asks what needs doing,
+  anything with a real deadline goes at the top with its UTC time and tool-calculated
+  time-remaining. A narrow factual lookup should not acquire unrelated action items.
+- For epoch-range status questions, use one compact table: epoch · set amount · #set-txs
+  when requested/available · funded · distributed · status/next action when relevant.
+- Whenever set-amount history is part of the question or answer, flag `2+ set-amount
+  txs` loudly — that is the accumulation incident. When the count could not be
+  determined, say so in the first line; an unverified set-amount answer is never a clean yes.
+- For epoch-status questions, "claimable" means distribution is complete; say it
+  explicitly for the epochs being discussed.
+- Use human units (ALOT, AVAX). Include absolute UTC datetimes when time is relevant;
+  never expose raw wei or invent a date merely to decorate a factual answer.

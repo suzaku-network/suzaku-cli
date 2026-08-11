@@ -61,6 +61,19 @@ describe('augmentFeesConfig', () => {
     expect(result.feesConfig.feeUnitNote).toBe('10000 bps = 100%');
   });
 
+  it('labels and humanizes the exact current unclaimed protocol rewards balance', () => {
+    const result = augmentFeesConfig({
+      feesConfig: {
+        protocolFee: 500,
+        protocolRewards: '15612850000000000000000',
+      },
+    }) as { feesConfig: Record<string, unknown> };
+
+    expect(result.feesConfig.protocolRewardsHuman).toBe('15,612.85');
+    expect(result.feesConfig.protocolRewardsMeaning).toContain('current unclaimed');
+    expect(result.feesConfig.protocolRewardsMeaning).toContain('not the historical');
+  });
+
   it('returns the original value when feesConfig is absent', () => {
     const input = { protocolFee: 500 };
 

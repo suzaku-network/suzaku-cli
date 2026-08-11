@@ -88,9 +88,9 @@ describe('run-evals CLI preflight', () => {
       targets: ['kimi:kimi-k3'],
       kimiModels: ['kimi-k3'],
       calls: {
-        perTarget: 28,
-        totalModelCalls: 28,
-        meteredKimiCalls: 28,
+        perTarget: 29,
+        totalModelCalls: 29,
+        meteredKimiCalls: 29,
       },
       kimiPricingPerMTok: {
         'kimi-k3': {

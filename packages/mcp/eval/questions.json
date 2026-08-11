@@ -171,12 +171,11 @@
         "How do rewards look across the six most recently completed Dexalot epochs? Include funding, distribution, and whether rewards are claimable.",
         "Show the maintainer rewards table for the latest six completed epochs, including the set amount and every lifecycle stage."
       ],
-      "expectedTools": [["rewards_get_epoch_status"], ["deployment_heartbeat"]],
+      "expectedTools": [["rewards_get_epoch_status"]],
       "expectedToolCalls": [
-        [{ "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-6}}", "toEpoch": "{{currentEpoch-1}}", "network": "mainnet" } }],
-        [{ "tool": "deployment_heartbeat", "argsSubset": { "middlewareAddress": "{{middleware}}", "rewardsAddress": "{{rewards}}", "uptimeTrackerAddress": "{{uptimeTracker}}", "mode": "digest", "network": "mainnet" } }]
+        [{ "tool": "rewards_get_epoch_status", "argsSubset": { "rewardsAddress": "{{rewards}}", "epoch": "{{currentEpoch-6}}", "toEpoch": "{{currentEpoch-1}}", "network": "mainnet" } }]
       ],
-      "maxToolCalls": 5,
+      "maxToolCalls": 3,
       "groundTruth": [
         {
           "tool": "rewards_get_epoch_status",
@@ -203,24 +202,6 @@
               "derive": { "op": "select", "where": { "field": "epoch", "op": "eq", "value": "{{currentEpoch-1}}" }, "field": "distributionComplete" },
               "match": "boolean"
             }
-          ]
-        },
-        {
-          "tool": "deployment_heartbeat",
-          "args": {
-            "middlewareAddress": "{{middleware}}",
-            "rewardsAddress": "{{rewards}}",
-            "lstWrapperAddress": "{{lstWrapper}}",
-            "uptimeTrackerAddress": "{{uptimeTracker}}",
-            "mode": "digest",
-            "windowEpochs": 6,
-            "network": "mainnet"
-          },
-          "timeoutMs": 300000,
-          "facts": [
-            { "name": "claimabilityRows", "path": "rewards.claimability", "match": "exists", "answerMatch": false },
-            { "name": "exactTiming", "path": "timing", "match": "exists", "answerMatch": false },
-            { "name": "uptimeStatus", "path": "uptime.status", "match": "exists", "answerMatch": false }
           ]
         }
       ]
@@ -376,6 +357,30 @@
             { "name": "distributionsCount", "path": "rewardsLifecycleEvents.countsByType.RewardsDistributed", "match": "integer", "context": ["distribution", "distributed"] },
             { "name": "claimsCount", "path": "rewardsLifecycleEvents.countsByType.RewardsClaimed", "match": "integer", "context": ["claim", "claims"] },
             { "name": "zeroClaimsCount", "path": "rewardsLifecycleEvents.countsByType.ZeroRewardsClaim", "match": "integer", "context": ["zero", "claim", "claims"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintainer-protocol-fees",
+      "prompt": "How much protocol fee has been claimed / is claimable?",
+      "promptVariants": [
+        "What are the exact all-time claimed and currently claimable protocol-fee totals?",
+        "Show me protocol fees already withdrawn versus the unclaimed balance available now."
+      ],
+      "expectedTools": [["rewards_get_fees_config"]],
+      "expectedToolCalls": [
+        [{ "tool": "rewards_get_fees_config", "argsSubset": { "rewardsAddress": "{{rewards}}", "network": "mainnet" } }]
+      ],
+      "maxToolCalls": 2,
+      "groundTruth": [
+        {
+          "tool": "rewards_get_fees_config",
+          "args": { "rewardsAddress": "{{rewards}}", "network": "mainnet" },
+          "facts": [
+            { "name": "claimableProtocolFees", "path": "feesConfig.protocolRewards", "match": "number", "context": ["claimable", "unclaimed", "available", "ALOT"] },
+            { "name": "protocolFeeRate", "path": "feesConfig.protocolFeePercent", "match": "string", "answerMatch": false },
+            { "name": "claimedHistoryAvailable", "value": false, "match": "boolean", "answerMatch": false }
           ]
         }
       ]

@@ -65,6 +65,16 @@ export function augmentFeesConfig<T>(data: T): T {
     if (operatorFeePercent !== undefined && !hasOwn(feesConfig, 'operatorFeePercent')) feesConfig.operatorFeePercent = operatorFeePercent;
     if (curatorFeePercent !== undefined && !hasOwn(feesConfig, 'curatorFeePercent')) feesConfig.curatorFeePercent = curatorFeePercent;
 
+    const protocolRewards = feesConfig.protocolRewards;
+    if (typeof protocolRewards === 'string' && /^\d+$/.test(protocolRewards)) {
+      if (!hasOwn(feesConfig, 'protocolRewardsHuman')) {
+        feesConfig.protocolRewardsHuman = weiToToken(protocolRewards);
+      }
+      if (!hasOwn(feesConfig, 'protocolRewardsMeaning')) {
+        feesConfig.protocolRewardsMeaning = 'current unclaimed protocol-fee balance; not the historical amount already claimed';
+      }
+    }
+
     if (!hasOwn(feesConfig, 'feeUnit')) feesConfig.feeUnit = 'bps';
     if (!hasOwn(feesConfig, 'feeUnitNote')) feesConfig.feeUnitNote = '10000 bps = 100%';
 

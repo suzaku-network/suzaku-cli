@@ -53,29 +53,28 @@
     {
       "id": "maintainer-rewards-six-epoch-status",
       "userNeed": "Review the complete rewards lifecycle for the six most recently completed epochs.",
-      "expectedOutcome": "Report exactly currentEpoch-6 through currentEpoch-1 with each set amount, funding state, distribution state, and protocol-level claimability; distinguish an incomplete future-gated distribution from work actionable now.",
+      "expectedOutcome": "Report exactly currentEpoch-6 through currentEpoch-1 with each set amount, funding state, distribution state, and protocol-level claimability, without turning the lookup into an unrelated action/deadline report.",
       "required": [
-        "Use the live six-epoch rewards range and the deterministic heartbeat together.",
-        "Keep every amount and lifecycle conclusion attached to the correct epoch.",
-        "If any UTC time or action recommendation is included, copy the server-calculated heartbeat fields rather than deriving it."
+        "Use one live six-epoch rewards status range.",
+        "Keep every amount and lifecycle conclusion attached to the correct epoch."
       ],
       "prohibited": [
-        "Do not label a funded but time-gated epoch as actionable now.",
         "Do not treat protocol-level distribution completion as proof that a particular account has an unclaimed balance.",
+        "Do not add unrelated uptime, current-action, cache, or deadline commentary.",
         "Do not calculate epoch timestamps or deadlines from offsets in prose."
       ],
       "evidence": [
-        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-six-epoch-status", "claim": "The rewards range supplies amounts and lifecycle flags; the heartbeat supplies deterministic claimability, uptime, and timing context."}
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-rewards-six-epoch-status", "claim": "The rewards range directly supplies the requested amounts and lifecycle flags."}
       ],
-      "requiredGroundTruth": ["rewards_get_epoch_status", "deployment_heartbeat"],
+      "requiredGroundTruth": ["rewards_get_epoch_status"],
       "machineChecks": [
-        "Both required read paths succeed with the exact deployment pins.",
+        "The single status-range read succeeds with the exact deployment pins.",
         "The queried range contains the six completed epochs and resolves the latest completed amount and status."
       ],
       "semanticCriteria": [
         "The answer covers all four requested lifecycle dimensions without inventing a current action or account-specific claim."
       ],
-      "invalidWhen": ["The epoch changes during collection or either required source is incomplete."]
+      "invalidWhen": ["The epoch changes during collection or the status range is incomplete."]
     },
     {
       "id": "maintainer-rewards-uptime-eligibility",
@@ -162,7 +161,7 @@
     {
       "id": "maintainer-rewards-current-activity",
       "userNeed": "Audit all rewards lifecycle events that occurred during the running middleware epoch.",
-      "expectedOutcome": "Report event counts from the current epoch's block-time range for reward setting, distribution, staker claims, undistributed claims, operator/curator/protocol fee claims, and zero-reward claims, including explicit zeroes rather than silently omitting categories.",
+      "expectedOutcome": "Report emitted event counts from the current epoch's block-time range for reward setting, distribution, staker claims, undistributed claims, and zero-reward claims. Explicitly state that fee-claim calls are not observable from events on the pinned Dexalot implementation because its fee-claim functions do not emit the advertised events.",
       "required": [
         "Bound the event scan from currentEpoch start through the finalized head.",
         "Use the lifecycle event source rather than current contract status as a proxy for activity.",
@@ -170,7 +169,7 @@
       ],
       "prohibited": [
         "Do not substitute a rewards status table for event history.",
-        "Do not omit zero-count categories requested by the maintainer.",
+        "Do not present zero fee-claim event counts as proof that no fee claim calls occurred.",
         "Do not describe an event targeting an older epoch as having occurred in that older epoch when its block is in the current one."
       ],
       "evidence": [
@@ -182,9 +181,38 @@
         "Total, set, distribution, claim, and zero-claim counts resolve."
       ],
       "semanticCriteria": [
-        "The answer reports the requested activity categories and keeps occurrence time separate from target epoch."
+        "The answer reports observable activity, keeps occurrence time separate from target epoch, and labels fee-claim execution history unavailable rather than zero."
       ],
       "invalidWhen": ["The event scan is incomplete, the finalized head is unavailable, or the epoch changes during collection."]
+    },
+    {
+      "id": "maintainer-protocol-fees",
+      "userNeed": "Know the exact protocol fees already claimed and the exact current unclaimed balance available to claim.",
+      "expectedOutcome": "Lead with the exact current protocolRewards balance. State that historical claimed total is not directly observable from the pinned contract because claimProtocolFee resets the balance without emitting ProtocolFeeClaimed; do not replace it with an estimate or a zero.",
+      "required": [
+        "Read the current protocolRewards balance directly from the Rewards contract.",
+        "Distinguish the exact currently unclaimed/claimable value from unavailable historical claimed value.",
+        "Explain the missing claim emission concisely when answering the claimed half."
+      ],
+      "prohibited": [
+        "Do not estimate claimed or claimable fees from the configured percentage or epoch reward amounts.",
+        "Do not substitute distribution-complete flags for protocol fee balances.",
+        "Do not claim that ProtocolFeeClaimed history can answer this deployment when claimProtocolFee emits no such event.",
+        "Do not append unrelated deployment actions, deadlines, uptime, or cache status."
+      ],
+      "evidence": [
+        {"kind": "live-mcp", "ref": "questions.json#maintainer-protocol-fees", "claim": "rewards_get_fees_config exposes the exact current protocolRewards balance."},
+        {"kind": "source", "ref": "evidence/protocol-fee-claim-observability.md#claimProtocolFee-no-event", "claim": "At the pinned Suzaku Core source, claimProtocolFee reads protocolRewards, resets it to zero, and transfers it without emitting ProtocolFeeClaimed."}
+      ],
+      "requiredGroundTruth": ["rewards_get_fees_config"],
+      "machineChecks": [
+        "The fee read resolves protocolRewardsHuman from the direct contract getter.",
+        "The contract-source limitation is fixed evidence, not inferred from an empty event scan."
+      ],
+      "semanticCriteria": [
+        "The answer gives exact claimable, marks claimed unavailable, and never derives either from the 5% fee setting."
+      ],
+      "invalidWhen": ["The direct protocolRewards read fails, or the answer presents an exact historical claimed total without a transaction-history implementation that correlates claimProtocolFee calls and token transfers."]
     },
     {
       "id": "can-set-rewards",

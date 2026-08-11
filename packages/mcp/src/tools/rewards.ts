@@ -55,7 +55,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'rewards_get_fees_config',
-    'Get the current protocol, operator, and curator fee configuration for a rewards contract',
+    'Get the current protocol, operator, and curator fee configuration plus the exact current protocolRewards balance. protocolRewards is the unclaimed protocol-fee amount claimable now; it is not the historical amount already claimed.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
       network: Network,
@@ -211,7 +211,7 @@ export function registerRewardsTools(server: McpServer, readOnly?: boolean) {
 
   server.tool(
     'rewards_get_events',
-    'Scan rewards contract lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range. Returns per-type counts and a flat chronological event list. Block scans can take ~30s per epoch of range; prefer a dedicated RPC.',
+    'Scan emitted rewards contract lifecycle events (RewardsAmountSet, RewardsDistributed, RewardsClaimed, UndistributedRewardsClaimed, Operator/Curator/ProtocolFeeClaimed, ZeroRewardsClaim) over a block or epoch range. Returns per-type counts and a flat chronological event list. A zero count proves only that no matching event was emitted; it does not prove the corresponding function was never called. The pinned Dexalot fee-claim functions do not emit their advertised fee-claim events. Block scans can take ~30s per epoch of range; prefer a dedicated RPC.',
     {
       rewardsAddress: Address.describe('Rewards contract address'),
       middlewareAddress: Address.optional().describe('L1Middleware address (required when using fromEpoch/toEpoch)'),

@@ -75,6 +75,17 @@ describe('monitor model profiles and direct MCP boundary', () => {
   it.each([
     ['openclaw.json', kimi],
     ['openclaw-codex.json', codex],
+  ])('%s lets invited members ask in only the pinned group without granting DM or command access', (_name, config) => {
+    const group = config.channels.telegram.groups['${TELEGRAM_GROUP_ID}'];
+    expect(config.channels.telegram.groupPolicy).toBe('allowlist');
+    expect(group).toEqual({ groupPolicy: 'open', requireMention: true });
+    expect(config.channels.telegram.allowFrom).toEqual(['tg:${TELEGRAM_ADMIN_USER_ID}']);
+    expect(config.commands.allowFrom.telegram).toEqual(['tg:${TELEGRAM_ADMIN_USER_ID}']);
+  });
+
+  it.each([
+    ['openclaw.json', kimi],
+    ['openclaw-codex.json', codex],
   ])('%s exposes only the read-only Suzaku MCP server to the monitor', (_name, config) => {
     const server = config.mcp.servers.suzaku;
     expect(server.command).toBe('node');

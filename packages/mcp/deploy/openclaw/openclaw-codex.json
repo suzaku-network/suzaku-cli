@@ -170,6 +170,7 @@
       "contextVisibility": "allowlist",
       "groups": {
         "${TELEGRAM_GROUP_ID}": {
+          "groupPolicy": "open",
           "requireMention": true
         }
       }

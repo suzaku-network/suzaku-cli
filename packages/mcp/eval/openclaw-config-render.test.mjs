@@ -26,8 +26,29 @@ describe('OpenClaw monitor config rendering', () => {
     expect(config.agents.defaults.models['anthropic/claude-sonnet-4-6']).toBeUndefined();
     expect(config.plugins.allow).not.toContain('anthropic');
     expect(config.channels.telegram.allowFrom).toEqual(['tg:123456789']);
-    expect(config.channels.telegram.groups['-1001234567890']).toBeDefined();
+    expect(config.channels.telegram.groups['-1001234567890']).toEqual({
+      groupPolicy: 'open',
+      requireMention: true,
+    });
     expect(config.channels.telegram.botToken).toBe('${TELEGRAM_BOT_TOKEN}');
+    expect(config.mcp.servers.suzaku.env).not.toHaveProperty('ETHERSCAN_API_KEY');
+    expect(config.mcp.servers.suzaku.env).not.toHaveProperty('SNOWSCAN_API_KEY');
+  });
+
+  it('keeps only optional explorer references backed by a real environment value', () => {
+    const canonical = renderConfig(load('openclaw.json'), {
+      ...baseEnv,
+      ETHERSCAN_API_KEY: 'etherscan-test-key',
+    });
+    expect(canonical.mcp.servers.suzaku.env.ETHERSCAN_API_KEY).toBe('${ETHERSCAN_API_KEY}');
+    expect(canonical.mcp.servers.suzaku.env).not.toHaveProperty('SNOWSCAN_API_KEY');
+
+    const legacy = renderConfig(load('openclaw.json'), {
+      ...baseEnv,
+      SNOWSCAN_API_KEY: 'snowscan-test-key',
+    });
+    expect(legacy.mcp.servers.suzaku.env.SNOWSCAN_API_KEY).toBe('${SNOWSCAN_API_KEY}');
+    expect(legacy.mcp.servers.suzaku.env).not.toHaveProperty('ETHERSCAN_API_KEY');
   });
 
   it('enables the pinned Anthropic fallback only with explicit opt-in and a key', () => {
